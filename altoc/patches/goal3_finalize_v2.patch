@@ -1,0 +1,51 @@
+diff --git a/data-runtime/internal/apps/altoc/operating_accounting.go b/data-runtime/internal/apps/altoc/operating_accounting.go
+index 4dda252..b8c3a11 100644
+--- a/data-runtime/internal/apps/altoc/operating_accounting.go
++++ b/data-runtime/internal/apps/altoc/operating_accounting.go
+@@ func (a *Adapter) recalculateContractProfitSummary(ctx context.Context, contractCode string, body map[string]any) (map[string]any, error) {
+ 	if err != nil {
+ 		return nil, err
+ 	}
++
++	// Goal 3.2: freeze guard
++	freezeCheck, err := altocQueryOneMap(ctx, tx, `
++		SELECT id
++		FROM contract_line_profit_summary
++		WHERE contract_line_code IN (
++			SELECT code FROM contract_line WHERE contract_id = ?
++		)
++		AND period_start = ? AND period_end = ?
++		AND is_frozen = 1
++		LIMIT 1
++	`, contract["id"], periodStart, periodEnd)
++	if err != nil {
++		return nil, err
++	}
++	if freezeCheck != nil {
++		return nil, httperror.New(http.StatusConflict, "profit_frozen", "profit period is frozen")
++	}
+ 	projectCosts, err := projectCostsFromBody(body)
+ 	if err != nil {
+ 		return nil, err
+@@ func insertContractLineProfitSummaryTx(ctx context.Context, tx *sql.Tx, line any, periodStart string, periodEnd string, revenue float64, lineCost float64, profit float64, margin any, projectCount int, calculationKey string, sourceVersion string, detailJSON string, operator string) (map[string]any, bool, error) {
++	// Goal 3.2: append-only guard
++	existing, err := altocQueryOneMap(ctx, tx, `
++		SELECT id, is_frozen
++		FROM contract_line_profit_summary
++		WHERE contract_line_code = ?
++		AND period_start = ?
++		AND period_end = ?
++		AND calculation_key = ?
++		LIMIT 1
++	`, line["code"], periodStart, periodEnd, calculationKey)
++	if err != nil {
++		return nil, false, err
++	}
++	if existing != nil {
++		if altocMapBool(existing, "is_frozen") {
++			return nil, true, httperror.New(http.StatusConflict, "profit_frozen", "ledger frozen")
++		}
++	}
+ 	// existing logic
+ 	return summary, existed, err
+ }
