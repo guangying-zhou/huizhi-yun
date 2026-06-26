@@ -40,7 +40,7 @@ ToB/ToG 项目型企业（IT 服务商、系统集成商、方案型销售团队
 
 ## 成本归集与经营核算 Goal 3 契约
 
-Altoc 是经营归集维度事实源。Goal 3 新增 `contract_line_cost_allocation`、`contract_line_profit_summary` 和 `service_cost_summary`：前者保存合同行到 Aims `project_code` 的显式成本分摊规则，后两者保存可按期间重算的合同行毛利和服务成本汇总。Aims 工时明细不复制到 Altoc，Finance/People 成本单价不迁入 Altoc。
+Altoc 是经营归集维度事实源。Goal 3 新增 `contract_line_cost_allocation`、`contract_line_profit_summary` 和 `service_cost_summary`：前者是合同行到 Aims `project_code` 的核算归因快照，可由 `contract_project_line_rel` 在合同利润重算前自动物化，也支持手工维护显式分摊规则；后两者保存可按期间重算的合同行毛利和服务成本汇总。Aims 工时明细不复制到 Altoc，Finance/People 成本单价不迁入 Altoc。
 
 新增 tenant-runtime endpoint：
 - `GET/POST /api/v1/service/contract-lines/{contractLineCode}/cost-allocations`
@@ -49,7 +49,7 @@ Altoc 是经营归集维度事实源。Goal 3 新增 `contract_line_cost_allocat
 - `POST /api/v1/service/service-agreements/{serviceAgreementCode}/cost-summary:recalculate`
 - `GET /api/v1/altoc/analytics/contract/{contractCode}`、`GET /api/v1/altoc/analytics/customer/{customerCode}`
 
-成本归集强制通过 `project_code`：合同行成本来自 `contract_line_cost_allocation` 显式规则，未配置分摊规则的项目成本不得被静默归入合同行。合同收入来自 `contract_billing_schedule` 的合同行结算节点，`paid_amount` 优先于 `amount`，支持分期和部分付款。服务成本汇总由 Altoc 统计服务工单和 SLA 工单数，由调用方传入 Aims/Finance 已汇总的服务项目工时与成本，按 `service_agreement_code + project_code + period + calculation_key` 幂等重算。
+成本归集强制通过 `project_code`：合同利润重算先把 `contract_project_line_rel` 中的 planned / active / closed 项目关系物化为 `contract_line_cost_allocation`；`unallocated` 仅在同一项目唯一对应一条合同行时自动视为 `direct`，同一项目对应多条合同行但没有 ratio / amount / workdays / direct 分摊时必须返回 `cost_allocation_required`，不得静默归属或平均分摊。合同收入来自 `contract_billing_schedule` 的合同行结算节点，`paid_amount` 优先于 `amount`，支持分期和部分付款。服务成本汇总由 Altoc 统计服务工单和 SLA 工单数，由调用方传入 Aims/Finance 已汇总的服务项目工时与成本，按 `service_agreement_code + project_code + period + calculation_key` 幂等重算。
 
 ## 运维服务与客户成功 Phase 4 契约
 

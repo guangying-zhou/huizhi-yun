@@ -234,8 +234,19 @@ func (a *Adapter) recalculateContractProfitSummary(ctx context.Context, contract
 	if err != nil {
 		return nil, err
 	}
+	materializedCount := 0
 	if err := ensureProjectCostsAllocated(projectCosts, allocations); err != nil {
-		return nil, err
+		materializedCount, err = materializeContractLineCostAllocationsTx(ctx, tx, contract["id"], operator)
+		if err != nil {
+			return nil, err
+		}
+		allocations, err = contractCostAllocationsByLine(ctx, tx, contract["id"], periodStart, periodEnd)
+		if err != nil {
+			return nil, err
+		}
+		if err := ensureProjectCostsAllocated(projectCosts, allocations); err != nil {
+			return nil, err
+		}
 	}
 	workdayTotals := projectWorkdayTotals(allocations)
 	results := make([]map[string]any, 0, len(lines))
@@ -271,12 +282,13 @@ func (a *Adapter) recalculateContractProfitSummary(ctx context.Context, contract
 		return nil, err
 	}
 	return map[string]any{
-		"contract":    contract,
-		"periodStart": periodStart,
-		"periodEnd":   periodEnd,
-		"items":       results,
-		"total":       len(results),
-		"idempotent":  idempotent,
+		"contract":                    contract,
+		"periodStart":                 periodStart,
+		"periodEnd":                   periodEnd,
+		"items":                       results,
+		"total":                       len(results),
+		"idempotent":                  idempotent,
+		"materializedCostAllocations": materializedCount,
 	}, nil
 }
 
@@ -745,6 +757,212 @@ func contractCostAllocationsByLine(ctx context.Context, conn altocQueryer, contr
 		result[lineCode] = append(result[lineCode], row)
 	}
 	return result, nil
+}
+
+type materializedContractLineCostAllocation struct {
+	RelationID        int64
+	ContractLineID    any
+	ContractLineCode  string
+	ContractCode      string
+	ProjectCode       string
+	AllocationType    string
+	AllocationRatio   *float64
+	AllocatedAmount   *float64
+	AllocatedWorkdays *float64
+	SourceRefCode     string
+	SnapshotJSON      string
+}
+
+func materializeContractLineCostAllocationsTx(ctx context.Context, tx *sql.Tx, contractID any, operator string) (int, error) {
+	exists, err := altocTableExists(ctx, tx, "contract_project_line_rel")
+	if err != nil || !exists {
+		return 0, err
+	}
+	rows, err := altocQueryMaps(ctx, tx, `
+		SELECT
+		  rel.id AS relation_id,
+		  rel.relation_type,
+		  rel.allocation_method,
+		  rel.allocation_ratio,
+		  rel.allocated_amount,
+		  rel.planned_workdays,
+		  cpl.project_code,
+		  cpl.project_role,
+		  cpl.plan_key,
+		  ct.code AS contract_code,
+		  cl.id AS contract_line_id,
+		  cl.code AS contract_line_code
+		FROM contract_project_link cpl
+		INNER JOIN contract ct ON ct.id = cpl.contract_id
+		INNER JOIN contract_project_line_rel rel ON rel.contract_project_link_id = cpl.id
+		INNER JOIN contract_line cl ON cl.id = rel.contract_line_id
+		WHERE cpl.contract_id = ?
+		  AND cpl.deleted_at IS NULL
+		  AND cpl.status IN `+contractProjectCostLookupStatusesSQL+`
+		  AND rel.deleted_at IS NULL
+		  AND cl.deleted_at IS NULL
+		  AND ct.deleted_at IS NULL
+		ORDER BY cpl.project_code ASC, cl.sort_no ASC, cl.line_no ASC, cl.id ASC, rel.id ASC
+	`, contractID)
+	if err != nil {
+		return 0, err
+	}
+	allocations, err := normalizeStructuredContractLineCostAllocations(rows)
+	if err != nil {
+		return 0, err
+	}
+	inserted := 0
+	for _, allocation := range allocations {
+		created, err := insertMaterializedContractLineCostAllocationTx(ctx, tx, allocation, operator)
+		if err != nil {
+			return 0, err
+		}
+		if created {
+			inserted++
+		}
+	}
+	return inserted, nil
+}
+
+func normalizeStructuredContractLineCostAllocations(rows []map[string]any) ([]materializedContractLineCostAllocation, error) {
+	projectLines := make(map[string]map[string]bool)
+	for _, row := range rows {
+		projectCode := altocMapText(row, "project_code")
+		lineCode := altocMapText(row, "contract_line_code")
+		if projectCode == "" || lineCode == "" {
+			return nil, httperror.New(http.StatusConflict, "invalid_contract_project_cost_allocation", "structured contract project relation is missing project or contract line code")
+		}
+		if projectLines[projectCode] == nil {
+			projectLines[projectCode] = make(map[string]bool)
+		}
+		projectLines[projectCode][lineCode] = true
+	}
+
+	result := make([]materializedContractLineCostAllocation, 0, len(rows))
+	seen := make(map[string]bool)
+	for _, row := range rows {
+		relationID := altocAnyInt64(row["relation_id"])
+		projectCode := altocMapText(row, "project_code")
+		lineCode := altocMapText(row, "contract_line_code")
+		if relationID == 0 {
+			return nil, httperror.New(http.StatusConflict, "invalid_contract_project_cost_allocation", "structured contract project relation is missing relation id")
+		}
+		allocationType := strings.ToLower(strings.TrimSpace(altocMapText(row, "allocation_method")))
+		if allocationType == "" || allocationType == "unallocated" {
+			if len(projectLines[projectCode]) != 1 {
+				return nil, httperror.New(http.StatusConflict, "cost_allocation_required", "project "+projectCode+" maps to multiple contract lines and requires explicit allocation")
+			}
+			allocationType = "direct"
+		}
+
+		allocation := materializedContractLineCostAllocation{
+			RelationID:       relationID,
+			ContractLineID:   row["contract_line_id"],
+			ContractLineCode: lineCode,
+			ContractCode:     altocMapText(row, "contract_code"),
+			ProjectCode:      projectCode,
+			AllocationType:   allocationType,
+			SourceRefCode:    fmt.Sprintf("contract_project_line_rel:%d", relationID),
+		}
+		switch allocationType {
+		case "direct":
+		case "ratio":
+			value, err := rowFloatPointer(row, "allocation_ratio")
+			if err != nil || value == nil || *value <= 0 {
+				return nil, httperror.New(http.StatusConflict, "invalid_contract_project_cost_allocation", "ratio allocation requires allocation_ratio > 0")
+			}
+			allocation.AllocationRatio = value
+		case "amount":
+			value, err := rowFloatPointer(row, "allocated_amount")
+			if err != nil || value == nil || *value < 0 {
+				return nil, httperror.New(http.StatusConflict, "invalid_contract_project_cost_allocation", "amount allocation requires allocated_amount >= 0")
+			}
+			allocation.AllocatedAmount = value
+		case "workdays":
+			value, err := rowFloatPointer(row, "planned_workdays")
+			if err != nil || value == nil || *value <= 0 {
+				return nil, httperror.New(http.StatusConflict, "invalid_contract_project_cost_allocation", "workdays allocation requires planned_workdays > 0")
+			}
+			allocation.AllocatedWorkdays = value
+		default:
+			return nil, httperror.New(http.StatusConflict, "invalid_contract_project_cost_allocation", "unknown contract project allocation method: "+allocationType)
+		}
+
+		key := strings.Join([]string{allocation.ContractLineCode, allocation.ProjectCode, allocation.AllocationType}, "\x00")
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		snapshot, _ := json.Marshal(map[string]any{
+			"source":             "contract_project_line_rel",
+			"relation_id":        allocation.RelationID,
+			"relation_type":      row["relation_type"],
+			"project_role":       row["project_role"],
+			"plan_key":           row["plan_key"],
+			"allocation_method":  row["allocation_method"],
+			"allocation_ratio":   row["allocation_ratio"],
+			"allocated_amount":   row["allocated_amount"],
+			"planned_workdays":   row["planned_workdays"],
+			"contract_code":      allocation.ContractCode,
+			"contract_line_code": allocation.ContractLineCode,
+			"project_code":       allocation.ProjectCode,
+		})
+		allocation.SnapshotJSON = string(snapshot)
+		result = append(result, allocation)
+	}
+	return result, nil
+}
+
+func insertMaterializedContractLineCostAllocationTx(ctx context.Context, tx *sql.Tx, allocation materializedContractLineCostAllocation, operator string) (bool, error) {
+	existingSource, err := altocQueryOneMap(ctx, tx, `
+		SELECT id
+		FROM contract_line_cost_allocation
+		WHERE source_type = 'contract_project_line_rel'
+		  AND source_ref_code = ?
+		  AND status = 'active'
+		  AND deleted_at IS NULL
+		LIMIT 1
+	`, allocation.SourceRefCode)
+	if err != nil || existingSource != nil {
+		return false, err
+	}
+	existingAllocation, err := altocQueryOneMap(ctx, tx, `
+		SELECT id
+		FROM contract_line_cost_allocation
+		WHERE contract_line_code = ?
+		  AND project_code = ?
+		  AND allocation_type = ?
+		  AND effective_from IS NULL
+		  AND effective_to IS NULL
+		  AND status = 'active'
+		  AND deleted_at IS NULL
+		LIMIT 1
+	`, allocation.ContractLineCode, allocation.ProjectCode, allocation.AllocationType)
+	if err != nil || existingAllocation != nil {
+		return false, err
+	}
+	if _, err := tx.ExecContext(ctx, `
+		INSERT INTO contract_line_cost_allocation (
+		  tenant_id, contract_line_id, contract_line_code, contract_code, project_code,
+		  allocation_type, allocation_ratio, allocated_amount, allocated_workdays,
+		  status, source_type, source_ref_code, snapshot_json, created_by, updated_by
+		) VALUES (NULL, ?, ?, ?, ?, ?, ?, ?, ?, 'active', 'contract_project_line_rel', ?, ?, ?, ?)
+	`, allocation.ContractLineID, allocation.ContractLineCode, allocation.ContractCode, allocation.ProjectCode, allocation.AllocationType, nullableFloat(allocation.AllocationRatio), nullableFloat(allocation.AllocatedAmount), nullableFloat(allocation.AllocatedWorkdays), allocation.SourceRefCode, allocation.SnapshotJSON, nullableText(operator), nullableText(operator)); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+func rowFloatPointer(row map[string]any, key string) (*float64, error) {
+	value, ok := row[key]
+	if !ok || value == nil {
+		return nil, nil
+	}
+	parsed, err := parseAltocFloat(value)
+	if err != nil {
+		return nil, err
+	}
+	return &parsed, nil
 }
 
 func projectWorkdayTotals(allocations map[string][]map[string]any) map[string]float64 {

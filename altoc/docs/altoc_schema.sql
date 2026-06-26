@@ -1125,6 +1125,7 @@ CREATE TABLE contract_line_cost_allocation (
     INDEX idx_clca_project (project_code, status),
     INDEX idx_clca_contract (contract_code),
     INDEX idx_clca_line_id (contract_line_id),
+    INDEX idx_clca_source (source_type, source_ref_code, status),
     CONSTRAINT fk_clca_line FOREIGN KEY (contract_line_id) REFERENCES contract_line(id) ON DELETE SET NULL,
     CHECK (allocation_ratio IS NULL OR allocation_ratio >= 0),
     CHECK (allocated_amount IS NULL OR allocated_amount >= 0),

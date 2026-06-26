@@ -92,6 +92,99 @@ func TestEnsureProjectCostsAllocatedRejectsUnallocatedCosts(t *testing.T) {
 	}
 }
 
+func TestMaterializeContractLineCostAllocationsFromStructuredRelation(t *testing.T) {
+	adapter, mock, closeDB := newAltocCoverageSQLMockAdapter(t)
+	defer closeDB()
+
+	mock.ExpectBegin()
+	mock.ExpectQuery(`(?s)SELECT COUNT\(\*\) AS count\s+FROM information_schema\.TABLES`).
+		WithArgs("contract_project_line_rel").
+		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(int64(1)))
+	mock.ExpectQuery(`(?s)SELECT\s+rel\.id AS relation_id,.*FROM contract_project_link cpl`).
+		WithArgs(int64(10)).
+		WillReturnRows(sqlmock.NewRows([]string{
+			"relation_id", "relation_type", "allocation_method", "allocation_ratio", "allocated_amount", "planned_workdays",
+			"project_code", "project_role", "plan_key", "contract_code", "contract_line_id", "contract_line_code",
+		}).AddRow(int64(501), "delivery", "ratio", float64(100), nil, nil, "PRJ-1", "delivery", "delivery-main", "CON-1", int64(20), "CL-1"))
+	mock.ExpectQuery(`(?s)SELECT id\s+FROM contract_line_cost_allocation\s+WHERE source_type = 'contract_project_line_rel'`).
+		WithArgs("contract_project_line_rel:501").
+		WillReturnRows(sqlmock.NewRows([]string{"id"}))
+	mock.ExpectQuery(`(?s)SELECT id\s+FROM contract_line_cost_allocation\s+WHERE contract_line_code = \?`).
+		WithArgs("CL-1", "PRJ-1", "ratio").
+		WillReturnRows(sqlmock.NewRows([]string{"id"}))
+	mock.ExpectExec(`(?s)INSERT INTO contract_line_cost_allocation`).
+		WithArgs(int64(20), "CL-1", "CON-1", "PRJ-1", "ratio", float64(100), nil, nil, "contract_project_line_rel:501", sqlmock.AnyArg(), "tester", "tester").
+		WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectCommit()
+
+	tx, err := adapter.DB().BeginTx(context.Background(), nil)
+	if err != nil {
+		t.Fatalf("BeginTx: %v", err)
+	}
+	inserted, err := materializeContractLineCostAllocationsTx(context.Background(), tx, int64(10), "tester")
+	if err != nil {
+		t.Fatalf("materializeContractLineCostAllocationsTx: %v", err)
+	}
+	if inserted != 1 {
+		t.Fatalf("inserted = %d, want 1", inserted)
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatalf("Commit: %v", err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("expectations: %v", err)
+	}
+}
+
+func TestMaterializeContractLineCostAllocationsIsIdempotentBySourceRef(t *testing.T) {
+	adapter, mock, closeDB := newAltocCoverageSQLMockAdapter(t)
+	defer closeDB()
+
+	mock.ExpectBegin()
+	mock.ExpectQuery(`(?s)SELECT COUNT\(\*\) AS count\s+FROM information_schema\.TABLES`).
+		WithArgs("contract_project_line_rel").
+		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(int64(1)))
+	mock.ExpectQuery(`(?s)SELECT\s+rel\.id AS relation_id,.*FROM contract_project_link cpl`).
+		WithArgs(int64(10)).
+		WillReturnRows(sqlmock.NewRows([]string{
+			"relation_id", "relation_type", "allocation_method", "allocation_ratio", "allocated_amount", "planned_workdays",
+			"project_code", "project_role", "plan_key", "contract_code", "contract_line_id", "contract_line_code",
+		}).AddRow(int64(501), "delivery", "ratio", float64(100), nil, nil, "PRJ-1", "delivery", "delivery-main", "CON-1", int64(20), "CL-1"))
+	mock.ExpectQuery(`(?s)SELECT id\s+FROM contract_line_cost_allocation\s+WHERE source_type = 'contract_project_line_rel'`).
+		WithArgs("contract_project_line_rel:501").
+		WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(int64(90)))
+	mock.ExpectCommit()
+
+	tx, err := adapter.DB().BeginTx(context.Background(), nil)
+	if err != nil {
+		t.Fatalf("BeginTx: %v", err)
+	}
+	inserted, err := materializeContractLineCostAllocationsTx(context.Background(), tx, int64(10), "tester")
+	if err != nil {
+		t.Fatalf("materializeContractLineCostAllocationsTx: %v", err)
+	}
+	if inserted != 0 {
+		t.Fatalf("inserted = %d, want 0", inserted)
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatalf("Commit: %v", err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("expectations: %v", err)
+	}
+}
+
+func TestNormalizeStructuredContractLineCostAllocationsRejectsAmbiguousUnallocatedProject(t *testing.T) {
+	_, err := normalizeStructuredContractLineCostAllocations([]map[string]any{
+		{"relation_id": int64(1), "allocation_method": "unallocated", "project_code": "PRJ-1", "contract_code": "CON-1", "contract_line_id": int64(20), "contract_line_code": "CL-1"},
+		{"relation_id": int64(2), "allocation_method": "unallocated", "project_code": "PRJ-1", "contract_code": "CON-1", "contract_line_id": int64(21), "contract_line_code": "CL-2"},
+	})
+	httpErr, ok := err.(httperror.Error)
+	if !ok || httpErr.Status != http.StatusConflict || httpErr.Code != "cost_allocation_required" {
+		t.Fatalf("error = %#v, want cost_allocation_required", err)
+	}
+}
+
 func TestParseAltocFloatRejectsNaNAndInf(t *testing.T) {
 	if _, err := parseAltocFloat(math.NaN()); err == nil {
 		t.Fatal("expected NaN to be rejected")
@@ -134,6 +227,27 @@ func TestRecalculateContractProfitSummaryWritesLineProfitSummary(t *testing.T) {
 		WithArgs("CON-1").
 		WillReturnRows(sqlmock.NewRows([]string{"id", "code", "contract_id", "contract_code", "customer_code", "sort_no"}).
 			AddRow(int64(20), "CL-1", int64(10), "CON-1", "CUS-1", int64(1)))
+	mock.ExpectQuery(`(?s)SELECT a\.\*\s+FROM contract_line_cost_allocation a\s+INNER JOIN contract_line cl`).
+		WithArgs(int64(10), "2026-06-30", "2026-06-01").
+		WillReturnRows(sqlmock.NewRows([]string{"id", "contract_line_code", "project_code", "allocation_type", "allocation_ratio", "allocated_amount", "allocated_workdays"}))
+	mock.ExpectQuery(`(?s)SELECT COUNT\(\*\) AS count\s+FROM information_schema\.TABLES`).
+		WithArgs("contract_project_line_rel").
+		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(int64(1)))
+	mock.ExpectQuery(`(?s)SELECT\s+rel\.id AS relation_id,.*FROM contract_project_link cpl`).
+		WithArgs(int64(10)).
+		WillReturnRows(sqlmock.NewRows([]string{
+			"relation_id", "relation_type", "allocation_method", "allocation_ratio", "allocated_amount", "planned_workdays",
+			"project_code", "project_role", "plan_key", "contract_code", "contract_line_id", "contract_line_code",
+		}).AddRow(int64(501), "delivery", "ratio", float64(60), nil, nil, "PRJ-1", "delivery", "delivery-main", "CON-1", int64(20), "CL-1"))
+	mock.ExpectQuery(`(?s)SELECT id\s+FROM contract_line_cost_allocation\s+WHERE source_type = 'contract_project_line_rel'`).
+		WithArgs("contract_project_line_rel:501").
+		WillReturnRows(sqlmock.NewRows([]string{"id"}))
+	mock.ExpectQuery(`(?s)SELECT id\s+FROM contract_line_cost_allocation\s+WHERE contract_line_code = \?`).
+		WithArgs("CL-1", "PRJ-1", "ratio").
+		WillReturnRows(sqlmock.NewRows([]string{"id"}))
+	mock.ExpectExec(`(?s)INSERT INTO contract_line_cost_allocation`).
+		WithArgs(int64(20), "CL-1", "CON-1", "PRJ-1", "ratio", float64(60), nil, nil, "contract_project_line_rel:501", sqlmock.AnyArg(), "tester", "tester").
+		WillReturnResult(sqlmock.NewResult(31, 1))
 	mock.ExpectQuery(`(?s)SELECT a\.\*\s+FROM contract_line_cost_allocation a\s+INNER JOIN contract_line cl`).
 		WithArgs(int64(10), "2026-06-30", "2026-06-01").
 		WillReturnRows(sqlmock.NewRows([]string{"id", "contract_line_code", "project_code", "allocation_type", "allocation_ratio", "allocated_amount", "allocated_workdays"}).
