@@ -43,6 +43,7 @@ erDiagram
         varchar owner_uid
         varchar dept_code
         tinyint is_product_line
+        int display_order
         enum status
         varchar created_by
     }

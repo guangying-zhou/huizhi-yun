@@ -140,6 +140,25 @@ func TestBindCustomerDeliveryAssetEnvironmentTxRejectsInvalidDeploymentStatus(t 
 	}
 }
 
+func TestUpsertServiceEnvironmentRejectsInvalidEnvironmentType(t *testing.T) {
+	adapter, mock, closeDB := newAssetsSQLMockAdapter(t)
+	defer closeDB()
+
+	_, err := adapter.upsertServiceEnvironment(context.Background(), map[string]any{
+		"customerCode":    "CUS-1",
+		"environmentName": "Production",
+		"idempotencyKey":  "REQ-1",
+		"environmentType": "cust_prod",
+	}, "tester")
+	httpErr, ok := err.(httperror.Error)
+	if !ok || httpErr.Status != http.StatusBadRequest || httpErr.Code != "invalid_environment_type" {
+		t.Fatalf("error = %#v, want 400 invalid_environment_type", err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("expectations: %v", err)
+	}
+}
+
 func TestBindCustomerDeliveryAssetEnvironmentTxSetsPrimaryAndSnapshot(t *testing.T) {
 	db, mock, err := sqlmock.New()
 	if err != nil {

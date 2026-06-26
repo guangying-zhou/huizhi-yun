@@ -375,7 +375,7 @@ func legacyServiceAgreementAssetCoverageRows(ctx context.Context, conn altocQuer
 		return nil, err
 	}
 	for _, row := range rows {
-		row["target_type"] = "legacy_asset"
+		row["target_type"] = "legacy"
 		row["resolution_status"] = "needs_review"
 		row["legacy_reference"] = row["delivery_asset_code"]
 	}

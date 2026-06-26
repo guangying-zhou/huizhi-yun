@@ -2,7 +2,10 @@ import { createError, getHeader, getRouterParam, readBody, type H3Event } from '
 import { buildAimsProjectRuntimeAccessQuery } from '~~/server/utils/aimsProjectRuntimeAccess'
 import { forwardAimsRuntimeGet, forwardAimsRuntimePost } from '~~/server/utils/aimsRuntimeForward'
 import { syncProjectEnvironmentAssets } from '~~/server/utils/projectEnvironmentAssetsSync'
-import { normalizeProjectEnvironmentDeliveryStatus } from '~~/server/utils/projectEnvironmentIdentity'
+import {
+  normalizeProjectEnvironmentDeliveryStatus,
+  projectEnvironmentRelationTypeValue
+} from '~~/server/utils/projectEnvironmentIdentity'
 
 interface RuntimeProject {
   id?: number | string
@@ -105,6 +108,14 @@ export default defineEventHandler(async (event) => {
   const project = await loadProject(event, projectId, uid)
   const projectCode = projectField(project, 'projectCode', 'project_code')
   const relationTypeInput = firstText(body, 'relationType', 'relation_type')
+  const normalizedRelationType = projectEnvironmentRelationTypeValue(relationTypeInput, '')
+  if (relationTypeInput && !normalizedRelationType) {
+    throw createError({
+      statusCode: 400,
+      message: 'invalid project environment relationType',
+      data: { code: 'invalid_environment_relation_type' }
+    })
+  }
   const deliveryAssetInput = firstText(body, 'deliveryAssetCode', 'delivery_asset_code')
   const idempotencyKey = text(getHeader(event, 'idempotency-key'))
     || `aims:project-environment:${projectCode}:${environmentCode}:status:${normalizedDeliveryStatus}`
@@ -117,7 +128,7 @@ export default defineEventHandler(async (event) => {
       body: {
         deliveryStatus: normalizedDeliveryStatus,
         deliveryAssetCode: deliveryAssetInput || undefined,
-        relationType: relationTypeInput || undefined,
+        relationType: normalizedRelationType || undefined,
         actualGoLiveAt: firstText(body, 'actualGoLiveAt', 'actual_go_live_at') || undefined,
         acceptedAt: firstText(body, 'acceptedAt', 'accepted_at') || undefined,
         handoverAt: firstText(body, 'handoverAt', 'handover_at') || undefined
@@ -127,7 +138,7 @@ export default defineEventHandler(async (event) => {
 
   const relation = statusUpdate.relation || {}
   const deliveryAssetCode = deliveryAssetInput || text(relation.delivery_asset_code)
-  const relationType = relationTypeInput || text(relation.relation_type) || 'initial_delivery'
+  const relationType = normalizedRelationType || text(relation.relation_type) || 'initial_delivery'
   const deliveryVersionSnapshot = firstText(body, 'deliveryVersionSnapshot', 'delivery_version_snapshot', 'deployedVersion', 'deployed_version')
     || text(relation.delivery_version_snapshot)
 

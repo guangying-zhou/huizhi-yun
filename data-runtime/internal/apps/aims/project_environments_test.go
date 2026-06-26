@@ -184,6 +184,35 @@ func TestUpsertProjectEnvironmentTxRejectsInvalidDeliveryStatus(t *testing.T) {
 	}
 }
 
+func TestUpsertProjectEnvironmentTxRejectsInvalidRelationType(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("sqlmock.New: %v", err)
+	}
+	defer db.Close()
+	mock.ExpectBegin()
+	tx, err := db.BeginTx(context.Background(), nil)
+	if err != nil {
+		t.Fatalf("BeginTx: %v", err)
+	}
+	mock.ExpectRollback()
+
+	_, err = upsertProjectEnvironmentTx(context.Background(), tx, "PRJ-1", map[string]any{
+		"environmentCode": "ENV-1",
+		"relationType":    "frist_delivery",
+	})
+	httpErr, ok := err.(httperror.Error)
+	if !ok || httpErr.Status != http.StatusBadRequest || httpErr.Code != "invalid_environment_relation_type" {
+		t.Fatalf("error = %#v, want 400 invalid_environment_relation_type", err)
+	}
+	if err := tx.Rollback(); err != nil {
+		t.Fatalf("Rollback: %v", err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("expectations: %v", err)
+	}
+}
+
 func TestChangeProjectEnvironmentTxStatusMarksAssetsSyncPending(t *testing.T) {
 	db, mock, err := sqlmock.New()
 	if err != nil {

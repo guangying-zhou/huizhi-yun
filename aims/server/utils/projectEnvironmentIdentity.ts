@@ -32,7 +32,7 @@ function firstText(body: Record<string, unknown>, ...keys: string[]) {
 }
 
 export function normalizeProjectEnvironmentRelationType(value: string) {
-  const normalized = cleanText(value) || 'initial_delivery'
+  const normalized = cleanText(value)
   return [
     'initial_delivery',
     'upgrade',
@@ -43,7 +43,13 @@ export function normalizeProjectEnvironmentRelationType(value: string) {
     'other'
   ].includes(normalized)
     ? normalized
-    : 'initial_delivery'
+    : ''
+}
+
+export function projectEnvironmentRelationTypeValue(value: string, defaultType = 'initial_delivery') {
+  const raw = cleanText(value)
+  if (!raw) return defaultType
+  return normalizeProjectEnvironmentRelationType(raw)
 }
 
 export function normalizeProjectEnvironmentDeliveryStatus(value: string) {
@@ -76,7 +82,7 @@ export function projectEnvironmentIdempotencyKey(input: ProjectEnvironmentIdempo
   const environmentRef = firstText(input.body, 'environmentCode', 'environment_code')
     || firstText(input.body, 'environmentName', 'environment_name')
   const deliveryAssetCode = firstText(input.body, 'deliveryAssetCode', 'delivery_asset_code') || 'no-asset'
-  const relationType = normalizeProjectEnvironmentRelationType(firstText(input.body, 'relationType', 'relation_type'))
+  const relationType = projectEnvironmentRelationTypeValue(firstText(input.body, 'relationType', 'relation_type')) || 'initial_delivery'
   return `aims:project-environment:${input.projectCode}:${environmentRef}:${deliveryAssetCode}:${relationType}`
 }
 

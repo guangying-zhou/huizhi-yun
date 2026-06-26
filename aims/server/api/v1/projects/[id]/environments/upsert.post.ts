@@ -7,7 +7,7 @@ import { syncProjectEnvironmentAssets } from '~~/server/utils/projectEnvironment
 import {
   buildAssetsEnvironmentUpsertPayload,
   normalizeProjectEnvironmentDeliveryStatus,
-  normalizeProjectEnvironmentRelationType,
+  projectEnvironmentRelationTypeValue,
   projectEnvironmentIdempotencyKey
 } from '~~/server/utils/projectEnvironmentIdentity'
 
@@ -241,7 +241,14 @@ export default defineEventHandler(async (event) => {
       data: { code: 'invalid_environment_transition' }
     })
   }
-  const relationType = normalizeProjectEnvironmentRelationType(firstText(body, 'relationType', 'relation_type'))
+  const relationType = projectEnvironmentRelationTypeValue(firstText(body, 'relationType', 'relation_type'))
+  if (!relationType) {
+    throw createError({
+      statusCode: 400,
+      message: 'invalid project environment relationType',
+      data: { code: 'invalid_environment_relation_type' }
+    })
+  }
   const isPrimary = boolInput(body, 'isPrimary', 'is_primary')
   const idempotencyKey = projectEnvironmentIdempotencyKey({
     explicitIdempotencyKey: text(getHeader(event, 'idempotency-key')),

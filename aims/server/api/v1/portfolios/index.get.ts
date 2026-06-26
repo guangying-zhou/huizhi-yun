@@ -14,6 +14,7 @@ interface PortfolioRow extends RowDataPacket {
   dept_code: string | null
   git_group: string | null
   is_product_line: number
+  display_order: number
   status: string
   created_by: string
   created_at: string
@@ -81,7 +82,7 @@ export default defineEventHandler(async (event) => {
       GROUP BY portfolio_id
     ) pc ON pc.portfolio_id = pf.id
     ${whereClause}
-    ORDER BY pf.updated_at DESC
+    ORDER BY pf.display_order ASC, pf.id ASC
     LIMIT ? OFFSET ?
   `
   const rows = await queryRows<PortfolioRow[]>(listSql, [...params, pageSize, offset])
@@ -99,6 +100,7 @@ export default defineEventHandler(async (event) => {
         deptCode: row.dept_code,
         gitGroup: row.git_group,
         isProductLine: Boolean(row.is_product_line),
+        displayOrder: Number(row.display_order || 0),
         status: row.status,
         createdBy: row.created_by,
         createdAt: row.created_at,

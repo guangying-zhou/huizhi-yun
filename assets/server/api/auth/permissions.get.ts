@@ -11,6 +11,7 @@ import {
   loadAuthorizationSnapshotFromConsoleRuntime,
   type RuntimeAuthorizationRole
 } from '@hzy/foundation/server/utils/platformBundleAuthorization'
+import { isAssetsLocalDevAuthorizationBypassEnabled } from '~~/server/utils/assetsLocalDevAuthorization'
 
 interface PermissionsResponse {
   code: number
@@ -31,8 +32,9 @@ export default defineEventHandler(async (event): Promise<PermissionsResponse> =>
 
   const bundleSnapshot = await loadAuthorizationSnapshotFromConsoleRuntime(uid, appCode, event, {
     localDev: {
+      enabled: isAssetsLocalDevAuthorizationBypassEnabled(),
       resources: manifestResources,
-      fallbackActions: ['view', 'edit', 'admin']
+      fallbackActions: []
     }
   })
   if (bundleSnapshot) {

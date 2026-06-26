@@ -105,6 +105,11 @@ function getDomainCategoryByCode(domainCode: string | null | undefined): '2G' | 
   return businessDomains.value.find(d => d.domainCode === domainCode)?.category || '2G'
 }
 
+function normalizeDisplayOrder(value: unknown) {
+  const parsed = Number(value ?? 0)
+  return Number.isFinite(parsed) ? Math.trunc(parsed) : 0
+}
+
 // 选择项目集负责人时自动填充部门
 function onPortfolioOwnerChange(uid: string | null) {
   portfolioForm.value.ownerUid = uid
@@ -196,7 +201,8 @@ const portfolioForm = ref<CreatePortfolioRequest>({
   ownerUid: '',
   deptCode: '',
   gitGroup: '',
-  isProductLine: false
+  isProductLine: false,
+  displayOrder: 0
 })
 const portfolioCodeManuallyEdited = ref(false)
 const projectOverviewPageSize = 500
@@ -230,7 +236,8 @@ const editPortfolioForm = ref<UpdatePortfolioRequest>({
   ownerUid: '',
   deptCode: '',
   gitGroup: '',
-  isProductLine: false
+  isProductLine: false,
+  displayOrder: 0
 })
 
 const currentEditingPortfolio = computed(() => {
@@ -468,9 +475,10 @@ async function handleCreatePortfolio() {
   }
   creatingPortfolio.value = true
   try {
+    portfolioForm.value.displayOrder = normalizeDisplayOrder(portfolioForm.value.displayOrder)
     await portfolioStore.createPortfolio(portfolioForm.value)
     showCreatePortfolioModal.value = false
-    portfolioForm.value = { code: '', name: '', description: '', domainCode: '', ownerUid: '', deptCode: '', gitGroup: '', isProductLine: false }
+    portfolioForm.value = { code: '', name: '', description: '', domainCode: '', ownerUid: '', deptCode: '', gitGroup: '', isProductLine: false, displayOrder: 0 }
     portfolioCodeManuallyEdited.value = false
     // 刷新项目列表以获取最新 portfolioId 映射
     await loadData()
@@ -494,7 +502,8 @@ function openEditPortfolio(portfolio: ProjectPortfolio) {
     ownerUid: latestPortfolio.ownerUid || '',
     deptCode: latestPortfolio.deptCode || '',
     gitGroup: latestPortfolio.gitGroup || '',
-    isProductLine: latestPortfolio.isProductLine
+    isProductLine: latestPortfolio.isProductLine,
+    displayOrder: normalizeDisplayOrder(latestPortfolio.displayOrder)
   }
   showEditPortfolioModal.value = true
 }
@@ -507,6 +516,7 @@ async function handleUpdatePortfolio() {
   }
   updatingPortfolio.value = true
   try {
+    editPortfolioForm.value.displayOrder = normalizeDisplayOrder(editPortfolioForm.value.displayOrder)
     await portfolioStore.updatePortfolio(editingPortfolio.value.id, editPortfolioForm.value)
     showEditPortfolioModal.value = false
     editingPortfolio.value = null
@@ -1244,6 +1254,17 @@ const portfolioAssignOptions = computed(() => {
                   @update:model-value="onPortfolioCodeInput"
                 />
               </UFormField>
+              <UFormField label="显示顺序" description="数字越小越靠前">
+                <UInput
+                  :model-value="String(portfolioForm.displayOrder ?? 0)"
+                  type="number"
+                  min="0"
+                  step="1"
+                  placeholder="0"
+                  class="w-full"
+                  @update:model-value="value => portfolioForm.displayOrder = normalizeDisplayOrder(value)"
+                />
+              </UFormField>
               <div class="grid grid-cols-2 gap-4">
                 <UFormField label="负责人">
                   <USelectMenu
@@ -1349,6 +1370,17 @@ const portfolioAssignOptions = computed(() => {
                   v-model="editPortfolioForm.name"
                   placeholder="如：智慧城市系列"
                   class="w-full"
+                />
+              </UFormField>
+              <UFormField label="显示顺序" description="数字越小越靠前">
+                <UInput
+                  :model-value="String(editPortfolioForm.displayOrder ?? 0)"
+                  type="number"
+                  min="0"
+                  step="1"
+                  placeholder="0"
+                  class="w-full"
+                  @update:model-value="value => editPortfolioForm.displayOrder = normalizeDisplayOrder(value)"
                 />
               </UFormField>
               <div class="grid grid-cols-2 gap-4">

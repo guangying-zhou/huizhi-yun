@@ -14,6 +14,7 @@ interface PortfolioRow extends RowDataPacket {
   dept_code: string | null
   git_group: string | null
   is_product_line: number
+  display_order: number
   status: string
   created_by: string
   created_at: string
@@ -71,6 +72,7 @@ export default defineEventHandler(async (event) => {
       deptCode: portfolio.dept_code,
       gitGroup: portfolio.git_group,
       isProductLine: Boolean(portfolio.is_product_line),
+      displayOrder: Number(portfolio.display_order || 0),
       status: portfolio.status,
       createdBy: portfolio.created_by,
       createdAt: portfolio.created_at,

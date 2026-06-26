@@ -283,8 +283,8 @@ function consoleAuthorizationBaseUrls(
   serverBaseUrl: string,
   preferServerBaseUrl: boolean
 ) {
-  if (isTenantGatewayContext(event) && preferServerBaseUrl) {
-    return uniqueBaseUrls([serverBaseUrl, tenantGatewayBaseUrl, runtimeBaseUrl])
+  if (isTenantGatewayContext(event) && preferServerBaseUrl && serverBaseUrl) {
+    return uniqueBaseUrls([serverBaseUrl, runtimeBaseUrl])
   }
 
   return isTenantGatewayContext(event)

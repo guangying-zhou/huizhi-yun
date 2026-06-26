@@ -59,7 +59,10 @@ func (a *Adapter) upsertServiceEnvironment(ctx context.Context, body map[string]
 	contractCode := firstText(bodyText(body, "contractCode"), bodyText(body, "contract_code"))
 	sourceProjectCode := firstText(bodyText(body, "sourceProjectCode"), bodyText(body, "source_project_code"), bodyText(body, "projectCode"), bodyText(body, "project_code"))
 	environmentName := firstText(bodyText(body, "environmentName"), bodyText(body, "environment_name"))
-	environmentType := normalizeEnvironmentType(firstText(bodyText(body, "environmentType"), bodyText(body, "environment_type")))
+	environmentType, err := environmentTypeInput(body, "customer_prod", "environmentType", "environment_type")
+	if err != nil {
+		return nil, err
+	}
 	requestedStatusText := firstText(bodyText(body, "status"), bodyText(body, "environmentStatus"), bodyText(body, "environment_status"), bodyText(body, "lifecycleStatus"), bodyText(body, "lifecycle_status"))
 	statusProvided := requestedStatusText != ""
 	statusText := requestedStatusText
@@ -775,8 +778,20 @@ func normalizeEnvironmentType(value string) string {
 	case "dev", "test", "staging", "internal_prod", "customer_test", "customer_prod":
 		return strings.ToLower(strings.TrimSpace(value))
 	default:
-		return "customer_prod"
+		return ""
 	}
+}
+
+func environmentTypeInput(body map[string]any, defaultValue string, keys ...string) (string, error) {
+	raw := firstTextFromBodyKeys(body, keys...)
+	if raw == "" {
+		return defaultValue, nil
+	}
+	value := normalizeEnvironmentType(raw)
+	if value == "" {
+		return "", httperror.New(http.StatusBadRequest, "invalid_environment_type", "invalid environmentType")
+	}
+	return value, nil
 }
 
 func normalizeEnvironmentStatus(value string) string {

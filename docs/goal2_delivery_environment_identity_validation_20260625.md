@@ -98,6 +98,10 @@ pnpm --dir foundation typecheck
 pnpm --dir foundation test
 cd data-runtime && go test ./... -count=1
 git diff --check
+git -C assets diff --check
+git -C aims diff --check
+git -C altoc diff --check
+git -C data-runtime diff --check
 ```
 
 测试计数：
@@ -114,7 +118,7 @@ git diff --check
 同时补充 Altoc `service_agreement_coverage` 读取策略测试：
 
 - 新 coverage 表存在正式覆盖时，读取来源为 `coverage`，不回退旧 `service_agreement_asset`。
-- 新 coverage 表为空时，旧 `service_agreement_asset` 仅作为 `legacy_asset / needs_review` 回退返回。
+- 新 coverage 表为空时，旧 `service_agreement_asset` 仅作为 `legacy / needs_review` 回退返回。
 
 追加执行并通过：
 
@@ -198,7 +202,26 @@ pnpm --dir aims test
 pnpm --dir aims typecheck
 ```
 
-完成收口后重新执行完整验证，全部通过：
+## 2026-06-26 Goal 2.1 审查修复
+
+根据 Goal 2 审查结果，本轮补强：
+
+- Altoc `customer_delivery_asset.status:sync` 在校验正式 Assets 对象前，先从 Altoc 计划 / 合同 / 服务协议上下文加载期望 `customer_code`，再传入 `references:resolve` 结果校验；跨客户正式交付资产或环境返回 409，且不会写入覆盖关系。
+- data-runtime 的状态同步事务增加二次保护：当 payload 或 Assets 回调体携带 `customer_code` 且与 Altoc 计划客户不一致时，返回 `delivery_asset_customer_conflict`。
+- Aims `project_environments.relation_type` 和 Assets `asset_environments.environment_type` 改为“未传使用默认，显式非法值 400 失败”，避免拼写错误静默变成默认正式关系。
+- Altoc 旧 `service_agreement_asset` 回退响应统一为 `target_type = legacy`。
+- Assets 文档明确 `asset_environments.status` 不单独保留 `accepted`；`accepted` 输入归一为 `active`，验收完成以 `accepted_at` 或部署关系 `deployment_status = accepted` 判断。
+
+本轮新增 / 更新测试：
+
+- Altoc status:sync 跨客户正式 pair 校验。
+- Altoc status:sync expected customer context runtime 查询。
+- Altoc status:sync payload customer 二次校验。
+- Aims 无效 `relationType` runtime / BFF helper 校验。
+- Assets 无效 `environmentType` runtime 校验。
+- Altoc legacy fallback `target_type = legacy` 断言。
+
+本轮重新执行受影响模块验证，全部通过：
 
 ```bash
 pnpm --dir assets lint
@@ -211,9 +234,6 @@ pnpm --dir altoc lint
 pnpm --dir altoc typecheck
 pnpm --dir altoc test
 pnpm --dir altoc audit:runtime-boundary
-pnpm --dir foundation lint
-pnpm --dir foundation typecheck
-pnpm --dir foundation test
 cd data-runtime && go test ./... -count=1
 git diff --check
 ```

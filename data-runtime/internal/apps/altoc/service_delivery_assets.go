@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -32,6 +33,9 @@ func (a *Adapter) syncCustomerDeliveryAssetStatus(ctx context.Context, deliveryA
 	}
 	if asset == nil || contract == nil {
 		return nil, httperror.New(http.StatusNotFound, "record_not_found", "contract delivery asset plan not found")
+	}
+	if err := assertStatusSyncPayloadCustomer(asset, body); err != nil {
+		return nil, err
 	}
 
 	operator := altocActor(body)
@@ -155,6 +159,53 @@ func (a *Adapter) syncCustomerDeliveryAssetStatus(ctx context.Context, deliveryA
 	}, nil
 }
 
+func (a *Adapter) customerDeliveryAssetStatusSyncContext(ctx context.Context, deliveryAssetCode string, query url.Values) (map[string]any, error) {
+	deliveryAssetCode = strings.TrimSpace(deliveryAssetCode)
+	if deliveryAssetCode == "" {
+		return nil, httperror.New(http.StatusBadRequest, "missing_delivery_asset_code", "deliveryAssetCode is required")
+	}
+	matches, args := deliveryAssetPlanSyncMatches(
+		deliveryAssetCode,
+		firstNonEmptyText(query.Get("sourcePlanCode"), query.Get("source_plan_code")),
+		firstNonEmptyText(query.Get("contractCode"), query.Get("contract_code"), query.Get("sourceContractCode"), query.Get("source_contract_code")),
+		firstNonEmptyText(query.Get("contractLineCode"), query.Get("contract_line_code"), query.Get("sourceContractLineCode"), query.Get("source_contract_line_code")),
+	)
+	row, err := altocQueryOneMap(ctx, a.DB(), `
+		SELECT
+		  dap.*,
+		  c.code AS contract_code,
+		  c.customer_id AS contract_customer_id,
+		  cu.code AS contract_customer_code,
+		  sa.customer_code AS service_agreement_customer_code
+		FROM contract_delivery_asset_plan dap
+		JOIN contract c ON c.id = dap.contract_id
+		LEFT JOIN customer cu ON cu.id = c.customer_id
+		LEFT JOIN service_agreement sa ON sa.contract_id = c.id AND sa.deleted_at IS NULL
+		WHERE dap.deleted_at IS NULL
+		  AND (`+strings.Join(matches, " OR ")+`)
+		  AND c.deleted_at IS NULL
+		ORDER BY dap.id ASC, sa.id ASC
+		LIMIT 1
+	`, args...)
+	if err != nil {
+		return nil, err
+	}
+	if row == nil {
+		return nil, httperror.New(http.StatusNotFound, "record_not_found", "contract delivery asset plan not found")
+	}
+	expectedCustomerCode := firstNonEmptyText(
+		altocMapText(row, "customer_code"),
+		altocMapText(row, "service_agreement_customer_code"),
+		altocMapText(row, "contract_customer_code"),
+	)
+	return map[string]any{
+		"delivery_asset_plan":    row,
+		"contract_code":          row["contract_code"],
+		"expectedCustomerCode":   expectedCustomerCode,
+		"expected_customer_code": expectedCustomerCode,
+	}, nil
+}
+
 func formalDeliveryAssetCodeForStatusSync(pathDeliveryAssetCode string, body map[string]any) (string, error) {
 	externalAssetCode := firstNonEmptyText(
 		syncBodyText(body, "externalAssetCode", "external_asset_code"),
@@ -170,29 +221,24 @@ func formalDeliveryAssetCodeForStatusSync(pathDeliveryAssetCode string, body map
 }
 
 func lockDeliveryAssetPlanForSyncTx(ctx context.Context, tx *sql.Tx, deliveryAssetCode string, body map[string]any) (map[string]any, map[string]any, error) {
-	sourcePlanCode := syncBodyText(body, "sourcePlanCode", "source_plan_code")
-	contractCode := syncBodyText(body, "contractCode", "contract_code", "sourceContractCode", "source_contract_code")
-	contractLineCode := syncBodyText(body, "contractLineCode", "contract_line_code", "sourceContractLineCode", "source_contract_line_code")
-
-	matches := []string{"(dap.external_asset_code = ? OR dap.code = ?)"}
-	args := []any{deliveryAssetCode, deliveryAssetCode}
-	if sourcePlanCode != "" {
-		matches = append(matches, "dap.code = ?")
-		args = append(args, sourcePlanCode)
-	}
-	if contractCode != "" && contractLineCode != "" {
-		matches = append(matches, "(dap.source_contract_code = ? AND dap.source_contract_line_code = ?)")
-		args = append(args, contractCode, contractLineCode)
-	}
+	matches, args := deliveryAssetPlanSyncMatches(
+		deliveryAssetCode,
+		syncBodyText(body, "sourcePlanCode", "source_plan_code"),
+		syncBodyText(body, "contractCode", "contract_code", "sourceContractCode", "source_contract_code"),
+		syncBodyText(body, "contractLineCode", "contract_line_code", "sourceContractLineCode", "source_contract_line_code"),
+	)
 
 	rows, err := tx.QueryContext(ctx, `
 		SELECT
 		  dap.*,
 		  c.code AS contract_code,
+		  c.customer_id AS contract_customer_id,
+		  cu.code AS contract_customer_code,
 		  c.owner_user_id AS contract_owner_user_id,
 		  c.owner_dept_code AS contract_owner_dept_code
 		FROM contract_delivery_asset_plan dap
 		JOIN contract c ON c.id = dap.contract_id
+		LEFT JOIN customer cu ON cu.id = c.customer_id
 		WHERE dap.deleted_at IS NULL
 		  AND (`+strings.Join(matches, " OR ")+`)
 		  AND c.deleted_at IS NULL
@@ -212,10 +258,73 @@ func lockDeliveryAssetPlanForSyncTx(ctx context.Context, tx *sql.Tx, deliveryAss
 	contract := map[string]any{
 		"id":              asset["contract_id"],
 		"code":            asset["contract_code"],
+		"customer_id":     asset["contract_customer_id"],
+		"customer_code":   asset["contract_customer_code"],
 		"owner_user_id":   asset["contract_owner_user_id"],
 		"owner_dept_code": asset["contract_owner_dept_code"],
 	}
 	return asset, contract, nil
+}
+
+func deliveryAssetPlanSyncMatches(deliveryAssetCode string, sourcePlanCode string, contractCode string, contractLineCode string) ([]string, []any) {
+	matches := []string{"(dap.external_asset_code = ? OR dap.code = ?)"}
+	args := []any{strings.TrimSpace(deliveryAssetCode), strings.TrimSpace(deliveryAssetCode)}
+	if sourcePlanCode = strings.TrimSpace(sourcePlanCode); sourcePlanCode != "" {
+		matches = append(matches, "dap.code = ?")
+		args = append(args, sourcePlanCode)
+	}
+	if contractCode = strings.TrimSpace(contractCode); contractCode != "" {
+		contractLineCode = strings.TrimSpace(contractLineCode)
+		if contractLineCode != "" {
+			matches = append(matches, "(dap.source_contract_code = ? AND dap.source_contract_line_code = ?)")
+			args = append(args, contractCode, contractLineCode)
+		}
+	}
+	return matches, args
+}
+
+func assertStatusSyncPayloadCustomer(asset map[string]any, body map[string]any) error {
+	expectedCustomer := altocMapText(asset, "customer_code")
+	if expectedCustomer == "" {
+		expectedCustomer = altocMapText(asset, "contract_customer_code")
+	}
+	assetCustomer := firstNonEmptyText(
+		syncBodyText(body, "customerCode", "customer_code"),
+		syncBodyText(body, "deliveryAssetCustomerCode", "delivery_asset_customer_code"),
+		nestedSyncBodyText(body, "asset", "customerCode", "customer_code"),
+		nestedSyncBodyText(body, "deliveryAsset", "customerCode", "customer_code"),
+		nestedSyncBodyText(body, "delivery_asset", "customerCode", "customer_code"),
+	)
+	environmentCustomer := firstNonEmptyText(
+		syncBodyText(body, "environmentCustomerCode", "environment_customer_code"),
+		nestedSyncBodyText(body, "environment", "customerCode", "customer_code"),
+		nestedSyncBodyText(body, "assetEnvironment", "customerCode", "customer_code"),
+		nestedSyncBodyText(body, "asset_environment", "customerCode", "customer_code"),
+	)
+	if expectedCustomer != "" {
+		if assetCustomer != "" && assetCustomer != expectedCustomer {
+			return httperror.New(http.StatusConflict, "delivery_asset_customer_conflict", "delivery asset belongs to another customer")
+		}
+		if environmentCustomer != "" && environmentCustomer != expectedCustomer {
+			return httperror.New(http.StatusConflict, "environment_customer_conflict", "environment belongs to another customer")
+		}
+	}
+	if assetCustomer != "" && environmentCustomer != "" && assetCustomer != environmentCustomer {
+		return httperror.New(http.StatusConflict, "delivery_asset_environment_conflict", "delivery asset and environment belong to different customers")
+	}
+	return nil
+}
+
+func nestedSyncBodyText(body map[string]any, parent string, keys ...string) string {
+	value, ok := body[parent]
+	if !ok {
+		return ""
+	}
+	nested, ok := value.(map[string]any)
+	if !ok {
+		return ""
+	}
+	return syncBodyText(nested, keys...)
 }
 
 func syncServiceAgreementAssetCodeTx(ctx context.Context, tx *sql.Tx, asset map[string]any, externalAssetCode string, operator string) (int64, error) {

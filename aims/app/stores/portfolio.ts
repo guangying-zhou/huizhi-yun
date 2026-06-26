@@ -13,6 +13,7 @@ export const usePortfolioStore = defineStore('portfolio', () => {
     dept_code?: string | null
     git_group?: string | null
     is_product_line?: boolean | number
+    display_order?: number | string | null
     created_by?: string
     created_at?: string
     updated_at?: string
@@ -31,6 +32,16 @@ export const usePortfolioStore = defineStore('portfolio', () => {
     return fallback
   }
 
+  function displayOrderValue(value: unknown) {
+    const parsed = Number(value ?? 0)
+    return Number.isFinite(parsed) ? Math.trunc(parsed) : 0
+  }
+
+  function comparePortfolio(a: ProjectPortfolio, b: ProjectPortfolio) {
+    return a.displayOrder - b.displayOrder
+      || a.id - b.id
+  }
+
   function normalizePortfolio(raw: RawProjectPortfolio): ProjectPortfolio {
     return {
       ...raw,
@@ -43,6 +54,7 @@ export const usePortfolioStore = defineStore('portfolio', () => {
       deptCode: raw.deptCode ?? raw.dept_code ?? null,
       gitGroup: raw.gitGroup ?? raw.git_group ?? null,
       isProductLine: raw.isProductLine ?? booleanValue(raw.is_product_line),
+      displayOrder: displayOrderValue(raw.displayOrder ?? raw.display_order),
       status: raw.status ?? 'active',
       createdBy: raw.createdBy ?? raw.created_by ?? '',
       createdAt: raw.createdAt ?? raw.created_at ?? '',
@@ -65,7 +77,7 @@ export const usePortfolioStore = defineStore('portfolio', () => {
         `/api/v1/portfolios?${params.toString()}`
       )
       if (res.code === 0) {
-        portfolios.value = res.data.items.map(normalizePortfolio)
+        portfolios.value = res.data.items.map(normalizePortfolio).sort(comparePortfolio)
         total.value = res.data.total
       }
     } catch (err) {

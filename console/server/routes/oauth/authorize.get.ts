@@ -1,12 +1,12 @@
 import { createError, defineEventHandler, getQuery, getRequestURL, sendRedirect } from 'h3'
 import { getRequestOrigin } from '@hzy/foundation/server/utils/appUrls'
 import {
-  assertPkce,
-  assertRedirectUri,
-  createAuthorizationCodeRecord,
-  normalizeScope,
-  requireOidcClient
-} from '~~/server/utils/oidc'
+  assertAuthorizePkce,
+  assertAuthorizeRedirectUri,
+  createAuthorizeCodeRecord,
+  normalizeAuthorizeScope,
+  requireAuthorizeOidcClient
+} from '~~/server/utils/oidcAuthorize'
 import { resolveOptionalConsoleSession } from '~~/server/utils/authSession'
 
 function first(value: unknown) {
@@ -35,15 +35,15 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, message: 'unsupported_response_type: only code is supported' })
   }
 
-  const client = await requireOidcClient(first(query.client_id))
-  const redirectUri = await assertRedirectUri(client, first(query.redirect_uri), 'redirect')
-  const scope = normalizeScope(first(query.scope))
+  const client = await requireAuthorizeOidcClient(first(query.client_id))
+  const redirectUri = await assertAuthorizeRedirectUri(client, first(query.redirect_uri), 'redirect')
+  const scope = normalizeAuthorizeScope(first(query.scope))
   const state = typeof first(query.state) === 'string' ? String(first(query.state)) : ''
   if (!state) {
     throw createError({ statusCode: 400, message: 'invalid_request: state is required' })
   }
   const nonce = typeof first(query.nonce) === 'string' ? String(first(query.nonce)) : ''
-  const pkce = assertPkce({
+  const pkce = assertAuthorizePkce({
     codeChallenge: first(query.code_challenge),
     codeChallengeMethod: first(query.code_challenge_method)
   })
@@ -54,7 +54,7 @@ export default defineEventHandler(async (event) => {
     return sendRedirect(event, `/login?redirect=${encodeURIComponent(requestUrl)}`)
   }
 
-  const code = await createAuthorizationCodeRecord({
+  const code = await createAuthorizeCodeRecord({
     event,
     client,
     session,

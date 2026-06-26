@@ -54,6 +54,10 @@ Finance 项目人力成本不得直连 People 数据库，也不得依赖 People
 - People 是人员事实、成本快照、贡献快照和个人绩效流程事实源；Finance 只维护项目财务核算结果、绩效金额/提成奖金的财务口径快照，不回写 People 人员事实或绩效终态。
 - 没有 People 员工职级、M/P 职级设置、Finance 人力成本参数或 Aims 工时时，Finance 只能显示项目收支和“人力成本未就绪”，不得把毛利展示为完整项目成本核算结果。
 
+## 成本归集与经营核算 Goal 3 契约
+
+Finance 保持成本单价和财务口径来源角色，不新增替代 Finance 的成本主账，也不直写 Altoc 或 Aims 数据库。Goal 3 的项目成本重算由上游编排把 Finance/People 成本参数传给 Aims `project_cost_summary`，再把项目期间成本传给 Altoc 的合同行利润和服务成本重算接口。Altoc 只保存经营归集规则和可重建汇总，Finance 仍负责正式发票、到账、核销、项目支出和成本参数。
+
 ## 一体化运营闭环 Phase 4 契约
 
 Finance 是维保收入、到账、核销、服务成本和毛利分析的财务事实源。P4.4 已落地 `GET /api/v1/finance/service/customers/{customerCode}/maintenance-financial-summary?contract_codes=&project_codes=&period_month=`，按客户、维保合同关联的合同编码和项目编码汇总开票、到账、核销、项目成本分摊与项目财务摘要；入站调用必须使用 Console service token，`aud=finance`、`scope=finance:read`。

@@ -388,7 +388,23 @@ func (a *Adapter) listProjectReleases(ctx context.Context, projectIDText string,
 		where = append(where, "pv.status = ?")
 		args = append(args, status)
 	}
-	rows, err := a.DB().QueryContext(ctx, `
+	rows, err := a.DB().QueryContext(ctx, projectReleasesListQuery(where), append([]any{projectID, projectID}, args...)...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items, err := aimsRowsToMaps(rows)
+	if err != nil {
+		return nil, err
+	}
+	return map[string]any{"items": items}, nil
+}
+
+func projectReleasesListQuery(where []string) string {
+	if len(where) == 0 {
+		where = []string{"1 = 1"}
+	}
+	return `
 		SELECT
 		  pv.id,
 		  pv.product_code,
@@ -430,18 +446,17 @@ func (a *Adapter) listProjectReleases(ctx context.Context, projectIDText string,
 		  WHERE tier = 'target' AND version_id IS NOT NULL
 		  GROUP BY version_id
 		) progress ON progress.version_id = pv.id
-		WHERE `+strings.Join(where, " AND ")+`
+		LEFT JOIN (
+		  SELECT
+		    version_id,
+		    COUNT(*) AS feature_count,
+		    SUM(CASE WHEN status = 'delivered' THEN 1 ELSE 0 END) AS delivered_feature_count
+		  FROM product_version_features
+		  GROUP BY version_id
+		) features ON features.version_id = pv.id
+		WHERE ` + strings.Join(where, " AND ") + `
 		ORDER BY pv.product_code ASC, pv.sort_order ASC, pv.created_at DESC, pv.id DESC
-	`, append([]any{projectID, projectID}, args...)...)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items, err := aimsRowsToMaps(rows)
-	if err != nil {
-		return nil, err
-	}
-	return map[string]any{"items": items}, nil
+	`
 }
 
 func (a *Adapter) createProductVersion(ctx context.Context, projectIDText string, query url.Values, body map[string]any) (map[string]any, error) {

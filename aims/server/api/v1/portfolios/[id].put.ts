@@ -40,6 +40,7 @@ export default defineEventHandler(async (event) => {
     deptCode: 'dept_code',
     gitGroup: 'git_group',
     isProductLine: 'is_product_line',
+    displayOrder: 'display_order',
     status: 'status'
   }
 
@@ -51,6 +52,9 @@ export default defineEventHandler(async (event) => {
       fields.push(`${dbCol} = ?`)
       if (bodyKey === 'isProductLine') {
         params.push(body[bodyKey] ? 1 : 0)
+      } else if (bodyKey === 'displayOrder') {
+        const displayOrder = Number(body[bodyKey] ?? 0)
+        params.push(Number.isFinite(displayOrder) ? Math.trunc(displayOrder) : 0)
       } else {
         params.push(body[bodyKey] ?? null)
       }

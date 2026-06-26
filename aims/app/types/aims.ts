@@ -80,6 +80,7 @@ export interface ProjectPortfolio {
   deptCode: string | null
   gitGroup: string | null
   isProductLine: boolean
+  displayOrder: number
   status: PortfolioStatus
   createdBy: string
   createdAt: string
@@ -438,6 +439,7 @@ export interface CreatePortfolioRequest {
   deptCode?: string | null
   gitGroup?: string | null
   isProductLine?: boolean
+  displayOrder?: number
 }
 
 /** 更新项目集 */
@@ -449,6 +451,7 @@ export interface UpdatePortfolioRequest {
   deptCode?: string | null
   gitGroup?: string | null
   isProductLine?: boolean
+  displayOrder?: number
   status?: PortfolioStatus
 }
 

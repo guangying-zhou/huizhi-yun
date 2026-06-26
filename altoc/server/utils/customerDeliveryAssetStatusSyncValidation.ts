@@ -156,7 +156,8 @@ function throwReferenceIssue(issue: ReferenceIssue) {
 async function validateFormalTargetIfNeeded(
   event: H3Event,
   target: FormalCoverageTarget,
-  idempotencyKey: string
+  idempotencyKey: string,
+  expectedCustomerCode: string
 ) {
   if (!target.requiresValidation) return
   const resolution = await callAssetsReferencesResolve(event, {
@@ -166,7 +167,7 @@ async function validateFormalTargetIfNeeded(
       ? [{ deliveryAssetCode: target.deliveryAssetCode, environmentCode: target.environmentCode }]
       : []
   }, idempotencyKey)
-  const issue = serviceAgreementCoverageReferenceIssue(target, resolution, '')
+  const issue = serviceAgreementCoverageReferenceIssue(target, resolution, expectedCustomerCode)
   if (issue) throwReferenceIssue(issue)
 }
 
@@ -221,6 +222,42 @@ async function writeStatusSyncRuntime(
   return runtime.data
 }
 
+async function loadDeliveryAssetStatusSyncExpectedCustomerCode(
+  event: H3Event,
+  deliveryAssetCode: string,
+  body: Record<string, unknown>
+) {
+  const runtime = await maybeCallTenantRuntime<RuntimeEnvelope<Record<string, unknown>>>(
+    event,
+    `/v1/altoc/service/customer-delivery-assets/${encodeURIComponent(deliveryAssetCode)}/status-sync-context`,
+    {
+      appCode: 'altoc',
+      scope: 'altoc.read altoc:contract:view',
+      method: 'GET',
+      query: {
+        sourcePlanCode: firstText(body, 'sourcePlanCode', 'source_plan_code'),
+        contractCode: firstText(body, 'contractCode', 'contract_code', 'sourceContractCode', 'source_contract_code'),
+        contractLineCode: firstText(body, 'contractLineCode', 'contract_line_code', 'sourceContractLineCode', 'source_contract_line_code')
+      }
+    }
+  )
+  if (!runtime.handled) {
+    throw createError({ statusCode: 503, message: 'Altoc tenant-runtime is required for delivery asset status sync validation.' })
+  }
+  if (runtime.data.code !== undefined && runtime.data.code !== 0) {
+    const code = runtimeEnvelopeErrorCode(runtime.data)
+    const message = runtimeEnvelopeErrorMessage(runtime.data, 'Altoc tenant-runtime returned an error.')
+    const upstreamStatus = serviceAgreementCoverageRuntimeErrorStatus(code, runtimeEnvelopeExplicitStatus(runtime.data))
+    throw createError({
+      statusCode: upstreamStatus,
+      message,
+      data: { code: code || runtime.data.code, message, upstreamStatus }
+    })
+  }
+  const data = objectBody(runtime.data.data)
+  return firstText(data, 'expectedCustomerCode', 'expected_customer_code')
+}
+
 export async function handleCustomerDeliveryAssetStatusSync(event: H3Event, input: {
   deliveryAssetCode: string
   statusCommand: string
@@ -233,7 +270,8 @@ export async function handleCustomerDeliveryAssetStatusSync(event: H3Event, inpu
     || `altoc:customer-delivery-asset:${input.deliveryAssetCode}:status-sync`
   const { target, issue } = deliveryAssetStatusSyncFormalTarget(input.deliveryAssetCode, body)
   if (issue) throwReferenceIssue(issue)
-  await validateFormalTargetIfNeeded(event, target, `${idempotencyKey}:assets-reference-validate`)
+  const expectedCustomerCode = await loadDeliveryAssetStatusSyncExpectedCustomerCode(event, input.deliveryAssetCode, body)
+  await validateFormalTargetIfNeeded(event, target, `${idempotencyKey}:assets-reference-validate`, expectedCustomerCode)
   return await writeStatusSyncRuntime(
     event,
     `/v1/altoc/service/customer-delivery-assets/${encodeURIComponent(input.deliveryAssetCode)}/status:sync`,

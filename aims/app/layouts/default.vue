@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import { globalMenuItems, globalUtilityItems } from '~/config/navigation'
+import { matchRouteRule, routeRuleRequirements } from '~/config/permissions'
 
 // 用户在线心跳
 useHeartbeat()
 
 // 平台授权快照
 const { loadAuthorization } = useAuthorization()
+const { hasPermission, hasRole } = usePermissions()
 
 // 项目上下文
 const { hasProjectContext, currentProjectId, currentProject, enterProject, exitProject, switchProject, loadCurrentProject } = useProjectContext()
@@ -92,7 +94,53 @@ const mainNavigationItems = computed(() => {
     .filter(item => item.label === '工作台' || item.label === '项目日历' || item.label === '项目总览' || item.label === '项目文档' || item.label === '统计分析')
 })
 
-const utilityNavigationItems = globalUtilityItems
+function hasAdminRoleAccess() {
+  return hasRole('system_admin')
+    || hasRole('platform:admin')
+    || hasRole('super_admin')
+    || hasRole('aims:admin')
+    || hasRole('console:admin')
+    || hasRole('console:console-dev-admin')
+}
+
+function hasProductAdminRoleAccess(path: string) {
+  return path.startsWith('/admin/products')
+    && (
+      hasRole('assets:admin')
+      || hasRole('assets:product-admin')
+      || hasRole('assets:product-manager')
+    )
+}
+
+function canAccessUtilityRoute(to?: string) {
+  if (!to || hasAdminRoleAccess() || hasProductAdminRoleAccess(to)) {
+    return true
+  }
+
+  const rule = matchRouteRule(to)
+  if (!rule) return true
+
+  return routeRuleRequirements(rule).some(item => hasPermission(item.resource, item.action))
+}
+
+function navigationTo(item: unknown) {
+  if (!item || typeof item !== 'object' || !('to' in item)) return undefined
+  const to = (item as { to?: unknown }).to
+  return typeof to === 'string' ? to : undefined
+}
+
+const utilityNavigationItems = computed(() => {
+  return globalUtilityItems
+    .map((item) => {
+      if (!item.children?.length) {
+        return canAccessUtilityRoute(navigationTo(item)) ? item : null
+      }
+
+      const children = item.children.filter(child => canAccessUtilityRoute(navigationTo(child)))
+      return children.length ? { ...item, children } : null
+    })
+    .filter((item): item is (typeof globalUtilityItems)[number] => Boolean(item))
+})
 
 // 项目集 store
 const portfolioStore = usePortfolioStore()

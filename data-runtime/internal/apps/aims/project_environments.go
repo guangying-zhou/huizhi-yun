@@ -113,7 +113,10 @@ func upsertProjectEnvironmentTx(ctx context.Context, tx *sql.Tx, projectCode str
 	if strings.HasPrefix(strings.ToUpper(environmentCode), "TEMP-") || strings.HasPrefix(strings.ToUpper(environmentCode), "PENDING-") {
 		return nil, httperror.New(http.StatusBadRequest, "invalid_environment_code", "Aims must not create placeholder environment codes")
 	}
-	relationType := normalizeProjectEnvironmentRelationType(firstBodyText(body, "relationType", "relation_type"))
+	relationType, err := projectEnvironmentRelationTypeInput(body, "initial_delivery", "relationType", "relation_type")
+	if err != nil {
+		return nil, err
+	}
 	deliveryAssetCode := firstBodyText(body, "deliveryAssetCode", "delivery_asset_code")
 	deliveryStatus, err := projectEnvironmentDeliveryStatusInput(body, "planned", "deliveryStatus", "delivery_status")
 	if err != nil {
@@ -389,7 +392,7 @@ func projectEnvironmentActiveRelationKey(projectID any, environmentCode string, 
 		projectID,
 		strings.TrimSpace(environmentCode),
 		strings.TrimSpace(deliveryAssetCode),
-		normalizeProjectEnvironmentRelationType(relationType),
+		relationType,
 	)
 }
 
@@ -399,8 +402,12 @@ func lockProjectEnvironmentForCommandTx(ctx context.Context, tx *sql.Tx, project
 	where := []string{"project_id = ?", "environment_code = ?", "deleted_at IS NULL"}
 	args := []any{projectID, environmentCode}
 	if relationType != "" {
+		normalizedRelationType := normalizeProjectEnvironmentRelationType(relationType)
+		if normalizedRelationType == "" {
+			return nil, httperror.New(http.StatusBadRequest, "invalid_environment_relation_type", "invalid project environment relationType")
+		}
 		where = append(where, "relation_type = ?")
-		args = append(args, normalizeProjectEnvironmentRelationType(relationType))
+		args = append(args, normalizedRelationType)
 	}
 	if deliveryAssetCode != "" {
 		where = append(where, "delivery_asset_code = ?")
@@ -454,8 +461,20 @@ func normalizeProjectEnvironmentRelationType(value string) string {
 	case "initial_delivery", "upgrade", "migration", "maintenance", "decommission", "verification", "other":
 		return strings.ToLower(strings.TrimSpace(value))
 	default:
-		return "initial_delivery"
+		return ""
 	}
+}
+
+func projectEnvironmentRelationTypeInput(body map[string]any, defaultType string, keys ...string) (string, error) {
+	raw := firstBodyText(body, keys...)
+	if raw == "" {
+		return defaultType, nil
+	}
+	relationType := normalizeProjectEnvironmentRelationType(raw)
+	if relationType == "" {
+		return "", httperror.New(http.StatusBadRequest, "invalid_environment_relation_type", "invalid project environment relationType")
+	}
+	return relationType, nil
 }
 
 func normalizeProjectEnvironmentDeliveryStatus(value string) string {

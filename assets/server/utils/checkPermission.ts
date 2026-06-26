@@ -4,6 +4,7 @@
 import type { H3Event } from 'h3'
 import { appCode, resources as manifestResources } from '~~/app/config/permissions'
 import { ensureAssetsConsoleAuth, getRequestUid } from '~~/server/utils/authIdentity'
+import { isAssetsLocalDevAuthorizationBypassEnabled } from '~~/server/utils/assetsLocalDevAuthorization'
 import { loadAuthorizationSnapshotFromConsoleRuntime } from '@hzy/foundation/server/utils/platformBundleAuthorization'
 
 type AuthorizationResources = Record<string, string[]>
@@ -12,8 +13,9 @@ type PermissionAction = 'view' | 'edit' | 'approve' | 'admin'
 async function loadAuthorizationResources(event: H3Event, uid: string): Promise<AuthorizationResources> {
   const bundleSnapshot = await loadAuthorizationSnapshotFromConsoleRuntime(uid, appCode, event, {
     localDev: {
+      enabled: isAssetsLocalDevAuthorizationBypassEnabled(),
       resources: manifestResources,
-      fallbackActions: ['view', 'edit', 'admin']
+      fallbackActions: []
     }
   })
   if (bundleSnapshot) {

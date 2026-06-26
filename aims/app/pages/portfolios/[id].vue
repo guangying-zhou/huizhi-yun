@@ -331,8 +331,14 @@ const editForm = ref<UpdatePortfolioRequest>({
   ownerUid: '',
   deptCode: '',
   gitGroup: '',
-  isProductLine: false
+  isProductLine: false,
+  displayOrder: 0
 })
+
+function normalizeDisplayOrder(value: unknown) {
+  const parsed = Number(value ?? 0)
+  return Number.isFinite(parsed) ? Math.trunc(parsed) : 0
+}
 
 function openEditModal() {
   if (!portfolio.value) return
@@ -343,7 +349,8 @@ function openEditModal() {
     ownerUid: portfolio.value.ownerUid || '',
     deptCode: portfolio.value.deptCode || '',
     gitGroup: portfolio.value.gitGroup || '',
-    isProductLine: portfolio.value.isProductLine
+    isProductLine: portfolio.value.isProductLine,
+    displayOrder: normalizeDisplayOrder(portfolio.value.displayOrder)
   }
   showEditModal.value = true
 }
@@ -392,6 +399,7 @@ function onEditOwnerChange(uid: string | null) {
 async function handleSaveEdit() {
   editSaving.value = true
   try {
+    editForm.value.displayOrder = normalizeDisplayOrder(editForm.value.displayOrder)
     await portfolioStore.updatePortfolio(portfolioId.value, editForm.value)
     showEditModal.value = false
     await fetchPortfolioDetail()
@@ -642,6 +650,18 @@ onMounted(async () => {
 
         <UFormField label="项目集编码">
           <UInput :model-value="portfolio?.code" disabled class="w-full" />
+        </UFormField>
+
+        <UFormField label="显示顺序" description="数字越小越靠前">
+          <UInput
+            :model-value="String(editForm.displayOrder ?? 0)"
+            type="number"
+            min="0"
+            step="1"
+            placeholder="0"
+            class="w-full"
+            @update:model-value="value => editForm.displayOrder = normalizeDisplayOrder(value)"
+          />
         </UFormField>
 
         <UFormField label="描述">

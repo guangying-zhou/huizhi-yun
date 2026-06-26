@@ -58,6 +58,10 @@ func (a *Adapter) HandleRuntime(ctx context.Context, method string, path string,
 		return map[string]any{"code": 0, "data": data}, operation, err
 	}
 
+	if data, operation, handled, err := a.handleProjectCostSummaryRuntime(ctx, method, path, query, body); handled {
+		return map[string]any{"code": 0, "data": data}, operation, err
+	}
+
 	if data, operation, handled, err := a.handleServiceContractRuntime(ctx, method, path, query, body); handled {
 		return map[string]any{"code": 0, "data": data}, operation, err
 	}

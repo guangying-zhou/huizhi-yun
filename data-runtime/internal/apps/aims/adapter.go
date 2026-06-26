@@ -14,6 +14,7 @@ var requiredTables = []string{
 	"aims_projects",
 	"aims_project_members",
 	"project_environments",
+	"project_cost_summary",
 	"project_weekly_reports",
 	"project_weekly_report_entries",
 	"project_weekly_report_work_items",
@@ -53,7 +54,7 @@ func New(cfg config.AimsConfig) (*Adapter, error) {
 				CodeColumn:     "code",
 				CodePrefix:     "PF",
 				SearchColumns:  []string{"code", "name", "domain_code", "owner_uid", "dept_code"},
-				DefaultOrderBy: "`updated_at` DESC, `id` DESC",
+				DefaultOrderBy: "`display_order` ASC, `id` ASC",
 			},
 			{
 				Path:           "projects",

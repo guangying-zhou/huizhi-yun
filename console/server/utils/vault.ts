@@ -3,11 +3,20 @@ import { readFile } from 'node:fs/promises'
 import { isAbsolute, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createError, getHeader, getRequestIP, type H3Event } from 'h3'
-import { importJWK, jwtVerify, type JWK, type JWTPayload } from 'jose'
+import type { JWK, JWTPayload } from 'jose'
 import type { ResultSetHeader, RowDataPacket } from 'mysql2/promise'
 import { useRuntimeConfig } from '#imports'
 import { execute, queryRow, queryRows, withTransaction } from '~~/server/utils/db'
 import { getOidcIssuer, getPublishedJwks, hashOpaqueValue } from '~~/server/utils/oidc'
+
+type JoseModule = typeof import('jose')
+
+let joseModulePromise: Promise<JoseModule> | null = null
+
+function loadJose() {
+  joseModulePromise ||= import('jose')
+  return joseModulePromise
+}
 
 type VaultStorageBackend = 'db_encrypted' | 'env_ref' | 'docker_secret' | 'k8s_secret'
 type VaultUsageType = 'integration' | 'service' | 'bootstrap' | 'custody'
@@ -958,6 +967,7 @@ export async function requireConsoleServiceActor(
     throw createError({ statusCode: 401, message: 'invalid_token: signing key not found' })
   }
 
+  const { importJWK, jwtVerify } = await loadJose()
   const key = await importJWK(jwk, header.alg || 'EdDSA')
   let payload: JWTPayload
   try {

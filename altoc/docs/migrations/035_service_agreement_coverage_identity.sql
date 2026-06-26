@@ -125,20 +125,37 @@ SELECT
       AND dap.environment_code IS NOT NULL AND dap.environment_code <> '' THEN 'delivery_asset_environment'
     WHEN saa.coverage_type IN ('planned_asset', 'pending_asset')
       AND dap.external_asset_code IS NOT NULL AND dap.external_asset_code <> '' THEN 'delivery_asset'
+    WHEN saa.coverage_type = 'customer_delivery_asset'
+      AND dap.code = saa.delivery_asset_code
+      AND dap.external_asset_code IS NOT NULL AND dap.external_asset_code <> ''
+      AND dap.environment_code IS NOT NULL AND dap.environment_code <> '' THEN 'delivery_asset_environment'
+    WHEN saa.coverage_type = 'customer_delivery_asset'
+      AND dap.code = saa.delivery_asset_code
+      AND dap.external_asset_code IS NOT NULL AND dap.external_asset_code <> '' THEN 'delivery_asset'
+    WHEN saa.coverage_type = 'customer_delivery_asset'
+      AND (saa.delivery_asset_code LIKE 'DAP-%' OR saa.delivery_asset_code LIKE 'CDAP-%') THEN 'pending_plan'
     WHEN saa.coverage_type = 'customer_delivery_asset' THEN 'delivery_asset'
     ELSE 'pending_plan'
   END,
   CASE
     WHEN saa.coverage_type IN ('planned_asset', 'pending_asset') THEN saa.delivery_asset_code
-    WHEN dap.code IS NOT NULL THEN dap.code
+    WHEN saa.coverage_type = 'customer_delivery_asset' AND dap.code IS NOT NULL THEN dap.code
+    WHEN saa.coverage_type = 'customer_delivery_asset'
+      AND (saa.delivery_asset_code LIKE 'DAP-%' OR saa.delivery_asset_code LIKE 'CDAP-%') THEN saa.delivery_asset_code
     ELSE NULL
   END,
   CASE
+    WHEN saa.coverage_type = 'customer_delivery_asset'
+      AND dap.code = saa.delivery_asset_code THEN NULLIF(dap.external_asset_code, '')
+    WHEN saa.coverage_type = 'customer_delivery_asset'
+      AND (saa.delivery_asset_code LIKE 'DAP-%' OR saa.delivery_asset_code LIKE 'CDAP-%') THEN NULL
     WHEN saa.coverage_type = 'customer_delivery_asset' THEN saa.delivery_asset_code
     WHEN saa.coverage_type IN ('planned_asset', 'pending_asset') THEN NULLIF(dap.external_asset_code, '')
     ELSE NULL
   END,
   CASE
+    WHEN saa.coverage_type = 'customer_delivery_asset'
+      AND dap.code = saa.delivery_asset_code THEN NULLIF(dap.environment_code, '')
     WHEN saa.coverage_type IN ('planned_asset', 'pending_asset') THEN NULLIF(dap.environment_code, '')
     ELSE NULL
   END,
@@ -148,12 +165,20 @@ SELECT
   END,
   CASE
     WHEN saa.coverage_type = 'legacy_delivery' THEN 'needs_review'
+    WHEN saa.coverage_type = 'customer_delivery_asset'
+      AND dap.code = saa.delivery_asset_code
+      AND dap.external_asset_code IS NOT NULL AND dap.external_asset_code <> '' THEN 'resolved'
+    WHEN saa.coverage_type = 'customer_delivery_asset'
+      AND (saa.delivery_asset_code LIKE 'DAP-%' OR saa.delivery_asset_code LIKE 'CDAP-%') THEN 'pending'
     WHEN saa.coverage_type = 'customer_delivery_asset' THEN 'resolved'
     WHEN saa.coverage_type IN ('planned_asset', 'pending_asset') AND dap.external_asset_code IS NOT NULL AND dap.external_asset_code <> '' THEN 'resolved'
     ELSE 'pending'
   END,
   CASE
     WHEN saa.coverage_type = 'legacy_delivery' THEN 'planned'
+    WHEN saa.coverage_type = 'customer_delivery_asset'
+      AND (saa.delivery_asset_code LIKE 'DAP-%' OR saa.delivery_asset_code LIKE 'CDAP-%')
+      AND (dap.external_asset_code IS NULL OR dap.external_asset_code = '') THEN 'planned'
     WHEN saa.coverage_type IN ('planned_asset', 'pending_asset') AND (dap.external_asset_code IS NULL OR dap.external_asset_code = '') THEN 'planned'
     ELSE
       CASE WHEN sa.status = 'active' THEN 'active' ELSE 'planned' END

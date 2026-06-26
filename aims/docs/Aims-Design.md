@@ -246,7 +246,7 @@ Account (hzy_account)              Aims (hzy_aims)
 
 | 表 | 关键字段 |
 |----|---------|
-| `project_portfolios` | id, name, description, domain_code(关联Account业务领域), owner_uid, dept_code, status(active/archived) |
+| `project_portfolios` | id, name, description, domain_code(关联Account业务领域), owner_uid, dept_code, display_order(显示顺序), status(active/archived) |
 | `aims_projects` | id, project_code(UNIQUE), name, category(enum), methodology(enum),  lifecycle_status(enum), **portfolio_id(FK→project_portfolios)**, **domain_code(关联Account业务领域)**, dept_code, leader_uid, **customer_code(Altoc客户编码)**, customer_name, contract_code, **module_config(JSON: 模块开关)**, board_config(JSON), workflow_config(JSON), created_by |
 | `aims_project_members` | id, project_id(FK), uid, role(enum: manager/developer/tester/viewer), joined_at — UNIQUE(project_id, uid) |
 | `aims_project_repos` | id, project_id(FK), repo_project_code(Account的project_code), created_at — UNIQUE(project_id, repo_project_code) |

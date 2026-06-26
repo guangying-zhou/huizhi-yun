@@ -5,6 +5,7 @@ import {
   environmentUpsertStatusValue,
   normalizeProjectEnvironmentDeliveryStatus,
   normalizeProjectEnvironmentRelationType,
+  projectEnvironmentRelationTypeValue,
   projectEnvironmentIdempotencyKey
 } from '../server/utils/projectEnvironmentIdentity.ts'
 
@@ -56,9 +57,10 @@ describe('project environment identity helpers', () => {
     )
   })
 
-  test('normalizes invalid relation type without inventing another project relation namespace', () => {
+  test('rejects invalid relation type without inventing another project relation namespace', () => {
     assert.equal(normalizeProjectEnvironmentRelationType('maintenance'), 'maintenance')
-    assert.equal(normalizeProjectEnvironmentRelationType('bad-value'), 'initial_delivery')
+    assert.equal(normalizeProjectEnvironmentRelationType('bad-value'), '')
+    assert.equal(projectEnvironmentRelationTypeValue('', 'initial_delivery'), 'initial_delivery')
   })
 
   test('rejects invalid project environment delivery status before cross-app writes', () => {

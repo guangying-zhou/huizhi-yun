@@ -2,7 +2,7 @@
 -- Aims (汇智云·项目) 数据库 Schema
 -- 数据库名: hzy_aims
 -- 创建日期: 2026-03-21
--- 更新日期: 2026-04-08
+-- 更新日期: 2026-06-26
 -- 说明:
 --   1. Aims 项目是独立业务实体，不是 Account 项目的扩展
 --   2. 与 Account 的 GitLab 仓库通过 aims_project_repos 表 N:M 关联
@@ -28,6 +28,7 @@ CREATE TABLE IF NOT EXISTS `project_portfolios` (
   `dept_code` VARCHAR(50) DEFAULT NULL COMMENT '所属部门(关联Account)',
   `git_group` VARCHAR(200) DEFAULT NULL COMMENT 'GitLab群组路径(如 myorg/frontend)',
   `is_product_line` TINYINT(1) NOT NULL DEFAULT 0 COMMENT '是否为产品线(1=产品线, 新建子项目自动归类为产品研发)',
+  `display_order` INT NOT NULL DEFAULT 0 COMMENT '显示顺序(由小到大排序)',
   `status` ENUM('active','archived') NOT NULL DEFAULT 'active' COMMENT '项目集状态',
   `created_by` VARCHAR(64) NOT NULL COMMENT '创建人uid',
   `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -38,6 +39,7 @@ CREATE TABLE IF NOT EXISTS `project_portfolios` (
   KEY `idx_owner_uid` (`owner_uid`),
   KEY `idx_dept_code` (`dept_code`),
   KEY `idx_is_product_line` (`is_product_line`),
+  KEY `idx_display_order` (`display_order`, `id`),
   KEY `idx_status` (`status`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='项目集(项目组合管理)';
 
@@ -662,6 +664,35 @@ CREATE TABLE IF NOT EXISTS `time_entries` (
   CONSTRAINT `fk_time_item` FOREIGN KEY (`work_item_id`) REFERENCES `work_items` (`id`) ON DELETE CASCADE,
   CONSTRAINT `fk_time_weekly_report` FOREIGN KEY (`weekly_report_id`) REFERENCES `project_weekly_reports` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='工时记录';
+
+CREATE TABLE IF NOT EXISTS `project_cost_summary` (
+  `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `project_code` VARCHAR(64) NOT NULL COMMENT 'Aims项目编号',
+  `period_start` DATE NOT NULL COMMENT '核算期间开始',
+  `period_end` DATE NOT NULL COMMENT '核算期间结束',
+  `total_worklogs` INT NOT NULL DEFAULT 0 COMMENT '工时记录数',
+  `total_hours` DECIMAL(12,2) NOT NULL DEFAULT 0.00 COMMENT '总工时',
+  `labor_cost` DECIMAL(18,2) NOT NULL DEFAULT 0.00 COMMENT '人力成本',
+  `outsourced_cost` DECIMAL(18,2) NOT NULL DEFAULT 0.00 COMMENT '外包成本',
+  `other_cost` DECIMAL(18,2) NOT NULL DEFAULT 0.00 COMMENT '其他成本',
+  `total_cost` DECIMAL(18,2) NOT NULL DEFAULT 0.00 COMMENT '总成本',
+  `calculation_key` VARCHAR(160) NOT NULL COMMENT '幂等计算键',
+  `source_version` VARCHAR(80) DEFAULT NULL COMMENT '人员/财务成本版本',
+  `calculated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '计算时间',
+  `version` INT NOT NULL DEFAULT 1 COMMENT '版本号',
+  `is_current` TINYINT NOT NULL DEFAULT 1 COMMENT '是否当前版本',
+  `detail_json` JSON DEFAULT NULL COMMENT '按人员/成本源聚合快照',
+  `created_by` VARCHAR(64) DEFAULT NULL,
+  `updated_by` VARCHAR(64) DEFAULT NULL,
+  `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  `deleted_at` DATETIME DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_project_cost_period_key` (`project_code`, `period_start`, `period_end`, `calculation_key`),
+  KEY `idx_project_cost_current` (`project_code`, `period_start`, `period_end`, `is_current`),
+  KEY `idx_project_cost_period` (`period_start`, `period_end`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  COMMENT='项目成本汇总，可按时间窗口重算';
 
 -- ============================================================
 -- 14. GitLab提交关联表

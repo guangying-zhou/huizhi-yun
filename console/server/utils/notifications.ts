@@ -51,13 +51,14 @@ interface NotificationRow extends RowDataPacket {
   recipientCreatedAt: string
 }
 
-interface CountRow extends RowDataPacket {
-  count: number
-}
-
 interface CategoryCountRow extends RowDataPacket {
   category: string
   count: number
+}
+
+interface SummaryCountRow extends RowDataPacket {
+  totalCount: number
+  unreadCount: number
 }
 
 function stringValue(value: unknown) {
@@ -289,38 +290,29 @@ export async function getUserNotificationSummary(uid: string) {
     AND r.archived_at IS NULL
     AND (n.expires_at IS NULL OR n.expires_at > UTC_TIMESTAMP())`
 
-  const [totalRow, unreadRow, categories, latest] = await Promise.all([
-    queryRow<CountRow>(
-      `SELECT COUNT(*) AS count
-         FROM portal_notification_recipients r
-         INNER JOIN portal_notifications n ON n.notification_id = r.notification_id
-        WHERE ${baseWhere}`,
-      [uid]
-    ),
-    queryRow<CountRow>(
-      `SELECT COUNT(*) AS count
-         FROM portal_notification_recipients r
-         INNER JOIN portal_notifications n ON n.notification_id = r.notification_id
-        WHERE ${baseWhere}
-          AND r.read_at IS NULL`,
-      [uid]
-    ),
-    queryRows<CategoryCountRow[]>(
-      `SELECT n.category, COUNT(*) AS count
-         FROM portal_notification_recipients r
-         INNER JOIN portal_notifications n ON n.notification_id = r.notification_id
-        WHERE ${baseWhere}
-          AND r.read_at IS NULL
-        GROUP BY n.category
-        ORDER BY count DESC, n.category ASC`,
-      [uid]
-    ),
-    listUserNotifications({ uid, status: 'all', limit: 5 })
-  ])
+  const countRow = await queryRow<SummaryCountRow>(
+    `SELECT COUNT(*) AS totalCount,
+            COALESCE(SUM(CASE WHEN r.read_at IS NULL THEN 1 ELSE 0 END), 0) AS unreadCount
+       FROM portal_notification_recipients r
+       INNER JOIN portal_notifications n ON n.notification_id = r.notification_id
+      WHERE ${baseWhere}`,
+    [uid]
+  )
+  const categories = await queryRows<CategoryCountRow[]>(
+    `SELECT n.category, COUNT(*) AS count
+       FROM portal_notification_recipients r
+       INNER JOIN portal_notifications n ON n.notification_id = r.notification_id
+      WHERE ${baseWhere}
+        AND r.read_at IS NULL
+      GROUP BY n.category
+      ORDER BY count DESC, n.category ASC`,
+    [uid]
+  )
+  const latest = await listUserNotifications({ uid, status: 'all', limit: 5 })
 
   return {
-    totalCount: Number(totalRow?.count || 0),
-    unreadCount: Number(unreadRow?.count || 0),
+    totalCount: Number(countRow?.totalCount || 0),
+    unreadCount: Number(countRow?.unreadCount || 0),
     unreadByCategory: categories.reduce<Record<string, number>>((acc, row) => {
       acc[row.category] = Number(row.count || 0)
       return acc

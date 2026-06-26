@@ -116,8 +116,8 @@ func TestListServiceAgreementCoveragesFallsBackToLegacyAssetsWhenCoverageEmpty(t
 	if len(items) != 1 {
 		t.Fatalf("items = %#v, want one legacy fallback row", items)
 	}
-	if items[0]["target_type"] != "legacy_asset" || items[0]["resolution_status"] != "needs_review" || items[0]["legacy_reference"] != "LEGACY-1" {
-		t.Fatalf("legacy fallback item = %#v, want legacy_asset needs_review", items[0])
+	if items[0]["target_type"] != "legacy" || items[0]["resolution_status"] != "needs_review" || items[0]["legacy_reference"] != "LEGACY-1" {
+		t.Fatalf("legacy fallback item = %#v, want legacy needs_review", items[0])
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Fatalf("expectations: %v", err)

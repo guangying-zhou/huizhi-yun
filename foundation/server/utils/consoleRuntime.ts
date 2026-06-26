@@ -438,10 +438,10 @@ export function resolveConsoleRuntimeSeedConfig(
 
   const consoleApiUrl = normalizeBaseUrl(
     runtimeApiUrl
-    || tenantGatewayConsoleUrl
     || envConsoleUrl
     || configuredRuntimeApiUrl
     || configuredConsoleUrl
+    || tenantGatewayConsoleUrl
     || deploymentPublicUrl
     || (process.env.NODE_ENV === 'production' ? '' : 'http://localhost:3000')
   )

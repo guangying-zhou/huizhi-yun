@@ -4,7 +4,7 @@ import { useRuntimeConfig } from '#imports'
 import type { RowDataPacket } from 'mysql2/promise'
 import { readFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
-import { importJWK, type JWK } from 'jose'
+import type { JWK } from 'jose'
 import { getRuntimeCacheDescriptor, readCachedBundle } from '~~/server/utils/bundleCache'
 import {
   loadActivationStatus,
@@ -16,6 +16,15 @@ import {
 import { resolveAuthClientMaterializeMode } from '~~/server/utils/authClients'
 import { getPublicConsoleCollabRuntimeState } from '~~/server/utils/collabRuntime'
 import { queryRow } from '~~/server/utils/db'
+
+type JoseModule = typeof import('jose')
+
+let joseModulePromise: Promise<JoseModule> | null = null
+
+function loadJose() {
+  joseModulePromise ||= import('jose')
+  return joseModulePromise
+}
 
 type CloudflareRuntimeEnv = Record<string, string | undefined>
 type CloudflareRuntimeEvent = {
@@ -206,6 +215,7 @@ async function validateSigningPrivateKey(event: H3Event, row: SigningKeyProbeRow
       throw new Error('current signing key private JWK does not match published public JWK')
     }
 
+    const { importJWK } = await loadJose()
     await importJWK(privateJwk, row.alg)
     return {
       usable: true,

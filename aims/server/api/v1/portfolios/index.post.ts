@@ -19,10 +19,11 @@ export default defineEventHandler(async (event) => {
   if (!body?.name?.trim()) {
     throw createError({ statusCode: 400, message: '项目集名称不能为空' })
   }
+  const displayOrder = Number(body.displayOrder ?? 0)
 
   const result = await execute<ResultSetHeader>(
-    `INSERT INTO project_portfolios (code, name, description, domain_code, owner_uid, dept_code, git_group, is_product_line, created_by)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO project_portfolios (code, name, description, domain_code, owner_uid, dept_code, git_group, is_product_line, display_order, created_by)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       body.code.trim().toUpperCase(),
       body.name.trim(),
@@ -32,6 +33,7 @@ export default defineEventHandler(async (event) => {
       body.deptCode || null,
       body.gitGroup || null,
       body.isProductLine ? 1 : 0,
+      Number.isFinite(displayOrder) ? Math.trunc(displayOrder) : 0,
       uid
     ]
   )

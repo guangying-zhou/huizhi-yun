@@ -1,5 +1,5 @@
 import { createHash, randomBytes } from 'node:crypto'
-import { createRemoteJWKSet, decodeJwt, jwtVerify, type JWTPayload } from 'jose'
+import type { JWTPayload } from 'jose'
 import {
   createError,
   deleteCookie,
@@ -72,7 +72,15 @@ const sessionCookies = {
 } as const
 
 const discoveryByIssuer = new Map<string, Promise<DiscoveryDocument>>()
-const jwksByUri = new Map<string, ReturnType<typeof createRemoteJWKSet>>()
+const jwksByUri = new Map<string, unknown>()
+type JoseModule = typeof import('jose')
+
+let joseModulePromise: Promise<JoseModule> | null = null
+
+function loadJose() {
+  joseModulePromise ||= import('jose')
+  return joseModulePromise
+}
 
 function stringValue(value: unknown) {
   return String(value || '').trim()
@@ -102,7 +110,7 @@ function getCookieOptions(event: H3Event, maxAge = 600) {
 
 function getTokenMaxAge(token: string, fallbackSeconds: number) {
   try {
-    const claims = decodeJwt(token)
+    const claims = JSON.parse(Buffer.from(token.split('.')[1] || '', 'base64url').toString('utf8')) as { exp?: unknown }
     const exp = typeof claims.exp === 'number' ? claims.exp : 0
     const now = Math.floor(Date.now() / 1000)
     if (exp > now) {
@@ -303,10 +311,12 @@ async function exchangeCode(event: H3Event, config: UpstreamOidcConfig, code: st
 async function resolveClaims(config: UpstreamOidcConfig, tokenSet: TokenResponse, nonce: string): Promise<UserClaims> {
   if (tokenSet.id_token) {
     if (config.jwksUri && config.issuer) {
+      const { createRemoteJWKSet, jwtVerify } = await loadJose()
       if (!jwksByUri.has(config.jwksUri)) {
         jwksByUri.set(config.jwksUri, createRemoteJWKSet(new URL(config.jwksUri)))
       }
-      const verified = await jwtVerify(tokenSet.id_token, jwksByUri.get(config.jwksUri)!, {
+      const jwks = jwksByUri.get(config.jwksUri) as ReturnType<typeof createRemoteJWKSet>
+      const verified = await jwtVerify(tokenSet.id_token, jwks, {
         issuer: config.issuer,
         audience: config.clientId
       })

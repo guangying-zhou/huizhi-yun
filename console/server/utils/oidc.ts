@@ -5,7 +5,6 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 import type { H3Event } from 'h3'
 import { createError, getHeader } from 'h3'
 import type { JWTPayload, JWK } from 'jose'
-import { exportJWK, generateKeyPair, importJWK, jwtVerify, SignJWT } from 'jose'
 import type { ResultSetHeader, RowDataPacket } from 'mysql2/promise'
 import { useRuntimeConfig } from '#imports'
 import { resolveCurrentAppHomeUrl } from '@hzy/foundation/server/utils/appUrls'
@@ -15,6 +14,15 @@ import { loadPlatformRuntimeConfig, resolvePlatformRuntimeCacheScope } from '~~/
 import type { ConsoleSessionContext } from '~~/server/utils/authSession'
 
 export const OIDC_SUPPORTED_SCOPES = new Set(['openid', 'profile', 'email', 'offline_access'])
+
+type JoseModule = typeof import('jose')
+
+let joseModulePromise: Promise<JoseModule> | null = null
+
+function loadJose() {
+  joseModulePromise ||= import('jose')
+  return joseModulePromise
+}
 
 interface AuthClientRow extends RowDataPacket {
   id: number
@@ -382,6 +390,7 @@ async function generateSigningKey(event: H3Event) {
   }
 
   const kid = `csk_${new Date().toISOString().replace(/\D/g, '').slice(0, 14)}_${randomBytes(6).toString('base64url')}`
+  const { exportJWK, generateKeyPair } = await loadJose()
   const { publicKey, privateKey } = await generateKeyPair('EdDSA', { extractable: true })
   const publicJwk = await exportJWK(publicKey)
   const privateJwk = await exportJWK(privateKey)
@@ -453,6 +462,7 @@ export async function ensureCurrentSigningKey(event: H3Event) {
       if (!publicJwkMatchesPrivate(existing, privateJwk)) {
         await repairEnvSigningKeyPublicJwk(existing, privateJwk)
       }
+      const { importJWK } = await loadJose()
       const key = await importJWK(privateJwk, existing.alg)
       return {
         kid: existing.kid,
@@ -482,6 +492,7 @@ export async function ensureCurrentSigningKey(event: H3Event) {
 
   const generated = await generateSigningKey(event)
   const privateJwk = await readPrivateJwk(event, generated.privateKeyRef)
+  const { importJWK } = await loadJose()
   const key = await importJWK(privateJwk, generated.alg)
   return {
     kid: generated.kid,
@@ -1034,6 +1045,7 @@ async function signJwt(input: {
     claims.nonce = input.nonce
   }
 
+  const { SignJWT } = await loadJose()
   return new SignJWT(claims)
     .setProtectedHeader({ alg: signingKey.alg, kid: signingKey.kid, typ: 'JWT' })
     .setIssuedAt(now)
@@ -1070,6 +1082,7 @@ async function signServiceAccessJwt(input: ServiceAccessTokenInput & { expiresIn
     }
   }
 
+  const { SignJWT } = await loadJose()
   return new SignJWT(claims)
     .setProtectedHeader({ alg: signingKey.alg, kid: signingKey.kid, typ: 'JWT' })
     .setIssuedAt(now)
@@ -1136,6 +1149,7 @@ export async function verifyAccessToken(event: H3Event, token: string) {
     throw createError({ statusCode: 401, message: 'invalid_token: signing key not found' })
   }
 
+  const { importJWK, jwtVerify } = await loadJose()
   const key = await importJWK(jwk, header.alg || 'EdDSA')
   const { payload } = await jwtVerify(token, key, {
     issuer: getOidcIssuer(event)

@@ -135,6 +135,9 @@ func (a *Adapter) handleRuntimeGet(ctx context.Context, path string, query url.V
 	if response, operation, matched, err := a.handleDashboardGet(ctx, path, query); matched {
 		return response, operation, true, err
 	}
+	if response, operation, matched, err := a.handleOperatingAccountingGet(ctx, path, query); matched {
+		return response, operation, true, err
+	}
 	if path == "/v1/altoc/teams" {
 		data, err := a.listSalesTeams(ctx, query)
 		return runtimeOK(data), "altoc.teams.list", true, err
@@ -218,6 +221,10 @@ func (a *Adapter) handleRuntimeGet(ctx context.Context, path string, query url.V
 	if contractID, jobID, ok := contractActivationJobPath(path); ok {
 		data, err := a.getContractActivationJob(ctx, contractID, jobID, query)
 		return runtimeOK(data), "altoc.contracts.activation.jobs.get", true, err
+	}
+	if deliveryAssetCode, ok := pathParam(path, "/v1/altoc/service/customer-delivery-assets/", "/status-sync-context"); ok {
+		data, err := a.customerDeliveryAssetStatusSyncContext(ctx, unescapePathParam(deliveryAssetCode), query)
+		return runtimeOK(data), "altoc.service.customer_delivery_assets.status_sync_context", true, err
 	}
 	if contractID, ok := pathParam(path, "/v1/altoc/contracts/", ""); ok {
 		data, err := a.getContractScoped(ctx, contractID, query)
@@ -396,6 +403,9 @@ func (a *Adapter) handleRuntimeUpdate(ctx context.Context, path string, body map
 }
 
 func (a *Adapter) handleRuntimePost(ctx context.Context, path string, body map[string]any) (any, string, bool, error) {
+	if response, operation, matched, err := a.handleOperatingAccountingPost(ctx, path, body); matched {
+		return response, operation, true, err
+	}
 	if path == "/v1/altoc/config/dict" {
 		data, err := a.createConfigDict(ctx, body)
 		return runtimeOK(data), "altoc.config.dict.create", true, err
