@@ -1,0 +1,39 @@
+{
+  "name": "finance",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "nuxt build --dotenv .env",
+    "build:cloudflare": "node scripts/build-cloudflare.mjs",
+    "cloudflare:config": "node scripts/render-cloudflare-config.mjs",
+    "deploy:cloudflare": "pnpm run cloudflare:config && pnpm run build:cloudflare && pnpm dlx wrangler@4 deploy --config .wrangler.generated.jsonc",
+    "preview:cloudflare": "pnpm run cloudflare:config && pnpm run build:cloudflare && pnpm dlx wrangler@4 dev --config .wrangler.generated.jsonc",
+    "dev": "VITE_HMR_PORT=24686 nuxt dev --dotenv .env.dev --port 3006",
+    "dev:direct": "NUXT_PUBLIC_SITE_URL=http://localhost:3006 HZY_APP_BASE_PATH=/ NUXT_APP_BASE_URL=/ VITE_HMR_PORT=24686 nuxt dev --dotenv .env.dev --port 3006",
+    "preview": "nuxt preview",
+    "postinstall": "nuxt prepare",
+    "lint": "eslint .",
+    "typecheck": "nuxt typecheck"
+  },
+  "dependencies": {
+    "@hzy/foundation": "workspace:*",
+    "@iconify-json/lucide": "^1.2.71",
+    "@iconify-json/simple-icons": "^1.2.55",
+    "@nuxt/ui": "^4.1.0",
+    "@pinia/nuxt": "^0.11.3",
+    "@vueuse/nuxt": "^13.9.0",
+    "date-fns": "^4.1.0",
+    "nuxt": "^4.2.0",
+    "pinia": "^3.0.4",
+    "zod": "^4.1.12",
+    "tailwindcss": "^4.1.0"
+  },
+  "devDependencies": {
+    "@nuxt/eslint": "^1.9.0",
+    "@types/node": "^24.10.0",
+    "eslint": "^9.38.0",
+    "typescript": "^5.9.3",
+    "vue-tsc": "^3.1.2"
+  },
+  "packageManager": "pnpm@10.23.0"
+}

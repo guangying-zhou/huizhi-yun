@@ -1,0 +1,269 @@
+{
+  "appCode": "assets",
+  "appName": "汇智云资产",
+  "appType": "business",
+  "description": "企业资产与资源管理：统一维护实物资产、资源资产、产品资产、知识产权、数字资产、环境视图、客户交付视图、采购入库、分配回收、预警与成本归因。",
+  "icon": "i-lucide-boxes",
+  "entry": {
+    "web": "/",
+    "apiBase": "/api/v1/assets"
+  },
+  "runtimeRequirements": {
+    "requiresSdk": true,
+    "supportsCustomerHosted": true,
+    "supportsManagedControlPlane": false
+  },
+  "compatibility": {
+    "minControlPlaneVersion": "0.1.0",
+    "minSdkVersion": "0.1.0"
+  },
+  "resources": [
+    {
+      "code": "dashboard",
+      "name": "工作台",
+      "description": "Assets 工作台、首页看板、待处理预警和资产摘要",
+      "actions": ["view"],
+      "sortOrder": 1
+    },
+    {
+      "code": "asset_items",
+      "name": "资产台账",
+      "description": "实物资产与资源资产统一台账、详情、状态和文档关联",
+      "actions": ["view", "edit", "approve", "admin"],
+      "sortOrder": 10
+    },
+    {
+      "code": "products",
+      "name": "产品资产",
+      "description": "产品主档、产品资产关系、关联技术底座和资源资产",
+      "actions": ["view", "edit", "admin"],
+      "sortOrder": 15
+    },
+    {
+      "code": "ip_assets",
+      "name": "知识产权资产",
+      "description": "软著、商标、专利、资质证照及其产品和文档关联",
+      "actions": ["view", "edit", "admin"],
+      "sortOrder": 16
+    },
+    {
+      "code": "digital_assets",
+      "name": "数字资产",
+      "description": "代码、文档、数据、模型、交付物等数字资产台账",
+      "actions": ["view", "edit", "admin"],
+      "sortOrder": 17
+    },
+    {
+      "code": "technology_bases",
+      "name": "技术底座",
+      "description": "基础平台、中台、共用模块和工具模块",
+      "actions": ["view", "edit", "admin"],
+      "sortOrder": 18
+    },
+    {
+      "code": "environments",
+      "name": "环境视图",
+      "description": "研发、测试、演示、客户生产等环境视图及环境资产关系",
+      "actions": ["view", "edit", "admin"],
+      "sortOrder": 20
+    },
+    {
+      "code": "deliveries",
+      "name": "客户交付视图",
+      "description": "客户、合同、项目、环境、资产和交付成本视图",
+      "actions": ["view", "edit", "admin"],
+      "sortOrder": 30
+    },
+    {
+      "code": "suppliers",
+      "name": "供应商台账",
+      "description": "供应商基础信息、采购关联和启停状态",
+      "actions": ["view", "edit", "admin"],
+      "sortOrder": 40
+    },
+    {
+      "code": "purchase_orders",
+      "name": "采购单",
+      "description": "采购申请、采购明细、审批状态、采购闭环和订单变更",
+      "actions": ["view", "edit", "approve", "admin"],
+      "sortOrder": 50
+    },
+    {
+      "code": "receipts",
+      "name": "入库激活",
+      "description": "实物资产入库、资源资产开通、订阅授权激活和采购项收货",
+      "actions": ["view", "edit", "admin"],
+      "sortOrder": 60
+    },
+    {
+      "code": "assignments",
+      "name": "资产操作",
+      "description": "资产分配、领用、转移、归还、释放、报废和操作记录",
+      "actions": ["view", "edit", "approve", "admin"],
+      "sortOrder": 70
+    },
+    {
+      "code": "alerts",
+      "name": "预警中心",
+      "description": "到期、余量不足、超期未归还、席位超分配等预警处理闭环",
+      "actions": ["view", "edit", "admin"],
+      "sortOrder": 80
+    },
+    {
+      "code": "reports",
+      "name": "报表统计",
+      "description": "资产总览、到期管理、项目/部门成本归因、客户交付成本和环境资源视图",
+      "actions": ["view", "admin"],
+      "sortOrder": 90
+    },
+    {
+      "code": "admin",
+      "name": "系统管理",
+      "description": "资产类别、字典、系统配置和应用后台管理",
+      "actions": ["view", "admin"],
+      "sortOrder": 100
+    }
+  ],
+  "recommendedRoles": [
+    {
+      "code": "assets:viewer",
+      "name": "Assets 只读",
+      "description": "查看被授权范围内的资产、环境、交付、采购、预警和报表",
+      "suggestedPermissions": [
+        "assets:dashboard:view",
+        "assets:asset_items:view",
+        "assets:products:view",
+        "assets:ip_assets:view",
+        "assets:digital_assets:view",
+        "assets:technology_bases:view",
+        "assets:environments:view",
+        "assets:deliveries:view",
+        "assets:suppliers:view",
+        "assets:purchase_orders:view",
+        "assets:receipts:view",
+        "assets:assignments:view",
+        "assets:alerts:view",
+        "assets:reports:view"
+      ]
+    },
+    {
+      "code": "assets:employee",
+      "name": "资产使用人",
+      "description": "查看本人相关资产，发起领用、归还、释放等资产操作",
+      "suggestedPermissions": [
+        "assets:dashboard:view",
+        "assets:asset_items:view",
+        "assets:assignments:view",
+        "assets:assignments:edit",
+        "assets:alerts:view"
+      ]
+    },
+    {
+      "code": "assets:owner",
+      "name": "部门/项目负责人",
+      "description": "管理本部门或项目相关资产、采购申请、环境交付视图和预警闭环",
+      "suggestedPermissions": [
+        "assets:dashboard:view",
+        "assets:asset_items:view",
+        "assets:asset_items:edit",
+        "assets:environments:view",
+        "assets:environments:edit",
+        "assets:deliveries:view",
+        "assets:purchase_orders:view",
+        "assets:purchase_orders:edit",
+        "assets:assignments:view",
+        "assets:assignments:edit",
+        "assets:alerts:view",
+        "assets:alerts:edit",
+        "assets:reports:view"
+      ]
+    },
+    {
+      "code": "assets:procurement",
+      "name": "采购与资产管理员",
+      "description": "维护供应商、采购单、入库激活、资产台账和资产操作闭环",
+      "suggestedPermissions": [
+        "assets:dashboard:view",
+        "assets:asset_items:edit",
+        "assets:products:edit",
+        "assets:ip_assets:edit",
+        "assets:digital_assets:edit",
+        "assets:technology_bases:edit",
+        "assets:suppliers:edit",
+        "assets:purchase_orders:edit",
+        "assets:receipts:edit",
+        "assets:assignments:edit",
+        "assets:alerts:edit",
+        "assets:reports:view"
+      ]
+    },
+    {
+      "code": "assets:asset_approver",
+      "name": "资产审批人",
+      "description": "审批资产采购、领用、调拨、报废和关键资产变更",
+      "suggestedPermissions": [
+        "assets:dashboard:view",
+        "assets:asset_items:view",
+        "assets:asset_items:approve",
+        "assets:purchase_orders:view",
+        "assets:purchase_orders:approve",
+        "assets:assignments:view",
+        "assets:assignments:approve",
+        "assets:alerts:view"
+      ]
+    },
+    {
+      "code": "assets:finance",
+      "name": "资产财务",
+      "description": "查看采购金额、成本归因、客户交付成本和资产报表",
+      "suggestedPermissions": [
+        "assets:dashboard:view",
+        "assets:asset_items:view",
+        "assets:deliveries:view",
+        "assets:suppliers:view",
+        "assets:purchase_orders:view",
+        "assets:receipts:view",
+        "assets:reports:view"
+      ]
+    },
+    {
+      "code": "assets:admin",
+      "name": "Assets 管理员",
+      "description": "管理 Assets 全部资产资源、视图、采购、预警、报表和系统配置",
+      "suggestedPermissions": [
+        "assets:dashboard:view",
+        "assets:asset_items:admin",
+        "assets:asset_items:approve",
+        "assets:products:admin",
+        "assets:ip_assets:admin",
+        "assets:digital_assets:admin",
+        "assets:technology_bases:admin",
+        "assets:environments:admin",
+        "assets:deliveries:admin",
+        "assets:suppliers:admin",
+        "assets:purchase_orders:admin",
+        "assets:purchase_orders:approve",
+        "assets:receipts:admin",
+        "assets:assignments:admin",
+        "assets:assignments:approve",
+        "assets:alerts:admin",
+        "assets:reports:admin",
+        "assets:admin:admin"
+      ]
+    }
+  ],
+  "supportedScopes": [
+    "tenant:global",
+    "department:tree",
+    "project:member",
+    "project:owner",
+    "subject:self",
+    "subject:owner",
+    "asset:owner",
+    "asset:keeper",
+    "asset:user"
+  ],
+  "capabilitiesRequired": [
+    "platform:app-registry"
+  ]
+}

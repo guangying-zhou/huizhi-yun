@@ -1,0 +1,62 @@
+{
+  "appCode": "platform",
+  "appName": "汇智云平台控制面",
+  "appType": "system",
+  "serviceRole": "supporting_service",
+  "description": "汇智云平台控制面能力声明：租户、应用、订阅、授权策略与运行治理。",
+  "icon": "i-lucide-shield-check",
+  "entry": {
+    "web": "/dashboard",
+    "apiBase": "/api/platform"
+  },
+  "runtimeRequirements": {
+    "requiresSdk": false,
+    "supportsCustomerHosted": false,
+    "supportsManagedControlPlane": true
+  },
+  "compatibility": {
+    "minControlPlaneVersion": "0.1.0",
+    "minSdkVersion": "0.1.0"
+  },
+  "resources": [
+    {
+      "code": "authorization",
+      "name": "授权治理",
+      "description": "角色授权、模拟会话与特权授权治理。",
+      "actions": [
+        "view",
+        "admin",
+        {
+          "action": "simulate-role",
+          "name": "模拟角色",
+          "description": "创建短期角色模拟会话。",
+          "sortOrder": 30
+        },
+        {
+          "action": "simulate-user",
+          "name": "模拟用户",
+          "description": "创建短期用户模拟会话。",
+          "sortOrder": 40
+        }
+      ],
+      "sortOrder": 10
+    }
+  ],
+  "recommendedRoles": [
+    {
+      "code": "platform:authorization_admin",
+      "name": "授权安全管理员",
+      "description": "管理授权治理能力，包括角色模拟和用户模拟。",
+      "suggestedPermissions": [
+        "platform:authorization:view",
+        "platform:authorization:admin",
+        "platform:authorization:simulate-role",
+        "platform:authorization:simulate-user"
+      ]
+    }
+  ],
+  "supportedScopes": [
+    "tenant:global"
+  ],
+  "capabilitiesRequired": []
+}

@@ -1,0 +1,59 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "hzy-platform",
+  "main": ".output/server/index.mjs",
+  "compatibility_date": "2026-05-04",
+  "compatibility_flags": ["nodejs_compat"],
+  "assets": {
+    "directory": ".output/public",
+    "binding": "ASSETS"
+  },
+  "observability": {
+    "enabled": true
+  },
+  "routes": [
+    {
+      "pattern": "huizhi.yun",
+      "custom_domain": true
+    },
+    {
+      "pattern": "www.huizhi.yun",
+      "custom_domain": true
+    }
+  ],
+  "hyperdrive": [
+    {
+      "binding": "HYPERDRIVE",
+      "id": "b97d58dd8016414283823d459e9306c2"
+    }
+  ],
+  "vars": {
+    "NODE_ENV": "production",
+    "HZY_DEPLOYMENT_PROFILE": "platform-cloud-db",
+    "NUXT_PUBLIC_DEPLOYMENT_PROFILE": "platform-cloud-db",
+    "GITLAB_BASE_URL": "https://gitlab.wiztek.cn",
+    "GITLAB_DEFAULT_APP_MANIFEST_PATH": "app.manifest.json",
+    "GITLAB_REQUEST_TIMEOUT_MS": "15000",
+    "NUXT_PUBLIC_APP_DISPLAY_NAME": "汇智云平台",
+    "NUXT_PUBLIC_PLATFORM_STAGE": "production",
+    "NUXT_PUBLIC_GOOGLE_ADMIN_LOGIN_ENABLED": "true",
+    "GOOGLE_OAUTH_CLIENT_ID": "666164221773-3kcu7tjc5a9hqpb5i5eo4d1nnfb32u1g.apps.googleusercontent.com",
+    "GOOGLE_OAUTH_REDIRECT_URI": "https://huizhi.yun/api/platform/auth/google/callback",
+    "GOOGLE_OAUTH_HOSTED_DOMAIN": "",
+    "GOOGLE_OAUTH_ALLOWED_EMAILS": "zhouguangying@gmail.com",
+    "GOOGLE_OAUTH_ALLOWED_DOMAINS": "",
+    "NUXT_PUBLIC_WECOM_ADMIN_LOGIN_ENABLED": "false",
+    "WECOM_CORPID": "",
+    "WECOM_AGENTID": "",
+    "WECOM_OAUTH_REDIRECT_URI": "https://huizhi.yun/api/platform/auth/wecom/callback",
+    "WECOM_OAUTH_ALLOWED_USERIDS": "",
+    "WECOM_OAUTH_ALLOW_ALL": "false",
+    "PLATFORM_AUTH_DEV_MOCK": "false",
+    "PLATFORM_ENABLE_OPS_RBAC": "true",
+    "PLATFORM_ALLOW_OPS_UID_FALLBACK": "false",
+    "PLATFORM_ALLOW_LEGACY_ADMIN_API": "false",
+    "PLATFORM_API_SUNSET_AT": "2026-07-31T23:59:59Z",
+    "PLATFORM_SERVICE_URL": "https://huizhi.yun",
+    "HZY_OBSERVABILITY_API_URL": "https://hzy-observability.zhouguangying.workers.dev"
+  }
+}

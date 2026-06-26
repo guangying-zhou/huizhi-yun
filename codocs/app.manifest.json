@@ -1,0 +1,141 @@
+{
+  "appCode": "codocs",
+  "appName": "汇智云文档",
+  "appType": "business",
+  "description": "协作文档、知识库、项目文档、部门文档、文档审阅与发布。",
+  "icon": "i-lucide-files",
+  "entry": {
+    "web": "/",
+    "apiBase": "/api/v1/codocs"
+  },
+  "runtimeRequirements": {
+    "requiresSdk": true,
+    "supportsCustomerHosted": true,
+    "supportsManagedControlPlane": false
+  },
+  "compatibility": {
+    "minControlPlaneVersion": "0.1.0",
+    "minSdkVersion": "0.1.0"
+  },
+  "resources": [
+    {
+      "code": "documents",
+      "name": "文档中心",
+      "description": "个人文档、共享文档、收藏、回收站与通用文档操作",
+      "actions": ["view", "create", "edit", "delete", "export", "admin"],
+      "sortOrder": 10
+    },
+    {
+      "code": "projects",
+      "name": "项目文档",
+      "description": "项目组文档、代码库文档、需求与缺陷关联文档",
+      "actions": ["view", "create", "edit", "export", "admin"],
+      "sortOrder": 20
+    },
+    {
+      "code": "departments",
+      "name": "部门文档",
+      "description": "部门协同文档、会议记录、周报、部门文件柜",
+      "actions": ["view", "create", "edit", "admin"],
+      "sortOrder": 30
+    },
+    {
+      "code": "company",
+      "name": "组织资产",
+      "description": "公司制度、公告、法务合规、技术规范、产品资料与知识库",
+      "actions": ["view", "create", "edit", "publish", "admin"],
+      "sortOrder": 40
+    },
+    {
+      "code": "reviews",
+      "name": "审阅中心",
+      "description": "文档审阅、审批、归档与盖章流程",
+      "actions": ["view", "submit", "approve", "archive", "admin"],
+      "sortOrder": 50
+    },
+    {
+      "code": "info",
+      "name": "资讯中心",
+      "description": "前沿资讯、推荐文章、资讯书签管理",
+      "actions": ["view", "edit", "admin"],
+      "sortOrder": 60
+    },
+    {
+      "code": "admin",
+      "name": "系统管理",
+      "description": "模板、发文流程、图片清理、归档管理等应用后台能力",
+      "actions": ["view", "admin"],
+      "sortOrder": 90
+    }
+  ],
+  "recommendedRoles": [
+    {
+      "code": "codocs:viewer",
+      "name": "Codocs 只读",
+      "description": "可进入 Codocs 并查看被授权的文档资源",
+      "suggestedPermissions": [
+        "codocs:documents:view",
+        "codocs:projects:view",
+        "codocs:departments:view",
+        "codocs:company:view",
+        "codocs:reviews:view",
+        "codocs:info:view"
+      ]
+    },
+    {
+      "code": "codocs:editor",
+      "name": "Codocs 编辑",
+      "description": "可创建、编辑被授权范围内的文档",
+      "suggestedPermissions": [
+        "codocs:documents:create",
+        "codocs:documents:edit",
+        "codocs:documents:export",
+        "codocs:projects:create",
+        "codocs:projects:edit",
+        "codocs:departments:create",
+        "codocs:departments:edit",
+        "codocs:company:edit",
+        "codocs:reviews:submit"
+      ]
+    },
+    {
+      "code": "codocs:publisher",
+      "name": "Codocs 发布审阅",
+      "description": "可处理组织资产发布与审阅归档流程",
+      "suggestedPermissions": [
+        "codocs:departments:export",
+        "codocs:company:publish",
+        "codocs:reviews:approve",
+        "codocs:reviews:archive"
+      ]
+    },
+    {
+      "code": "codocs:admin",
+      "name": "Codocs 管理员",
+      "description": "管理 Codocs 应用配置、模板、发文流程与全局文档能力",
+      "suggestedPermissions": [
+        "codocs:documents:admin",
+        "codocs:documents:export",
+        "codocs:projects:admin",
+        "codocs:departments:admin",
+        "codocs:departments:export",
+        "codocs:company:admin",
+        "codocs:company:publish",
+        "codocs:reviews:admin",
+        "codocs:reviews:approve",
+        "codocs:reviews:archive",
+        "codocs:info:admin",
+        "codocs:admin:admin"
+      ]
+    }
+  ],
+  "supportedScopes": [
+    "tenant:global",
+    "department:tree",
+    "project:member",
+    "subject:self"
+  ],
+  "capabilitiesRequired": [
+    "platform:app-registry"
+  ]
+}

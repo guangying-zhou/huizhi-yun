@@ -1,0 +1,263 @@
+{
+  "appCode": "console",
+  "appName": "汇智云控制台",
+  "appType": "internal",
+  "serviceRole": "supporting_service",
+  "description": "汇智云基础运行服务：企业资料、系统参数、集成配置、凭证保险箱、目录运行时与认证运行时",
+  "icon": "i-lucide-monitor-cog",
+  "entry": {
+    "web": "/",
+    "apiBase": "/api/v1/console"
+  },
+  "runtimeRequirements": {
+    "requiresSdk": true,
+    "supportsCustomerHosted": true,
+    "supportsManagedControlPlane": false
+  },
+  "compatibility": {
+    "minControlPlaneVersion": "0.1.0",
+    "minSdkVersion": "0.1.0"
+  },
+  "resources": [
+    {
+      "code": "console_overview",
+      "name": "概览",
+      "description": "企业控制台健康概览",
+      "actions": [
+        "view"
+      ],
+      "sortOrder": 1
+    },
+    {
+      "code": "org_profile",
+      "name": "企业资料",
+      "description": "企业基础资料、业务域和区域",
+      "actions": [
+        "view",
+        "edit",
+        "admin"
+      ],
+      "sortOrder": 10
+    },
+    {
+      "code": "directory_users",
+      "name": "目录用户",
+      "description": "Console Directory Runtime 用户目录查看与维护",
+      "actions": [
+        "view",
+        "edit",
+        "admin"
+      ],
+      "sortOrder": 12
+    },
+    {
+      "code": "directory_departments",
+      "name": "目录部门",
+      "description": "Console Directory Runtime 部门树查看与维护",
+      "actions": [
+        "view",
+        "edit",
+        "admin"
+      ],
+      "sortOrder": 13
+    },
+    {
+      "code": "directory_projects",
+      "name": "项目注册表",
+      "description": "Console Directory Runtime 项目注册表、项目组与基础归属关系",
+      "actions": [
+        "view",
+        "edit",
+        "admin"
+      ],
+      "sortOrder": 14
+    },
+    {
+      "code": "directory_sources",
+      "name": "目录源配置",
+      "description": "LDAP、企业微信、钉钉等外部目录源的非敏感配置与 secret 引用",
+      "actions": [
+        "view",
+        "edit",
+        "admin"
+      ],
+      "sortOrder": 15
+    },
+    {
+      "code": "directory_sync",
+      "name": "目录同步",
+      "description": "Console Directory Runtime 同步任务、subject export 与外部目录源同步",
+      "actions": [
+        "view",
+        "edit",
+        "admin"
+      ],
+      "sortOrder": 16
+    },
+    {
+      "code": "system_settings",
+      "name": "系统参数",
+      "description": "参数目录、参数值和基础字典",
+      "actions": [
+        "view",
+        "edit",
+        "admin"
+      ],
+      "sortOrder": 20
+    },
+    {
+      "code": "integration_config",
+      "name": "集成中心",
+      "description": "外部集成配置和连通性检查",
+      "actions": [
+        "view",
+        "edit",
+        "admin"
+      ],
+      "sortOrder": 30
+    },
+    {
+      "code": "credential_vault",
+      "name": "凭证库",
+      "description": "secret 元数据、版本、轮换和访问审计",
+      "actions": [
+        "view",
+        "edit",
+        "admin"
+      ],
+      "sortOrder": 40
+    },
+    {
+      "code": "service_clients",
+      "name": "服务凭证",
+      "description": "本地 service client 和授权",
+      "actions": [
+        "view",
+        "edit",
+        "admin"
+      ],
+      "sortOrder": 50
+    },
+    {
+      "code": "collab_runtime",
+      "name": "协作运行时",
+      "description": "Console 内嵌 Collab Runtime 的状态、provider 和基础运行配置",
+      "actions": [
+        "view",
+        "admin"
+      ],
+      "sortOrder": 60
+    }
+  ],
+  "recommendedRoles": [
+    {
+      "code": "console:viewer",
+      "name": "企业控制台只读",
+      "description": "查看企业控制台配置和状态",
+      "suggestedPermissions": [
+        "console:console_overview:view",
+        "console:org_profile:view",
+        "console:system_settings:view",
+        "console:integration_config:view",
+        "console:directory_users:view",
+        "console:directory_departments:view",
+        "console:directory_projects:view",
+        "console:directory_sources:view",
+        "console:directory_sync:view",
+        "console:collab_runtime:view"
+      ]
+    },
+    {
+      "code": "console:operator",
+      "name": "企业控制台运维",
+      "description": "维护系统参数、集成配置、服务凭证与目录基础数据",
+      "suggestedPermissions": [
+        "console:console_overview:view",
+        "console:org_profile:edit",
+        "console:system_settings:edit",
+        "console:integration_config:edit",
+        "console:service_clients:edit",
+        "console:directory_users:edit",
+        "console:directory_departments:edit",
+        "console:directory_projects:edit",
+        "console:directory_sources:edit",
+        "console:directory_sync:edit",
+        "console:collab_runtime:view"
+      ]
+    },
+    {
+      "code": "console:directory_manager",
+      "name": "目录管理员",
+      "description": "管理 Console Directory Runtime 的用户、部门、项目、目录源和同步任务",
+      "suggestedPermissions": [
+        "console:console_overview:view",
+        "console:org_profile:view",
+        "console:directory_users:admin",
+        "console:directory_departments:admin",
+        "console:directory_projects:admin",
+        "console:directory_sources:admin",
+        "console:directory_sync:admin"
+      ]
+    },
+    {
+      "code": "console:security_admin",
+      "name": "安全管理员",
+      "description": "管理集成、凭证库、服务凭证和安全相关系统参数",
+      "suggestedPermissions": [
+        "console:console_overview:view",
+        "console:system_settings:admin",
+        "console:integration_config:admin",
+        "console:credential_vault:admin",
+        "console:service_clients:admin",
+        "console:collab_runtime:admin"
+      ]
+    },
+    {
+      "code": "console:admin",
+      "name": "企业控制台管理员",
+      "description": "管理企业控制台全部资源，包括凭证库治理",
+      "suggestedPermissions": [
+        "console:console_overview:view",
+        "console:org_profile:view",
+        "console:org_profile:edit",
+        "console:org_profile:admin",
+        "console:directory_users:view",
+        "console:directory_users:edit",
+        "console:directory_users:admin",
+        "console:directory_departments:view",
+        "console:directory_departments:edit",
+        "console:directory_departments:admin",
+        "console:directory_projects:view",
+        "console:directory_projects:edit",
+        "console:directory_projects:admin",
+        "console:directory_sources:view",
+        "console:directory_sources:edit",
+        "console:directory_sources:admin",
+        "console:directory_sync:view",
+        "console:directory_sync:edit",
+        "console:directory_sync:admin",
+        "console:system_settings:view",
+        "console:system_settings:edit",
+        "console:system_settings:admin",
+        "console:integration_config:view",
+        "console:integration_config:edit",
+        "console:integration_config:admin",
+        "console:credential_vault:view",
+        "console:credential_vault:edit",
+        "console:credential_vault:admin",
+        "console:service_clients:view",
+        "console:service_clients:edit",
+        "console:service_clients:admin",
+        "console:collab_runtime:view",
+        "console:collab_runtime:admin"
+      ]
+    }
+  ],
+  "supportedScopes": [
+    "tenant:global"
+  ],
+  "capabilitiesRequired": [
+    "platform:app-registry",
+    "platform:credential-vault"
+  ]
+}

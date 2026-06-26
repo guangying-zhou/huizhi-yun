@@ -1,0 +1,35 @@
+{
+  "name": "nuxt-template",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "nuxt build --dotenv .env",
+    "dev": "nuxt dev --dotenv .env.dev",
+    "preview": "nuxt preview",
+    "postinstall": "nuxt prepare",
+    "lint": "eslint .",
+    "typecheck": "nuxt typecheck"
+  },
+  "dependencies": {
+    "@hzy/foundation": "workspace:*",
+    "@iconify-json/lucide": "^1.2.71",
+    "@iconify-json/simple-icons": "^1.2.55",
+    "@nuxt/ui": "^4.1.0",
+    "@pinia/nuxt": "^0.11.3",
+    "@vueuse/nuxt": "^13.9.0",
+    "ali-oss": "^6.23.0",
+    "date-fns": "^4.1.0",
+    "mysql2": "^3.15.3",
+    "nuxt": "^4.2.0",
+    "pinia": "^3.0.4",
+    "zod": "^4.1.12"
+  },
+  "devDependencies": {
+    "@nuxt/eslint": "^1.9.0",
+    "@types/node": "^24.10.0",
+    "eslint": "^9.38.0",
+    "typescript": "^5.9.3",
+    "vue-tsc": "^3.1.2"
+  },
+  "packageManager": "pnpm@10.23.0"
+}

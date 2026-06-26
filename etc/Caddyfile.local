@@ -1,0 +1,92 @@
+# 汇智云企业端统一域名本地开发 Caddy 配置
+#
+# 使用方式：
+#   caddy run --config etc/Caddyfile.local
+#
+# 应用启动环境需要与这里的 path 一致：
+#   Console: HZY_DEPLOYMENT_PUBLIC_URL=http://localhost:3080 NUXT_APP_BASE_URL=/       HZY_APP_BASE_PATH=/
+#   Aims:    HZY_DEPLOYMENT_PUBLIC_URL=http://localhost:3080 NUXT_APP_BASE_URL=/aims/   HZY_APP_BASE_PATH=/aims/
+#   Codocs:  HZY_DEPLOYMENT_PUBLIC_URL=http://localhost:3080 NUXT_APP_BASE_URL=/codocs/ HZY_APP_BASE_PATH=/codocs/
+#   Altoc:   HZY_DEPLOYMENT_PUBLIC_URL=http://localhost:3080 NUXT_APP_BASE_URL=/altoc/  HZY_APP_BASE_PATH=/altoc/
+#   Assets:  HZY_DEPLOYMENT_PUBLIC_URL=http://localhost:3080 NUXT_APP_BASE_URL=/assets/ HZY_APP_BASE_PATH=/assets/
+#   Finance: HZY_DEPLOYMENT_PUBLIC_URL=http://localhost:3080 NUXT_APP_BASE_URL=/finance/ HZY_APP_BASE_PATH=/finance/
+#   Workflow:HZY_DEPLOYMENT_PUBLIC_URL=http://localhost:3080 NUXT_APP_BASE_URL=/workflow/ HZY_APP_BASE_PATH=/workflow/
+#   Collab Runtime 默认由 Console 进程内嵌启动，并监听 127.0.0.1:3021；也可切换为 standalone collab 进程。
+#
+# 注意：这里使用 reverse_proxy 保留原始 URI，不使用 handle_path，避免剥离应用 basePath。
+{
+	storage file_system {
+		root /private/tmp/hzy-caddy-storage
+	}
+}
+
+:3080 {
+	route {
+		redir /aims /aims/ 308
+		redir /codocs /codocs/ 308
+		redir /altoc /altoc/ 308
+		redir /assets /assets/ 308
+		redir /finance /finance/ 308
+		redir /workflow /workflow/ 308
+		redir /collab /collab/ 308
+
+		handle /codocs/ws* {
+			reverse_proxy localhost:3021 {
+				header_up X-Forwarded-Prefix /codocs
+			}
+		}
+
+		@collab path /collab /collab/ /collab/*
+		handle @collab {
+			reverse_proxy localhost:3021 {
+				header_up X-Forwarded-Prefix /collab
+			}
+		}
+
+		@aims path /aims /aims/ /aims/*
+		handle @aims {
+			reverse_proxy localhost:3002 {
+				header_up X-Forwarded-Prefix /aims
+			}
+		}
+
+		@codocs path /codocs /codocs/ /codocs/*
+		handle @codocs {
+			reverse_proxy localhost:3001 {
+				header_up X-Forwarded-Prefix /codocs
+			}
+		}
+
+		@altoc path /altoc /altoc/ /altoc/*
+		handle @altoc {
+			reverse_proxy localhost:3003 {
+				header_up X-Forwarded-Prefix /altoc
+			}
+		}
+
+		@assets path /assets /assets/ /assets/*
+		handle @assets {
+			reverse_proxy localhost:3004 {
+				header_up X-Forwarded-Prefix /assets
+			}
+		}
+
+		@finance path /finance /finance/ /finance/*
+		handle @finance {
+			reverse_proxy localhost:3006 {
+				header_up X-Forwarded-Prefix /finance
+			}
+		}
+
+		@workflow path /workflow /workflow/ /workflow/*
+		handle @workflow {
+			reverse_proxy localhost:3020 {
+				header_up X-Forwarded-Prefix /workflow
+			}
+		}
+
+		handle {
+			reverse_proxy localhost:3000
+		}
+	}
+}

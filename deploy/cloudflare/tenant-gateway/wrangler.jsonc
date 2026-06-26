@@ -1,0 +1,35 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "hzy-tenant-gateway",
+  "main": "src/index.js",
+  "compatibility_date": "2026-05-23",
+  "workers_dev": true,
+  "observability": {
+    "enabled": true
+  },
+  "routes": [
+    {
+      "pattern": "*.huizhi.yun/*",
+      "zone_name": "huizhi.yun"
+    }
+  ],
+  "vars": {
+    "HZY_TENANT_GATEWAY_REGISTRY_URL": "https://huizhi.yun/api/platform/internal/tenant-gateway/resolve",
+    "HZY_TENANT_DOMAIN_SUFFIX": "huizhi.yun",
+    "HZY_TENANT_GATEWAY_RESERVED_SUBDOMAINS": "admin,aims,align,altoc,api,app,apps,assets,auth,billing,cdn,cdn-cgi,codocs,collab,console,dash,dashboard,dev,docs,downloads,finance,help,hrm,id,insights,login,mail,oauth,observability,people,platform,root,rum,sso,static,status,staging,support,test,webdev,workflow,www",
+    "HZY_TENANT_GATEWAY_RESERVED_SUBDOMAIN_PREFIXES": "dev-agent-",
+    "HZY_TENANT_GATEWAY_RESERVED_SUBDOMAIN_SUFFIXES": "-data-runtime",
+    "HZY_DEFAULT_TENANT": "wiztek",
+    "HZY_CONSOLE_ORIGIN": "https://console.huizhi.yun",
+    "HZY_FINANCE_ORIGIN": "https://finance.huizhi.yun",
+    "HZY_ALTOC_ORIGIN": "https://altoc.huizhi.yun",
+    "HZY_AIMS_ORIGIN": "https://aims.huizhi.yun",
+    "HZY_ASSETS_ORIGIN": "https://assets.huizhi.yun",
+    "HZY_CODOCS_ORIGIN": "https://codocs.huizhi.yun",
+    "HZY_PEOPLE_ORIGIN": "https://people.huizhi.yun",
+    "HZY_WORKFLOW_ORIGIN": "https://workflow.huizhi.yun",
+    "HZY_WEBDEV_ORIGIN": "https://webdev.huizhi.yun",
+    "HZY_COLLAB_ORIGIN": "https://hzy-collab-codocs-poc.zhouguangying.workers.dev",
+    "HZY_OBSERVABILITY_ORIGIN": "https://hzy-observability.zhouguangying.workers.dev"
+  }
+}

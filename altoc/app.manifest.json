@@ -1,0 +1,244 @@
+{
+  "appCode": "altoc",
+  "appName": "汇智云经营",
+  "appType": "business",
+  "description": "面向 ToB / ToG 项目型企业的 LTC 经营闭环：客户、线索、商机、报价、招投标、合同与回款。",
+  "icon": "i-lucide-handshake",
+  "entry": {
+    "web": "/",
+    "apiBase": "/api/v1/altoc"
+  },
+  "runtimeRequirements": {
+    "requiresSdk": true,
+    "supportsCustomerHosted": true,
+    "supportsManagedControlPlane": false
+  },
+  "compatibility": {
+    "minControlPlaneVersion": "0.1.0",
+    "minSdkVersion": "0.1.0"
+  },
+  "resources": [
+    {
+      "code": "dashboard",
+      "name": "经营驾驶舱",
+      "description": "经营漏斗、回款节奏、经营报表与数据分析视图",
+      "actions": ["view", "export"],
+      "sortOrder": 1
+    },
+    {
+      "code": "customer",
+      "name": "客户管理",
+      "description": "客户档案、分级、联系人与客户跟进记录",
+      "actions": ["view", "edit", "approve", "admin"],
+      "sortOrder": 10
+    },
+    {
+      "code": "lead",
+      "name": "线索管理",
+      "description": "销售线索登记、分配与转化",
+      "actions": ["view", "edit", "assign", "disqualify", "convert", "activity", "admin"],
+      "sortOrder": 20
+    },
+    {
+      "code": "opportunity",
+      "name": "商机管理",
+      "description": "商机阶段、负责人、预测金额与销售活动",
+      "actions": ["view", "edit", "assign", "transition", "activity", "admin"],
+      "sortOrder": 30
+    },
+    {
+      "code": "quotation",
+      "name": "报价管理",
+      "description": "报价单、报价版本、招投标项目与材料管理",
+      "actions": ["view", "edit", "approve", "admin"],
+      "sortOrder": 40
+    },
+    {
+      "code": "contract",
+      "name": "合同管理",
+      "description": "合同主数据、里程碑、履约状态和合同文档",
+      "actions": ["view", "edit", "approve", "finance-summary:sync", "admin"],
+      "sortOrder": 50
+    },
+    {
+      "code": "receivable",
+      "name": "回款管理",
+      "description": "回款计划、回款确认、逾期扫描与发票登记",
+      "actions": ["view", "edit", "confirm", "mark-billable", "admin"],
+      "sortOrder": 60
+    },
+    {
+      "code": "maintenance_contract",
+      "name": "维保合同",
+      "description": "维保合同、服务期限、产品版本、客户成功负责人和续约提醒",
+      "actions": ["view", "edit", "admin"],
+      "sortOrder": 70
+    },
+    {
+      "code": "service_entitlement",
+      "name": "服务权益",
+      "description": "服务窗口、SLA 响应时限、解决时限、额度和计费方式",
+      "actions": ["view", "edit", "admin"],
+      "sortOrder": 71
+    },
+    {
+      "code": "service_ticket",
+      "name": "服务工单",
+      "description": "报障、咨询、需求、变更工单入口和跨模块处理引用",
+      "actions": ["view", "edit", "close", "delivery-result:sync", "admin"],
+      "sortOrder": 72
+    },
+    {
+      "code": "renewal_opportunity",
+      "name": "续约机会",
+      "description": "维保续约、增购、交叉销售机会和下一步动作",
+      "actions": ["view", "edit", "admin"],
+      "sortOrder": 73
+    },
+    {
+      "code": "settings",
+      "name": "经营设置",
+      "description": "基础配置、团队管理与个人设置",
+      "actions": ["view", "edit", "admin"],
+      "sortOrder": 90
+    },
+    {
+      "code": "admin",
+      "name": "系统管理",
+      "description": "经营模块系统管理、团队和字段配置",
+      "actions": ["view", "edit", "admin"],
+      "sortOrder": 100
+    }
+  ],
+  "recommendedRoles": [
+    {
+      "code": "altoc:viewer",
+      "name": "经营只读",
+      "description": "查看与自己相关的客户、商机、合同和回款",
+      "suggestedPermissions": [
+        "altoc:dashboard:view",
+        "altoc:customer:view",
+        "altoc:lead:view",
+        "altoc:opportunity:view",
+        "altoc:quotation:view",
+        "altoc:contract:view",
+        "altoc:receivable:view",
+        "altoc:maintenance_contract:view",
+        "altoc:service_entitlement:view",
+        "altoc:service_ticket:view",
+        "altoc:renewal_opportunity:view"
+      ]
+    },
+    {
+      "code": "altoc:sales",
+      "name": "销售",
+      "description": "维护客户、线索、商机、报价与招投标过程",
+      "suggestedPermissions": [
+        "altoc:dashboard:view",
+        "altoc:customer:edit",
+        "altoc:lead:edit",
+        "altoc:lead:assign",
+        "altoc:lead:disqualify",
+        "altoc:lead:convert",
+        "altoc:lead:activity",
+        "altoc:opportunity:edit",
+        "altoc:opportunity:assign",
+        "altoc:opportunity:transition",
+        "altoc:opportunity:activity",
+        "altoc:quotation:edit"
+      ]
+    },
+    {
+      "code": "altoc:customer_success",
+      "name": "客户成功",
+      "description": "维护维保合同、SLA、服务工单和续约经营机会",
+      "suggestedPermissions": [
+        "altoc:dashboard:view",
+        "altoc:customer:view",
+        "altoc:contract:view",
+        "altoc:maintenance_contract:edit",
+        "altoc:service_entitlement:edit",
+        "altoc:service_ticket:edit",
+        "altoc:service_ticket:close",
+        "altoc:renewal_opportunity:edit"
+      ]
+    },
+    {
+      "code": "altoc:contract_manager",
+      "name": "合同经理",
+      "description": "管理合同与回款，推进签订和履约跟踪",
+      "suggestedPermissions": [
+        "altoc:dashboard:view",
+        "altoc:contract:edit",
+        "altoc:receivable:edit",
+        "altoc:receivable:confirm",
+        "altoc:maintenance_contract:edit",
+        "altoc:renewal_opportunity:view",
+        "altoc:dashboard:export"
+      ]
+    },
+    {
+      "code": "altoc:contract_approver",
+      "name": "合同审批人",
+      "description": "审批报价、合同、折扣、商务条款和关键回款节点",
+      "suggestedPermissions": [
+        "altoc:dashboard:view",
+        "altoc:customer:view",
+        "altoc:customer:approve",
+        "altoc:quotation:view",
+        "altoc:quotation:approve",
+        "altoc:contract:view",
+        "altoc:contract:approve",
+        "altoc:receivable:view",
+        "altoc:maintenance_contract:view",
+        "altoc:service_ticket:view",
+        "altoc:renewal_opportunity:view"
+      ]
+    },
+    {
+      "code": "altoc:admin",
+      "name": "经营管理员",
+      "description": "管理经营模块全部配置与历史数据",
+      "suggestedPermissions": [
+        "altoc:dashboard:view",
+        "altoc:dashboard:export",
+        "altoc:customer:admin",
+        "altoc:customer:approve",
+        "altoc:lead:admin",
+        "altoc:lead:assign",
+        "altoc:lead:disqualify",
+        "altoc:lead:convert",
+        "altoc:lead:activity",
+        "altoc:opportunity:admin",
+        "altoc:opportunity:assign",
+        "altoc:opportunity:transition",
+        "altoc:opportunity:activity",
+        "altoc:quotation:admin",
+        "altoc:quotation:approve",
+        "altoc:contract:admin",
+        "altoc:contract:approve",
+        "altoc:contract:finance-summary:sync",
+        "altoc:receivable:admin",
+        "altoc:receivable:confirm",
+        "altoc:receivable:mark-billable",
+        "altoc:maintenance_contract:admin",
+        "altoc:service_entitlement:admin",
+        "altoc:service_ticket:admin",
+        "altoc:service_ticket:close",
+        "altoc:service_ticket:delivery-result:sync",
+        "altoc:renewal_opportunity:admin",
+        "altoc:settings:admin",
+        "altoc:admin:admin"
+      ]
+    }
+  ],
+  "supportedScopes": [
+    "tenant:global",
+    "department:tree",
+    "subject:self",
+    "subject:owner"
+  ],
+  "capabilitiesRequired": [
+    "platform:app-registry"
+  ]
+}

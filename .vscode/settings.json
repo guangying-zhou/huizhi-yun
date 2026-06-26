@@ -1,0 +1,54 @@
+{
+    "editor.formatOnSave": false,
+    "editor.codeActionsOnSave": {
+        "source.fixAll.eslint": "always"
+    },
+    "[vue]": {
+        "editor.codeActionsOnSave": {
+            "source.fixAll.eslint": "always"
+        }
+    },
+    "eslint.validate": [
+        "javascript",
+        "typescript",
+        "vue"
+    ],
+    "eslint.workingDirectories": [
+        {
+            "mode": "auto"
+        }
+    ],
+    "files.trimTrailingWhitespace": true,
+    "files.insertFinalNewline": true,
+    "eslint.run": "onSave",
+    "files.watcherExclude": {
+        "**/.git/objects/**": true,
+        "**/.git/subtree-cache/**": true,
+        "**/node_modules/**": true,
+        "**/.nuxt/**": true,
+        "**/.output/**": true,
+        "**/.nitro/**": true,
+        "**/.cache/**": true,
+        "**/.turbo/**": true,
+        "**/dist/**": true,
+        "**/build/**": true,
+        "**/coverage/**": true,
+        "**/.pnpm-store/**": true,
+        "**/.yarn/**": true
+    },
+    "search.exclude": {
+        "**/.git/objects/**": true,
+        "**/.git/subtree-cache/**": true,
+        "**/node_modules/**": true,
+        "**/.nuxt/**": true,
+        "**/.output/**": true,
+        "**/.nitro/**": true,
+        "**/.cache/**": true,
+        "**/.turbo/**": true,
+        "**/dist/**": true,
+        "**/build/**": true,
+        "**/coverage/**": true,
+        "**/.pnpm-store/**": true,
+        "**/.yarn/**": true
+    }
+}

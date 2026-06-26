@@ -1,0 +1,79 @@
+# Nuxt dev/build outputs
+.output
+.nuxt
+.nitro
+.cache
+dist
+*.zip
+
+# Node dependencies
+node_modules
+
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Environment files
+.env
+.env.dev
+# .env.*
+!.env.example
+
+# IDE / Editor
+.idea
+.vscode
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Test coverage
+coverage
+.nyc_output
+
+# Build artifacts
+*.tsbuildinfo
+
+# Turso local database
+.turso
+*.db
+*.sqlite
+
+# Cloudflare
+.wrangler
+.dev.vars
+
+# Drizzle
+drizzle/meta
+
+# Temporary files
+tmp
+temp
+*.tmp
+*.temp
+__pycache__
+
+# Package manager locks (choose one - you're using pnpm)
+# package-lock.json
+# yarn.lock
+
+# Debug
+.debug
+
+# Vercel
+.vercel
+
+# PWA assets
+sw.*
+workbox-*

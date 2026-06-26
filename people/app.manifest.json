@@ -1,0 +1,119 @@
+{
+  "appCode": "people",
+  "appName": "汇智云HR",
+  "appType": "internal",
+  "serviceRole": "business_app",
+  "description": "人员事实、任职快照、月度人员成本、项目贡献快照和绩效周期确认。",
+  "icon": "i-lucide-users",
+  "entry": {
+    "web": "/",
+    "apiBase": "/api/v1/people"
+  },
+  "runtimeRequirements": {
+    "requiresSdk": true,
+    "supportsCustomerHosted": true,
+    "supportsManagedControlPlane": false
+  },
+  "compatibility": {
+    "minControlPlaneVersion": "0.1.0",
+    "minSdkVersion": "0.1.0"
+  },
+  "resources": [
+    {
+      "code": "dashboard",
+      "name": "工作台",
+      "description": "汇智云HR工作台、人员和绩效摘要",
+      "actions": ["view"],
+      "sortOrder": 1
+    },
+    {
+      "code": "employees",
+      "name": "员工",
+      "description": "员工事实、岗位、职级和成本摘要",
+      "actions": ["view", "edit", "admin"],
+      "sortOrder": 10
+    },
+    {
+      "code": "assignments",
+      "name": "任职变更",
+      "description": "入转调离、任职历史和审批回写",
+      "actions": ["view", "edit", "approve", "admin"],
+      "sortOrder": 20
+    },
+    {
+      "code": "cost_snapshots",
+      "name": "成本快照",
+      "description": "月度标准成本和实际成本快照",
+      "actions": ["view", "edit", "approve", "admin"],
+      "sortOrder": 30
+    },
+    {
+      "code": "performance_cycles",
+      "name": "绩效周期",
+      "description": "绩效周期、项目贡献快照和周期确认",
+      "actions": ["view", "edit", "approve", "admin"],
+      "sortOrder": 40
+    },
+    {
+      "code": "standard_costs",
+      "name": "职级设置",
+      "description": "M/P 职级工资、绩效工资范围和成本快照生成口径",
+      "actions": ["view", "edit", "approve", "admin"],
+      "sortOrder": 70
+    },
+    {
+      "code": "positions",
+      "name": "岗位字典",
+      "description": "岗位主数据维护",
+      "actions": ["view", "admin"],
+      "sortOrder": 80
+    },
+    {
+      "code": "ranks",
+      "name": "职级字典",
+      "description": "职级主数据维护",
+      "actions": ["view", "admin"],
+      "sortOrder": 90
+    },
+    {
+      "code": "admin",
+      "name": "People 设置",
+      "description": "People 字典和系统设置",
+      "actions": ["view", "admin"],
+      "sortOrder": 100
+    }
+  ],
+  "recommendedRoles": [
+    {
+      "code": "people:viewer",
+      "name": "People 只读",
+      "description": "查看员工事实、任职、成本快照和绩效周期",
+      "suggestedPermissions": [
+        "people:dashboard:view",
+        "people:employees:view",
+        "people:assignments:view",
+        "people:cost_snapshots:view",
+        "people:performance_cycles:view"
+      ]
+    },
+    {
+      "code": "people:admin",
+      "name": "People 管理员",
+      "description": "维护 People 全部人员事实、字典、成本和绩效周期",
+      "suggestedPermissions": [
+        "people:dashboard:view",
+        "people:employees:admin",
+        "people:assignments:admin",
+        "people:assignments:approve",
+        "people:cost_snapshots:admin",
+        "people:cost_snapshots:approve",
+        "people:performance_cycles:admin",
+        "people:performance_cycles:approve",
+        "people:standard_costs:admin",
+        "people:standard_costs:approve",
+        "people:positions:admin",
+        "people:ranks:admin"
+      ]
+    }
+  ]
+}

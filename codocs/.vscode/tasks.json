@@ -1,0 +1,11 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Fix scan_svn_repos.py function block",
+			"type": "shell",
+			"command": "python3 - <<'PY'\nfrom pathlib import Path\np=Path('/Users/gavin/Dev/WizOA/codeinsight/server/scripts/scan_svn_repos.py')\ns=p.read_text()\nstart = s.find('def scan_repository(')\nend = s.find('\\n\\n\\ndef load_config', start)\nblock = s[start:end]\nprint(block)\nPY",
+			"group": "build"
+		}
+	]
+}

@@ -1,0 +1,166 @@
+{
+  "appCode": "finance",
+  "appName": "汇智云财务",
+  "appType": "business",
+  "description": "面向中小型项目制企业的经营财务中台：发票、到账、核销、费用报销、项目支出、银行账户、项目核算和个人财务绩效。",
+  "icon": "i-lucide-receipt-text",
+  "entry": {
+    "web": "/",
+    "apiBase": "/api/v1/finance"
+  },
+  "runtimeRequirements": {
+    "requiresSdk": true,
+    "supportsCustomerHosted": true,
+    "supportsManagedControlPlane": false
+  },
+  "compatibility": {
+    "minControlPlaneVersion": "0.1.0",
+    "minSdkVersion": "0.1.0"
+  },
+  "resources": [
+    {
+      "code": "dashboard",
+      "name": "财务工作台",
+      "description": "现金流、应收应付、审批和经营财务摘要",
+      "actions": ["view", "export"],
+      "sortOrder": 1
+    },
+    {
+      "code": "invoices",
+      "name": "发票管理",
+      "description": "开票申请、正式发票、发票状态和发票关联",
+      "actions": ["view", "edit", "approve", "admin"],
+      "sortOrder": 10
+    },
+    {
+      "code": "receipts",
+      "name": "收款管理",
+      "description": "到账记录、银行流水、收款确认和收款核销",
+      "actions": ["view", "edit", "confirm", "admin"],
+      "sortOrder": 20
+    },
+    {
+      "code": "expenses",
+      "name": "费用支出",
+      "description": "项目支出、费用报销、付款申请和支出台账",
+      "actions": ["view", "edit", "approve", "confirm", "admin"],
+      "sortOrder": 30
+    },
+    {
+      "code": "bank_accounts",
+      "name": "银行账户",
+      "description": "账户资料、余额快照和资金账户管理",
+      "actions": ["view", "edit", "admin"],
+      "sortOrder": 40
+    },
+    {
+      "code": "reconciliation",
+      "name": "核销管理",
+      "description": "发票、收款、合同和回款计划核销",
+      "actions": ["view", "edit", "confirm", "admin"],
+      "sortOrder": 50
+    },
+    {
+      "code": "project_accounting",
+      "name": "项目核算",
+      "description": "项目收入、支出、成本、毛利和费用分摊",
+      "actions": ["view", "edit", "admin"],
+      "sortOrder": 60
+    },
+    {
+      "code": "performance",
+      "name": "个人财务绩效",
+      "description": "个人贡献、提成、绩效金额和财务结果归因",
+      "actions": ["view", "edit", "admin"],
+      "sortOrder": 70
+    },
+    {
+      "code": "reports",
+      "name": "财务报表",
+      "description": "现金流、收支、利润和经营财务分析",
+      "actions": ["view", "export", "admin"],
+      "sortOrder": 80
+    },
+    {
+      "code": "settings",
+      "name": "财务设置",
+      "description": "科目、费用类型、人力成本参数、审批规则和集成配置",
+      "actions": ["view", "edit", "admin"],
+      "sortOrder": 90
+    }
+  ],
+  "recommendedRoles": [
+    {
+      "code": "finance:viewer",
+      "name": "财务只读",
+      "description": "查看被授权范围内的发票、收款、支出、项目核算和报表",
+      "suggestedPermissions": [
+        "finance:dashboard:view",
+        "finance:invoices:view",
+        "finance:receipts:view",
+        "finance:expenses:view",
+        "finance:project_accounting:view",
+        "finance:reports:view"
+      ]
+    },
+    {
+      "code": "finance:accountant",
+      "name": "财务会计",
+      "description": "维护发票、收款、核销、支出和银行账户台账",
+      "suggestedPermissions": [
+        "finance:dashboard:view",
+        "finance:invoices:edit",
+        "finance:receipts:edit",
+        "finance:receipts:confirm",
+        "finance:expenses:edit",
+        "finance:bank_accounts:edit",
+        "finance:reconciliation:confirm",
+        "finance:reports:view"
+      ]
+    },
+    {
+      "code": "finance:expense_approver",
+      "name": "费用审批人",
+      "description": "审批费用报销、项目支出和付款申请",
+      "suggestedPermissions": [
+        "finance:dashboard:view",
+        "finance:expenses:view",
+        "finance:expenses:approve"
+      ]
+    },
+    {
+      "code": "finance:manager",
+      "name": "财务负责人",
+      "description": "管理财务台账、核销、项目核算、个人绩效和财务报表",
+      "suggestedPermissions": [
+        "finance:dashboard:view",
+        "finance:invoices:admin",
+        "finance:receipts:admin",
+        "finance:expenses:admin",
+        "finance:bank_accounts:admin",
+        "finance:reconciliation:admin",
+        "finance:project_accounting:admin",
+        "finance:performance:admin",
+        "finance:reports:export",
+        "finance:settings:edit"
+      ]
+    },
+    {
+      "code": "finance:admin",
+      "name": "财务管理员",
+      "description": "管理 Finance 模块全部配置、权限和集成参数",
+      "suggestedPermissions": [
+        "finance:dashboard:view",
+        "finance:invoices:admin",
+        "finance:receipts:admin",
+        "finance:expenses:admin",
+        "finance:bank_accounts:admin",
+        "finance:reconciliation:admin",
+        "finance:project_accounting:admin",
+        "finance:performance:admin",
+        "finance:reports:admin",
+        "finance:settings:admin"
+      ]
+    }
+  ]
+}

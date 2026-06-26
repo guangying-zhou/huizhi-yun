@@ -1,0 +1,172 @@
+{
+  "appCode": "aims",
+  "appName": "汇智云项目",
+  "appType": "business",
+  "description": "面向中小研发团队的项目全生命周期管理（PIVR 方法论）：组合、项目、迭代、任务、缺陷、工时、看板与报表。",
+  "icon": "i-lucide-package",
+  "entry": {
+    "web": "/",
+    "apiBase": "/api/v1/aims"
+  },
+  "runtimeRequirements": {
+    "requiresSdk": true,
+    "supportsCustomerHosted": true,
+    "supportsManagedControlPlane": false
+  },
+  "compatibility": {
+    "minControlPlaneVersion": "0.1.0",
+    "minSdkVersion": "0.1.0"
+  },
+  "resources": [
+    {
+      "code": "aims_overview",
+      "name": "工作台",
+      "description": "AIMS 个人工作台与项目概览",
+      "actions": ["view"],
+      "sortOrder": 1
+    },
+    {
+      "code": "portfolios",
+      "name": "项目组合",
+      "description": "组合（portfolio）层级的研发资产视图",
+      "actions": ["view", "edit", "admin"],
+      "sortOrder": 10
+    },
+    {
+      "code": "projects",
+      "name": "项目",
+      "description": "立项、成员、迭代、状态流转",
+      "actions": ["view", "create", "edit", "approve", "close", "admin"],
+      "sortOrder": 20
+    },
+    {
+      "code": "work_items",
+      "name": "工作项",
+      "description": "需求 / 任务 / 缺陷统一视图",
+      "actions": ["view", "create", "edit", "delete", "assign"],
+      "sortOrder": 30
+    },
+    {
+      "code": "board",
+      "name": "看板",
+      "description": "迭代看板与状态流转",
+      "actions": ["view", "edit"],
+      "sortOrder": 40
+    },
+    {
+      "code": "timesheet",
+      "name": "工时",
+      "description": "个人工时填报、审核与汇总",
+      "actions": ["view", "submit", "approve", "admin"],
+      "sortOrder": 50
+    },
+    {
+      "code": "reports",
+      "name": "报表",
+      "description": "项目进度、燃尽、负载等研发效能报表",
+      "actions": ["view", "edit", "admin", "export"],
+      "sortOrder": 60
+    },
+    {
+      "code": "notifications",
+      "name": "通知",
+      "description": "AIMS 内的通知中心与待办",
+      "actions": ["view"],
+      "sortOrder": 70
+    },
+    {
+      "code": "project_templates",
+      "name": "项目模板",
+      "description": "项目模板与流程模板的定义与维护",
+      "actions": ["view", "edit", "admin"],
+      "sortOrder": 80
+    },
+    {
+      "code": "admin",
+      "name": "系统管理",
+      "description": "AIMS 应用级后台管理",
+      "actions": ["view", "edit", "admin"],
+      "sortOrder": 90
+    }
+  ],
+  "recommendedRoles": [
+    {
+      "code": "aims:viewer",
+      "name": "AIMS 只读",
+      "description": "查看分配给自己的项目与工作项",
+      "suggestedPermissions": [
+        "aims:aims_overview:view",
+        "aims:projects:view",
+        "aims:work_items:view",
+        "aims:board:view",
+        "aims:timesheet:view",
+        "aims:reports:view"
+      ]
+    },
+    {
+      "code": "aims:dev",
+      "name": "AIMS 开发",
+      "description": "执行任务、提交工时、参与看板流转",
+      "suggestedPermissions": [
+        "aims:aims_overview:view",
+        "aims:projects:view",
+        "aims:work_items:edit",
+        "aims:board:edit",
+        "aims:timesheet:submit",
+        "aims:notifications:view"
+      ]
+    },
+    {
+      "code": "aims:pm",
+      "name": "AIMS 项目经理",
+      "description": "管理项目、迭代、人员与工时审核",
+      "suggestedPermissions": [
+        "aims:aims_overview:view",
+        "aims:projects:admin",
+        "aims:work_items:edit",
+        "aims:work_items:assign",
+        "aims:board:edit",
+        "aims:timesheet:approve",
+        "aims:reports:view",
+        "aims:reports:export"
+      ]
+    },
+    {
+      "code": "aims:project_approver",
+      "name": "AIMS 项目审批",
+      "description": "处理立项、项目变更、验收和重大里程碑等项目审批",
+      "suggestedPermissions": [
+        "aims:aims_overview:view",
+        "aims:projects:view",
+        "aims:projects:approve",
+        "aims:reports:view"
+      ]
+    },
+    {
+      "code": "aims:admin",
+      "name": "AIMS 管理员",
+      "description": "管理 AIMS 全局配置与项目模板",
+      "suggestedPermissions": [
+        "aims:aims_overview:view",
+        "aims:portfolios:admin",
+        "aims:projects:admin",
+        "aims:work_items:edit",
+        "aims:timesheet:admin",
+        "aims:reports:view",
+        "aims:reports:admin",
+        "aims:project_templates:admin",
+        "aims:admin:admin"
+      ]
+    }
+  ],
+  "supportedScopes": [
+    "tenant:global",
+    "project:member",
+    "project:owner",
+    "department:tree",
+    "subject:self"
+  ],
+  "capabilitiesRequired": [
+    "platform:app-registry"
+  ]
+}

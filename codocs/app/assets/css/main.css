@@ -1,0 +1,492 @@
+@import "tailwindcss";
+@import "@nuxt/ui";
+
+@theme static {
+  --font-sans: 'Public Sans', sans-serif;
+
+  --color-green-50: #EFFDF5;
+  --color-green-100: #D9FBE8;
+  --color-green-200: #B3F5D1;
+  --color-green-300: #75EDAE;
+  --color-green-400: #00DC82;
+  --color-green-500: #00C16A;
+  --color-green-600: #00A155;
+  --color-green-700: #007F45;
+  --color-green-800: #016538;
+  --color-green-900: #0A5331;
+  --color-green-950: #052E16;
+}
+
+@media print {
+
+  /* GLOBAL RESET */
+  *,
+  *:before,
+  *:after {
+    background: transparent !important;
+    color: #000 !important;
+    box-shadow: none !important;
+    text-shadow: none !important;
+  }
+
+  /* HIDE UI ELEMENTS EXPLICITLY */
+  #hzy,
+  /* Sidebar ID */
+  aside,
+  header,
+  nav,
+  button,
+  .u-button,
+  .u-dropdown-menu,
+  [role="button"],
+  [role="navigation"],
+  [role="banner"],
+  .crepe-wrapper .crepe-loading,
+  .crepe-loading,
+  .loading-text,
+  div[role="status"],
+  /* Toasts */
+  div[class*="notifications"],
+  /* Generic notifications container */
+  div[id^="headlessui-portal"],
+  /* Headless UI Portals */
+  /* .label removed to prevent hiding Mermaid text */
+  .code-fence-label,
+  .preview-label,
+  .preview-toolbar,
+  /* Specific class identified by user */
+  div[class*="toast"],
+  /* Explicit toast class match */
+  /* Known Milkdown/Crepe internal structural classes */
+  /* Only hide select wrapper (language selector) to clean up print */
+  .milkdown .code-fence_select-wrapper,
+  /* 隐藏编辑器侧边栏（版本历史、标注、AI 摘要等） */
+  .crepe-container > :not(.crepe-wrapper) {
+    display: none !important;
+  }
+
+  /* HIDE PREVIEW LABEL (Pseudo-elements) */
+  /* Target any element inside the editor that might have the label via ::before/::after */
+  /* We specifically target likely candidates for the 'PREVIEW' badge */
+
+  /* Specific targeting for the Mermaid 'Preview' and 'Source' badges */
+  :has(.mermaid-preview) *::before,
+  :has(.mermaid-preview) *::after,
+  .mermaid-preview::before,
+  .mermaid-preview::after,
+  /* Sometimes the label is on the CODE block wrapper */
+  .code-fence::before,
+  .code-fence::after,
+  div[data-type="mermaid"]::before,
+  div[data-type="mermaid"]::after {
+    display: none !important;
+    content: none !important;
+  }
+
+  /* HIDE FIXED/ABSOLUTE OVERLAYS (Toasts, Modals) */
+  /* Be careful: this might hide content if layout resets didn't work,
+     but with our layout resets, main content should be static/block */
+  body>div.fixed,
+  body>div.absolute,
+  div[class*="z-[5"] {
+    /* High Z-index elements often overlays */
+    display: none !important;
+  }
+
+  /* LAYOUT RESET - CRITICAL for Pagination */
+  html,
+  body {
+    height: auto !important;
+    min-height: 100% !important;
+    overflow: visible !important;
+    position: static !important;
+  }
+
+  /* Reset the specific Nuxt structure */
+  #__nuxt,
+  #app {
+    display: block !important;
+    height: auto !important;
+    overflow: visible !important;
+    position: static !important;
+  }
+
+  /* Break the dashboard layout */
+  .u-dashboard-group,
+  .u-dashboard-group>div {
+    display: block !important;
+    height: auto !important;
+    width: 100% !important;
+    overflow: visible !important;
+    position: static !important;
+    flex: none !important;
+  }
+
+  /* Reset specific scroll containers in document page */
+  .min-h-screen,
+  .overflow-auto,
+  div[class*="overflow-"] {
+    display: block !important;
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    overflow: visible !important;
+    position: static !important;
+  }
+
+  /* MAIN CONTENT VISIBILITY */
+  main {
+    display: block !important;
+    height: auto !important;
+    width: 100% !important;
+    overflow: visible !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  /* CONTENT STYLING */
+  /* Milkdown/ProseMirror specific overrides */
+  .crepe-wrapper,
+  .crepe-editor,
+  .crepe-editor .milkdown,
+  .crepe-editor .ProseMirror {
+    display: block !important;
+    width: 100% !important;
+    height: auto !important;
+    min-height: 0 !important;
+    overflow: visible !important;
+  }
+
+  .crepe-editor .ProseMirror {
+    padding: 0 !important;
+  }
+
+  /* DOCUMENT TITLE IN PRINT */
+  /* Style the input that acts as title */
+  input[type="text"] {
+    display: block !important;
+    border: none !important;
+    font-size: 24pt !important;
+    font-weight: bold !important;
+    margin-bottom: 20px !important;
+    width: 100% !important;
+    text-align: center !important;
+  }
+
+  /* HIDE MERMAID SOURCE */
+  /* Use :has() to target the parent of the preview and hide siblings (the source code) */
+  /* This assumes the source and preview are siblings in the same container */
+  :has(> .mermaid-preview)>*:not(.mermaid-preview) {
+    display: none !important;
+  }
+
+  /* Also specifically target the .cm-editor just in case structure differs slightly */
+  :has(.mermaid-preview) .cm-editor,
+  :has(.mermaid-preview) .code-fence_value {
+    display: none !important;
+  }
+
+  /* FORCE VISIBILITY for standard code blocks in Print */
+  .milkdown-code-block:not(:has(.mermaid-preview)),
+  .code-fence:not(:has(.mermaid-preview)) .code-fence_value-wrapper,
+  .code-fence:not(:has(.mermaid-preview)) .cm-editor,
+  .code-fence:not(:has(.mermaid-preview)) .code-fence_value,
+  .milkdown-code-block:not(:has(.mermaid-preview)) .cm-editor,
+  .milkdown-code-block:not(:has(.mermaid-preview)) .codemirror-host {
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    height: auto !important;
+    overflow: visible !important;
+  }
+
+  /* Ensure internals don't get hidden but keep their layout */
+  .milkdown-code-block:not(:has(.mermaid-preview)) .cm-content,
+  .milkdown-code-block:not(:has(.mermaid-preview)) .cm-line {
+    visibility: visible !important;
+    opacity: 1 !important;
+  }
+
+  /* Hide tools in print mode */
+  .milkdown-code-block .tools {
+    display: none !important;
+  }
+
+  /* Hide line numbers and fold gutter in print mode */
+  .milkdown-code-block .cm-gutters,
+  .milkdown-code-block .cm-lineNumbers,
+  .milkdown-code-block .cm-foldGutter {
+    display: none !important;
+  }
+
+  /* Adjust scroller padding in print mode */
+  .milkdown-code-block .cm-scroller {
+    padding-left: 0.5rem !important;
+  }
+
+  /* Darken code text color in print mode */
+  .milkdown-code-block .cm-content,
+  .milkdown-code-block .cm-line {
+    color: #000000 !important;
+  }
+
+  /* HIDE EDITOR TOOLBARS */
+  .milkdown-menu,
+  .crepe-toolbar {
+    display: none !important;
+  }
+
+  /* PRESERVE LIST ITEM LAYOUT in Print */
+  /* Milkdown list items use flex to keep bullet/number and text side-by-side */
+  .milkdown-list-item-block>.list-item {
+    display: flex !important;
+    align-items: flex-start !important;
+  }
+
+  .milkdown-list-item-block>.list-item>.children {
+    min-width: 0 !important;
+    flex: 1 !important;
+  }
+
+  .milkdown-list-item-block li .label-wrapper {
+    display: flex !important;
+    justify-content: center !important;
+    align-items: center !important;
+  }
+}
+
+/* ==========================================================================
+   READ-ONLY MODE TWEAKS
+   ========================================================================== */
+
+/* Hide Mermaid Source in Read-Only Mode */
+.crepe-readonly :has(> .mermaid-preview)>*:not(.mermaid-preview) {
+  display: none !important;
+}
+
+.crepe-readonly :has(.mermaid-preview) .cm-editor,
+.crepe-readonly :has(.mermaid-preview) .code-fence_value {
+  display: none !important;
+}
+
+/* EXPLICTLY SHOW Non-Mermaid Code Blocks in Read-Only */
+.crepe-readonly .milkdown-code-block:not(:has(.mermaid-preview)),
+.crepe-readonly .code-fence:not(:has(.mermaid-preview)) .code-fence_value-wrapper,
+.crepe-readonly .code-fence:not(:has(.mermaid-preview)) .cm-editor,
+.crepe-readonly .code-fence:not(:has(.mermaid-preview)) .code-fence_value,
+.crepe-readonly .milkdown-code-block:not(:has(.mermaid-preview)) .cm-editor,
+.crepe-readonly .milkdown-code-block:not(:has(.mermaid-preview)) .codemirror-host {
+  display: block !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  height: auto !important;
+}
+
+/* Ensure internals don't get hidden but keep their layout */
+.crepe-readonly .milkdown-code-block:not(:has(.mermaid-preview)) .cm-content,
+.crepe-readonly .milkdown-code-block:not(:has(.mermaid-preview)) .cm-line {
+  visibility: visible !important;
+  opacity: 1 !important;
+  /* Do NOT force display: block */
+}
+
+/* Hide tools in readonly mode */
+.crepe-readonly .milkdown-code-block .tools {
+  display: none !important;
+}
+
+/* Hide line numbers and fold gutter in readonly mode */
+.crepe-readonly .milkdown-code-block .cm-gutters,
+.crepe-readonly .milkdown-code-block .cm-lineNumbers,
+.crepe-readonly .milkdown-code-block .cm-foldGutter {
+  display: none !important;
+}
+
+/* Adjust scroller padding in readonly mode */
+.crepe-readonly .milkdown-code-block .cm-scroller {
+  padding-left: 0.5rem !important;
+}
+
+/* Hide Preview Label in Read-Only Mode */
+.crepe-readonly .preview-label {
+  display: none !important;
+}
+
+.crepe-readonly .preview-divider {
+  display: none !important;
+}
+
+/* Hide Pseudo-element Labels in Read-Only Mode */
+.crepe-readonly :has(.mermaid-preview) *::before,
+.crepe-readonly :has(.mermaid-preview) *::after,
+.crepe-readonly .mermaid-preview::before,
+.crepe-readonly .mermaid-preview::after,
+/* Only hide code fence labels for MERMAID */
+.crepe-readonly :has(.mermaid-preview).code-fence::before,
+.crepe-readonly :has(.mermaid-preview).code-fence::after,
+.crepe-readonly div[data-type="mermaid"]::before,
+.crepe-readonly div[data-type="mermaid"]::after {
+  display: none !important;
+  content: none !important;
+}
+
+/* Hide block handles (drag/add icons) in Read-Only Mode */
+.crepe-readonly .milkdown-block-handle,
+.crepe-readonly .crepe-block-handle,
+.crepe-readonly div[data-role="block-handle"],
+.crepe-readonly .block-handle {
+  display: none !important;
+}
+
+/* ==========================================================================
+   EDITOR TYPOGRAPHY OVERRIDES
+   ========================================================================== */
+
+/* Editor Padding - 必须用 !important 覆盖 Crepe reset.css 的 padding: 60px 120px */
+.crepe-editor .ProseMirror {
+  min-height: calc(100vh - 125px);
+  padding: 1rem 1rem 1rem 5.5rem !important;
+  outline: none;
+}
+
+/* 移动端编辑器 padding 优化 */
+@media (max-width: 640px) {
+  .crepe-editor .ProseMirror {
+    padding: 0.5rem !important;
+    min-height: calc(100vh - 100px);
+    font-size: 15px;
+    line-height: 1.7;
+  }
+
+  /* 移动端表格横向滚动 */
+  .crepe-editor .ProseMirror .tableWrapper {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* 移动端代码块横向滚动 */
+  .crepe-editor .ProseMirror pre {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    max-width: 100%;
+  }
+
+  /* 移动端 Mermaid 图表可滚动 */
+  .mermaid-preview {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .mermaid-preview svg {
+    min-width: 300px;
+  }
+
+  /* 移动端标题字号缩小 */
+  .crepe-editor .ProseMirror h1 {
+    font-size: 1.5em !important;
+  }
+
+  .crepe-editor .ProseMirror h2 {
+    font-size: 1.3em !important;
+  }
+
+  .crepe-editor .ProseMirror h3 {
+    font-size: 1.15em !important;
+  }
+
+  /* 移动端图片自适应 */
+  .crepe-editor .ProseMirror img {
+    max-width: 100% !important;
+    height: auto !important;
+  }
+}
+
+/* Readonly Mode - Reduce padding */
+/* .crepe-readonly .ProseMirror {
+  padding: 1rem !important;
+} */
+
+/* Reduce Heading Sizes and set Font */
+.crepe-editor .ProseMirror h1,
+.crepe-editor .ProseMirror h2,
+.crepe-editor .ProseMirror h3,
+.crepe-editor .ProseMirror h4,
+.crepe-editor .ProseMirror h5,
+.crepe-editor .ProseMirror h6 {
+  font-family: "PingFang SC", "Heiti SC", "Microsoft YaHei", "SimHei", sans-serif !important;
+  font-weight: bold !important;
+}
+
+.crepe-editor .ProseMirror h1 {
+  font-size: 1.75em !important;
+  line-height: 1.3 !important;
+  margin-top: 1.5em !important;
+  margin-bottom: 0.5em !important;
+  text-align: center;
+}
+
+.crepe-editor .ProseMirror h2 {
+  font-size: 1.5em !important;
+  line-height: 1.3 !important;
+  margin-top: 1.4em !important;
+  margin-bottom: 0.4em !important;
+}
+
+.crepe-editor .ProseMirror h3 {
+  font-size: 1.25em !important;
+  line-height: 1.3 !important;
+  margin-top: 1.3em !important;
+  margin-bottom: 0.3em !important;
+}
+
+.crepe-editor .ProseMirror h4 {
+  font-size: 1.1em !important;
+  margin-top: 1.2em !important;
+  margin-bottom: 0.2em !important;
+}
+
+.crepe-editor .ProseMirror h5 {
+  font-size: 1em !important;
+  margin-top: 1.1em !important;
+  margin-bottom: 0.2em !important;
+}
+
+.crepe-editor .ProseMirror h6 {
+  font-size: 0.9em !important;
+  color: #666;
+  margin-top: 1em !important;
+  margin-bottom: 0.2em !important;
+}
+
+/* ==========================================================================
+   TABLE OVERRIDES
+   ========================================================================== */
+
+/* 表格 wrapper 仅保留水平滚动容器角色，宽度和 table 宽度的锁定统一由
+   MilkdownEditor.client.vue 的 <style> 块管理（固定 800px，A4 视觉对齐） */
+.crepe-editor .ProseMirror .tableWrapper {
+  overflow-x: auto;
+}
+
+.crepe-editor .ProseMirror td,
+.crepe-editor .ProseMirror th {
+  position: relative;
+}
+
+/* Ensure selected cells are still visible */
+.crepe-editor .ProseMirror .selectedCell:after {
+  z-index: 2;
+  position: absolute;
+  content: "";
+  left: 0;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  background: rgba(200, 200, 255, 0.4);
+  pointer-events: none;
+}
+
+/* ==========================================================================
+   MERMAID TYPOGRAPHY OVERRIDES
+   ========================================================================== */
+/* Mermaid 字体和字号由 mermaid 自动计算，不做覆盖 */

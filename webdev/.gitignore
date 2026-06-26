@@ -1,0 +1,23 @@
+# dependencies
+node_modules/
+
+# Nuxt build artifacts
+.nuxt/
+.output/
+.data/
+.nitro/
+.wrangler/
+.wrangler.generated.jsonc
+.dev.vars
+
+# local environment
+.env
+.env.dev
+.env.*
+!.env.example
+!.env.cloudflare.example
+.env.cloudflare.local
+
+# logs and OS files
+*.log
+.DS_Store

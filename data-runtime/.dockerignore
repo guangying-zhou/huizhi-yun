@@ -1,0 +1,5 @@
+.env
+.bin/
+hzy-data-runtime
+dist/
+node_modules/

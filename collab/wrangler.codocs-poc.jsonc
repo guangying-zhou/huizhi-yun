@@ -1,0 +1,30 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "hzy-collab-codocs-poc",
+  "main": "src/providers/cloudflare-durable-object.ts",
+  "compatibility_date": "2026-05-24",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": true,
+  "observability": {
+    "enabled": true
+  },
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "COLLAB_ROOM",
+        "class_name": "CodocsCollabRoom"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["CodocsCollabRoom"]
+    }
+  ],
+  "vars": {
+    "HZY_ALLOWED_TENANTS": "wiztek,C000001",
+    "HZY_DEFAULT_TENANT": "wiztek",
+    "NODE_ENV": "production"
+  }
+}

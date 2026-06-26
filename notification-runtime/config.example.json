@@ -1,0 +1,21 @@
+{
+  "host": "0.0.0.0",
+  "port": "18081",
+  "tenant": "default",
+  "deployment": "local",
+  "auth": {
+    "mode": "jwt",
+    "jwt": {
+      "audience": "notification-runtime",
+      "issuer": "http://localhost:3000",
+      "jwksUrl": "http://localhost:3000/.well-known/jwks.json"
+    }
+  },
+  "console": {
+    "baseUrl": "http://localhost:3000",
+    "tokenUrl": "http://localhost:3000/oauth/token",
+    "clientId": "notification-runtime",
+    "clientSecret": "change-me",
+    "timeoutMs": 10000
+  }
+}

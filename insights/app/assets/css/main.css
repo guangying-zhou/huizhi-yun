@@ -1,0 +1,239 @@
+@import "tailwindcss";
+@import "@nuxt/ui";
+
+/* Critical styles to prevent FOUC - loaded synchronously */
+/* These styles must be available immediately */
+html {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  /* Prevent layout shifts during font loading */
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-feature-settings: "kern";
+  font-feature-settings: "kern";
+}
+
+/* Critical loading state - minimal hiding to reduce white screen */
+html.loading-styles .nuxt-loading-indicator {
+  visibility: visible !important;
+}
+
+/* Only hide content that might cause FOUC, not everything */
+html.loading-styles main,
+html.loading-styles .main-content {
+  opacity: 0 !important;
+  transition: opacity 0.2s ease !important;
+}
+
+html.loading-styles body {
+  visibility: visible !important;
+  background: #ffffff !important;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
+/* Make header always visible to reduce perceived loading time */
+html.loading-styles header,
+html.loading-styles .header {
+  opacity: 1 !important;
+  visibility: visible !important;
+}
+
+/* Show loading indicator during style loading */
+html.loading-styles body::before {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, #3b82f6 0%, #10b981 50%, #3b82f6 100%);
+  background-size: 200% 100%;
+  animation: loading-sweep 1.5s ease-in-out infinite;
+  z-index: 999999;
+  visibility: visible !important;
+}
+
+@keyframes loading-sweep {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* Ensure body has a min-height and proper background with immediate fallback */
+body {
+  min-height: 100vh;
+  /* Immediate fallback colors for critical rendering */
+  background-color: #ffffff;
+  color: #111827;
+  /* CSS custom properties with fallbacks */
+  background-color: var(--ui-bg, #ffffff);
+  color: var(--ui-text, #111827);
+  transition: background-color 0.2s ease, color 0.2s ease;
+  max-width: 100vw;
+  overflow-x: hidden; /* Prevent horizontal scrollbar */
+
+  /* Prevent text flashing during font loads */
+  font-display: swap;
+
+  /* Add gradient background for glass effect visual layers */
+  background-image:
+    radial-gradient(circle at 50% 0%, rgba(59, 130, 246, 0.1) 0%, transparent 50%),
+    linear-gradient(180deg, transparent 0%, rgba(59, 130, 246, 0.02) 100%);
+}
+
+/* 确保根元素正确处理滚动，保持 sticky 定位正常工作 */
+html {
+  scroll-behavior: smooth;
+}
+
+/* Header presentation tokens */
+:root {
+  --app-header-bg: rgba(255, 255, 255, 0.95);
+  --app-header-border: rgba(0, 0, 0, 0.08);
+  --app-header-shadow: 0 1px 3px rgba(0, 0, 0, 0.1), 0 4px 20px rgba(0, 0, 0, 0.05);
+  --app-header-backdrop: none;
+}
+
+@supports (backdrop-filter: blur(12px)) {
+  :root {
+    --app-header-bg: rgba(255, 255, 255, 0.75);
+    --app-header-backdrop: blur(12px) saturate(180%);
+  }
+}
+
+html.dark {
+  --app-header-bg: rgba(15, 15, 15, 0.95);
+  --app-header-border: rgba(255, 255, 255, 0.08);
+  --app-header-shadow: 0 1px 3px rgba(0, 0, 0, 0.3), 0 4px 20px rgba(0, 0, 0, 0.15);
+}
+
+@supports (backdrop-filter: blur(12px)) {
+  html.dark {
+    --app-header-bg: rgba(15, 15, 15, 0.75);
+    --app-header-backdrop: blur(12px) saturate(180%);
+  }
+}
+
+/* 确保 sticky header 正常工作 - 更全面的选择器和毛玻璃效果 */
+header,
+.ui-header,
+[data-sticky],
+[data-sticky="true"] {
+  position: sticky !important;
+  top: 0 !important;
+  z-index: 50 !important;
+  width: 100% !important;
+
+  /* 渐进增强的毛玻璃背景效果 */
+  background-color: var(--app-header-bg) !important;
+  backdrop-filter: var(--app-header-backdrop, none) !important;
+  -webkit-backdrop-filter: var(--app-header-backdrop, none) !important;
+
+  /* 边框和阴影增强视觉效果 */
+  border-bottom: 1px solid var(--app-header-border) !important;
+  box-shadow: var(--app-header-shadow) !important;
+
+  /* 确保内容层级和动画 */
+  isolation: isolate !important;
+  transition: all 0.2s ease !important;
+}
+
+/* 注意：不要全局覆盖容器的最大宽度，以保持设计稿的左右留白（如 max-w-7xl） */
+/* 如果个别模块出现横向溢出，请在对应组件内定向处理，而不是在这里全局放开 */
+
+/* Dark mode optimizations with immediate fallbacks */
+.dark body {
+  /* Immediate fallback colors */
+  background-color: #0f0f0f;
+  color: #f9fafb;
+  /* CSS custom properties with fallbacks */
+  background-color: var(--ui-bg, #0f0f0f);
+  color: var(--ui-text, #f9fafb);
+
+  /* 暗色模式渐变背景 */
+  background-image:
+    radial-gradient(circle at 50% 0%, rgba(59, 130, 246, 0.15) 0%, transparent 50%),
+    linear-gradient(180deg, transparent 0%, rgba(59, 130, 246, 0.05) 100%);
+}
+
+/* Critical loading styles */
+.nuxt-loading-indicator {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(to right, #3b82f6, #10b981);
+  z-index: 999999;
+  animation: loading-bar 2s infinite;
+}
+
+@keyframes loading-bar {
+  0% { transform: translateX(-100%); }
+  50% { transform: translateX(0%); }
+  100% { transform: translateX(100%); }
+}
+
+@theme {
+  --font-sans: 'Public Sans', sans-serif;
+
+  /* Base colors */
+  --color-white: #ffffff;
+  --color-black: #000000;
+
+  /* Gray colors */
+  --color-gray-50: #f9fafb;
+  --color-gray-100: #f3f4f6;
+  --color-gray-200: #e5e7eb;
+  --color-gray-300: #d1d5db;
+  --color-gray-400: #9ca3af;
+  --color-gray-500: #6b7280;
+  --color-gray-600: #4b5563;
+  --color-gray-700: #374151;
+  --color-gray-800: #1f2937;
+  --color-gray-900: #111827;
+  --color-gray-950: #030712;
+
+  /* Blue colors */
+  --color-blue-50: #eff6ff;
+  --color-blue-100: #dbeafe;
+  --color-blue-200: #bfdbfe;
+  --color-blue-300: #93c5fd;
+  --color-blue-400: #60a5fa;
+  --color-blue-500: #3b82f6;
+  --color-blue-600: #2563eb;
+  --color-blue-700: #1d4ed8;
+  --color-blue-800: #1e40af;
+  --color-blue-900: #1e3a8a;
+  --color-blue-950: #172554;
+
+  /* Green colors */
+  --color-green-50: #EFFDF5;
+  --color-green-100: #D9FBE8;
+  --color-green-200: #B3F5D1;
+  --color-green-300: #75EDAE;
+  --color-green-400: #00DC82;
+  --color-green-500: #00C16A;
+  --color-green-600: #00A155;
+  --color-green-700: #007F45;
+  --color-green-800: #016538;
+  --color-green-900: #0A5331;
+  --color-green-950: #052E16;
+
+  /* Red colors */
+  --color-red-50: #fef2f2;
+  --color-red-100: #fee2e2;
+  --color-red-200: #fecaca;
+  --color-red-300: #fca5a5;
+  --color-red-400: #f87171;
+  --color-red-500: #ef4444;
+  --color-red-600: #dc2626;
+  --color-red-700: #b91c1c;
+  --color-red-800: #991b1b;
+  --color-red-900: #7f1d1d;
+  --color-red-950: #450a0a;
+}
+
+.dark {
+  --ui-bg: var(--ui-color-neutral-950);
+}

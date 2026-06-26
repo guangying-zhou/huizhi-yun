@@ -1,0 +1,34 @@
+# Dependencies
+node_modules/
+pnpm-lock.yaml
+
+# Local tool state
+.claude/
+.codex/tmp/
+.gstack/
+.kiro/
+.playwright-cli/
+.tmp-design/
+memory/
+.nuxt/
+.output/
+
+# Environment files
+.env
+.env.*
+!.env.example
+!.env.*.example
+
+# System files
+.DS_Store
+*.log
+*.docx
+*.pdf
+*.pptx
+*.tar.gz
+*.xls
+*.xlsx
+*.zip
+license.lic
+.pnpm-store/
+.tmp*/

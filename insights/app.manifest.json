@@ -1,0 +1,135 @@
+{
+  "appCode": "insights",
+  "appName": "汇智云洞察",
+  "appType": "business",
+  "description": "面向研发管理者的代码仓库监测与研发效能分析：仓库、贡献者、部门、关系、监控与告警。",
+  "entry": {
+    "web": "/",
+    "apiBase": "/api/v1/insights"
+  },
+  "runtimeRequirements": {
+    "requiresSdk": true,
+    "supportsCustomerHosted": true,
+    "supportsManagedControlPlane": false
+  },
+  "compatibility": {
+    "minControlPlaneVersion": "0.1.0",
+    "minSdkVersion": "0.1.0"
+  },
+  "resources": [
+    {
+      "code": "insights_overview",
+      "name": "工作台",
+      "description": "Insights 总览与最近指标",
+      "actions": ["view"],
+      "sortOrder": 1
+    },
+    {
+      "code": "repos",
+      "name": "代码仓库",
+      "description": "代码仓库列表、采集状态与详情",
+      "actions": ["view", "edit", "admin"],
+      "sortOrder": 10
+    },
+    {
+      "code": "repo_ingestion",
+      "name": "数据采集",
+      "description": "代码仓库采集任务与回放",
+      "actions": ["view", "trigger", "admin"],
+      "sortOrder": 15
+    },
+    {
+      "code": "commits",
+      "name": "提交",
+      "description": "提交明细、关联工作项与代码量统计",
+      "actions": ["view"],
+      "sortOrder": 20
+    },
+    {
+      "code": "contributors",
+      "name": "贡献者",
+      "description": "贡献者画像与代码量统计",
+      "actions": ["view", "edit"],
+      "sortOrder": 30
+    },
+    {
+      "code": "departments",
+      "name": "部门视图",
+      "description": "按部门聚合的研发效能视图",
+      "actions": ["view"],
+      "sortOrder": 40
+    },
+    {
+      "code": "dashboard",
+      "name": "效能看板",
+      "description": "仓库 / 部门 / 贡献者 / 关系等多维看板",
+      "actions": ["view", "export"],
+      "sortOrder": 50
+    },
+    {
+      "code": "monitoring",
+      "name": "异常监控",
+      "description": "代码量、活跃度等异常告警与规则配置",
+      "actions": ["view", "edit", "admin"],
+      "sortOrder": 60
+    },
+    {
+      "code": "insights_settings",
+      "name": "Insights 配置",
+      "description": "参数、用户映射、贡献者归并、仓库源、字典等",
+      "actions": ["view", "edit", "admin"],
+      "sortOrder": 70
+    }
+  ],
+  "recommendedRoles": [
+    {
+      "code": "insights:viewer",
+      "name": "Insights 只读",
+      "description": "查看研发效能看板与仓库统计",
+      "suggestedPermissions": [
+        "insights:insights_overview:view",
+        "insights:repos:view",
+        "insights:contributors:view",
+        "insights:departments:view",
+        "insights:dashboard:view"
+      ]
+    },
+    {
+      "code": "insights:analyst",
+      "name": "Insights 分析师",
+      "description": "查看与导出报表，并维护贡献者归并",
+      "suggestedPermissions": [
+        "insights:insights_overview:view",
+        "insights:repos:view",
+        "insights:contributors:view",
+        "insights:contributors:edit",
+        "insights:departments:view",
+        "insights:dashboard:view",
+        "insights:dashboard:export",
+        "insights:monitoring:view"
+      ]
+    },
+    {
+      "code": "insights:admin",
+      "name": "Insights 管理员",
+      "description": "管理仓库源、采集任务、监控规则与全局配置",
+      "suggestedPermissions": [
+        "insights:insights_overview:view",
+        "insights:repos:admin",
+        "insights:repo_ingestion:admin",
+        "insights:contributors:edit",
+        "insights:monitoring:admin",
+        "insights:insights_settings:admin",
+        "insights:dashboard:export"
+      ]
+    }
+  ],
+  "supportedScopes": [
+    "tenant:global",
+    "department:tree",
+    "subject:self"
+  ],
+  "capabilitiesRequired": [
+    "platform:app-registry"
+  ]
+}

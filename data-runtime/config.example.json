@@ -1,0 +1,106 @@
+{
+  "server": {
+    "host": "0.0.0.0",
+    "port": 8080
+  },
+  "tenant": "demo",
+  "deployment": "demo-agent",
+  "auth": {
+    "mode": "static_token",
+    "staticToken": "change-me",
+    "jwt": {
+      "audience": "data-runtime",
+      "jwksUrl": ""
+    }
+  },
+  "apps": {
+    "finance": {
+      "enabled": true,
+      "db": {
+        "host": "127.0.0.1",
+        "port": 3306,
+        "user": "hzy_finance",
+        "password": "change-me",
+        "database": "hzy_finance",
+        "connectionLimit": 5
+      }
+    },
+    "workflow": {
+      "enabled": false,
+      "db": {
+        "host": "127.0.0.1",
+        "port": 3306,
+        "user": "hzy_workflow",
+        "password": "change-me",
+        "database": "hzy_workflow",
+        "connectionLimit": 5
+      }
+    },
+    "webdev": {
+      "enabled": false,
+      "db": {
+        "host": "127.0.0.1",
+        "port": 3306,
+        "user": "hzy_webdev",
+        "password": "change-me",
+        "database": "hzy_webdev",
+        "connectionLimit": 5
+      }
+    },
+    "assets": {
+      "enabled": false,
+      "db": {
+        "host": "127.0.0.1",
+        "port": 3306,
+        "user": "hzy_assets",
+        "password": "change-me",
+        "database": "hzy_assets",
+        "connectionLimit": 5
+      }
+    },
+    "people": {
+      "enabled": false,
+      "db": {
+        "host": "127.0.0.1",
+        "port": 3306,
+        "user": "hzy_people",
+        "password": "change-me",
+        "database": "hzy_people",
+        "connectionLimit": 5
+      }
+    },
+    "altoc": {
+      "enabled": false,
+      "db": {
+        "host": "127.0.0.1",
+        "port": 3306,
+        "user": "hzy_altoc",
+        "password": "change-me",
+        "database": "hzy_altoc",
+        "connectionLimit": 5
+      }
+    },
+    "aims": {
+      "enabled": false,
+      "db": {
+        "host": "127.0.0.1",
+        "port": 3306,
+        "user": "hzy_aims",
+        "password": "change-me",
+        "database": "hzy_aims",
+        "connectionLimit": 5
+      }
+    },
+    "codocs": {
+      "enabled": false,
+      "db": {
+        "host": "127.0.0.1",
+        "port": 3306,
+        "user": "hzy_codocs",
+        "password": "change-me",
+        "database": "hzy_codocs",
+        "connectionLimit": 5
+      }
+    }
+  }
+}

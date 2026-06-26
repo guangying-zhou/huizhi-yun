@@ -1,0 +1,24 @@
+{
+  "name": "@hzy/platform-adapter-nuxt",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@hzy/platform-sdk": "workspace:*",
+    "h3": "^1.15.10",
+    "vue": "^3.5.22"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3"
+  },
+  "peerDependencies": {
+    "nuxt": "^4.2.0"
+  }
+}

@@ -1,0 +1,80 @@
+# Local unified-domain dev proxy.
+# Start/reload:
+#   caddy run --config deploy/dev-stack/Caddyfile.local
+#   caddy reload --config deploy/dev-stack/Caddyfile.local
+{
+	storage file_system {
+		root /tmp/hzy-caddy-storage-local
+	}
+}
+
+:3180 {
+	route {
+		redir /aims /aims/ 308
+		redir /codocs /codocs/ 308
+		redir /altoc /altoc/ 308
+		redir /assets /assets/ 308
+		redir /finance /finance/ 308
+		redir /workflow /workflow/ 308
+		redir /collab /collab/ 308
+
+		handle /codocs/ws* {
+			reverse_proxy 127.0.0.1:3107 {
+				header_up X-Forwarded-Prefix /codocs
+			}
+		}
+
+		@collab path /collab /collab/ /collab/*
+		handle @collab {
+			reverse_proxy 127.0.0.1:3107 {
+				header_up X-Forwarded-Prefix /collab
+			}
+		}
+
+		@aims path /aims /aims/ /aims/*
+		handle @aims {
+			reverse_proxy 127.0.0.1:3102 {
+				header_up X-Forwarded-Prefix /aims
+			}
+		}
+
+		@codocs path /codocs /codocs/ /codocs/*
+		handle @codocs {
+			reverse_proxy 127.0.0.1:3101 {
+				header_up X-Forwarded-Prefix /codocs
+			}
+		}
+
+		@altoc path /altoc /altoc/ /altoc/*
+		handle @altoc {
+			reverse_proxy 127.0.0.1:3103 {
+				header_up X-Forwarded-Prefix /altoc
+			}
+		}
+
+		@assets path /assets /assets/ /assets/*
+		handle @assets {
+			reverse_proxy 127.0.0.1:3104 {
+				header_up X-Forwarded-Prefix /assets
+			}
+		}
+
+		@workflow path /workflow /workflow/ /workflow/*
+		handle @workflow {
+			reverse_proxy 127.0.0.1:3105 {
+				header_up X-Forwarded-Prefix /workflow
+			}
+		}
+
+		@finance path /finance /finance/ /finance/*
+		handle @finance {
+			reverse_proxy 127.0.0.1:3106 {
+				header_up X-Forwarded-Prefix /finance
+			}
+		}
+
+		handle {
+			reverse_proxy 127.0.0.1:3100
+		}
+	}
+}

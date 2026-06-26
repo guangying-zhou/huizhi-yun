@@ -1,0 +1,6 @@
+START TRANSACTION;
+
+ALTER TABLE `policy_bundles`
+  ADD COLUMN IF NOT EXISTS `signed_at` DATETIME NULL AFTER `signed_by_kid`;
+
+COMMIT;

@@ -1,0 +1,31 @@
+{
+  // Disable formatOnSave to avoid conflicts; ESLint fixAll handles formatting
+  "editor.formatOnSave": false,
+  // Tell the editor to use the ESLint extension to fix and format code on save.
+  // This ensures that the formatting is consistent with the project's ESLint rules.
+  "editor.codeActionsOnSave": {
+    "source.fixAll.eslint": "always"
+  },
+  // Set ESLint as the default formatter for JavaScript, TypeScript, and Vue files.
+  "[javascript]": {
+    "editor.defaultFormatter": "dbaeumer.vscode-eslint"
+  },
+  "[typescript]": {
+    "editor.defaultFormatter": "dbaeumer.vscode-eslint"
+  },
+  "[vue]": {
+    "editor.defaultFormatter": "dbaeumer.vscode-eslint",
+    "editor.formatOnSave": false
+  },
+  // Enable ESLint validation for these languages
+  "eslint.validate": [
+    "javascript",
+    "typescript",
+    "vue"
+  ],
+  // Use the flat config file (eslint.config.mjs)
+  "eslint.useFlatConfig": true,
+  // General file hygiene
+  "files.trimTrailingWhitespace": true,
+  "files.insertFinalNewline": true
+}

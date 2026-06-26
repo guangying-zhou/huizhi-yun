@@ -1,0 +1,30 @@
+packages:
+  - 'foundation'
+  - 'foundation/packages/*'
+  - 'platform'
+  - 'platform/packages/*'
+  - 'aims'
+  - 'workflow'
+  - 'console'
+  - 'webdev'
+  - 'nuxt-template'
+  - 'account'
+  - 'codocs'
+  - 'codocs/slidev-service'
+  - 'collab'
+  - 'align'
+  # 以下模块待试点验证后再纳入
+  - 'altoc'
+  - 'assets'
+  - 'finance'
+  - 'people'
+  # - 'insights'
+allowBuilds:
+  '@parcel/watcher': true
+  esbuild: true
+  maplibre-gl: true
+  playwright-chromium: true
+  unrs-resolver: true
+  vue-demi: true
+overrides:
+  h3: 1.15.10

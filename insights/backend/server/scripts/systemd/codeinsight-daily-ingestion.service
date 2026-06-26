@@ -1,0 +1,26 @@
+[Unit]
+Description=CodeInsight Daily Ingestion Coordinator
+After=network.target mysql.service
+
+[Service]
+Type=oneshot
+User=codeinsight
+Group=codeinsight
+WorkingDirectory=/opt/codeinsight/backend
+Environment="PATH=/opt/codeinsight/venv/bin:/usr/local/bin:/usr/bin:/bin"
+Environment="PYTHONPATH=/opt/codeinsight/backend"
+# Database connection (override in /etc/codeinsight/env)
+EnvironmentFile=-/etc/codeinsight/env
+ExecStart=/opt/codeinsight/venv/bin/python -m server.scripts.maintenance.daily_ingestion_coordinator
+StandardOutput=journal
+StandardError=journal
+
+# Restart policy: do not restart (timer will re-trigger)
+Restart=no
+
+# Security hardening
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/opt/codeinsight/logs /tmp
+PrivateTmp=yes

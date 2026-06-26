@@ -1,0 +1,36 @@
+{
+  "name": "webdev",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "nuxt build --dotenv .env",
+    "build:cloudflare": "node scripts/build-cloudflare.mjs",
+    "cloudflare:config": "node scripts/render-cloudflare-config.mjs",
+    "deploy:cloudflare": "pnpm run cloudflare:config && pnpm run build:cloudflare && pnpm dlx wrangler@4 deploy --config .wrangler.generated.jsonc",
+    "dev": "nuxt dev --dotenv .env.dev",
+    "preview:cloudflare": "pnpm run cloudflare:config && pnpm run build:cloudflare && pnpm dlx wrangler@4 dev --config .wrangler.generated.jsonc",
+    "preview": "nuxt preview",
+    "postinstall": "nuxt prepare",
+    "lint": "eslint .",
+    "test": "node --test --experimental-strip-types \"test/**/*.test.ts\"",
+    "typecheck": "nuxt typecheck"
+  },
+  "dependencies": {
+    "@hzy/foundation": "workspace:*",
+    "@iconify-json/lucide": "^1.2.71",
+    "@nuxt/ui": "^4.1.0",
+    "@pinia/nuxt": "^0.11.3",
+    "@vueuse/nuxt": "^13.9.0",
+    "nuxt": "^4.2.0",
+    "pinia": "^3.0.4",
+    "zod": "^4.1.12"
+  },
+  "devDependencies": {
+    "@nuxt/eslint": "^1.9.0",
+    "@types/node": "^24.10.0",
+    "eslint": "^9.38.0",
+    "typescript": "^5.9.3",
+    "vue-tsc": "^3.1.2"
+  },
+  "packageManager": "pnpm@10.32.1"
+}

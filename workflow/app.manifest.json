@@ -1,0 +1,156 @@
+{
+  "appCode": "workflow",
+  "appName": "汇智云流程",
+  "appType": "internal",
+  "description": "通用审批流程引擎，提供流程定义、表单定义、条件路由、审批实例、待办任务与审批完成回调能力。",
+  "icon": "i-lucide-route",
+  "authMode": "oidc",
+  "bundleEnabled": true,
+  "entry": {
+    "web": "/",
+    "apiBase": "/api/v1"
+  },
+  "runtimeRequirements": {
+    "requiresSdk": true,
+    "supportsCustomerHosted": true,
+    "supportsManagedControlPlane": true
+  },
+  "compatibility": {
+    "minControlPlaneVersion": "0.1.0",
+    "minSdkVersion": "0.1.0"
+  },
+  "resources": [
+    {
+      "code": "workflow_workspace",
+      "name": "工作台",
+      "description": "审批工作台、待办摘要和流程概览",
+      "actions": ["view"],
+      "sortOrder": 1
+    },
+    {
+      "code": "workflow_tasks",
+      "name": "审批任务",
+      "description": "我的待办、已办任务和审批处理",
+      "actions": ["view", "approve", "reject", "delegate", "edit", "admin"],
+      "sortOrder": 10
+    },
+    {
+      "code": "workflow_instances",
+      "name": "流程实例",
+      "description": "我发起的流程、实例详情、撤回和重新提交",
+      "actions": ["view", "cancel", "resubmit", "edit", "admin"],
+      "sortOrder": 20
+    },
+    {
+      "code": "flow_schemas",
+      "name": "流程定义",
+      "description": "审批流程模板、节点配置和版本治理",
+      "actions": ["view", "edit", "admin"],
+      "sortOrder": 30
+    },
+    {
+      "code": "form_schemas",
+      "name": "表单定义",
+      "description": "JSON Schema 申请表单定义和预览",
+      "actions": ["view", "edit", "admin"],
+      "sortOrder": 40
+    },
+    {
+      "code": "action_defs",
+      "name": "审批业务",
+      "description": "业务模块资源动作、发起配置和嵌入视图配置",
+      "actions": ["view", "edit", "admin"],
+      "sortOrder": 50
+    },
+    {
+      "code": "route_rules",
+      "name": "路由规则",
+      "description": "按部门、角色、表单数据和优先级匹配审批流程",
+      "actions": ["view", "edit", "admin"],
+      "sortOrder": 60
+    }
+  ],
+  "recommendedRoles": [
+    {
+      "code": "workflow:viewer",
+      "name": "Workflow 只读",
+      "description": "查看审批工作台、任务、实例和流程配置",
+      "suggestedPermissions": [
+        "workflow:workflow_workspace:view",
+        "workflow:workflow_tasks:view",
+        "workflow:workflow_instances:view",
+        "workflow:flow_schemas:view",
+        "workflow:form_schemas:view",
+        "workflow:action_defs:view",
+        "workflow:route_rules:view"
+      ]
+    },
+    {
+      "code": "workflow:approver",
+      "name": "Workflow 审批处理",
+      "description": "处理被流程节点分配给自己的审批任务",
+      "suggestedPermissions": [
+        "workflow:workflow_workspace:view",
+        "workflow:workflow_tasks:view",
+        "workflow:workflow_tasks:approve",
+        "workflow:workflow_tasks:reject",
+        "workflow:workflow_tasks:delegate",
+        "workflow:workflow_instances:view"
+      ]
+    },
+    {
+      "code": "workflow:initiator",
+      "name": "Workflow 发起人",
+      "description": "查看、撤回和重新提交自己发起的流程实例",
+      "suggestedPermissions": [
+        "workflow:workflow_workspace:view",
+        "workflow:workflow_tasks:view",
+        "workflow:workflow_instances:view",
+        "workflow:workflow_instances:cancel",
+        "workflow:workflow_instances:resubmit"
+      ]
+    },
+    {
+      "code": "workflow:designer",
+      "name": "Workflow 流程设计",
+      "description": "维护流程定义、表单定义、审批业务和路由规则",
+      "suggestedPermissions": [
+        "workflow:workflow_workspace:view",
+        "workflow:workflow_tasks:view",
+        "workflow:workflow_instances:view",
+        "workflow:flow_schemas:edit",
+        "workflow:form_schemas:edit",
+        "workflow:action_defs:edit",
+        "workflow:route_rules:edit"
+      ]
+    },
+    {
+      "code": "workflow:admin",
+      "name": "Workflow 管理员",
+      "description": "管理流程引擎全部资源和审批配置",
+      "suggestedPermissions": [
+        "workflow:workflow_workspace:view",
+        "workflow:workflow_tasks:approve",
+        "workflow:workflow_tasks:reject",
+        "workflow:workflow_tasks:delegate",
+        "workflow:workflow_tasks:admin",
+        "workflow:workflow_instances:cancel",
+        "workflow:workflow_instances:resubmit",
+        "workflow:workflow_instances:admin",
+        "workflow:flow_schemas:admin",
+        "workflow:form_schemas:admin",
+        "workflow:action_defs:admin",
+        "workflow:route_rules:admin"
+      ]
+    }
+  ],
+  "supportedScopes": [
+    "tenant:global",
+    "self",
+    "department",
+    "participant"
+  ],
+  "capabilitiesRequired": [
+    "platform:app-registry"
+  ]
+}

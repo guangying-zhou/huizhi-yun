@@ -1,0 +1,71 @@
+{
+  "appCode": "webdev",
+  "appName": "WebDev",
+  "appType": "internal",
+  "description": "远程开发控制面：授权用户通过浏览器触发 Dev Agent、Codex 任务、测试和部署流程。",
+  "icon": "i-lucide-terminal",
+  "authMode": "oidc",
+  "bundleEnabled": true,
+  "entry": {
+    "web": "/",
+    "apiBase": "/api/webdev"
+  },
+  "runtimeRequirements": {
+    "requiresSdk": true,
+    "supportsCustomerHosted": false,
+    "supportsManagedControlPlane": true
+  },
+  "compatibility": {
+    "minControlPlaneVersion": "0.1.0",
+    "minSdkVersion": "0.1.0"
+  },
+  "resources": [
+    {
+      "code": "webdev_workspace",
+      "name": "开发控制台",
+      "description": "查看 Dev Agent 状态、触发 Codex 任务、读取任务日志和历史记录",
+      "actions": ["view", "execute", "deploy", "admin"],
+      "sortOrder": 1
+    }
+  ],
+  "recommendedRoles": [
+    {
+      "code": "webdev:operator",
+      "name": "WebDev 执行者",
+      "description": "可进入 WebDev，执行开发任务并查看运行日志和历史记录",
+      "suggestedPermissions": [
+        "webdev:webdev_workspace:view",
+        "webdev:webdev_workspace:execute"
+      ]
+    },
+    {
+      "code": "webdev:deployer",
+      "name": "WebDev 发布者",
+      "description": "可执行开发任务、触发测试和发布部署",
+      "suggestedPermissions": [
+        "webdev:webdev_workspace:view",
+        "webdev:webdev_workspace:execute",
+        "webdev:webdev_workspace:deploy"
+      ]
+    },
+    {
+      "code": "webdev:admin",
+      "name": "WebDev 管理员",
+      "description": "管理 WebDev 远程开发控制面全部能力",
+      "suggestedPermissions": [
+        "webdev:webdev_workspace:view",
+        "webdev:webdev_workspace:execute",
+        "webdev:webdev_workspace:deploy",
+        "webdev:webdev_workspace:admin"
+      ]
+    }
+  ],
+  "supportedScopes": [
+    "tenant:global",
+    "subject:self"
+  ],
+  "capabilitiesRequired": [
+    "platform:app-registry",
+    "console:oidc"
+  ]
+}
