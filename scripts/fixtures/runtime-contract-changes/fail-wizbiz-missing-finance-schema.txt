@@ -1,0 +1,4 @@
+# The migration test and only one of two affected schemas are insufficient.
+data-runtime/internal/migrations/wizbiz/incremental.go
+data-runtime/internal/migrations/wizbiz/incremental_test.go
+altoc/docs/altoc_schema.sql

@@ -1,0 +1,40 @@
+{
+	"folders": [
+		{
+			"path": "."
+		}
+	],
+	"settings": {
+		"kiroAgent.configureMCP": "Enabled",
+		"editor.formatOnSave": true,
+		"editor.codeActionsOnSave": {
+			"source.fixAll.eslint": "always"
+		},
+		"[vue]": {
+			"editor.codeActionsOnSave": {
+				"source.fixAll.eslint": "always"
+			}
+		},
+		"eslint.validate": [
+			"javascript",
+			"typescript",
+			"vue"
+		],
+		"eslint.workingDirectories": [
+			{
+				"mode": "auto"
+			}
+		],
+		"files.trimTrailingWhitespace": true,
+		"files.insertFinalNewline": true,
+		"files.exclude": {
+			// "nuxt-template": true,
+			// "aims": true
+		},
+		"chat.tools.terminal.autoApprove": {
+			"./node_modules/.bin/eslint": true,
+			"pushd": true,
+			"popd": true
+		}
+	}
+}

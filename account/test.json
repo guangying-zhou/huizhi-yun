@@ -1,0 +1,16 @@
+{
+  "error": true,
+  "url": "http://localhost:3000/api/ldap-users?search=%E9%83%87%E6%AD%A3%E5%9F%BA",
+  "statusCode": 500,
+  "statusMessage": "Server Error",
+  "message": "Unknown column 'up.ldap_cn' in 'where clause'",
+  "stack": [
+    "Unknown column 'up.ldap_cn' in 'where clause'",
+    "at createError (/Users/gavin/Dev/huizhi-yun/account/node_modules/.pnpm/h3@1.15.5/node_modules/h3/dist/index.mjs:71:15)",
+    "at Object.handler (/Users/gavin/Dev/huizhi-yun/account/server/api/ldap-users/index.get.ts:105:0)",
+    "at process.processTicksAndRejections (node:internal/process/task_queues:105:5)",
+    "at async file:///Users/gavin/Dev/huizhi-yun/account/node_modules/.pnpm/h3@1.15.5/node_modules/h3/dist/index.mjs:2011:19)",
+    "at async Object.callAsync (/Users/gavin/Dev/huizhi-yun/account/node_modules/.pnpm/unctx@2.5.0/node_modules/unctx/dist/index.mjs:72:16)",
+    "at async Server.toNodeHandle (/Users/gavin/Dev/huizhi-yun/account/node_modules/.pnpm/h3@1.15.5/node_modules/h3/dist/index.mjs:2303:7)"
+  ]
+}

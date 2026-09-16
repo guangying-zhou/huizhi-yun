@@ -1,0 +1,9 @@
+/hzy-data-runtime
+/hzy-data-runtime-linux-*
+.bin/
+/build/
+*.tar.gz
+*.sha256
+coverage.out
+.env
+.env.dev

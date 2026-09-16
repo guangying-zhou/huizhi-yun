@@ -1,0 +1,25 @@
+-- Append-only corrections for objective observations. Apply after v5.22.
+SET @pc_objective_correction_sql = IF(EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='product_objective_observations' AND column_name='correction_of_id'), 'SELECT 1', 'ALTER TABLE product_objective_observations ADD COLUMN correction_of_id BIGINT UNSIGNED NULL');
+PREPARE pc_objective_correction_stmt FROM @pc_objective_correction_sql;
+EXECUTE pc_objective_correction_stmt;
+DEALLOCATE PREPARE pc_objective_correction_stmt;
+SET @pc_objective_correction_sql = IF(EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='product_objective_observations' AND column_name='correction_reason'), 'SELECT 1', 'ALTER TABLE product_objective_observations ADD COLUMN correction_reason TEXT NULL');
+PREPARE pc_objective_correction_stmt FROM @pc_objective_correction_sql;
+EXECUTE pc_objective_correction_stmt;
+DEALLOCATE PREPARE pc_objective_correction_stmt;
+SET @pc_objective_correction_sql = IF(EXISTS(SELECT 1 FROM information_schema.statistics WHERE table_schema=DATABASE() AND table_name='product_objective_observations' AND index_name='uk_pc_objective_observation_scope'), 'SELECT 1', 'ALTER TABLE product_objective_observations ADD UNIQUE KEY uk_pc_objective_observation_scope(id,objective_id,product_code)');
+PREPARE pc_objective_correction_stmt FROM @pc_objective_correction_sql;
+EXECUTE pc_objective_correction_stmt;
+DEALLOCATE PREPARE pc_objective_correction_stmt;
+SET @pc_objective_correction_sql = IF(EXISTS(SELECT 1 FROM information_schema.statistics WHERE table_schema=DATABASE() AND table_name='product_objective_observations' AND index_name='uk_pc_objective_observation_correction'), 'SELECT 1', 'ALTER TABLE product_objective_observations ADD UNIQUE KEY uk_pc_objective_observation_correction(correction_of_id)');
+PREPARE pc_objective_correction_stmt FROM @pc_objective_correction_sql;
+EXECUTE pc_objective_correction_stmt;
+DEALLOCATE PREPARE pc_objective_correction_stmt;
+SET @pc_objective_correction_sql = IF(EXISTS(SELECT 1 FROM information_schema.table_constraints WHERE constraint_schema=DATABASE() AND table_name='product_objective_observations' AND constraint_name='fk_pc_objective_observation_correction'), 'SELECT 1', 'ALTER TABLE product_objective_observations ADD CONSTRAINT fk_pc_objective_observation_correction FOREIGN KEY(correction_of_id,objective_id,product_code) REFERENCES product_objective_observations(id,objective_id,product_code)');
+PREPARE pc_objective_correction_stmt FROM @pc_objective_correction_sql;
+EXECUTE pc_objective_correction_stmt;
+DEALLOCATE PREPARE pc_objective_correction_stmt;
+SET @pc_objective_correction_sql = IF(EXISTS(SELECT 1 FROM information_schema.table_constraints WHERE constraint_schema=DATABASE() AND table_name='product_objective_observations' AND constraint_name='ck_pc_objective_observation_correction'), 'SELECT 1', 'ALTER TABLE product_objective_observations ADD CONSTRAINT ck_pc_objective_observation_correction CHECK((correction_of_id IS NULL AND correction_reason IS NULL) OR (correction_of_id IS NOT NULL AND correction_reason IS NOT NULL AND CHAR_LENGTH(TRIM(correction_reason))>0))');
+PREPARE pc_objective_correction_stmt FROM @pc_objective_correction_sql;
+EXECUTE pc_objective_correction_stmt;
+DEALLOCATE PREPARE pc_objective_correction_stmt;

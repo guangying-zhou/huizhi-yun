@@ -1,0 +1,10 @@
+import { setHeader, setResponseStatus } from 'h3'
+
+export default defineEventHandler((event) => {
+  setHeader(event, 'access-control-allow-origin', '*')
+  setHeader(event, 'access-control-allow-methods', 'GET, HEAD, OPTIONS')
+  setHeader(event, 'access-control-allow-headers', '*')
+  setHeader(event, 'access-control-max-age', 86400)
+  setResponseStatus(event, 204)
+  return null
+})

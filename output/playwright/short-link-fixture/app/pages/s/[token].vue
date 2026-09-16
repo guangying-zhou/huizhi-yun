@@ -1,0 +1,1 @@
+/Users/gavin/orca/workspaces/huizhi-yun/stream-c-people/codocs/app/pages/s/[token].vue

@@ -1,0 +1,108 @@
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
+import assert from 'node:assert/strict'
+import { test } from 'node:test'
+
+const root = resolve(import.meta.dirname, '..')
+const read = (file: string) => readFileSync(resolve(root, file), 'utf8')
+
+test('milestone completion creates an immutable request before launching Workflow', () => {
+  const page = read('app/pages/projects/[id]/milestones/[milestoneId].vue')
+  const createRoute = read('server/api/v1/milestones/[id]/completion-requests.post.ts')
+  const bindRoute = read('server/api/v1/milestone-completion-requests/[requestId]/bind-workflow.post.ts')
+  const runtime = read('../data-runtime/internal/apps/aims/milestone_completion_governance.go')
+
+  assert.match(page, /actionCode: 'milestone_completion'/)
+  assert.match(page, /async beforeSubmit\(\)[\s\S]*\/completion-requests/)
+  assert.match(page, /completionRequestId/)
+  assert.match(page, /async onSubmitted\(payload\)[\s\S]*bind-workflow/)
+  assert.doesNotMatch(page, /review-approve/)
+  assert.match(createRoute, /resolveProjectGovernanceRoleHolder\(event, 'project_director'\)/)
+  assert.match(createRoute, /current_user_completion_request_authorized/)
+  assert.match(bindRoute, /current_user_completion_request_authorized/)
+  assert.match(runtime, /snapshot_sha256/)
+  assert.match(runtime, /completion_lock_request_id/)
+  assert.match(runtime, /requireCurrentProjectManagerResponsibilityTx/)
+  assert.match(runtime, /milestone_required_document_quality_incomplete/)
+})
+
+test('only trusted Workflow terminal callback can finalize a milestone and enqueue Altoc work', () => {
+  const callback = read('server/api/v1/service/workflow/callback.post.ts')
+  const retired = read('server/api/v1/milestones/[id]/review-approve.post.ts')
+  const runtime = read('../data-runtime/internal/apps/aims/milestone_completion_governance.go')
+  const directGuard = read('../data-runtime/internal/apps/aims/direct_object_guards.go')
+  const workflowRuntime = read('../data-runtime/internal/apps/workflow/runtime.go')
+  const callbackOutbox = read('../data-runtime/internal/apps/workflow/callback_outbox.go')
+  const callbackDelivery = read('../workflow/server/utils/dataRuntime.ts')
+  const scheduledDrain = read('../workflow/server/api/internal/integration-operations/drain.post.ts')
+  const grant = read('../console/docs/sql/Console-SQL-Seed-v1.89-workflow-aims-milestone-callback.sql')
+
+  assert.match(callback, /requireServiceScope\(event, \{ scope: 'workflow:callback', allowedApps: \['workflow'\] \}\)/)
+  assert.match(callback, /workflow_callback_verified/)
+  assert.match(callback, /dispatchMilestoneReceivableOperation/)
+  assert.match(retired, /statusCode: 410/)
+  assert.match(runtime, /status != "approved" && status != "rejected"/)
+  assert.match(runtime, /UPDATE milestones SET status = 'completed', completion_lock_request_id = NULL/)
+  assert.match(runtime, /enqueueMilestoneReceivableBillableOperationTx/)
+  assert.match(directGuard, /workflow_decision_required/)
+  assert.match(workflowRuntime, /"aims":\s+"\/api\/v1\/service\/workflow\/callback"/)
+  assert.match(callbackOutbox, /INSERT INTO flow_callback_logs/)
+  assert.match(callbackOutbox, /status IN \('pending', 'failed'\)/)
+  assert.match(callbackDelivery, /checkpointWorkflowCallback/)
+  assert.match(callbackDelivery, /drainWorkflowCallbackOutbox/)
+  assert.match(scheduledDrain, /requireTenantGatewaySchedulerRequest\(event, 'workflow'\)/)
+  assert.match(grant, /'workflow'[\s\S]*'callback'/)
+})
+
+test('project initiation callback activates the project and its first milestone atomically', () => {
+  const callback = read('server/api/v1/service/workflow/callback.post.ts')
+  const runtime = read('../data-runtime/internal/apps/aims/project_initiation_workflow.go')
+  const dispatcher = read('../data-runtime/internal/apps/aims/milestone_completion_governance.go')
+
+  assert.match(callback, /projectId: Number\(formData\.projectId \|\| formData\.project_id \|\| 0\)/)
+  assert.match(dispatcher, /resourceCode == "projects" && actionCode == "initiation"/)
+  assert.match(runtime, /workflow_callback_verified/)
+  assert.match(runtime, /SELECT lifecycle_status[\s\S]*FROM aims_projects[\s\S]*FOR UPDATE/)
+  assert.match(runtime, /UPDATE aims_projects SET lifecycle_status = 'active'/)
+  assert.match(runtime, /initializeProjectMilestoneStatusesOnActivationTx/)
+  assert.match(runtime, /activatedMilestoneId/)
+})
+
+test('pending Workflow task follows the current singleton project director', () => {
+  const middleware = read('../workflow/server/middleware/data-runtime.ts')
+  const resolver = read('../workflow/server/utils/projectDirectorRoleHolder.ts')
+  const reconciliation = read('../data-runtime/internal/apps/workflow/project_director_reconciliation.go')
+  const seed = read('../console/docs/sql/Console-SQL-Seed-v1.87-project-governance-role-holder-grants.sql')
+  const flow = read('../workflow/docs/migrations/010_aims_milestone_completion.sql')
+
+  assert.match(middleware, /delete query\.current_project_director_uid/)
+  assert.match(middleware, /resolveWorkflowProjectDirectorRoleHolder/)
+  assert.match(resolver, /console:authorization-role-holders:read/)
+  assert.match(reconciliation, /i\.action_code = 'milestone_completion'/)
+  assert.match(reconciliation, /SET assignee_uid = \?, actionable_version = \?/)
+  assert.match(reconciliation, /projectDirectorRevision/)
+  assert.match(reconciliation, /flow_actionable_outbox/)
+  assert.match(seed, /'workflow'/)
+  assert.match(flow, /form_data\.projectDirectorUid/)
+  assert.match(flow, /'allow_resubmit', FALSE/)
+})
+
+test('milestone acceptance facts are locked while completion approval is pending', () => {
+  const runtime = read('../data-runtime/internal/apps/aims/milestone_completion_governance.go')
+  const workspace = read('../data-runtime/internal/apps/aims/workspace.go')
+  const milestones = read('../data-runtime/internal/apps/aims/project_milestones.go')
+  const deliverables = read('../data-runtime/internal/apps/aims/deliverables.go')
+  const schema = read('docs/aims_schema.sql')
+  const migration = read('docs/migration_v5.10_milestone_completion_acceptance_lock.sql')
+  const legacyActions = read('../data-runtime/internal/apps/aims/requirement_import_actions.go')
+
+  assert.match(runtime, /http\.StatusLocked/)
+  assert.match(runtime, /enforceMilestoneCompletionLockForMutation/)
+  assert.match(workspace, /aims\.milestone_completion\.lock_guard/)
+  assert.match(milestones, /requireMilestoneCompletionUnlocked/)
+  assert.match(deliverables, /requireDeliverableMilestoneCompletionUnlocked/)
+  assert.match(schema, /trg_work_item_completion_lock_update/)
+  assert.match(schema, /trg_deliverable_completion_lock_update/)
+  assert.match(migration, /SIGNAL SQLSTATE '45000'/)
+  assert.doesNotMatch(legacyActions, /func \(a \*Adapter\) approveMilestoneReview/)
+})

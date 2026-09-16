@@ -1,0 +1,1 @@
+<script setup lang="ts">const path=ref('codocs/company/rules/原文档.md')</script><template><div class="p-6"><UButton @click="path='codocs/company/rules/新文档.md'">切换文档</UButton><p>{{path}}</p><PublishedAssetLinkButton :path="path" /></div></template>

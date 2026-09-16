@@ -1,0 +1,3 @@
+import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
+export default defineNuxtConfig({ ssr: false, devtools: { enabled: false }, modules: ['@nuxt/ui'], app: { baseURL: '/codocs/' }, css: ['~/assets.css'], nitro: { publicAssets: ['cmaps','standard_fonts','wasm'].map(directory => ({dir:join(dirname(fileURLToPath(import.meta.resolve('pdfjs-dist/package.json'))),directory),baseURL:'/pdfjs/6.3.289/'+directory})) } })

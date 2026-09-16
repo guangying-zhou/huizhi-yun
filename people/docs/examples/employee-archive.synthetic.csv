@@ -1,0 +1,3 @@
+employee_id,name,id_number,date_of_birth,education,major,school,graduation,hiredate,mobile_number,ding_id,operate_time
+SAFE01-SYNTHETIC-001,合成员工甲,NULL,1990-01-01,1,软件工程,"合成测试学校,本部",2012-06-30,2020-07-01,NULL,safe01-synthetic-user-001,2026-09-05 00:00:00
+SAFE01-SYNTHETIC-002,合成员工乙,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,safe01-synthetic-user-002,NULL

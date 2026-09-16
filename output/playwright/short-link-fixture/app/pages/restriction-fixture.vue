@@ -1,0 +1,1 @@
+<script setup lang="ts">const restricted=ref(false);const content='# 状态切换验收\n\n已有选区应在启用限制时清除。'</script><template><div><UButton @mousedown.prevent @click="restricted=true">启用发布限制</UButton><EditorMilkdownEditor :model-value="content" :show-sidebar="false" :readonly="restricted" :disable-selection="restricted" /></div></template>

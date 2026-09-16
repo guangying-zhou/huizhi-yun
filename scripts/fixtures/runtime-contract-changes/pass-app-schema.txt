@@ -1,0 +1,5 @@
+# App schema behavior: app test, API contract, and app schema documentation.
+data-runtime/internal/apps/aims/project_weekly_report_schema.go
+data-runtime/internal/apps/aims/project_weekly_report_summary_test.go
+docs/Tenant-Runtime-API-Contract-v1.md
+aims/docs/aims_schema.sql

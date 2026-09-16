@@ -1,0 +1,1791 @@
+{
+  "schemaRevision": "sha256:a0e1d91cf8c43e5336df8363055a156117c4589232ce4b8aaf59bcf2cccd23c6",
+  "source": "console/docs/hzy_console_schema.sql",
+  "excludedTables": [
+    "console_runtime_cache"
+  ],
+  "tables": {
+    "auth_authorization_codes": {
+      "columns": [
+        "client_id",
+        "code_challenge",
+        "code_challenge_method",
+        "code_hash",
+        "consumed_at",
+        "expires_at",
+        "id",
+        "issued_at",
+        "nonce",
+        "nonce_hash",
+        "redirect_uri",
+        "scope",
+        "session_id",
+        "state_hash",
+        "status",
+        "uid"
+      ],
+      "indexes": [
+        "PRIMARY",
+        "idx_auth_authorization_codes_client",
+        "idx_auth_authorization_codes_session",
+        "uk_auth_authorization_codes_hash"
+      ],
+      "constraints": [
+        "ck_auth_authorization_codes_challenge_method",
+        "ck_auth_authorization_codes_status",
+        "fk_auth_authorization_codes_client",
+        "fk_auth_authorization_codes_session",
+        "fk_auth_authorization_codes_user"
+      ]
+    },
+    "auth_client_redirect_uris": {
+      "columns": [
+        "client_id",
+        "created_at",
+        "id",
+        "redirect_uri",
+        "redirect_uri_hash",
+        "source",
+        "status",
+        "updated_at",
+        "uri_type"
+      ],
+      "indexes": [
+        "PRIMARY",
+        "idx_auth_client_redirect_uris_status",
+        "uk_auth_client_redirect_uris"
+      ],
+      "constraints": [
+        "ck_auth_client_redirect_uris_status",
+        "ck_auth_client_redirect_uris_type",
+        "fk_auth_client_redirect_uris_client"
+      ]
+    },
+    "auth_clients": {
+      "columns": [
+        "app_code",
+        "auth_mode",
+        "client_id",
+        "client_name",
+        "client_type",
+        "created_at",
+        "description",
+        "home_url",
+        "icon",
+        "id",
+        "logout_url",
+        "source",
+        "source_hash",
+        "status",
+        "updated_at"
+      ],
+      "indexes": [
+        "PRIMARY",
+        "idx_auth_clients_app",
+        "uk_auth_clients_client"
+      ],
+      "constraints": [
+        "ck_auth_clients_status",
+        "ck_auth_clients_type"
+      ]
+    },
+    "auth_external_login_transactions": {
+      "columns": [
+        "browser_binding_sha256",
+        "consumed_at",
+        "created_at",
+        "deployment_code",
+        "expires_at",
+        "integration_code",
+        "issued_at",
+        "provider_code",
+        "redirect_path",
+        "state_sha256",
+        "status",
+        "target_app_code",
+        "tenant_code",
+        "transaction_id",
+        "updated_at"
+      ],
+      "indexes": [
+        "PRIMARY",
+        "idx_auth_external_login_expiry",
+        "uk_auth_external_login_state"
+      ],
+      "constraints": [
+        "ck_auth_external_login_status"
+      ]
+    },
+    "auth_identity_providers": {
+      "columns": [
+        "client_id",
+        "config_json",
+        "created_at",
+        "credential_ref",
+        "id",
+        "integration_code",
+        "is_default",
+        "issuer_url",
+        "provider_code",
+        "provider_name",
+        "provider_type",
+        "status",
+        "updated_at"
+      ],
+      "indexes": [
+        "PRIMARY",
+        "idx_auth_identity_providers_type",
+        "uk_auth_identity_providers_code"
+      ],
+      "constraints": [
+        "ck_auth_identity_providers_status"
+      ]
+    },
+    "auth_login_events": {
+      "columns": [
+        "auth_provider",
+        "browser",
+        "created_at",
+        "device_summary",
+        "failure_reason",
+        "id",
+        "identity_id",
+        "ip_address",
+        "location",
+        "login_result",
+        "login_type",
+        "os",
+        "session_id",
+        "target_app",
+        "uid"
+      ],
+      "indexes": [
+        "PRIMARY",
+        "idx_auth_login_events_identity",
+        "idx_auth_login_events_result",
+        "idx_auth_login_events_session",
+        "idx_auth_login_events_target",
+        "idx_auth_login_events_uid_time"
+      ],
+      "constraints": [
+        "ck_auth_login_events_result",
+        "fk_auth_login_events_identity",
+        "fk_auth_login_events_user"
+      ]
+    },
+    "auth_refresh_tokens": {
+      "columns": [
+        "client_id",
+        "expires_at",
+        "id",
+        "issued_at",
+        "reuse_detected_at",
+        "revoked_at",
+        "rotated_at",
+        "session_id",
+        "status",
+        "token_family",
+        "token_hash",
+        "uid"
+      ],
+      "indexes": [
+        "PRIMARY",
+        "idx_auth_refresh_tokens_client",
+        "idx_auth_refresh_tokens_family",
+        "idx_auth_refresh_tokens_session",
+        "uk_auth_refresh_tokens_hash"
+      ],
+      "constraints": [
+        "ck_auth_refresh_tokens_status",
+        "fk_auth_refresh_tokens_client",
+        "fk_auth_refresh_tokens_session",
+        "fk_auth_refresh_tokens_user"
+      ]
+    },
+    "auth_signing_keys": {
+      "columns": [
+        "alg",
+        "created_at",
+        "id",
+        "kid",
+        "not_after",
+        "not_before",
+        "private_key_ref",
+        "public_jwk_json",
+        "status",
+        "updated_at",
+        "use_type"
+      ],
+      "indexes": [
+        "PRIMARY",
+        "idx_auth_signing_keys_status",
+        "uk_auth_signing_keys_kid"
+      ],
+      "constraints": [
+        "ck_auth_signing_keys_status"
+      ]
+    },
+    "auth_token_events": {
+      "columns": [
+        "client_id",
+        "created_at",
+        "event_type",
+        "failure_reason",
+        "id",
+        "ip_address",
+        "result",
+        "session_hash",
+        "token_hash",
+        "uid",
+        "user_agent"
+      ],
+      "indexes": [
+        "PRIMARY",
+        "idx_auth_token_events_client_time",
+        "idx_auth_token_events_type_time",
+        "idx_auth_token_events_uid_time"
+      ],
+      "constraints": [
+        "ck_auth_token_events_result"
+      ]
+    },
+    "connector_runtime_enrollments": {
+      "columns": [
+        "created_at",
+        "deployment_code",
+        "enrollment_id",
+        "enrollment_token_sha256",
+        "expires_at",
+        "redeemed_at",
+        "status",
+        "tenant_code",
+        "updated_at"
+      ],
+      "indexes": [
+        "PRIMARY",
+        "idx_connector_runtime_enrollment_binding",
+        "uk_connector_runtime_enrollment_token"
+      ],
+      "constraints": [
+        "ck_connector_runtime_enrollment_status"
+      ]
+    },
+    "connector_runtime_instances": {
+      "columns": [
+        "agent_version",
+        "capabilities_json",
+        "connector_id",
+        "created_at",
+        "deployment_code",
+        "last_seen_at",
+        "public_key_pem",
+        "status",
+        "tenant_code",
+        "updated_at"
+      ],
+      "indexes": [
+        "PRIMARY",
+        "idx_connector_runtime_status",
+        "uk_connector_runtime_binding"
+      ],
+      "constraints": [
+        "ck_connector_runtime_status"
+      ]
+    },
+    "console_cutover_dispositions": {
+      "columns": [
+        "active_subject_key",
+        "actor_id",
+        "actor_type",
+        "category",
+        "change_reference",
+        "created_at",
+        "disposition_id",
+        "reason_code",
+        "reason_text",
+        "request_id",
+        "source_app",
+        "source_fingerprint",
+        "source_updated_at",
+        "status",
+        "subject_key",
+        "superseded_at",
+        "superseded_by_id",
+        "updated_at"
+      ],
+      "indexes": [
+        "PRIMARY",
+        "idx_console_cutover_disposition_change",
+        "idx_console_cutover_disposition_source",
+        "uk_console_cutover_disposition_active"
+      ],
+      "constraints": [
+        "ck_console_cutover_disposition_category",
+        "ck_console_cutover_disposition_fingerprint",
+        "ck_console_cutover_disposition_reason",
+        "ck_console_cutover_disposition_status"
+      ]
+    },
+    "console_mutation_receipts": {
+      "columns": [
+        "actor_id",
+        "actor_type",
+        "completed_at",
+        "created_at",
+        "idempotency_key",
+        "operation_code",
+        "receipt_id",
+        "request_id",
+        "request_sha256",
+        "response_http_status",
+        "result_json",
+        "status",
+        "tenant_code",
+        "updated_at"
+      ],
+      "indexes": [
+        "PRIMARY",
+        "idx_console_mutation_receipt_status_time",
+        "uk_console_mutation_receipt_identity"
+      ],
+      "constraints": []
+    },
+    "console_platform_lifecycle_actionables": {
+      "columns": [
+        "actionable_key",
+        "closure_acknowledged_at",
+        "closure_state",
+        "created_at",
+        "generation",
+        "notification_id",
+        "object_version",
+        "operation_id",
+        "published_at",
+        "recipient_uids_json",
+        "updated_at"
+      ],
+      "indexes": [
+        "PRIMARY",
+        "idx_console_platform_lifecycle_actionable_pending"
+      ],
+      "constraints": [
+        "ck_console_platform_lifecycle_actionable_closure",
+        "fk_console_platform_lifecycle_actionable_operation"
+      ]
+    },
+    "dictionaries": {
+      "columns": [
+        "created_at",
+        "description",
+        "dictionary_code",
+        "dictionary_name",
+        "id",
+        "source",
+        "status",
+        "updated_at"
+      ],
+      "indexes": [
+        "PRIMARY",
+        "idx_dictionaries_status",
+        "uk_dictionaries"
+      ],
+      "constraints": []
+    },
+    "dictionary_items": {
+      "columns": [
+        "created_at",
+        "dictionary_id",
+        "extra_json",
+        "id",
+        "item_code",
+        "item_name",
+        "item_value",
+        "parent_id",
+        "sort_order",
+        "status",
+        "updated_at"
+      ],
+      "indexes": [
+        "PRIMARY",
+        "idx_dictionary_items_parent",
+        "idx_dictionary_items_status",
+        "uk_dictionary_items",
+        "uk_dictionary_items_id_dict"
+      ],
+      "constraints": [
+        "fk_dictionary_items_dict",
+        "fk_dictionary_items_parent"
+      ]
+    },
+    "directory_activation_credentials": {
+      "columns": [
+        "attempt_count",
+        "created_at",
+        "credential_id",
+        "expires_at",
+        "issued_operation_id",
+        "purpose",
+        "redeem_operation_id",
+        "redeemed_at",
+        "source_app",
+        "status",
+        "token_sha256",
+        "uid",
+        "updated_at"
+      ],
+      "indexes": [
+        "PRIMARY",
+        "idx_directory_activation_uid_status",
+        "uk_directory_activation_token"
+      ],
+      "constraints": [
+        "ck_directory_activation_purpose",
+        "ck_directory_activation_status",
+        "ck_directory_activation_terminal"
+      ]
+    },
+    "directory_connector_enrollments": {
+      "columns": [
+        "created_at",
+        "deployment_code",
+        "enrollment_jti",
+        "expires_at",
+        "redeemed_at",
+        "status",
+        "tenant_code",
+        "updated_at"
+      ],
+      "indexes": [
+        "PRIMARY",
+        "idx_directory_connector_enrollment_binding"
+      ],
+      "constraints": [
+        "ck_directory_connector_enrollment_status"
+      ]
+    },
+    "directory_connectors": {
+      "columns": [
+        "agent_version",
+        "capabilities_json",
+        "connector_id",
+        "created_at",
+        "deployment_code",
+        "last_heartbeat_at",
+        "last_seen_at",
+        "metrics_json",
+        "public_key_pem",
+        "revoked_at",
+        "runtime_started_at",
+        "status",
+        "tenant_code",
+        "updated_at"
+      ],
+      "indexes": [
+        "PRIMARY",
+        "idx_directory_connector_status",
+        "uk_directory_connector_binding"
+      ],
+      "constraints": [
+        "ck_directory_connector_status"
+      ]
+    },
+    "directory_department_aliases": {
+      "columns": [
+        "alias_dept_code",
+        "canonical_dept_code",
+        "created_at",
+        "created_by_uid",
+        "migration_run_id",
+        "provider_code",
+        "reason_code",
+        "status",
+        "updated_at"
+      ],
+      "indexes": [
+        "PRIMARY",
+        "idx_directory_department_alias_canonical"
+      ],
+      "constraints": [
+        "ck_directory_department_alias_distinct",
+        "ck_directory_department_alias_status",
+        "fk_directory_department_alias_source",
+        "fk_directory_department_alias_target"
+      ]
+    },
+    "directory_department_identities": {
+      "columns": [
+        "active_dept_code",
+        "created_at",
+        "created_by_uid",
+        "dept_code",
+        "external_department_id",
+        "first_seen_at",
+        "id",
+        "last_seen_at",
+        "last_snapshot_revision",
+        "manager_external_subject",
+        "mapping_origin",
+        "provider_code",
+        "source_payload_hash",
+        "status",
+        "updated_at",
+        "updated_by_uid"
+      ],
+      "indexes": [
+        "PRIMARY",
+        "idx_directory_department_identity_dept",
+        "uk_directory_department_identity_active_dept",
+        "uk_directory_department_identity_external"
+      ],
+      "constraints": [
+        "ck_directory_department_identity_origin",
+        "ck_directory_department_identity_status",
+        "fk_directory_department_identity_dept"
+      ]
+    },
+    "directory_department_snapshot_differences": {
+      "columns": [
+        "active_child_department_count_snapshot",
+        "active_primary_user_count_snapshot",
+        "applied_at",
+        "applied_by_uid",
+        "created_at",
+        "dept_code",
+        "dept_name_snapshot",
+        "external_department_id",
+        "id",
+        "level_no_snapshot",
+        "parent_dept_code_snapshot",
+        "snapshot_run_id",
+        "status",
+        "updated_at"
+      ],
+      "indexes": [
+        "PRIMARY",
+        "idx_directory_department_snapshot_difference_dept",
+        "idx_directory_department_snapshot_difference_status",
+        "uk_directory_department_snapshot_difference"
+      ],
+      "constraints": [
+        "ck_directory_department_snapshot_difference_status",
+        "fk_directory_department_snapshot_difference_dept",
+        "fk_directory_department_snapshot_difference_run"
+      ]
+    },
+    "directory_department_snapshot_runs": {
+      "columns": [
+        "active_identity_count",
+        "applied_at",
+        "confirmed_at",
+        "confirmed_by_uid",
+        "connector_id",
+        "created_at",
+        "id",
+        "job_id",
+        "missing_department_count",
+        "missing_department_ratio",
+        "policy_max_missing_count",
+        "policy_max_missing_ratio",
+        "provider_code",
+        "reported_department_count",
+        "risk_level",
+        "root_external_department_id",
+        "root_missing",
+        "seen_department_count",
+        "snapshot_hash",
+        "snapshot_revision",
+        "status",
+        "updated_at"
+      ],
+      "indexes": [
+        "PRIMARY",
+        "idx_directory_department_snapshot_job",
+        "idx_directory_department_snapshot_status",
+        "uk_directory_department_snapshot_revision"
+      ],
+      "constraints": [
+        "ck_directory_department_snapshot_risk",
+        "ck_directory_department_snapshot_status"
+      ]
+    },
+    "directory_departments": {
+      "columns": [
+        "created_at",
+        "dept_category",
+        "dept_code",
+        "dept_name",
+        "dept_path",
+        "description",
+        "external_ref",
+        "id",
+        "leader_uid",
+        "level_no",
+        "manager_uid",
+        "org_type",
+        "parent_dept_code",
+        "parent_id",
+        "sort_order",
+        "source_payload_hash",
+        "source_provider",
+        "status",
+        "synced_at",
+        "updated_at"
+      ],
+      "indexes": [
+        "PRIMARY",
+        "idx_directory_departments_parent",
+        "idx_directory_departments_parent_code",
+        "idx_directory_departments_sync",
+        "idx_directory_departments_type_status",
+        "uk_directory_departments_code",
+        "uk_directory_departments_source_ref"
+      ],
+      "constraints": [
+        "ck_directory_departments_status",
+        "fk_directory_departments_parent"
+      ]
+    },
+    "directory_hr_source_policies": {
+      "columns": [
+        "created_at",
+        "max_missing_department_count",
+        "max_missing_department_ratio",
+        "provider_code",
+        "status",
+        "updated_at",
+        "updated_by_uid"
+      ],
+      "indexes": [
+        "PRIMARY"
+      ],
+      "constraints": [
+        "ck_directory_hr_source_policy_ratio",
+        "ck_directory_hr_source_policy_status"
+      ]
+    },
+    "directory_identities": {
+      "columns": [
+        "created_at",
+        "email",
+        "id",
+        "last_login_at",
+        "last_synced_at",
+        "mobile_tail4",
+        "profile_json",
+        "provider_code",
+        "provider_dn",
+        "provider_subject",
+        "provider_username",
+        "status",
+        "uid",
+        "updated_at"
+      ],
+      "indexes": [
+        "PRIMARY",
+        "idx_directory_identities_email",
+        "idx_directory_identities_status",
+        "uk_directory_identities_provider_subject",
+        "uk_directory_identities_uid_provider"
+      ],
+      "constraints": [
+        "ck_directory_identities_status",
+        "fk_directory_identities_user"
+      ]
+    },
+    "directory_identity_reservations": {
+      "columns": [
+        "active_email",
+        "active_provider_subject",
+        "active_username",
+        "consumed_at",
+        "created_at",
+        "created_by_uid",
+        "email",
+        "expires_at",
+        "provider_code",
+        "provider_subject",
+        "released_at",
+        "reservation_id",
+        "source_app",
+        "source_biz_code",
+        "status",
+        "uid",
+        "updated_at",
+        "username"
+      ],
+      "indexes": [
+        "PRIMARY",
+        "idx_directory_reservation_expiry",
+        "idx_directory_reservation_source",
+        "uk_directory_reservation_active_email",
+        "uk_directory_reservation_active_subject",
+        "uk_directory_reservation_active_uid",
+        "uk_directory_reservation_active_username"
+      ],
+      "constraints": [
+        "ck_directory_reservation_status",
+        "ck_directory_reservation_terminal"
+      ]
+    },
+    "directory_lifecycle_scope_versions": {
+      "columns": [
+        "applied_revision",
+        "created_at",
+        "employee_uid",
+        "lifecycle_type",
+        "snapshot_hash",
+        "updated_at"
+      ],
+      "indexes": [
+        "PRIMARY"
+      ],
+      "constraints": []
+    },
+    "directory_project_members": {
+      "columns": [
+        "created_at",
+        "external_ref",
+        "id",
+        "joined_at",
+        "left_at",
+        "member_role",
+        "project_code",
+        "source_provider",
+        "status",
+        "uid",
+        "updated_at"
+      ],
+      "indexes": [
+        "PRIMARY",
+        "idx_directory_project_members_project",
+        "idx_directory_project_members_uid",
+        "uk_directory_project_members"
+      ],
+      "constraints": [
+        "ck_directory_project_members_status",
+        "fk_directory_project_members_project",
+        "fk_directory_project_members_user"
+      ]
+    },
+    "directory_projects": {
+      "columns": [
+        "created_at",
+        "dept_code",
+        "description",
+        "external_ref",
+        "id",
+        "leader_uid",
+        "owner_uid",
+        "parent_project_code",
+        "project_code",
+        "project_name",
+        "project_type",
+        "repo_url",
+        "source_payload_hash",
+        "source_provider",
+        "status",
+        "synced_at",
+        "updated_at"
+      ],
+      "indexes": [
+        "PRIMARY",
+        "idx_directory_projects_dept",
+        "idx_directory_projects_leader",
+        "idx_directory_projects_owner",
+        "idx_directory_projects_parent",
+        "idx_directory_projects_sync",
+        "uk_directory_projects_code",
+        "uk_directory_projects_source_ref"
+      ],
+      "constraints": [
+        "ck_directory_projects_status",
+        "fk_directory_projects_dept",
+        "fk_directory_projects_leader",
+        "fk_directory_projects_owner",
+        "fk_directory_projects_parent"
+      ]
+    },
+    "directory_subject_exports": {
+      "columns": [
+        "created_at",
+        "exported_at",
+        "external_ref",
+        "id",
+        "parent_subject_code",
+        "parent_subject_type",
+        "snapshot_hash",
+        "source_object_code",
+        "source_object_type",
+        "status",
+        "subject_code",
+        "subject_type",
+        "updated_at"
+      ],
+      "indexes": [
+        "PRIMARY",
+        "idx_directory_subject_exports_parent",
+        "idx_directory_subject_exports_source",
+        "idx_directory_subject_exports_status",
+        "uk_directory_subject_exports_subject"
+      ],
+      "constraints": [
+        "ck_directory_subject_exports_status",
+        "ck_directory_subject_exports_type"
+      ]
+    },
+    "directory_sync_events": {
+      "columns": [
+        "after_hash",
+        "before_hash",
+        "change_type",
+        "created_at",
+        "external_ref",
+        "id",
+        "job_code",
+        "message",
+        "object_code",
+        "object_type",
+        "source_provider",
+        "status"
+      ],
+      "indexes": [
+        "PRIMARY",
+        "idx_directory_sync_events_job",
+        "idx_directory_sync_events_object",
+        "idx_directory_sync_events_status"
+      ],
+      "constraints": [
+        "ck_directory_sync_events_status",
+        "fk_directory_sync_events_job"
+      ]
+    },
+    "directory_sync_jobs": {
+      "columns": [
+        "created_at",
+        "created_count",
+        "cursor_after",
+        "cursor_before",
+        "deleted_count",
+        "error_count",
+        "error_message",
+        "finished_at",
+        "id",
+        "integration_id",
+        "job_code",
+        "object_scope",
+        "provider_code",
+        "requested_by",
+        "skipped_count",
+        "started_at",
+        "status",
+        "sync_type",
+        "total_count",
+        "updated_at",
+        "updated_count"
+      ],
+      "indexes": [
+        "PRIMARY",
+        "idx_directory_sync_jobs_integration",
+        "idx_directory_sync_jobs_provider",
+        "idx_directory_sync_jobs_status",
+        "uk_directory_sync_jobs_code"
+      ],
+      "constraints": [
+        "ck_directory_sync_jobs_status",
+        "fk_directory_sync_jobs_integration"
+      ]
+    },
+    "directory_user_departments": {
+      "columns": [
+        "created_at",
+        "dept_code",
+        "external_ref",
+        "id",
+        "is_primary",
+        "joined_at",
+        "left_at",
+        "relation_type",
+        "source_provider",
+        "status",
+        "uid",
+        "updated_at"
+      ],
+      "indexes": [
+        "PRIMARY",
+        "idx_directory_user_departments_dept",
+        "idx_directory_user_departments_primary",
+        "idx_directory_user_departments_uid",
+        "uk_directory_user_departments"
+      ],
+      "constraints": [
+        "ck_directory_user_departments_status",
+        "fk_directory_user_departments_dept",
+        "fk_directory_user_departments_user"
+      ]
+    },
+    "directory_users": {
+      "columns": [
+        "avatar_url",
+        "created_at",
+        "display_name",
+        "email",
+        "external_ref",
+        "gender",
+        "id",
+        "last_login_at",
+        "last_login_ip",
+        "locale",
+        "mobile",
+        "mobile_tail4",
+        "nickname",
+        "position_title",
+        "primary_dept_code",
+        "real_name",
+        "remark",
+        "source_payload_hash",
+        "source_provider",
+        "status",
+        "synced_at",
+        "timezone",
+        "uid",
+        "updated_at",
+        "user_type",
+        "username"
+      ],
+      "indexes": [
+        "PRIMARY",
+        "idx_directory_users_email",
+        "idx_directory_users_mobile",
+        "idx_directory_users_primary_dept",
+        "idx_directory_users_status",
+        "idx_directory_users_sync",
+        "uk_directory_users_source_ref",
+        "uk_directory_users_uid"
+      ],
+      "constraints": [
+        "ck_directory_users_status",
+        "fk_directory_users_primary_dept"
+      ]
+    },
+    "integration_check_logs": {
+      "columns": [
+        "check_type",
+        "checked_at",
+        "error_message",
+        "id",
+        "integration_id",
+        "request_summary_json",
+        "response_summary_json",
+        "status",
+        "trigger_source"
+      ],
+      "indexes": [
+        "PRIMARY",
+        "idx_integration_check_logs_integration_time",
+        "idx_integration_check_logs_status"
+      ],
+      "constraints": [
+        "fk_integration_check_logs_integration"
+      ]
+    },
+    "integration_credentials": {
+      "columns": [
+        "active_guard_integration_id",
+        "credential_name",
+        "credential_role",
+        "expires_at",
+        "id",
+        "integration_id",
+        "issued_at",
+        "last_used_at",
+        "rotated_from_id",
+        "secret_id",
+        "secret_version_id",
+        "status",
+        "version_no"
+      ],
+      "indexes": [
+        "PRIMARY",
+        "idx_integration_credentials_rotated_from",
+        "idx_integration_credentials_secret",
+        "idx_integration_credentials_secret_version",
+        "idx_integration_credentials_status",
+        "uk_integration_credentials_active",
+        "uk_integration_credentials_id_integration",
+        "uk_integration_credentials_version"
+      ],
+      "constraints": [
+        "ck_integration_credentials_role_v1",
+        "fk_integration_credentials_integration",
+        "fk_integration_credentials_prev",
+        "fk_integration_credentials_secret",
+        "fk_integration_credentials_secret_version"
+      ]
+    },
+    "integration_operation": {
+      "columns": [
+        "attempt_count",
+        "command_json",
+        "command_schema_version",
+        "command_sha256",
+        "created_at",
+        "created_by",
+        "deployment_code",
+        "fencing_token",
+        "idempotency_key",
+        "last_error_class",
+        "last_error_code",
+        "last_error_summary",
+        "locked_until",
+        "next_attempt_at",
+        "operation_code",
+        "operation_id",
+        "operation_key",
+        "original_actor_uid",
+        "original_request_id",
+        "required_capability",
+        "response_summary_sha256",
+        "service_client_id",
+        "source_app",
+        "source_biz_code",
+        "source_biz_type",
+        "status",
+        "succeeded_at",
+        "target_app",
+        "target_biz_code",
+        "target_biz_type",
+        "target_receipt_id",
+        "tenant_code",
+        "updated_at",
+        "updated_by"
+      ],
+      "indexes": [
+        "PRIMARY",
+        "idx_console_iop_due",
+        "uk_console_iop_key"
+      ],
+      "constraints": []
+    },
+    "integration_operation_attempt": {
+      "columns": [
+        "attempt_id",
+        "attempt_no",
+        "created_at",
+        "error_code",
+        "fencing_token",
+        "finished_at",
+        "operation_id",
+        "result_status",
+        "started_at"
+      ],
+      "indexes": [
+        "PRIMARY",
+        "idx_console_ioa_status",
+        "uk_console_ioa_attempt"
+      ],
+      "constraints": []
+    },
+    "integrations": {
+      "columns": [
+        "base_url",
+        "category",
+        "config_json",
+        "connectivity_status",
+        "created_at",
+        "created_by",
+        "current_credential_id",
+        "id",
+        "integration_code",
+        "integration_name",
+        "integration_type",
+        "last_checked_at",
+        "last_error_message",
+        "provider_code",
+        "status",
+        "updated_at"
+      ],
+      "indexes": [
+        "PRIMARY",
+        "idx_integrations_connectivity",
+        "idx_integrations_current_credential_ref",
+        "idx_integrations_type_status",
+        "uk_integrations_code"
+      ],
+      "constraints": [
+        "fk_integrations_current_credential"
+      ]
+    },
+    "local_presence_heartbeats": {
+      "columns": [
+        "last_seen_at",
+        "page_path",
+        "source_app",
+        "status",
+        "uid"
+      ],
+      "indexes": [
+        "PRIMARY",
+        "idx_local_presence_last_seen",
+        "idx_local_presence_status"
+      ],
+      "constraints": [
+        "ck_local_presence_status",
+        "fk_local_presence_user"
+      ]
+    },
+    "local_sessions": {
+      "columns": [
+        "auth_provider",
+        "created_at",
+        "device_summary",
+        "expires_at",
+        "id",
+        "identity_id",
+        "ip_address",
+        "issued_at",
+        "last_seen_at",
+        "revoked_at",
+        "session_id",
+        "status",
+        "uid",
+        "updated_at",
+        "user_agent"
+      ],
+      "indexes": [
+        "PRIMARY",
+        "idx_local_sessions_expires",
+        "idx_local_sessions_identity",
+        "idx_local_sessions_uid",
+        "uk_local_sessions_session"
+      ],
+      "constraints": [
+        "ck_local_sessions_status",
+        "fk_local_sessions_identity",
+        "fk_local_sessions_user"
+      ]
+    },
+    "operation_logs": {
+      "columns": [
+        "action",
+        "actor_id",
+        "actor_type",
+        "created_at",
+        "detail_json",
+        "domain_code",
+        "id",
+        "request_id",
+        "target_key",
+        "target_type"
+      ],
+      "indexes": [
+        "PRIMARY",
+        "idx_operation_logs_actor_time",
+        "idx_operation_logs_domain_time"
+      ],
+      "constraints": []
+    },
+    "org_business_domains": {
+      "columns": [
+        "alias_name",
+        "category",
+        "created_at",
+        "description",
+        "domain_code",
+        "domain_name",
+        "id",
+        "parent_id",
+        "revision",
+        "sort_order",
+        "source",
+        "status",
+        "updated_at"
+      ],
+      "indexes": [
+        "PRIMARY",
+        "idx_org_business_domains_category",
+        "idx_org_business_domains_parent",
+        "idx_org_business_domains_status",
+        "uk_org_business_domains"
+      ],
+      "constraints": [
+        "fk_org_business_domains_parent"
+      ]
+    },
+    "org_profiles": {
+      "columns": [
+        "address_text",
+        "contact_email",
+        "contact_mobile",
+        "contact_name",
+        "country_code",
+        "created_at",
+        "currency_code",
+        "display_name",
+        "id",
+        "industry_code",
+        "legal_name",
+        "locale",
+        "logo_path",
+        "org_name",
+        "org_short_name",
+        "revision",
+        "singleton_key",
+        "status",
+        "tenant_code",
+        "timezone",
+        "unified_social_credit_code",
+        "updated_at",
+        "website_url"
+      ],
+      "indexes": [
+        "PRIMARY",
+        "idx_org_profiles_status",
+        "uk_org_profiles_singleton",
+        "uk_org_profiles_tenant"
+      ],
+      "constraints": [
+        "ck_org_profiles_singleton_key"
+      ]
+    },
+    "policy_bundle_snapshots": {
+      "columns": [
+        "bundle_hash",
+        "bundle_version",
+        "deployment_code",
+        "envelope",
+        "etag",
+        "object_key",
+        "synced_at_ms",
+        "tenant_code"
+      ],
+      "indexes": [
+        "PRIMARY"
+      ],
+      "constraints": []
+    },
+    "portal_actionable_projections": {
+      "columns": [
+        "actionable_key",
+        "biz_id",
+        "biz_type",
+        "business_key",
+        "closed_at",
+        "created_at",
+        "current_notification_id",
+        "id",
+        "object_version",
+        "source_app_code",
+        "state",
+        "target_app_code",
+        "uid",
+        "updated_at"
+      ],
+      "indexes": [
+        "PRIMARY",
+        "idx_portal_actionable_projection_business",
+        "idx_portal_actionable_projection_uid_state",
+        "uk_portal_actionable_projection"
+      ],
+      "constraints": [
+        "ck_portal_actionable_projection_state",
+        "fk_portal_actionable_projection_notification",
+        "fk_portal_actionable_projection_user"
+      ]
+    },
+    "portal_notification_deliveries": {
+      "columns": [
+        "attempt_count",
+        "channel",
+        "created_at",
+        "id",
+        "last_error",
+        "notification_id",
+        "provider",
+        "sent_at",
+        "status",
+        "uid",
+        "updated_at"
+      ],
+      "indexes": [
+        "PRIMARY",
+        "idx_portal_notification_deliveries_notification",
+        "idx_portal_notification_deliveries_uid"
+      ],
+      "constraints": [
+        "ck_portal_notification_deliveries_status",
+        "fk_portal_notification_deliveries_notification",
+        "fk_portal_notification_deliveries_user"
+      ]
+    },
+    "portal_notification_recipients": {
+      "columns": [
+        "archived_at",
+        "created_at",
+        "delivery_state",
+        "id",
+        "notification_id",
+        "pinned_at",
+        "read_at",
+        "uid",
+        "updated_at"
+      ],
+      "indexes": [
+        "PRIMARY",
+        "idx_portal_notification_recipients_uid_archive",
+        "idx_portal_notification_recipients_uid_read",
+        "uk_portal_notification_recipients_uid"
+      ],
+      "constraints": [
+        "ck_portal_notification_recipients_state",
+        "fk_portal_notification_recipients_notification",
+        "fk_portal_notification_recipients_user"
+      ]
+    },
+    "portal_notifications": {
+      "columns": [
+        "action_url",
+        "biz_id",
+        "biz_type",
+        "body",
+        "category",
+        "created_at",
+        "created_by",
+        "event_type",
+        "expires_at",
+        "id",
+        "idempotency_key",
+        "metadata_json",
+        "notification_id",
+        "request_hash",
+        "severity",
+        "source_app_code",
+        "summary",
+        "title",
+        "updated_at"
+      ],
+      "indexes": [
+        "PRIMARY",
+        "idx_portal_notifications_biz",
+        "idx_portal_notifications_category_time",
+        "idx_portal_notifications_source_time",
+        "uk_portal_notifications_id",
+        "uk_portal_notifications_idempotency"
+      ],
+      "constraints": [
+        "ck_portal_notifications_request_hash",
+        "ck_portal_notifications_severity"
+      ]
+    },
+    "region_divisions": {
+      "columns": [
+        "created_at",
+        "division_code",
+        "division_name",
+        "id",
+        "region_id"
+      ],
+      "indexes": [
+        "PRIMARY",
+        "idx_region_divisions_code",
+        "uk_region_divisions"
+      ],
+      "constraints": [
+        "fk_region_divisions_region"
+      ]
+    },
+    "regions": {
+      "columns": [
+        "created_at",
+        "description",
+        "id",
+        "parent_id",
+        "region_code",
+        "region_name",
+        "region_type",
+        "revision",
+        "sort_order",
+        "status",
+        "updated_at"
+      ],
+      "indexes": [
+        "PRIMARY",
+        "idx_regions_parent",
+        "idx_regions_status",
+        "uk_regions"
+      ],
+      "constraints": [
+        "fk_regions_parent"
+      ]
+    },
+    "runtime_clipboards": {
+      "columns": [
+        "content",
+        "content_type",
+        "created_at",
+        "expires_at",
+        "source_app",
+        "uid"
+      ],
+      "indexes": [
+        "PRIMARY",
+        "idx_runtime_clipboards_expires"
+      ],
+      "constraints": [
+        "fk_runtime_clipboards_user"
+      ]
+    },
+    "service_client_credentials": {
+      "columns": [
+        "active_guard_service_client_id",
+        "client_id",
+        "expires_at",
+        "id",
+        "issued_at",
+        "last_used_at",
+        "rotated_from_id",
+        "secret_id",
+        "service_client_id",
+        "status",
+        "version_no"
+      ],
+      "indexes": [
+        "PRIMARY",
+        "idx_service_client_credentials_rotated_from",
+        "idx_service_client_credentials_secret",
+        "idx_service_client_credentials_status",
+        "uk_service_client_credentials_active",
+        "uk_service_client_credentials_client_id",
+        "uk_service_client_credentials_client_version",
+        "uk_service_client_credentials_id_client"
+      ],
+      "constraints": [
+        "fk_service_client_credentials_client",
+        "fk_service_client_credentials_prev",
+        "fk_service_client_credentials_secret"
+      ]
+    },
+    "service_client_grants": {
+      "columns": [
+        "action",
+        "created_at",
+        "id",
+        "resource_code",
+        "scope_json",
+        "service_client_id",
+        "status",
+        "updated_at"
+      ],
+      "indexes": [
+        "PRIMARY",
+        "idx_service_client_grants_status",
+        "uk_service_client_grants"
+      ],
+      "constraints": [
+        "fk_service_client_grants_client"
+      ]
+    },
+    "service_clients": {
+      "columns": [
+        "app_code",
+        "client_code",
+        "client_name",
+        "client_type",
+        "created_at",
+        "current_credential_id",
+        "description",
+        "id",
+        "status",
+        "updated_at"
+      ],
+      "indexes": [
+        "PRIMARY",
+        "idx_service_clients_current_credential_ref",
+        "idx_service_clients_status",
+        "uk_service_clients_code"
+      ],
+      "constraints": [
+        "fk_service_clients_current_credential"
+      ]
+    },
+    "service_command_receipt": {
+      "columns": [
+        "command_schema_version",
+        "command_sha256",
+        "completed_at",
+        "correlation_id",
+        "created_at",
+        "deployment_code",
+        "fencing_token",
+        "first_request_id",
+        "idempotency_key",
+        "last_received_at",
+        "last_request_id",
+        "locked_by",
+        "locked_until",
+        "operation_code",
+        "operation_id",
+        "original_actor_uid",
+        "receipt_id",
+        "received_at",
+        "required_capability",
+        "response_http_status",
+        "response_summary_sha256",
+        "result_json",
+        "service_client_id",
+        "source_app",
+        "source_deployment_code",
+        "status",
+        "target_app",
+        "target_biz_code",
+        "target_biz_type",
+        "tenant_code",
+        "updated_at",
+        "version_no"
+      ],
+      "indexes": [
+        "PRIMARY",
+        "uk_console_scr_identity"
+      ],
+      "constraints": []
+    },
+    "setting_catalogs": {
+      "columns": [
+        "category",
+        "created_at",
+        "default_value_json",
+        "description",
+        "editable_in_ui",
+        "id",
+        "is_required",
+        "scope_type",
+        "setting_key",
+        "setting_name",
+        "status",
+        "updated_at",
+        "validator_json",
+        "value_type"
+      ],
+      "indexes": [
+        "PRIMARY",
+        "idx_setting_catalogs_category",
+        "uk_setting_catalogs_key"
+      ],
+      "constraints": []
+    },
+    "setting_values": {
+      "columns": [
+        "created_at",
+        "id",
+        "revision",
+        "scope_key",
+        "setting_key",
+        "source",
+        "updated_at",
+        "updated_by",
+        "value_json"
+      ],
+      "indexes": [
+        "PRIMARY",
+        "idx_setting_values_key",
+        "uk_setting_values"
+      ],
+      "constraints": [
+        "fk_setting_values_catalog"
+      ]
+    },
+    "vault_access_logs": {
+      "columns": [
+        "action",
+        "actor_id",
+        "actor_type",
+        "app_code",
+        "approval_code",
+        "created_at",
+        "id",
+        "reason",
+        "request_ip",
+        "result_status",
+        "secret_id",
+        "user_agent",
+        "version_id"
+      ],
+      "indexes": [
+        "PRIMARY",
+        "idx_vault_access_logs_action_time",
+        "idx_vault_access_logs_actor_time",
+        "idx_vault_access_logs_secret_time",
+        "idx_vault_access_logs_version_secret"
+      ],
+      "constraints": [
+        "fk_vault_access_logs_secret",
+        "fk_vault_access_logs_version"
+      ]
+    },
+    "vault_secret_versions": {
+      "columns": [
+        "activated_at",
+        "backend_secret_ref",
+        "ciphertext_blob",
+        "content_hash",
+        "created_at",
+        "created_by",
+        "encryption_scheme",
+        "id",
+        "key_fingerprint",
+        "retired_at",
+        "rotated_from_id",
+        "secret_id",
+        "status",
+        "version_no"
+      ],
+      "indexes": [
+        "PRIMARY",
+        "idx_vault_secret_versions_rotated_from",
+        "idx_vault_secret_versions_status",
+        "uk_vault_secret_versions",
+        "uk_vault_secret_versions_id_secret"
+      ],
+      "constraints": [
+        "ck_vault_secret_versions_material",
+        "fk_vault_secret_versions_prev",
+        "fk_vault_secret_versions_secret"
+      ]
+    },
+    "vault_secrets": {
+      "columns": [
+        "created_at",
+        "created_by",
+        "current_version_id",
+        "expires_at",
+        "id",
+        "kms_key_ref",
+        "last_rotated_at",
+        "masked_preview",
+        "owner_key",
+        "owner_type",
+        "reveal_policy",
+        "rotate_policy_json",
+        "secret_code",
+        "secret_name",
+        "secret_ref",
+        "secret_type",
+        "status",
+        "storage_backend",
+        "updated_at",
+        "usage_type"
+      ],
+      "indexes": [
+        "PRIMARY",
+        "idx_vault_secrets_owner",
+        "idx_vault_secrets_status",
+        "uk_vault_secrets_code",
+        "uk_vault_secrets_ref"
+      ],
+      "constraints": [
+        "ck_vault_secrets_storage_backend_v1",
+        "fk_vault_secrets_current_version"
+      ]
+    },
+    "work_calendar_days": {
+      "columns": [
+        "calendar_code",
+        "created_at",
+        "day_of_week",
+        "day_type",
+        "holiday_name",
+        "id",
+        "import_batch",
+        "is_workday",
+        "remark",
+        "revision",
+        "source",
+        "source_ref",
+        "updated_at",
+        "work_date",
+        "year_month",
+        "year_no"
+      ],
+      "indexes": [
+        "PRIMARY",
+        "idx_work_calendar_days_month",
+        "idx_work_calendar_days_year",
+        "uk_work_calendar_days_date"
+      ],
+      "constraints": [
+        "fk_work_calendar_days_calendar"
+      ]
+    },
+    "work_calendar_import_jobs": {
+      "columns": [
+        "calendar_code",
+        "completed_at",
+        "created_at",
+        "id",
+        "import_mode",
+        "imported_days",
+        "job_code",
+        "message",
+        "region_code",
+        "requested_by",
+        "source",
+        "source_url",
+        "status",
+        "year_no"
+      ],
+      "indexes": [
+        "PRIMARY",
+        "idx_work_calendar_import_jobs_calendar",
+        "uk_work_calendar_import_jobs"
+      ],
+      "constraints": [
+        "fk_work_calendar_import_jobs_calendar"
+      ]
+    },
+    "work_calendar_months": {
+      "columns": [
+        "calculated_at",
+        "calendar_code",
+        "id",
+        "month_no",
+        "non_workday_count",
+        "revision",
+        "source",
+        "standard_hours_per_day",
+        "standard_work_hours",
+        "updated_at",
+        "workday_count",
+        "year_month",
+        "year_no"
+      ],
+      "indexes": [
+        "PRIMARY",
+        "idx_work_calendar_months_year",
+        "uk_work_calendar_months"
+      ],
+      "constraints": [
+        "fk_work_calendar_months_calendar"
+      ]
+    },
+    "work_calendars": {
+      "columns": [
+        "calendar_code",
+        "calendar_name",
+        "created_at",
+        "id",
+        "region_code",
+        "revision",
+        "standard_hours_per_day",
+        "status",
+        "timezone",
+        "updated_at",
+        "weekend_days_json"
+      ],
+      "indexes": [
+        "PRIMARY",
+        "idx_work_calendars_region",
+        "uk_work_calendars_code"
+      ],
+      "constraints": []
+    }
+  }
+}

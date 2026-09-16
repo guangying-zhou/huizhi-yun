@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "releaseId": "POLICY-STORE-C000001-20260907",
+  "state": "locked",
+  "authorization": "User explicitly approved wiztek/C000001 migration, Runtime upgrade and Cloudflare switch, then requested execution in this conversation.",
+  "sourceCommit": "9f18b507",
+  "deploymentPlan": {
+    "tenant": "wiztek",
+    "tenantCode": "C000001",
+    "environment": "production",
+    "wranglerVersion": "4.110.0",
+    "components": ["data-runtime", "console", "tenant-gateway"],
+    "excluded": ["people-worker", "platform-worker", "test-environment", "latest-promotion"]
+  },
+  "dataRuntime": {
+    "host": "oa.wiztek.cn",
+    "deployment": "c000001-prod-tenant-runtime",
+    "consoleDeployment": "C000001-console",
+    "database": "hzy_console",
+    "targetVersion": "0.3.216",
+    "inventorySha256": "96a5858d2564ff6e00940713f34d43c2cb2388d5c0f47f53fa958dc547804929",
+    "beforeVersion": "0.3.215",
+    "beforeBinarySha256": "8a38aad4460b0a76d47408c7ebd549c412127070ffa983052015f8fc7e197646",
+    "signingKeyId": "e1f7cfc0fb174116c305766c2a39d90606e22cc5a3c02d1cf7fc749578bcab82"
+  },
+  "cloudflare": {
+    "accountId": "6cf3948db481580745329253415d59d3",
+    "console": { "name": "hzy-console-prod", "beforeVersion": "81ad528b-3c5f-45ea-91d3-3deb554174cb" },
+    "gateway": { "name": "hzy-tenant-gateway", "beforeVersion": "03f345e2-a300-411d-b7c5-9d8154f3e1fb" },
+    "syncHosts": ["wiztek.huizhi.yun"]
+  }
+}

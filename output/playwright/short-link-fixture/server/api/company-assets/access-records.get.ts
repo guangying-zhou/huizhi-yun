@@ -1,0 +1,1 @@
+export default defineEventHandler(event=>({code:0,data:{items:[{id:'1',viewerUid:'U001',viewedAt:'2026-09-10T10:00:00Z',ossPath:'codocs/company/tech-specs/a.md'}],total:1,page:1,pageSize:20}}))

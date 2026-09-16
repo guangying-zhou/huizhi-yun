@@ -1,0 +1,35 @@
+# 依赖
+node_modules/
+
+# 本地环境与凭据（所有模块）
+.env
+.env.dev
+**/.env
+**/.env.dev
+*.env.local
+**/*.env.local
+
+# worktree 本地元数据
+.hzy-worktree.env
+
+# AI 工具本地配置
+.claude/
+.gstack/
+.kiro/
+.codex-goal2-db-backups/
+.playwright-cli/
+.nuxt/
+.output/
+.cache/
+.wrangler/
+
+# 原始人事导入资料；合成样例放在 people/docs/examples/
+employee.csv
+employee-archive*.csv
+!people/docs/examples/employee-archive.synthetic.csv
+
+# 系统文件
+.DS_Store
+*.log
+.pnpm-store/
+.tmp*/

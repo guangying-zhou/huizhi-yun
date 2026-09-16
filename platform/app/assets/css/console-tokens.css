@@ -1,0 +1,106 @@
+/* HZY Platform Console — Design Tokens
+   Aesthetic: Linear × Stripe × Cloudflare Dashboard.
+   Confident, dense, neutral. One accent.
+   Loaded only on the new platform layout to avoid clashing with Nuxt UI defaults. */
+
+@import url('https://fonts.googleapis.com/css2?family=Geist:wght@300..700&family=Geist+Mono:wght@400..600&display=swap');
+
+.console-v2 {
+  /* ── Neutrals ─────────────────────────────────────────────── */
+  --bg:           #ffffff;
+  --bg-subtle:    #fafafa;
+  --bg-muted:     #f4f4f5;
+  --bg-sunken:    #f0f0f1;
+  --bg-inverse:   #0a0a0a;
+
+  --line:         #ebebec;
+  --line-strong:  #d4d4d6;
+  --line-focus:   #0a0a0a;
+
+  --fg:           #0a0a0a;
+  --fg-strong:    #18181b;
+  --fg-default:   #27272a;
+  --fg-muted:     #71717a;
+  --fg-subtle:    #a1a1aa;
+  --fg-disabled:  #d4d4d8;
+  --fg-inverse:   #ffffff;
+
+  /* Brand / accent — deep indigo */
+  --brand:        #3645e8;
+  --brand-hover:  #2d3bd1;
+  --brand-active: #2433b8;
+  --brand-bg:     #eef0fe;
+  --brand-fg:     #1e2a9e;
+
+  /* Status palette */
+  --success:      #10806a;
+  --success-bg:   #e6f6f1;
+  --success-fg:   #075e4d;
+
+  --info:         #2563eb;
+  --info-bg:      #e8efff;
+  --info-fg:      #1d4ed8;
+
+  --warning:      #b95d00;
+  --warning-bg:   #fdf1e1;
+  --warning-fg:   #8a4400;
+
+  --error:        #c53030;
+  --error-bg:     #fdecec;
+  --error-fg:     #991b1b;
+
+  --neutral:      #71717a;
+  --neutral-bg:   #f1f1f2;
+  --neutral-fg:   #52525b;
+
+  /* Type */
+  --font-sans-c:  'Geist', ui-sans-serif, -apple-system, 'Segoe UI', 'PingFang SC',
+                  'Hiragino Sans GB', 'Microsoft YaHei', system-ui, sans-serif;
+  --font-mono-c:  'Geist Mono', 'JetBrains Mono', ui-monospace,
+                  'SF Mono', Menlo, Consolas, monospace;
+
+  --tx-12: 12px;
+  --tx-13: 13px;
+  --tx-14: 14px;
+  --tx-15: 15px;
+  --tx-16: 16px;
+  --tx-18: 18px;
+  --tx-20: 20px;
+  --tx-22: 22px;
+  --tx-26: 26px;
+
+  --lh-tight:  1.25;
+  --lh-snug:   1.4;
+  --lh-normal: 1.55;
+
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius:    8px;
+  --radius-md: 10px;
+  --radius-lg: 12px;
+
+  --shadow-sm: 0 1px 2px rgba(0,0,0,.04), 0 0 0 1px rgba(0,0,0,.04);
+  --shadow:    0 4px 12px rgba(0,0,0,.06), 0 1px 2px rgba(0,0,0,.04);
+  --shadow-lg: 0 12px 32px rgba(0,0,0,.10), 0 2px 6px rgba(0,0,0,.06);
+
+  --topbar-h:    52px;
+  --sidebar-w:   240px;
+  --content-max: 1280px;
+
+  background: var(--bg-subtle);
+  color: var(--fg-default);
+  font-family: var(--font-sans-c);
+  font-size: var(--tx-14);
+  line-height: var(--lh-normal);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-feature-settings: 'cv11', 'ss01', 'ss03';
+}
+
+.console-v2 *,
+.console-v2 *::before,
+.console-v2 *::after { box-sizing: border-box; }
+
+.console-v2 button { font-family: inherit; }
+.console-v2 a { color: inherit; text-decoration: none; }
+.console-v2 ::selection { background: var(--brand-bg); color: var(--brand-fg); }

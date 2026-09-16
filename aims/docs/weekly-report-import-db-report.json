@@ -1,0 +1,7422 @@
+{
+  "mode": "db-apply",
+  "generatedAt": "2026-06-09T10:59:34.291Z",
+  "sourcePayloadReport": "/Users/gavin/Dev/huizhi-yun/aims/docs/weekly-report-import-payloads-rerun.json",
+  "stats": {
+    "files": 15,
+    "summaryRows": 558,
+    "detailGroups": 501,
+    "matchedReports": 483,
+    "readyReports": 362,
+    "readyEntries": 1452,
+    "readyWorkItems": 2135,
+    "membersToAdd": 46
+  },
+  "unmatchedProjects": [
+    {
+      "file": "2026.2.24-2025.2.28项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 9,
+      "source": "summary",
+      "projectCode": "",
+      "projectName": "JD维护",
+      "reason": "project_not_found",
+      "bestScore": 0.444,
+      "bestCandidate": "122 22220901 济南市不动产登记系统功能拓展"
+    },
+    {
+      "file": "2026.2.24-2025.2.28项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 9,
+      "source": "summary",
+      "projectCode": "",
+      "projectName": "内部管理系统",
+      "reason": "project_not_found",
+      "bestScore": 0.4,
+      "bestCandidate": "201 422304 物业管理系统维护"
+    },
+    {
+      "file": "2026.2.24-2025.2.28项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 9,
+      "source": "detail",
+      "sheet": "交付-房产组",
+      "projectCode": "",
+      "projectName": "物业项目运维(微信资金)",
+      "reason": "project_not_found",
+      "bestScore": 0.5,
+      "bestCandidate": "33 Eland 智慧维修资金"
+    },
+    {
+      "file": "2026.2.24-2025.2.28项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 9,
+      "source": "detail",
+      "sheet": "交付-JD组",
+      "projectCode": "",
+      "projectName": "JD维护",
+      "reason": "project_not_found",
+      "bestScore": 0.444,
+      "bestCandidate": "122 22220901 济南市不动产登记系统功能拓展"
+    },
+    {
+      "file": "2026.2.24-2025.2.28项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 9,
+      "source": "detail",
+      "sheet": "产品研发部",
+      "projectCode": "",
+      "projectName": "内部管理系统 （立项阶段）",
+      "reason": "project_not_found",
+      "bestScore": 0.286,
+      "bestCandidate": "201 422304 物业管理系统维护"
+    },
+    {
+      "file": "2026.3.2-2025.3.6项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 10,
+      "source": "summary",
+      "projectCode": "",
+      "projectName": "JD维护",
+      "reason": "project_not_found",
+      "bestScore": 0.444,
+      "bestCandidate": "122 22220901 济南市不动产登记系统功能拓展"
+    },
+    {
+      "file": "2026.3.2-2025.3.6项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 10,
+      "source": "summary",
+      "projectCode": "",
+      "projectName": "内部管理系统",
+      "reason": "project_not_found",
+      "bestScore": 0.4,
+      "bestCandidate": "201 422304 物业管理系统维护"
+    },
+    {
+      "file": "2026.3.2-2025.3.6项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 10,
+      "source": "detail",
+      "sheet": "交付-JD组",
+      "projectCode": "",
+      "projectName": "JD维护",
+      "reason": "project_not_found",
+      "bestScore": 0.444,
+      "bestCandidate": "122 22220901 济南市不动产登记系统功能拓展"
+    },
+    {
+      "file": "2026.3.2-2025.3.6项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 10,
+      "source": "detail",
+      "sheet": "产品研发部",
+      "projectCode": "",
+      "projectName": "内部管理系统 （立项阶段）",
+      "reason": "project_not_found",
+      "bestScore": 0.286,
+      "bestCandidate": "201 422304 物业管理系统维护"
+    },
+    {
+      "file": "2026.3.9-2025.3.13项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 11,
+      "source": "summary",
+      "projectCode": "",
+      "projectName": "JD维护",
+      "reason": "project_not_found",
+      "bestScore": 0.444,
+      "bestCandidate": "122 22220901 济南市不动产登记系统功能拓展"
+    },
+    {
+      "file": "2026.3.9-2025.3.13项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 11,
+      "source": "summary",
+      "projectCode": "",
+      "projectName": "内部管理系统",
+      "reason": "project_not_found",
+      "bestScore": 0.4,
+      "bestCandidate": "201 422304 物业管理系统维护"
+    },
+    {
+      "file": "2026.3.9-2025.3.13项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 11,
+      "source": "detail",
+      "sheet": "交付-JD组",
+      "projectCode": "",
+      "projectName": "JD维护",
+      "reason": "project_not_found",
+      "bestScore": 0.444,
+      "bestCandidate": "122 22220901 济南市不动产登记系统功能拓展"
+    },
+    {
+      "file": "2026.3.9-2025.3.13项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 11,
+      "source": "detail",
+      "sheet": "产品研发部",
+      "projectCode": "",
+      "projectName": "内部管理系统 （立项阶段）",
+      "reason": "project_not_found",
+      "bestScore": 0.286,
+      "bestCandidate": "201 422304 物业管理系统维护"
+    },
+    {
+      "file": "2026.3.16-2025.3.20项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 12,
+      "source": "summary",
+      "projectCode": "",
+      "projectName": "JD维护",
+      "reason": "project_not_found",
+      "bestScore": 0.444,
+      "bestCandidate": "122 22220901 济南市不动产登记系统功能拓展"
+    },
+    {
+      "file": "2026.3.16-2025.3.20项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 12,
+      "source": "summary",
+      "projectCode": "",
+      "projectName": "内部管理系统",
+      "reason": "project_not_found",
+      "bestScore": 0.4,
+      "bestCandidate": "201 422304 物业管理系统维护"
+    },
+    {
+      "file": "2026.3.16-2025.3.20项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 12,
+      "source": "detail",
+      "sheet": "交付-JD组",
+      "projectCode": "",
+      "projectName": "JD维护",
+      "reason": "project_not_found",
+      "bestScore": 0.444,
+      "bestCandidate": "122 22220901 济南市不动产登记系统功能拓展"
+    },
+    {
+      "file": "2026.3.16-2025.3.20项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 12,
+      "source": "detail",
+      "sheet": "产品研发部",
+      "projectCode": "",
+      "projectName": "内部管理系统 （立项阶段）",
+      "reason": "project_not_found",
+      "bestScore": 0.286,
+      "bestCandidate": "201 422304 物业管理系统维护"
+    },
+    {
+      "file": "2026.3.23-2025.3.27项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 13,
+      "source": "summary",
+      "projectCode": "",
+      "projectName": "JD维护",
+      "reason": "project_not_found",
+      "bestScore": 0.444,
+      "bestCandidate": "122 22220901 济南市不动产登记系统功能拓展"
+    },
+    {
+      "file": "2026.3.23-2025.3.27项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 13,
+      "source": "detail",
+      "sheet": "交付-JD组",
+      "projectCode": "",
+      "projectName": "JD维护",
+      "reason": "project_not_found",
+      "bestScore": 0.444,
+      "bestCandidate": "122 22220901 济南市不动产登记系统功能拓展"
+    },
+    {
+      "file": "2026.3.30-2025.4.3项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 14,
+      "source": "summary",
+      "projectCode": "",
+      "projectName": "JD维护",
+      "reason": "project_not_found",
+      "bestScore": 0.444,
+      "bestCandidate": "122 22220901 济南市不动产登记系统功能拓展"
+    },
+    {
+      "file": "2026.3.30-2025.4.3项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 14,
+      "source": "detail",
+      "sheet": "交付-JD组",
+      "projectCode": "",
+      "projectName": "JD维护",
+      "reason": "project_not_found",
+      "bestScore": 0.444,
+      "bestCandidate": "122 22220901 济南市不动产登记系统功能拓展"
+    },
+    {
+      "file": "2026.4.6-2025.4.10项目周报汇总 .xlsx",
+      "reportYear": 2026,
+      "reportWeek": 15,
+      "source": "summary",
+      "projectCode": "",
+      "projectName": "JD维护",
+      "reason": "project_not_found",
+      "bestScore": 0.444,
+      "bestCandidate": "122 22220901 济南市不动产登记系统功能拓展"
+    },
+    {
+      "file": "2026.4.6-2025.4.10项目周报汇总 .xlsx",
+      "reportYear": 2026,
+      "reportWeek": 15,
+      "source": "detail",
+      "sheet": "交付-JD组",
+      "projectCode": "",
+      "projectName": "JD维护",
+      "reason": "project_not_found",
+      "bestScore": 0.444,
+      "bestCandidate": "122 22220901 济南市不动产登记系统功能拓展"
+    },
+    {
+      "file": "2026.4.13-2025.4.17项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 16,
+      "source": "summary",
+      "projectCode": "",
+      "projectName": "JD维护",
+      "reason": "project_not_found",
+      "bestScore": 0.444,
+      "bestCandidate": "122 22220901 济南市不动产登记系统功能拓展"
+    },
+    {
+      "file": "2026.4.13-2025.4.17项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 16,
+      "source": "detail",
+      "sheet": "交付-JD组",
+      "projectCode": "",
+      "projectName": "JD维护",
+      "reason": "project_not_found",
+      "bestScore": 0.444,
+      "bestCandidate": "122 22220901 济南市不动产登记系统功能拓展"
+    },
+    {
+      "file": "2026.4.20-2025.4.24项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 17,
+      "source": "summary",
+      "projectCode": "",
+      "projectName": "JD维护",
+      "reason": "project_not_found",
+      "bestScore": 0.444,
+      "bestCandidate": "122 22220901 济南市不动产登记系统功能拓展"
+    },
+    {
+      "file": "2026.4.20-2025.4.24项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 17,
+      "source": "detail",
+      "sheet": "交付-JD组",
+      "projectCode": "",
+      "projectName": "JD维护",
+      "reason": "project_not_found",
+      "bestScore": 0.444,
+      "bestCandidate": "122 22220901 济南市不动产登记系统功能拓展"
+    },
+    {
+      "file": "2026.4.26-2025.4.30项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 18,
+      "source": "summary",
+      "projectCode": "",
+      "projectName": "JD维护",
+      "reason": "project_not_found",
+      "bestScore": 0.444,
+      "bestCandidate": "122 22220901 济南市不动产登记系统功能拓展"
+    },
+    {
+      "file": "2026.4.26-2025.4.30项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 18,
+      "source": "detail",
+      "sheet": "交付-JD组",
+      "projectCode": "",
+      "projectName": "JD维护",
+      "reason": "project_not_found",
+      "bestScore": 0.444,
+      "bestCandidate": "122 22220901 济南市不动产登记系统功能拓展"
+    },
+    {
+      "file": "2026.5.6-2025.5.9项目周报汇总 .xlsx",
+      "reportYear": 2026,
+      "reportWeek": 19,
+      "source": "summary",
+      "projectCode": "",
+      "projectName": "JD维护",
+      "reason": "project_not_found",
+      "bestScore": 0.444,
+      "bestCandidate": "122 22220901 济南市不动产登记系统功能拓展"
+    },
+    {
+      "file": "2026.5.6-2025.5.9项目周报汇总 .xlsx",
+      "reportYear": 2026,
+      "reportWeek": 19,
+      "source": "detail",
+      "sheet": "交付-JD组",
+      "projectCode": "",
+      "projectName": "JD维护",
+      "reason": "project_not_found",
+      "bestScore": 0.444,
+      "bestCandidate": "122 22220901 济南市不动产登记系统功能拓展"
+    },
+    {
+      "file": "2026.5.11-2025.5.15项目周报汇总 .xlsx",
+      "reportYear": 2026,
+      "reportWeek": 20,
+      "source": "summary",
+      "projectCode": "",
+      "projectName": "JD维护",
+      "reason": "project_not_found",
+      "bestScore": 0.444,
+      "bestCandidate": "122 22220901 济南市不动产登记系统功能拓展"
+    },
+    {
+      "file": "2026.5.11-2025.5.15项目周报汇总 .xlsx",
+      "reportYear": 2026,
+      "reportWeek": 20,
+      "source": "detail",
+      "sheet": "交付-JD组",
+      "projectCode": "",
+      "projectName": "JD维护",
+      "reason": "project_not_found",
+      "bestScore": 0.444,
+      "bestCandidate": "122 22220901 济南市不动产登记系统功能拓展"
+    },
+    {
+      "file": "2026.5.18-2025.5.22项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 21,
+      "source": "summary",
+      "projectCode": "",
+      "projectName": "JD维护",
+      "reason": "project_not_found",
+      "bestScore": 0.444,
+      "bestCandidate": "122 22220901 济南市不动产登记系统功能拓展"
+    },
+    {
+      "file": "2026.5.18-2025.5.22项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 21,
+      "source": "detail",
+      "sheet": "交付-JD组",
+      "projectCode": "",
+      "projectName": "JD维护",
+      "reason": "project_not_found",
+      "bestScore": 0.444,
+      "bestCandidate": "122 22220901 济南市不动产登记系统功能拓展"
+    },
+    {
+      "file": "2026.5.25-2025.5.29项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 22,
+      "source": "summary",
+      "projectCode": "",
+      "projectName": "JD维护",
+      "reason": "project_not_found",
+      "bestScore": 0.444,
+      "bestCandidate": "122 22220901 济南市不动产登记系统功能拓展"
+    },
+    {
+      "file": "2026.5.25-2025.5.29项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 22,
+      "source": "detail",
+      "sheet": "交付-JD组",
+      "projectCode": "",
+      "projectName": "JD维护",
+      "reason": "project_not_found",
+      "bestScore": 0.444,
+      "bestCandidate": "122 22220901 济南市不动产登记系统功能拓展"
+    },
+    {
+      "file": "2026.6.1-2025.6.5项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 23,
+      "source": "summary",
+      "projectCode": "",
+      "projectName": "JD维护",
+      "reason": "project_not_found",
+      "bestScore": 0.444,
+      "bestCandidate": "122 22220901 济南市不动产登记系统功能拓展"
+    },
+    {
+      "file": "2026.6.1-2025.6.5项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 23,
+      "source": "detail",
+      "sheet": "交付-JD组",
+      "projectCode": "",
+      "projectName": "JD维护",
+      "reason": "project_not_found",
+      "bestScore": 0.444,
+      "bestCandidate": "122 22220901 济南市不动产登记系统功能拓展"
+    }
+  ],
+  "unmatchedMembers": [
+    {
+      "file": "2026.2.24-2025.2.28项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 9,
+      "projectId": 248,
+      "projectName": "卓识网安业务平台系统开发",
+      "memberName": "宋占伟",
+      "days": 5,
+      "reason": "user_not_found"
+    },
+    {
+      "file": "2026.3.2-2025.3.6项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 10,
+      "projectId": 245,
+      "projectName": "济南市联合资产交易公示平台",
+      "memberName": "宋占伟",
+      "days": 1.5,
+      "reason": "user_not_found"
+    },
+    {
+      "file": "2026.3.2-2025.3.6项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 10,
+      "projectId": 248,
+      "projectName": "卓识网安业务平台系统开发",
+      "memberName": "宋占伟",
+      "days": 3,
+      "reason": "user_not_found"
+    }
+  ],
+  "membersToAdd": [
+    {
+      "projectId": 33,
+      "projectName": "智慧维修资金",
+      "uid": "duanyouxuan",
+      "realName": "段佑轩",
+      "role": "member",
+      "status": "active",
+      "source": "weekly_report_import"
+    },
+    {
+      "projectId": 33,
+      "projectName": "智慧维修资金",
+      "uid": "jingxu",
+      "realName": "景旭",
+      "role": "member",
+      "status": "active",
+      "source": "weekly_report_import"
+    },
+    {
+      "projectId": 33,
+      "projectName": "智慧维修资金",
+      "uid": "lishuying",
+      "realName": "李淑英",
+      "role": "member",
+      "status": "active",
+      "source": "weekly_report_import"
+    },
+    {
+      "projectId": 33,
+      "projectName": "智慧维修资金",
+      "uid": "liucunshan",
+      "realName": "刘存山",
+      "role": "member",
+      "status": "active",
+      "source": "weekly_report_import"
+    },
+    {
+      "projectId": 33,
+      "projectName": "智慧维修资金",
+      "uid": "luhonglin",
+      "realName": "路红林",
+      "role": "member",
+      "status": "active",
+      "source": "weekly_report_import"
+    },
+    {
+      "projectId": 33,
+      "projectName": "智慧维修资金",
+      "uid": "marui",
+      "realName": "马睿",
+      "role": "member",
+      "status": "active",
+      "source": "weekly_report_import"
+    },
+    {
+      "projectId": 33,
+      "projectName": "智慧维修资金",
+      "uid": "niulijun",
+      "realName": "牛丽君",
+      "role": "member",
+      "status": "active",
+      "source": "weekly_report_import"
+    },
+    {
+      "projectId": 33,
+      "projectName": "智慧维修资金",
+      "uid": "shishoujie",
+      "realName": "时守杰",
+      "role": "member",
+      "status": "active",
+      "source": "weekly_report_import"
+    },
+    {
+      "projectId": 33,
+      "projectName": "智慧维修资金",
+      "uid": "songwenwen",
+      "realName": "宋雯雯",
+      "role": "member",
+      "status": "active",
+      "source": "weekly_report_import"
+    },
+    {
+      "projectId": 33,
+      "projectName": "智慧维修资金",
+      "uid": "sunda",
+      "realName": "孙达",
+      "role": "member",
+      "status": "active",
+      "source": "weekly_report_import"
+    },
+    {
+      "projectId": 33,
+      "projectName": "智慧维修资金",
+      "uid": "wandeyue",
+      "realName": "万德跃",
+      "role": "member",
+      "status": "active",
+      "source": "weekly_report_import"
+    },
+    {
+      "projectId": 33,
+      "projectName": "智慧维修资金",
+      "uid": "wangdezhi",
+      "realName": "王德智",
+      "role": "member",
+      "status": "active",
+      "source": "weekly_report_import"
+    },
+    {
+      "projectId": 33,
+      "projectName": "智慧维修资金",
+      "uid": "wangzhuang",
+      "realName": "王壮",
+      "role": "member",
+      "status": "active",
+      "source": "weekly_report_import"
+    },
+    {
+      "projectId": 33,
+      "projectName": "智慧维修资金",
+      "uid": "xujianfei",
+      "realName": "许建飞",
+      "role": "member",
+      "status": "active",
+      "source": "weekly_report_import"
+    },
+    {
+      "projectId": 33,
+      "projectName": "智慧维修资金",
+      "uid": "zhaoyanfeng",
+      "realName": "赵衍峰",
+      "role": "member",
+      "status": "active",
+      "source": "weekly_report_import"
+    },
+    {
+      "projectId": 126,
+      "projectName": "济南不动产登记电子监督系统功能拓展",
+      "uid": "wangjian",
+      "realName": "王建",
+      "role": "member",
+      "status": "active",
+      "source": "weekly_report_import"
+    },
+    {
+      "projectId": 136,
+      "projectName": "济南房产交易管理平台运行维护",
+      "uid": "duanyouxuan",
+      "realName": "段佑轩",
+      "role": "member",
+      "status": "active",
+      "source": "weekly_report_import"
+    },
+    {
+      "projectId": 136,
+      "projectName": "济南房产交易管理平台运行维护",
+      "uid": "huanzhengji",
+      "realName": "郇正基",
+      "role": "member",
+      "status": "active",
+      "source": "weekly_report_import"
+    },
+    {
+      "projectId": 136,
+      "projectName": "济南房产交易管理平台运行维护",
+      "uid": "jingxu",
+      "realName": "景旭",
+      "role": "member",
+      "status": "active",
+      "source": "weekly_report_import"
+    },
+    {
+      "projectId": 136,
+      "projectName": "济南房产交易管理平台运行维护",
+      "uid": "liucunshan",
+      "realName": "刘存山",
+      "role": "member",
+      "status": "active",
+      "source": "weekly_report_import"
+    },
+    {
+      "projectId": 136,
+      "projectName": "济南房产交易管理平台运行维护",
+      "uid": "niulijun",
+      "realName": "牛丽君",
+      "role": "member",
+      "status": "active",
+      "source": "weekly_report_import"
+    },
+    {
+      "projectId": 136,
+      "projectName": "济南房产交易管理平台运行维护",
+      "uid": "shishoujie",
+      "realName": "时守杰",
+      "role": "member",
+      "status": "active",
+      "source": "weekly_report_import"
+    },
+    {
+      "projectId": 136,
+      "projectName": "济南房产交易管理平台运行维护",
+      "uid": "wandeyue",
+      "realName": "万德跃",
+      "role": "member",
+      "status": "active",
+      "source": "weekly_report_import"
+    },
+    {
+      "projectId": 136,
+      "projectName": "济南房产交易管理平台运行维护",
+      "uid": "wangdezhi",
+      "realName": "王德智",
+      "role": "member",
+      "status": "active",
+      "source": "weekly_report_import"
+    },
+    {
+      "projectId": 136,
+      "projectName": "济南房产交易管理平台运行维护",
+      "uid": "wangyanlei",
+      "realName": "王延磊",
+      "role": "member",
+      "status": "active",
+      "source": "weekly_report_import"
+    },
+    {
+      "projectId": 136,
+      "projectName": "济南房产交易管理平台运行维护",
+      "uid": "wangzhuang",
+      "realName": "王壮",
+      "role": "member",
+      "status": "active",
+      "source": "weekly_report_import"
+    },
+    {
+      "projectId": 136,
+      "projectName": "济南房产交易管理平台运行维护",
+      "uid": "wushengao",
+      "realName": "吴胜傲",
+      "role": "member",
+      "status": "active",
+      "source": "weekly_report_import"
+    },
+    {
+      "projectId": 211,
+      "projectName": "汇智物业一体化信息管理平台",
+      "uid": "marui",
+      "realName": "马睿",
+      "role": "member",
+      "status": "active",
+      "source": "weekly_report_import"
+    },
+    {
+      "projectId": 211,
+      "projectName": "汇智物业一体化信息管理平台",
+      "uid": "zhaoyanfeng",
+      "realName": "赵衍峰",
+      "role": "member",
+      "status": "active",
+      "source": "weekly_report_import"
+    },
+    {
+      "projectId": 227,
+      "projectName": "阳信房源超市运维项目",
+      "uid": "wanghengtong",
+      "realName": "王恒通",
+      "role": "member",
+      "status": "active",
+      "source": "weekly_report_import"
+    },
+    {
+      "projectId": 233,
+      "projectName": "汇房云中介SaaS服务平台",
+      "uid": "lubo",
+      "realName": "卢波",
+      "role": "member",
+      "status": "active",
+      "source": "weekly_report_import"
+    },
+    {
+      "projectId": 233,
+      "projectName": "汇房云中介SaaS服务平台",
+      "uid": "wangshuai",
+      "realName": "王帅",
+      "role": "member",
+      "status": "active",
+      "source": "weekly_report_import"
+    },
+    {
+      "projectId": 241,
+      "projectName": "基础平台",
+      "uid": "caoqian",
+      "realName": "曹倩",
+      "role": "member",
+      "status": "active",
+      "source": "weekly_report_import"
+    },
+    {
+      "projectId": 241,
+      "projectName": "基础平台",
+      "uid": "chenyiming",
+      "realName": "陈一明",
+      "role": "member",
+      "status": "active",
+      "source": "weekly_report_import"
+    },
+    {
+      "projectId": 241,
+      "projectName": "基础平台",
+      "uid": "pengbukun",
+      "realName": "彭步坤",
+      "role": "member",
+      "status": "active",
+      "source": "weekly_report_import"
+    },
+    {
+      "projectId": 244,
+      "projectName": "车位使用权公证备案平台",
+      "uid": "xuxingxin",
+      "realName": "许兴欣",
+      "role": "member",
+      "status": "active",
+      "source": "weekly_report_import"
+    },
+    {
+      "projectId": 253,
+      "projectName": "济南市泉农通信息平台二期",
+      "uid": "duanyouxuan",
+      "realName": "段佑轩",
+      "role": "member",
+      "status": "active",
+      "source": "weekly_report_import"
+    },
+    {
+      "projectId": 253,
+      "projectName": "济南市泉农通信息平台二期",
+      "uid": "fengqingzhao",
+      "realName": "冯庆召",
+      "role": "member",
+      "status": "active",
+      "source": "weekly_report_import"
+    },
+    {
+      "projectId": 253,
+      "projectName": "济南市泉农通信息平台二期",
+      "uid": "hanhuabin",
+      "realName": "韩化斌",
+      "role": "member",
+      "status": "active",
+      "source": "weekly_report_import"
+    },
+    {
+      "projectId": 253,
+      "projectName": "济南市泉农通信息平台二期",
+      "uid": "liangchao",
+      "realName": "梁超",
+      "role": "member",
+      "status": "active",
+      "source": "weekly_report_import"
+    },
+    {
+      "projectId": 253,
+      "projectName": "济南市泉农通信息平台二期",
+      "uid": "wangcheng",
+      "realName": "王成",
+      "role": "member",
+      "status": "active",
+      "source": "weekly_report_import"
+    },
+    {
+      "projectId": 253,
+      "projectName": "济南市泉农通信息平台二期",
+      "uid": "wanghengtong",
+      "realName": "王恒通",
+      "role": "member",
+      "status": "active",
+      "source": "weekly_report_import"
+    },
+    {
+      "projectId": 253,
+      "projectName": "济南市泉农通信息平台二期",
+      "uid": "wangyanlei",
+      "realName": "王延磊",
+      "role": "member",
+      "status": "active",
+      "source": "weekly_report_import"
+    },
+    {
+      "projectId": 253,
+      "projectName": "济南市泉农通信息平台二期",
+      "uid": "yuanchang",
+      "realName": "袁畅",
+      "role": "member",
+      "status": "active",
+      "source": "weekly_report_import"
+    },
+    {
+      "projectId": 253,
+      "projectName": "济南市泉农通信息平台二期",
+      "uid": "zhangdawei",
+      "realName": "张大伟",
+      "role": "member",
+      "status": "active",
+      "source": "weekly_report_import"
+    },
+    {
+      "projectId": 253,
+      "projectName": "济南市泉农通信息平台二期",
+      "uid": "zhangjinzhi",
+      "realName": "张金枝",
+      "role": "member",
+      "status": "active",
+      "source": "weekly_report_import"
+    }
+  ],
+  "skippedReports": [
+    {
+      "file": "2026.2.24-2025.2.28项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 9,
+      "projectId": 33,
+      "projectName": "智慧维修资金",
+      "reason": "no_resolved_project_member_entries",
+      "summaryThisWeekDays": 19.5,
+      "detailMemberDays": 0
+    },
+    {
+      "file": "2026.2.24-2025.2.28项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 9,
+      "projectId": 137,
+      "projectName": "济南不动产登记平台运行维护",
+      "reason": "no_resolved_project_member_entries",
+      "summaryThisWeekDays": 19,
+      "detailMemberDays": 0
+    },
+    {
+      "file": "2026.2.24-2025.2.28项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 9,
+      "projectId": 240,
+      "projectName": "公司内部系统维护升级",
+      "reason": "no_resolved_project_member_entries",
+      "summaryThisWeekDays": 0.5,
+      "detailMemberDays": 0
+    },
+    {
+      "file": "2026.3.9-2025.3.13项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 11,
+      "projectId": 144,
+      "projectName": "日照银行智慧社区维护与升级",
+      "reason": "no_resolved_project_member_entries",
+      "summaryThisWeekDays": 27,
+      "detailMemberDays": 0
+    },
+    {
+      "file": "2026.3.16-2025.3.20项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 12,
+      "projectId": 33,
+      "projectName": "智慧维修资金",
+      "reason": "no_resolved_project_member_entries",
+      "summaryThisWeekDays": 20.5,
+      "detailMemberDays": 0
+    },
+    {
+      "file": "2026.3.16-2025.3.20项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 12,
+      "projectId": 118,
+      "projectName": "济南市房产交易管理平台拓展",
+      "reason": "no_resolved_project_member_entries",
+      "summaryThisWeekDays": 2,
+      "detailMemberDays": 0
+    },
+    {
+      "file": "2026.5.11-2025.5.15项目周报汇总 .xlsx",
+      "reportYear": 2026,
+      "reportWeek": 20,
+      "projectId": 144,
+      "projectName": "日照银行智慧社区维护与升级",
+      "reason": "no_resolved_project_member_entries",
+      "summaryThisWeekDays": 41,
+      "detailMemberDays": 0
+    },
+    {
+      "file": "2026.6.1-2025.6.5项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 23,
+      "projectId": 243,
+      "projectName": "日照市三平台融合、智慧物业、住宅专项维修资金系统信创改造",
+      "reason": "no_resolved_project_member_entries",
+      "summaryThisWeekDays": 1,
+      "detailMemberDays": 0
+    }
+  ],
+  "emptyReportsIgnored": [
+    {
+      "file": "2026.2.24-2025.2.28项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 9,
+      "projectId": 133,
+      "projectName": "济南市不动产登记云柜台系统",
+      "reason": "no_resolved_project_member_entries",
+      "summaryThisWeekDays": 0,
+      "detailMemberDays": 0
+    },
+    {
+      "file": "2026.2.24-2025.2.28项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 9,
+      "projectId": 211,
+      "projectName": "汇智物业一体化信息管理平台",
+      "reason": "no_resolved_project_member_entries",
+      "summaryThisWeekDays": null,
+      "detailMemberDays": 0
+    },
+    {
+      "file": "2026.2.24-2025.2.28项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 9,
+      "projectId": 227,
+      "projectName": "阳信房源超市运维项目",
+      "reason": "no_resolved_project_member_entries",
+      "summaryThisWeekDays": 0,
+      "detailMemberDays": 0
+    },
+    {
+      "file": "2026.2.24-2025.2.28项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 9,
+      "projectId": 230,
+      "projectName": "汇智不动产登记电子监督系统",
+      "reason": "no_resolved_project_member_entries",
+      "summaryThisWeekDays": 0,
+      "detailMemberDays": 0
+    },
+    {
+      "file": "2026.2.24-2025.2.28项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 9,
+      "projectId": 233,
+      "projectName": "汇房云中介SaaS服务平台",
+      "reason": "no_resolved_project_member_entries",
+      "summaryThisWeekDays": 0,
+      "detailMemberDays": 0
+    },
+    {
+      "file": "2026.2.24-2025.2.28项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 9,
+      "projectId": 234,
+      "projectName": "汇房智选房源超市",
+      "reason": "no_resolved_project_member_entries",
+      "summaryThisWeekDays": 0,
+      "detailMemberDays": 0
+    },
+    {
+      "file": "2026.2.24-2025.2.28项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 9,
+      "projectId": 237,
+      "projectName": "汇房云培训考试系统",
+      "reason": "no_resolved_project_member_entries",
+      "summaryThisWeekDays": 0,
+      "detailMemberDays": 0
+    },
+    {
+      "file": "2026.3.2-2025.3.6项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 10,
+      "projectId": 131,
+      "projectName": "济南市不动产登记预受理系统",
+      "reason": "no_resolved_project_member_entries",
+      "summaryThisWeekDays": 0,
+      "detailMemberDays": 0
+    },
+    {
+      "file": "2026.3.2-2025.3.6项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 10,
+      "projectId": 133,
+      "projectName": "济南市不动产登记云柜台系统",
+      "reason": "no_resolved_project_member_entries",
+      "summaryThisWeekDays": 0,
+      "detailMemberDays": 0
+    },
+    {
+      "file": "2026.3.2-2025.3.6项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 10,
+      "projectId": 227,
+      "projectName": "阳信房源超市运维项目",
+      "reason": "no_resolved_project_member_entries",
+      "summaryThisWeekDays": null,
+      "detailMemberDays": 0
+    },
+    {
+      "file": "2026.3.2-2025.3.6项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 10,
+      "projectId": 234,
+      "projectName": "汇房智选房源超市",
+      "reason": "no_resolved_project_member_entries",
+      "summaryThisWeekDays": null,
+      "detailMemberDays": 0
+    },
+    {
+      "file": "2026.3.2-2025.3.6项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 10,
+      "projectId": 237,
+      "projectName": "汇房云培训考试系统",
+      "reason": "no_resolved_project_member_entries",
+      "summaryThisWeekDays": null,
+      "detailMemberDays": 0
+    },
+    {
+      "file": "2026.3.2-2025.3.6项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 10,
+      "projectId": 240,
+      "projectName": "公司内部系统维护升级",
+      "reason": "no_resolved_project_member_entries",
+      "summaryThisWeekDays": 0,
+      "detailMemberDays": 0
+    },
+    {
+      "file": "2026.3.9-2025.3.13项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 11,
+      "projectId": 131,
+      "projectName": "济南市不动产登记预受理系统",
+      "reason": "no_resolved_project_member_entries",
+      "summaryThisWeekDays": 0,
+      "detailMemberDays": 0
+    },
+    {
+      "file": "2026.3.9-2025.3.13项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 11,
+      "projectId": 227,
+      "projectName": "阳信房源超市运维项目",
+      "reason": "no_resolved_project_member_entries",
+      "summaryThisWeekDays": null,
+      "detailMemberDays": 0
+    },
+    {
+      "file": "2026.3.9-2025.3.13项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 11,
+      "projectId": 230,
+      "projectName": "汇智不动产登记电子监督系统",
+      "reason": "no_resolved_project_member_entries",
+      "summaryThisWeekDays": 0,
+      "detailMemberDays": 0
+    },
+    {
+      "file": "2026.3.9-2025.3.13项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 11,
+      "projectId": 234,
+      "projectName": "汇房智选房源超市",
+      "reason": "no_resolved_project_member_entries",
+      "summaryThisWeekDays": null,
+      "detailMemberDays": 0
+    },
+    {
+      "file": "2026.3.9-2025.3.13项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 11,
+      "projectId": 240,
+      "projectName": "公司内部系统维护升级",
+      "reason": "no_resolved_project_member_entries",
+      "summaryThisWeekDays": null,
+      "detailMemberDays": 0
+    },
+    {
+      "file": "2026.3.9-2025.3.13项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 11,
+      "projectId": 244,
+      "projectName": "车位使用权公证备案平台",
+      "reason": "no_resolved_project_member_entries",
+      "summaryThisWeekDays": 0,
+      "detailMemberDays": 0
+    },
+    {
+      "file": "2026.3.16-2025.3.20项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 12,
+      "projectId": 131,
+      "projectName": "济南市不动产登记预受理系统",
+      "reason": "no_resolved_project_member_entries",
+      "summaryThisWeekDays": 0,
+      "detailMemberDays": 0
+    },
+    {
+      "file": "2026.3.16-2025.3.20项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 12,
+      "projectId": 133,
+      "projectName": "济南市不动产登记云柜台系统",
+      "reason": "no_resolved_project_member_entries",
+      "summaryThisWeekDays": 0,
+      "detailMemberDays": 0
+    },
+    {
+      "file": "2026.3.16-2025.3.20项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 12,
+      "projectId": 227,
+      "projectName": "阳信房源超市运维项目",
+      "reason": "no_resolved_project_member_entries",
+      "summaryThisWeekDays": null,
+      "detailMemberDays": 0
+    },
+    {
+      "file": "2026.3.16-2025.3.20项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 12,
+      "projectId": 230,
+      "projectName": "汇智不动产登记电子监督系统",
+      "reason": "no_resolved_project_member_entries",
+      "summaryThisWeekDays": 0,
+      "detailMemberDays": 0
+    },
+    {
+      "file": "2026.3.16-2025.3.20项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 12,
+      "projectId": 234,
+      "projectName": "汇房智选房源超市",
+      "reason": "no_resolved_project_member_entries",
+      "summaryThisWeekDays": null,
+      "detailMemberDays": 0
+    },
+    {
+      "file": "2026.3.16-2025.3.20项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 12,
+      "projectId": 237,
+      "projectName": "汇房云培训考试系统",
+      "reason": "no_resolved_project_member_entries",
+      "summaryThisWeekDays": null,
+      "detailMemberDays": 0
+    },
+    {
+      "file": "2026.3.16-2025.3.20项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 12,
+      "projectId": 240,
+      "projectName": "公司内部系统维护升级",
+      "reason": "no_resolved_project_member_entries",
+      "summaryThisWeekDays": null,
+      "detailMemberDays": 0
+    },
+    {
+      "file": "2026.3.16-2025.3.20项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 12,
+      "projectId": 244,
+      "projectName": "车位使用权公证备案平台",
+      "reason": "no_resolved_project_member_entries",
+      "summaryThisWeekDays": null,
+      "detailMemberDays": 0
+    },
+    {
+      "file": "2026.3.23-2025.3.27项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 13,
+      "projectId": 126,
+      "projectName": "济南不动产登记电子监督系统功能拓展",
+      "reason": "no_resolved_project_member_entries",
+      "summaryThisWeekDays": 0,
+      "detailMemberDays": 0
+    },
+    {
+      "file": "2026.3.23-2025.3.27项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 13,
+      "projectId": 131,
+      "projectName": "济南市不动产登记预受理系统",
+      "reason": "no_resolved_project_member_entries",
+      "summaryThisWeekDays": 0,
+      "detailMemberDays": 0
+    },
+    {
+      "file": "2026.3.23-2025.3.27项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 13,
+      "projectId": 133,
+      "projectName": "济南市不动产登记云柜台系统",
+      "reason": "no_resolved_project_member_entries",
+      "summaryThisWeekDays": 0,
+      "detailMemberDays": 0
+    },
+    {
+      "file": "2026.3.23-2025.3.27项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 13,
+      "projectId": 227,
+      "projectName": "阳信房源超市运维项目",
+      "reason": "no_resolved_project_member_entries",
+      "summaryThisWeekDays": null,
+      "detailMemberDays": 0
+    },
+    {
+      "file": "2026.3.23-2025.3.27项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 13,
+      "projectId": 234,
+      "projectName": "汇房智选房源超市",
+      "reason": "no_resolved_project_member_entries",
+      "summaryThisWeekDays": null,
+      "detailMemberDays": 0
+    },
+    {
+      "file": "2026.3.23-2025.3.27项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 13,
+      "projectId": 240,
+      "projectName": "公司内部系统维护升级",
+      "reason": "no_resolved_project_member_entries",
+      "summaryThisWeekDays": null,
+      "detailMemberDays": 0
+    },
+    {
+      "file": "2026.3.30-2025.4.3项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 14,
+      "projectId": 131,
+      "projectName": "济南市不动产登记预受理系统",
+      "reason": "no_resolved_project_member_entries",
+      "summaryThisWeekDays": 0,
+      "detailMemberDays": 0
+    },
+    {
+      "file": "2026.3.30-2025.4.3项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 14,
+      "projectId": 133,
+      "projectName": "济南市不动产登记云柜台系统",
+      "reason": "no_resolved_project_member_entries",
+      "summaryThisWeekDays": 0,
+      "detailMemberDays": 0
+    },
+    {
+      "file": "2026.3.30-2025.4.3项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 14,
+      "projectId": 211,
+      "projectName": "汇智物业一体化信息管理平台",
+      "reason": "no_resolved_project_member_entries",
+      "summaryThisWeekDays": null,
+      "detailMemberDays": 0
+    },
+    {
+      "file": "2026.3.30-2025.4.3项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 14,
+      "projectId": 227,
+      "projectName": "阳信房源超市运维项目",
+      "reason": "no_resolved_project_member_entries",
+      "summaryThisWeekDays": null,
+      "detailMemberDays": 0
+    },
+    {
+      "file": "2026.3.30-2025.4.3项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 14,
+      "projectId": 230,
+      "projectName": "汇智不动产登记电子监督系统",
+      "reason": "no_resolved_project_member_entries",
+      "summaryThisWeekDays": 0,
+      "detailMemberDays": 0
+    },
+    {
+      "file": "2026.3.30-2025.4.3项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 14,
+      "projectId": 234,
+      "projectName": "汇房智选房源超市",
+      "reason": "no_resolved_project_member_entries",
+      "summaryThisWeekDays": null,
+      "detailMemberDays": 0
+    },
+    {
+      "file": "2026.3.30-2025.4.3项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 14,
+      "projectId": 237,
+      "projectName": "汇房云培训考试系统",
+      "reason": "no_resolved_project_member_entries",
+      "summaryThisWeekDays": 0,
+      "detailMemberDays": 0
+    },
+    {
+      "file": "2026.3.30-2025.4.3项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 14,
+      "projectId": 240,
+      "projectName": "公司内部系统维护升级",
+      "reason": "no_resolved_project_member_entries",
+      "summaryThisWeekDays": null,
+      "detailMemberDays": 0
+    },
+    {
+      "file": "2026.3.30-2025.4.3项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 14,
+      "projectId": 244,
+      "projectName": "车位使用权公证备案平台",
+      "reason": "no_resolved_project_member_entries",
+      "summaryThisWeekDays": 0,
+      "detailMemberDays": 0
+    },
+    {
+      "file": "2026.4.6-2025.4.10项目周报汇总 .xlsx",
+      "reportYear": 2026,
+      "reportWeek": 15,
+      "projectId": 118,
+      "projectName": "济南市房产交易管理平台拓展",
+      "reason": "no_resolved_project_member_entries",
+      "summaryThisWeekDays": 0,
+      "detailMemberDays": 0
+    },
+    {
+      "file": "2026.4.6-2025.4.10项目周报汇总 .xlsx",
+      "reportYear": 2026,
+      "reportWeek": 15,
+      "projectId": 131,
+      "projectName": "济南市不动产登记预受理系统",
+      "reason": "no_resolved_project_member_entries",
+      "summaryThisWeekDays": 0,
+      "detailMemberDays": 0
+    },
+    {
+      "file": "2026.4.6-2025.4.10项目周报汇总 .xlsx",
+      "reportYear": 2026,
+      "reportWeek": 15,
+      "projectId": 133,
+      "projectName": "济南市不动产登记云柜台系统",
+      "reason": "no_resolved_project_member_entries",
+      "summaryThisWeekDays": 0,
+      "detailMemberDays": 0
+    },
+    {
+      "file": "2026.4.6-2025.4.10项目周报汇总 .xlsx",
+      "reportYear": 2026,
+      "reportWeek": 15,
+      "projectId": 227,
+      "projectName": "阳信房源超市运维项目",
+      "reason": "no_resolved_project_member_entries",
+      "summaryThisWeekDays": null,
+      "detailMemberDays": 0
+    },
+    {
+      "file": "2026.4.6-2025.4.10项目周报汇总 .xlsx",
+      "reportYear": 2026,
+      "reportWeek": 15,
+      "projectId": 230,
+      "projectName": "汇智不动产登记电子监督系统",
+      "reason": "no_resolved_project_member_entries",
+      "summaryThisWeekDays": 0,
+      "detailMemberDays": 0
+    },
+    {
+      "file": "2026.4.6-2025.4.10项目周报汇总 .xlsx",
+      "reportYear": 2026,
+      "reportWeek": 15,
+      "projectId": 234,
+      "projectName": "汇房智选房源超市",
+      "reason": "no_resolved_project_member_entries",
+      "summaryThisWeekDays": null,
+      "detailMemberDays": 0
+    },
+    {
+      "file": "2026.4.6-2025.4.10项目周报汇总 .xlsx",
+      "reportYear": 2026,
+      "reportWeek": 15,
+      "projectId": 237,
+      "projectName": "汇房云培训考试系统",
+      "reason": "no_resolved_project_member_entries",
+      "summaryThisWeekDays": null,
+      "detailMemberDays": 0
+    },
+    {
+      "file": "2026.4.6-2025.4.10项目周报汇总 .xlsx",
+      "reportYear": 2026,
+      "reportWeek": 15,
+      "projectId": 240,
+      "projectName": "公司内部系统维护升级",
+      "reason": "no_resolved_project_member_entries",
+      "summaryThisWeekDays": null,
+      "detailMemberDays": 0
+    },
+    {
+      "file": "2026.4.6-2025.4.10项目周报汇总 .xlsx",
+      "reportYear": 2026,
+      "reportWeek": 15,
+      "projectId": 244,
+      "projectName": "车位使用权公证备案平台",
+      "reason": "no_resolved_project_member_entries",
+      "summaryThisWeekDays": null,
+      "detailMemberDays": 0
+    },
+    {
+      "file": "2026.4.6-2025.4.10项目周报汇总 .xlsx",
+      "reportYear": 2026,
+      "reportWeek": 15,
+      "projectId": 247,
+      "projectName": "住房租赁智慧管理与服务平台",
+      "reason": "no_resolved_project_member_entries",
+      "summaryThisWeekDays": null,
+      "detailMemberDays": 0
+    },
+    {
+      "file": "2026.4.13-2025.4.17项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 16,
+      "projectId": 127,
+      "projectName": "济南市不动产登记全量数据汇交及比对系统",
+      "reason": "no_resolved_project_member_entries",
+      "summaryThisWeekDays": 0,
+      "detailMemberDays": 0
+    },
+    {
+      "file": "2026.4.13-2025.4.17项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 16,
+      "projectId": 131,
+      "projectName": "济南市不动产登记预受理系统",
+      "reason": "no_resolved_project_member_entries",
+      "summaryThisWeekDays": 0,
+      "detailMemberDays": 0
+    },
+    {
+      "file": "2026.4.13-2025.4.17项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 16,
+      "projectId": 133,
+      "projectName": "济南市不动产登记云柜台系统",
+      "reason": "no_resolved_project_member_entries",
+      "summaryThisWeekDays": 0,
+      "detailMemberDays": 0
+    },
+    {
+      "file": "2026.4.13-2025.4.17项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 16,
+      "projectId": 230,
+      "projectName": "汇智不动产登记电子监督系统",
+      "reason": "no_resolved_project_member_entries",
+      "summaryThisWeekDays": 0,
+      "detailMemberDays": 0
+    },
+    {
+      "file": "2026.4.13-2025.4.17项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 16,
+      "projectId": 234,
+      "projectName": "汇房智选房源超市",
+      "reason": "no_resolved_project_member_entries",
+      "summaryThisWeekDays": null,
+      "detailMemberDays": 0
+    },
+    {
+      "file": "2026.4.13-2025.4.17项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 16,
+      "projectId": 240,
+      "projectName": "公司内部系统维护升级",
+      "reason": "no_resolved_project_member_entries",
+      "summaryThisWeekDays": null,
+      "detailMemberDays": 0
+    },
+    {
+      "file": "2026.4.13-2025.4.17项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 16,
+      "projectId": 247,
+      "projectName": "住房租赁智慧管理与服务平台",
+      "reason": "no_resolved_project_member_entries",
+      "summaryThisWeekDays": null,
+      "detailMemberDays": 0
+    },
+    {
+      "file": "2026.4.20-2025.4.24项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 17,
+      "projectId": 127,
+      "projectName": "济南市不动产登记全量数据汇交及比对系统",
+      "reason": "no_resolved_project_member_entries",
+      "summaryThisWeekDays": 0,
+      "detailMemberDays": 0
+    },
+    {
+      "file": "2026.4.20-2025.4.24项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 17,
+      "projectId": 131,
+      "projectName": "济南市不动产登记预受理系统",
+      "reason": "no_resolved_project_member_entries",
+      "summaryThisWeekDays": 0,
+      "detailMemberDays": 0
+    },
+    {
+      "file": "2026.4.20-2025.4.24项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 17,
+      "projectId": 133,
+      "projectName": "济南市不动产登记云柜台系统",
+      "reason": "no_resolved_project_member_entries",
+      "summaryThisWeekDays": 0,
+      "detailMemberDays": 0
+    },
+    {
+      "file": "2026.4.20-2025.4.24项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 17,
+      "projectId": 227,
+      "projectName": "阳信房源超市运维项目",
+      "reason": "no_resolved_project_member_entries",
+      "summaryThisWeekDays": null,
+      "detailMemberDays": 0
+    },
+    {
+      "file": "2026.4.20-2025.4.24项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 17,
+      "projectId": 230,
+      "projectName": "汇智不动产登记电子监督系统",
+      "reason": "no_resolved_project_member_entries",
+      "summaryThisWeekDays": 0,
+      "detailMemberDays": 0
+    },
+    {
+      "file": "2026.4.20-2025.4.24项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 17,
+      "projectId": 234,
+      "projectName": "汇房智选房源超市",
+      "reason": "no_resolved_project_member_entries",
+      "summaryThisWeekDays": null,
+      "detailMemberDays": 0
+    },
+    {
+      "file": "2026.4.20-2025.4.24项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 17,
+      "projectId": 240,
+      "projectName": "公司内部系统维护升级",
+      "reason": "no_resolved_project_member_entries",
+      "summaryThisWeekDays": null,
+      "detailMemberDays": 0
+    },
+    {
+      "file": "2026.4.20-2025.4.24项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 17,
+      "projectId": 247,
+      "projectName": "住房租赁智慧管理与服务平台",
+      "reason": "no_resolved_project_member_entries",
+      "summaryThisWeekDays": null,
+      "detailMemberDays": 0
+    },
+    {
+      "file": "2026.4.26-2025.4.30项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 18,
+      "projectId": 127,
+      "projectName": "济南市不动产登记全量数据汇交及比对系统",
+      "reason": "no_resolved_project_member_entries",
+      "summaryThisWeekDays": 0,
+      "detailMemberDays": 0
+    },
+    {
+      "file": "2026.4.26-2025.4.30项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 18,
+      "projectId": 131,
+      "projectName": "济南市不动产登记预受理系统",
+      "reason": "no_resolved_project_member_entries",
+      "summaryThisWeekDays": 0,
+      "detailMemberDays": 0
+    },
+    {
+      "file": "2026.4.26-2025.4.30项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 18,
+      "projectId": 133,
+      "projectName": "济南市不动产登记云柜台系统",
+      "reason": "no_resolved_project_member_entries",
+      "summaryThisWeekDays": 0,
+      "detailMemberDays": 0
+    },
+    {
+      "file": "2026.4.26-2025.4.30项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 18,
+      "projectId": 230,
+      "projectName": "汇智不动产登记电子监督系统",
+      "reason": "no_resolved_project_member_entries",
+      "summaryThisWeekDays": 0,
+      "detailMemberDays": 0
+    },
+    {
+      "file": "2026.4.26-2025.4.30项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 18,
+      "projectId": 234,
+      "projectName": "汇房智选房源超市",
+      "reason": "no_resolved_project_member_entries",
+      "summaryThisWeekDays": null,
+      "detailMemberDays": 0
+    },
+    {
+      "file": "2026.4.26-2025.4.30项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 18,
+      "projectId": 240,
+      "projectName": "公司内部系统维护升级",
+      "reason": "no_resolved_project_member_entries",
+      "summaryThisWeekDays": null,
+      "detailMemberDays": 0
+    },
+    {
+      "file": "2026.4.26-2025.4.30项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 18,
+      "projectId": 247,
+      "projectName": "住房租赁智慧管理与服务平台",
+      "reason": "no_resolved_project_member_entries",
+      "summaryThisWeekDays": null,
+      "detailMemberDays": 0
+    },
+    {
+      "file": "2026.5.6-2025.5.9项目周报汇总 .xlsx",
+      "reportYear": 2026,
+      "reportWeek": 19,
+      "projectId": 131,
+      "projectName": "济南市不动产登记预受理系统",
+      "reason": "no_resolved_project_member_entries",
+      "summaryThisWeekDays": 0,
+      "detailMemberDays": 0
+    },
+    {
+      "file": "2026.5.6-2025.5.9项目周报汇总 .xlsx",
+      "reportYear": 2026,
+      "reportWeek": 19,
+      "projectId": 133,
+      "projectName": "济南市不动产登记云柜台系统",
+      "reason": "no_resolved_project_member_entries",
+      "summaryThisWeekDays": 0,
+      "detailMemberDays": 0
+    },
+    {
+      "file": "2026.5.6-2025.5.9项目周报汇总 .xlsx",
+      "reportYear": 2026,
+      "reportWeek": 19,
+      "projectId": 230,
+      "projectName": "汇智不动产登记电子监督系统",
+      "reason": "no_resolved_project_member_entries",
+      "summaryThisWeekDays": 0,
+      "detailMemberDays": 0
+    },
+    {
+      "file": "2026.5.6-2025.5.9项目周报汇总 .xlsx",
+      "reportYear": 2026,
+      "reportWeek": 19,
+      "projectId": 234,
+      "projectName": "汇房智选房源超市",
+      "reason": "no_resolved_project_member_entries",
+      "summaryThisWeekDays": null,
+      "detailMemberDays": 0
+    },
+    {
+      "file": "2026.5.6-2025.5.9项目周报汇总 .xlsx",
+      "reportYear": 2026,
+      "reportWeek": 19,
+      "projectId": 240,
+      "projectName": "公司内部系统维护升级",
+      "reason": "no_resolved_project_member_entries",
+      "summaryThisWeekDays": null,
+      "detailMemberDays": 0
+    },
+    {
+      "file": "2026.5.6-2025.5.9项目周报汇总 .xlsx",
+      "reportYear": 2026,
+      "reportWeek": 19,
+      "projectId": 247,
+      "projectName": "住房租赁智慧管理与服务平台",
+      "reason": "no_resolved_project_member_entries",
+      "summaryThisWeekDays": null,
+      "detailMemberDays": 0
+    },
+    {
+      "file": "2026.5.6-2025.5.9项目周报汇总 .xlsx",
+      "reportYear": 2026,
+      "reportWeek": 19,
+      "projectId": 248,
+      "projectName": "卓识网安业务平台系统开发",
+      "reason": "no_resolved_project_member_entries",
+      "summaryThisWeekDays": null,
+      "detailMemberDays": 0
+    },
+    {
+      "file": "2026.5.11-2025.5.15项目周报汇总 .xlsx",
+      "reportYear": 2026,
+      "reportWeek": 20,
+      "projectId": 131,
+      "projectName": "济南市不动产登记预受理系统",
+      "reason": "no_resolved_project_member_entries",
+      "summaryThisWeekDays": 0,
+      "detailMemberDays": 0
+    },
+    {
+      "file": "2026.5.11-2025.5.15项目周报汇总 .xlsx",
+      "reportYear": 2026,
+      "reportWeek": 20,
+      "projectId": 133,
+      "projectName": "济南市不动产登记云柜台系统",
+      "reason": "no_resolved_project_member_entries",
+      "summaryThisWeekDays": 0,
+      "detailMemberDays": 0
+    },
+    {
+      "file": "2026.5.11-2025.5.15项目周报汇总 .xlsx",
+      "reportYear": 2026,
+      "reportWeek": 20,
+      "projectId": 227,
+      "projectName": "阳信房源超市运维项目",
+      "reason": "no_resolved_project_member_entries",
+      "summaryThisWeekDays": null,
+      "detailMemberDays": 0
+    },
+    {
+      "file": "2026.5.11-2025.5.15项目周报汇总 .xlsx",
+      "reportYear": 2026,
+      "reportWeek": 20,
+      "projectId": 230,
+      "projectName": "汇智不动产登记电子监督系统",
+      "reason": "no_resolved_project_member_entries",
+      "summaryThisWeekDays": 0,
+      "detailMemberDays": 0
+    },
+    {
+      "file": "2026.5.11-2025.5.15项目周报汇总 .xlsx",
+      "reportYear": 2026,
+      "reportWeek": 20,
+      "projectId": 234,
+      "projectName": "汇房智选房源超市",
+      "reason": "no_resolved_project_member_entries",
+      "summaryThisWeekDays": null,
+      "detailMemberDays": 0
+    },
+    {
+      "file": "2026.5.11-2025.5.15项目周报汇总 .xlsx",
+      "reportYear": 2026,
+      "reportWeek": 20,
+      "projectId": 240,
+      "projectName": "公司内部系统维护升级",
+      "reason": "no_resolved_project_member_entries",
+      "summaryThisWeekDays": null,
+      "detailMemberDays": 0
+    },
+    {
+      "file": "2026.5.11-2025.5.15项目周报汇总 .xlsx",
+      "reportYear": 2026,
+      "reportWeek": 20,
+      "projectId": 247,
+      "projectName": "住房租赁智慧管理与服务平台",
+      "reason": "no_resolved_project_member_entries",
+      "summaryThisWeekDays": null,
+      "detailMemberDays": 0
+    },
+    {
+      "file": "2026.5.11-2025.5.15项目周报汇总 .xlsx",
+      "reportYear": 2026,
+      "reportWeek": 20,
+      "projectId": 248,
+      "projectName": "卓识网安业务平台系统开发",
+      "reason": "no_resolved_project_member_entries",
+      "summaryThisWeekDays": null,
+      "detailMemberDays": 0
+    },
+    {
+      "file": "2026.5.18-2025.5.22项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 21,
+      "projectId": 131,
+      "projectName": "济南市不动产登记预受理系统",
+      "reason": "no_resolved_project_member_entries",
+      "summaryThisWeekDays": 0,
+      "detailMemberDays": 0
+    },
+    {
+      "file": "2026.5.18-2025.5.22项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 21,
+      "projectId": 133,
+      "projectName": "济南市不动产登记云柜台系统",
+      "reason": "no_resolved_project_member_entries",
+      "summaryThisWeekDays": 0,
+      "detailMemberDays": 0
+    },
+    {
+      "file": "2026.5.18-2025.5.22项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 21,
+      "projectId": 227,
+      "projectName": "阳信房源超市运维项目",
+      "reason": "no_resolved_project_member_entries",
+      "summaryThisWeekDays": null,
+      "detailMemberDays": 0
+    },
+    {
+      "file": "2026.5.18-2025.5.22项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 21,
+      "projectId": 230,
+      "projectName": "汇智不动产登记电子监督系统",
+      "reason": "no_resolved_project_member_entries",
+      "summaryThisWeekDays": 0,
+      "detailMemberDays": 0
+    },
+    {
+      "file": "2026.5.18-2025.5.22项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 21,
+      "projectId": 234,
+      "projectName": "汇房智选房源超市",
+      "reason": "no_resolved_project_member_entries",
+      "summaryThisWeekDays": null,
+      "detailMemberDays": 0
+    },
+    {
+      "file": "2026.5.18-2025.5.22项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 21,
+      "projectId": 240,
+      "projectName": "公司内部系统维护升级",
+      "reason": "no_resolved_project_member_entries",
+      "summaryThisWeekDays": null,
+      "detailMemberDays": 0
+    },
+    {
+      "file": "2026.5.18-2025.5.22项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 21,
+      "projectId": 247,
+      "projectName": "住房租赁智慧管理与服务平台",
+      "reason": "no_resolved_project_member_entries",
+      "summaryThisWeekDays": null,
+      "detailMemberDays": 0
+    },
+    {
+      "file": "2026.5.18-2025.5.22项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 21,
+      "projectId": 248,
+      "projectName": "卓识网安业务平台系统开发",
+      "reason": "no_resolved_project_member_entries",
+      "summaryThisWeekDays": null,
+      "detailMemberDays": 0
+    },
+    {
+      "file": "2026.5.25-2025.5.29项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 22,
+      "projectId": 118,
+      "projectName": "济南市房产交易管理平台拓展",
+      "reason": "no_resolved_project_member_entries",
+      "summaryThisWeekDays": null,
+      "detailMemberDays": 0
+    },
+    {
+      "file": "2026.5.25-2025.5.29项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 22,
+      "projectId": 127,
+      "projectName": "济南市不动产登记全量数据汇交及比对系统",
+      "reason": "no_resolved_project_member_entries",
+      "summaryThisWeekDays": 0,
+      "detailMemberDays": 0
+    },
+    {
+      "file": "2026.5.25-2025.5.29项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 22,
+      "projectId": 131,
+      "projectName": "济南市不动产登记预受理系统",
+      "reason": "no_resolved_project_member_entries",
+      "summaryThisWeekDays": 0,
+      "detailMemberDays": 0
+    },
+    {
+      "file": "2026.5.25-2025.5.29项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 22,
+      "projectId": 133,
+      "projectName": "济南市不动产登记云柜台系统",
+      "reason": "no_resolved_project_member_entries",
+      "summaryThisWeekDays": 0,
+      "detailMemberDays": 0
+    },
+    {
+      "file": "2026.5.25-2025.5.29项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 22,
+      "projectId": 227,
+      "projectName": "阳信房源超市运维项目",
+      "reason": "no_resolved_project_member_entries",
+      "summaryThisWeekDays": null,
+      "detailMemberDays": 0
+    },
+    {
+      "file": "2026.5.25-2025.5.29项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 22,
+      "projectId": 230,
+      "projectName": "汇智不动产登记电子监督系统",
+      "reason": "no_resolved_project_member_entries",
+      "summaryThisWeekDays": 0,
+      "detailMemberDays": 0
+    },
+    {
+      "file": "2026.5.25-2025.5.29项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 22,
+      "projectId": 234,
+      "projectName": "汇房智选房源超市",
+      "reason": "no_resolved_project_member_entries",
+      "summaryThisWeekDays": null,
+      "detailMemberDays": 0
+    },
+    {
+      "file": "2026.5.25-2025.5.29项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 22,
+      "projectId": 240,
+      "projectName": "公司内部系统维护升级",
+      "reason": "no_resolved_project_member_entries",
+      "summaryThisWeekDays": null,
+      "detailMemberDays": 0
+    },
+    {
+      "file": "2026.5.25-2025.5.29项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 22,
+      "projectId": 247,
+      "projectName": "住房租赁智慧管理与服务平台",
+      "reason": "no_resolved_project_member_entries",
+      "summaryThisWeekDays": null,
+      "detailMemberDays": 0
+    },
+    {
+      "file": "2026.6.1-2025.6.5项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 23,
+      "projectId": 127,
+      "projectName": "济南市不动产登记全量数据汇交及比对系统",
+      "reason": "no_resolved_project_member_entries",
+      "summaryThisWeekDays": 0,
+      "detailMemberDays": 0
+    },
+    {
+      "file": "2026.6.1-2025.6.5项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 23,
+      "projectId": 133,
+      "projectName": "济南市不动产登记云柜台系统",
+      "reason": "no_resolved_project_member_entries",
+      "summaryThisWeekDays": 0,
+      "detailMemberDays": 0
+    },
+    {
+      "file": "2026.6.1-2025.6.5项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 23,
+      "projectId": 227,
+      "projectName": "阳信房源超市运维项目",
+      "reason": "no_resolved_project_member_entries",
+      "summaryThisWeekDays": null,
+      "detailMemberDays": 0
+    },
+    {
+      "file": "2026.6.1-2025.6.5项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 23,
+      "projectId": 230,
+      "projectName": "汇智不动产登记电子监督系统",
+      "reason": "no_resolved_project_member_entries",
+      "summaryThisWeekDays": 0,
+      "detailMemberDays": 0
+    },
+    {
+      "file": "2026.6.1-2025.6.5项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 23,
+      "projectId": 234,
+      "projectName": "汇房智选房源超市",
+      "reason": "no_resolved_project_member_entries",
+      "summaryThisWeekDays": null,
+      "detailMemberDays": 0
+    },
+    {
+      "file": "2026.6.1-2025.6.5项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 23,
+      "projectId": 240,
+      "projectName": "公司内部系统维护升级",
+      "reason": "no_resolved_project_member_entries",
+      "summaryThisWeekDays": null,
+      "detailMemberDays": 0
+    },
+    {
+      "file": "2026.6.1-2025.6.5项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 23,
+      "projectId": 247,
+      "projectName": "住房租赁智慧管理与服务平台",
+      "reason": "no_resolved_project_member_entries",
+      "summaryThisWeekDays": null,
+      "detailMemberDays": 0
+    }
+  ],
+  "workloadMismatches": [
+    {
+      "file": "2026.2.24-2025.2.28项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 9,
+      "projectId": 131,
+      "projectName": "济南市不动产登记预受理系统",
+      "source": "detail_total",
+      "sheet": "交付-不动产组",
+      "detailMemberDays": 0.5,
+      "detailTotalDays": 19
+    },
+    {
+      "file": "2026.2.24-2025.2.28项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 9,
+      "projectId": 250,
+      "projectName": "宿松房产一体化平台",
+      "source": "detail_total",
+      "sheet": "交付-房产组",
+      "detailMemberDays": 8,
+      "detailTotalDays": 9
+    },
+    {
+      "file": "2026.2.24-2025.2.28项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 9,
+      "projectId": 232,
+      "projectName": "不动产登记人工智能数字人",
+      "source": "detail_total",
+      "sheet": "交付-AI大数据组",
+      "detailMemberDays": 12.5,
+      "detailTotalDays": 6
+    },
+    {
+      "file": "2026.2.24-2025.2.28项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 9,
+      "projectId": 33,
+      "projectName": "智慧维修资金",
+      "source": "summary_vs_resolved_entries",
+      "summaryThisWeekDays": 19.5,
+      "resolvedEntryDays": 0
+    },
+    {
+      "file": "2026.2.24-2025.2.28项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 9,
+      "projectId": 131,
+      "projectName": "济南市不动产登记预受理系统",
+      "source": "summary_vs_detail",
+      "summaryThisWeekDays": 0,
+      "detailMemberDays": 0.5
+    },
+    {
+      "file": "2026.2.24-2025.2.28项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 9,
+      "projectId": 131,
+      "projectName": "济南市不动产登记预受理系统",
+      "source": "summary_vs_resolved_entries",
+      "summaryThisWeekDays": 0,
+      "resolvedEntryDays": 0.5
+    },
+    {
+      "file": "2026.2.24-2025.2.28项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 9,
+      "projectId": 136,
+      "projectName": "济南房产交易管理平台运行维护",
+      "source": "summary_vs_detail",
+      "summaryThisWeekDays": 14.5,
+      "detailMemberDays": 31.5
+    },
+    {
+      "file": "2026.2.24-2025.2.28项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 9,
+      "projectId": 136,
+      "projectName": "济南房产交易管理平台运行维护",
+      "source": "summary_vs_resolved_entries",
+      "summaryThisWeekDays": 14.5,
+      "resolvedEntryDays": 31.5
+    },
+    {
+      "file": "2026.2.24-2025.2.28项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 9,
+      "projectId": 137,
+      "projectName": "济南不动产登记平台运行维护",
+      "source": "summary_vs_resolved_entries",
+      "summaryThisWeekDays": 19,
+      "resolvedEntryDays": 0
+    },
+    {
+      "file": "2026.2.24-2025.2.28项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 9,
+      "projectId": 148,
+      "projectName": "基层经费监管系统维护与升级",
+      "source": "summary_vs_detail",
+      "summaryThisWeekDays": 4,
+      "detailMemberDays": 5
+    },
+    {
+      "file": "2026.2.24-2025.2.28项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 9,
+      "projectId": 148,
+      "projectName": "基层经费监管系统维护与升级",
+      "source": "summary_vs_resolved_entries",
+      "summaryThisWeekDays": 4,
+      "resolvedEntryDays": 5
+    },
+    {
+      "file": "2026.2.24-2025.2.28项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 9,
+      "projectId": 232,
+      "projectName": "不动产登记人工智能数字人",
+      "source": "summary_vs_detail",
+      "summaryThisWeekDays": 6,
+      "detailMemberDays": 12.5
+    },
+    {
+      "file": "2026.2.24-2025.2.28项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 9,
+      "projectId": 232,
+      "projectName": "不动产登记人工智能数字人",
+      "source": "summary_vs_resolved_entries",
+      "summaryThisWeekDays": 6,
+      "resolvedEntryDays": 12.5
+    },
+    {
+      "file": "2026.2.24-2025.2.28项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 9,
+      "projectId": 240,
+      "projectName": "公司内部系统维护升级",
+      "source": "summary_vs_resolved_entries",
+      "summaryThisWeekDays": 0.5,
+      "resolvedEntryDays": 0
+    },
+    {
+      "file": "2026.2.24-2025.2.28项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 9,
+      "projectId": 247,
+      "projectName": "住房租赁智慧管理与服务平台",
+      "source": "summary_vs_detail",
+      "summaryThisWeekDays": 0,
+      "detailMemberDays": 1
+    },
+    {
+      "file": "2026.2.24-2025.2.28项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 9,
+      "projectId": 247,
+      "projectName": "住房租赁智慧管理与服务平台",
+      "source": "summary_vs_resolved_entries",
+      "summaryThisWeekDays": 0,
+      "resolvedEntryDays": 1
+    },
+    {
+      "file": "2026.2.24-2025.2.28项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 9,
+      "projectId": 248,
+      "projectName": "卓识网安业务平台系统开发",
+      "source": "summary_vs_detail",
+      "summaryThisWeekDays": 0,
+      "detailMemberDays": 21.8
+    },
+    {
+      "file": "2026.2.24-2025.2.28项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 9,
+      "projectId": 248,
+      "projectName": "卓识网安业务平台系统开发",
+      "source": "summary_vs_resolved_entries",
+      "summaryThisWeekDays": 0,
+      "resolvedEntryDays": 16.8
+    },
+    {
+      "file": "2026.2.24-2025.2.28项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 9,
+      "projectId": 250,
+      "projectName": "宿松房产一体化平台",
+      "source": "summary_vs_detail",
+      "summaryThisWeekDays": 9,
+      "detailMemberDays": 8
+    },
+    {
+      "file": "2026.2.24-2025.2.28项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 9,
+      "projectId": 250,
+      "projectName": "宿松房产一体化平台",
+      "source": "summary_vs_resolved_entries",
+      "summaryThisWeekDays": 9,
+      "resolvedEntryDays": 8
+    },
+    {
+      "file": "2026.3.2-2025.3.6项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 10,
+      "projectId": 250,
+      "projectName": "宿松房产一体化平台",
+      "source": "detail_total",
+      "sheet": "交付-房产组",
+      "detailMemberDays": 9.5,
+      "detailTotalDays": 10.5
+    },
+    {
+      "file": "2026.3.2-2025.3.6项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 10,
+      "projectId": 136,
+      "projectName": "济南房产交易管理平台运行维护",
+      "source": "summary_vs_detail",
+      "summaryThisWeekDays": 17.5,
+      "detailMemberDays": 37.5
+    },
+    {
+      "file": "2026.3.2-2025.3.6项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 10,
+      "projectId": 136,
+      "projectName": "济南房产交易管理平台运行维护",
+      "source": "summary_vs_resolved_entries",
+      "summaryThisWeekDays": 17.5,
+      "resolvedEntryDays": 37.5
+    },
+    {
+      "file": "2026.3.2-2025.3.6项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 10,
+      "projectId": 245,
+      "projectName": "济南市联合资产交易公示平台",
+      "source": "summary_vs_resolved_entries",
+      "summaryThisWeekDays": 27.35,
+      "resolvedEntryDays": 25.85
+    },
+    {
+      "file": "2026.3.2-2025.3.6项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 10,
+      "projectId": 250,
+      "projectName": "宿松房产一体化平台",
+      "source": "summary_vs_detail",
+      "summaryThisWeekDays": 10.5,
+      "detailMemberDays": 9.5
+    },
+    {
+      "file": "2026.3.2-2025.3.6项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 10,
+      "projectId": 250,
+      "projectName": "宿松房产一体化平台",
+      "source": "summary_vs_resolved_entries",
+      "summaryThisWeekDays": 10.5,
+      "resolvedEntryDays": 9.5
+    },
+    {
+      "file": "2026.3.9-2025.3.13项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 11,
+      "projectId": 136,
+      "projectName": "济南房产交易管理平台运行维护",
+      "source": "summary_vs_detail",
+      "summaryThisWeekDays": 13,
+      "detailMemberDays": 28.5
+    },
+    {
+      "file": "2026.3.9-2025.3.13项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 11,
+      "projectId": 136,
+      "projectName": "济南房产交易管理平台运行维护",
+      "source": "summary_vs_resolved_entries",
+      "summaryThisWeekDays": 13,
+      "resolvedEntryDays": 28.5
+    },
+    {
+      "file": "2026.3.9-2025.3.13项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 11,
+      "projectId": 144,
+      "projectName": "日照银行智慧社区维护与升级",
+      "source": "summary_vs_resolved_entries",
+      "summaryThisWeekDays": 27,
+      "resolvedEntryDays": 0
+    },
+    {
+      "file": "2026.3.16-2025.3.20项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 12,
+      "projectId": 136,
+      "projectName": "济南房产交易管理平台运行维护",
+      "source": "detail_total",
+      "sheet": "交付-房产组",
+      "detailMemberDays": 16.5,
+      "detailTotalDays": 13.5
+    },
+    {
+      "file": "2026.3.16-2025.3.20项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 12,
+      "projectId": 118,
+      "projectName": "济南市房产交易管理平台拓展",
+      "source": "detail_total",
+      "sheet": "交付-房产组",
+      "detailMemberDays": 0,
+      "detailTotalDays": 2
+    },
+    {
+      "file": "2026.3.16-2025.3.20项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 12,
+      "projectId": 250,
+      "projectName": "宿松房产一体化平台",
+      "source": "detail_total",
+      "sheet": "交付-房产组",
+      "detailMemberDays": 11.5,
+      "detailTotalDays": 13.5
+    },
+    {
+      "file": "2026.3.16-2025.3.20项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 12,
+      "projectId": 33,
+      "projectName": "智慧维修资金",
+      "source": "summary_vs_resolved_entries",
+      "summaryThisWeekDays": 20.5,
+      "resolvedEntryDays": 0
+    },
+    {
+      "file": "2026.3.16-2025.3.20项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 12,
+      "projectId": 118,
+      "projectName": "济南市房产交易管理平台拓展",
+      "source": "summary_vs_resolved_entries",
+      "summaryThisWeekDays": 2,
+      "resolvedEntryDays": 0
+    },
+    {
+      "file": "2026.3.16-2025.3.20项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 12,
+      "projectId": 136,
+      "projectName": "济南房产交易管理平台运行维护",
+      "source": "summary_vs_detail",
+      "summaryThisWeekDays": 14,
+      "detailMemberDays": 30.5
+    },
+    {
+      "file": "2026.3.16-2025.3.20项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 12,
+      "projectId": 136,
+      "projectName": "济南房产交易管理平台运行维护",
+      "source": "summary_vs_resolved_entries",
+      "summaryThisWeekDays": 14,
+      "resolvedEntryDays": 30.5
+    },
+    {
+      "file": "2026.3.16-2025.3.20项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 12,
+      "projectId": 137,
+      "projectName": "济南不动产登记平台运行维护",
+      "source": "summary_vs_detail",
+      "summaryThisWeekDays": 25,
+      "detailMemberDays": 22
+    },
+    {
+      "file": "2026.3.16-2025.3.20项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 12,
+      "projectId": 137,
+      "projectName": "济南不动产登记平台运行维护",
+      "source": "summary_vs_resolved_entries",
+      "summaryThisWeekDays": 25,
+      "resolvedEntryDays": 22
+    },
+    {
+      "file": "2026.3.16-2025.3.20项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 12,
+      "projectId": 144,
+      "projectName": "日照银行智慧社区维护与升级",
+      "source": "summary_vs_detail",
+      "summaryThisWeekDays": 27,
+      "detailMemberDays": 28
+    },
+    {
+      "file": "2026.3.16-2025.3.20项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 12,
+      "projectId": 144,
+      "projectName": "日照银行智慧社区维护与升级",
+      "source": "summary_vs_resolved_entries",
+      "summaryThisWeekDays": 27,
+      "resolvedEntryDays": 28
+    },
+    {
+      "file": "2026.3.16-2025.3.20项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 12,
+      "projectId": 250,
+      "projectName": "宿松房产一体化平台",
+      "source": "summary_vs_detail",
+      "summaryThisWeekDays": 13.5,
+      "detailMemberDays": 11.5
+    },
+    {
+      "file": "2026.3.16-2025.3.20项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 12,
+      "projectId": 250,
+      "projectName": "宿松房产一体化平台",
+      "source": "summary_vs_resolved_entries",
+      "summaryThisWeekDays": 13.5,
+      "resolvedEntryDays": 11.5
+    },
+    {
+      "file": "2026.3.23-2025.3.27项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 13,
+      "projectId": 137,
+      "projectName": "济南不动产登记平台运行维护",
+      "source": "detail_total",
+      "sheet": "交付-不动产组",
+      "detailMemberDays": 20,
+      "detailTotalDays": 24
+    },
+    {
+      "file": "2026.3.23-2025.3.27项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 13,
+      "projectId": 136,
+      "projectName": "济南房产交易管理平台运行维护",
+      "source": "detail_total",
+      "sheet": "交付-房产组",
+      "detailMemberDays": 16.5,
+      "detailTotalDays": 15
+    },
+    {
+      "file": "2026.3.23-2025.3.27项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 13,
+      "projectId": 33,
+      "projectName": "智慧维修资金",
+      "source": "detail_total",
+      "sheet": "交付-房产组",
+      "detailMemberDays": 27.5,
+      "detailTotalDays": 29.5
+    },
+    {
+      "file": "2026.3.23-2025.3.27项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 13,
+      "projectId": 243,
+      "projectName": "日照市三平台融合、智慧物业、住宅专项维修资金系统信创改造",
+      "source": "detail_total",
+      "sheet": "交付-物业组",
+      "detailMemberDays": 6,
+      "detailTotalDays": 3
+    },
+    {
+      "file": "2026.3.23-2025.3.27项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 13,
+      "projectId": 33,
+      "projectName": "智慧维修资金",
+      "source": "summary_vs_detail",
+      "summaryThisWeekDays": 29.5,
+      "detailMemberDays": 27.5
+    },
+    {
+      "file": "2026.3.23-2025.3.27项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 13,
+      "projectId": 33,
+      "projectName": "智慧维修资金",
+      "source": "summary_vs_resolved_entries",
+      "summaryThisWeekDays": 29.5,
+      "resolvedEntryDays": 27.5
+    },
+    {
+      "file": "2026.3.23-2025.3.27项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 13,
+      "projectId": 136,
+      "projectName": "济南房产交易管理平台运行维护",
+      "source": "summary_vs_detail",
+      "summaryThisWeekDays": 15,
+      "detailMemberDays": 26
+    },
+    {
+      "file": "2026.3.23-2025.3.27项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 13,
+      "projectId": 136,
+      "projectName": "济南房产交易管理平台运行维护",
+      "source": "summary_vs_resolved_entries",
+      "summaryThisWeekDays": 15,
+      "resolvedEntryDays": 26
+    },
+    {
+      "file": "2026.3.23-2025.3.27项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 13,
+      "projectId": 137,
+      "projectName": "济南不动产登记平台运行维护",
+      "source": "summary_vs_detail",
+      "summaryThisWeekDays": 24,
+      "detailMemberDays": 20
+    },
+    {
+      "file": "2026.3.23-2025.3.27项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 13,
+      "projectId": 137,
+      "projectName": "济南不动产登记平台运行维护",
+      "source": "summary_vs_resolved_entries",
+      "summaryThisWeekDays": 24,
+      "resolvedEntryDays": 20
+    },
+    {
+      "file": "2026.3.23-2025.3.27项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 13,
+      "projectId": 148,
+      "projectName": "基层经费监管系统维护与升级",
+      "source": "summary_vs_detail",
+      "summaryThisWeekDays": 3,
+      "detailMemberDays": 7
+    },
+    {
+      "file": "2026.3.23-2025.3.27项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 13,
+      "projectId": 148,
+      "projectName": "基层经费监管系统维护与升级",
+      "source": "summary_vs_resolved_entries",
+      "summaryThisWeekDays": 3,
+      "resolvedEntryDays": 7
+    },
+    {
+      "file": "2026.3.23-2025.3.27项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 13,
+      "projectId": 243,
+      "projectName": "日照市三平台融合、智慧物业、住宅专项维修资金系统信创改造",
+      "source": "summary_vs_detail",
+      "summaryThisWeekDays": 3,
+      "detailMemberDays": 6
+    },
+    {
+      "file": "2026.3.23-2025.3.27项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 13,
+      "projectId": 243,
+      "projectName": "日照市三平台融合、智慧物业、住宅专项维修资金系统信创改造",
+      "source": "summary_vs_resolved_entries",
+      "summaryThisWeekDays": 3,
+      "resolvedEntryDays": 6
+    },
+    {
+      "file": "2026.3.30-2025.4.3项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 14,
+      "projectId": 243,
+      "projectName": "日照市三平台融合、智慧物业、住宅专项维修资金系统信创改造",
+      "source": "detail_total",
+      "sheet": "交付-物业组",
+      "detailMemberDays": 8.5,
+      "detailTotalDays": 0.5
+    },
+    {
+      "file": "2026.3.30-2025.4.3项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 14,
+      "projectId": 136,
+      "projectName": "济南房产交易管理平台运行维护",
+      "source": "summary_vs_detail",
+      "summaryThisWeekDays": 27.5,
+      "detailMemberDays": 40.25
+    },
+    {
+      "file": "2026.3.30-2025.4.3项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 14,
+      "projectId": 136,
+      "projectName": "济南房产交易管理平台运行维护",
+      "source": "summary_vs_resolved_entries",
+      "summaryThisWeekDays": 27.5,
+      "resolvedEntryDays": 40.25
+    },
+    {
+      "file": "2026.3.30-2025.4.3项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 14,
+      "projectId": 243,
+      "projectName": "日照市三平台融合、智慧物业、住宅专项维修资金系统信创改造",
+      "source": "summary_vs_detail",
+      "summaryThisWeekDays": 0.5,
+      "detailMemberDays": 8.5
+    },
+    {
+      "file": "2026.3.30-2025.4.3项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 14,
+      "projectId": 243,
+      "projectName": "日照市三平台融合、智慧物业、住宅专项维修资金系统信创改造",
+      "source": "summary_vs_resolved_entries",
+      "summaryThisWeekDays": 0.5,
+      "resolvedEntryDays": 8.5
+    },
+    {
+      "file": "2026.4.6-2025.4.10项目周报汇总 .xlsx",
+      "reportYear": 2026,
+      "reportWeek": 15,
+      "projectId": 33,
+      "projectName": "智慧维修资金",
+      "source": "summary_vs_detail",
+      "summaryThisWeekDays": 16.5,
+      "detailMemberDays": 14.5
+    },
+    {
+      "file": "2026.4.6-2025.4.10项目周报汇总 .xlsx",
+      "reportYear": 2026,
+      "reportWeek": 15,
+      "projectId": 33,
+      "projectName": "智慧维修资金",
+      "source": "summary_vs_resolved_entries",
+      "summaryThisWeekDays": 16.5,
+      "resolvedEntryDays": 14.5
+    },
+    {
+      "file": "2026.4.6-2025.4.10项目周报汇总 .xlsx",
+      "reportYear": 2026,
+      "reportWeek": 15,
+      "projectId": 122,
+      "projectName": "济南市不动产登记系统功能拓展",
+      "source": "summary_vs_detail",
+      "summaryThisWeekDays": 8.5,
+      "detailMemberDays": 19.25
+    },
+    {
+      "file": "2026.4.6-2025.4.10项目周报汇总 .xlsx",
+      "reportYear": 2026,
+      "reportWeek": 15,
+      "projectId": 122,
+      "projectName": "济南市不动产登记系统功能拓展",
+      "source": "summary_vs_resolved_entries",
+      "summaryThisWeekDays": 8.5,
+      "resolvedEntryDays": 19.25
+    },
+    {
+      "file": "2026.4.6-2025.4.10项目周报汇总 .xlsx",
+      "reportYear": 2026,
+      "reportWeek": 15,
+      "projectId": 136,
+      "projectName": "济南房产交易管理平台运行维护",
+      "source": "summary_vs_detail",
+      "summaryThisWeekDays": 11.5,
+      "detailMemberDays": 20.25
+    },
+    {
+      "file": "2026.4.6-2025.4.10项目周报汇总 .xlsx",
+      "reportYear": 2026,
+      "reportWeek": 15,
+      "projectId": 136,
+      "projectName": "济南房产交易管理平台运行维护",
+      "source": "summary_vs_resolved_entries",
+      "summaryThisWeekDays": 11.5,
+      "resolvedEntryDays": 20.25
+    },
+    {
+      "file": "2026.4.13-2025.4.17项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 16,
+      "projectId": 33,
+      "projectName": "智慧维修资金",
+      "source": "summary_vs_detail",
+      "summaryThisWeekDays": 19,
+      "detailMemberDays": 16
+    },
+    {
+      "file": "2026.4.13-2025.4.17项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 16,
+      "projectId": 33,
+      "projectName": "智慧维修资金",
+      "source": "summary_vs_resolved_entries",
+      "summaryThisWeekDays": 19,
+      "resolvedEntryDays": 16
+    },
+    {
+      "file": "2026.4.13-2025.4.17项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 16,
+      "projectId": 122,
+      "projectName": "济南市不动产登记系统功能拓展",
+      "source": "summary_vs_detail",
+      "summaryThisWeekDays": 6.5,
+      "detailMemberDays": 17
+    },
+    {
+      "file": "2026.4.13-2025.4.17项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 16,
+      "projectId": 122,
+      "projectName": "济南市不动产登记系统功能拓展",
+      "source": "summary_vs_resolved_entries",
+      "summaryThisWeekDays": 6.5,
+      "resolvedEntryDays": 17
+    },
+    {
+      "file": "2026.4.13-2025.4.17项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 16,
+      "projectId": 126,
+      "projectName": "济南不动产登记电子监督系统功能拓展",
+      "source": "summary_vs_detail",
+      "summaryThisWeekDays": 2.5,
+      "detailMemberDays": 11
+    },
+    {
+      "file": "2026.4.13-2025.4.17项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 16,
+      "projectId": 126,
+      "projectName": "济南不动产登记电子监督系统功能拓展",
+      "source": "summary_vs_resolved_entries",
+      "summaryThisWeekDays": 2.5,
+      "resolvedEntryDays": 11
+    },
+    {
+      "file": "2026.4.13-2025.4.17项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 16,
+      "projectId": 136,
+      "projectName": "济南房产交易管理平台运行维护",
+      "source": "summary_vs_detail",
+      "summaryThisWeekDays": 15,
+      "detailMemberDays": 25.75
+    },
+    {
+      "file": "2026.4.13-2025.4.17项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 16,
+      "projectId": 136,
+      "projectName": "济南房产交易管理平台运行维护",
+      "source": "summary_vs_resolved_entries",
+      "summaryThisWeekDays": 15,
+      "resolvedEntryDays": 25.75
+    },
+    {
+      "file": "2026.4.20-2025.4.24项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 17,
+      "projectId": 148,
+      "projectName": "基层经费监管系统维护与升级",
+      "source": "detail_total",
+      "sheet": "交付-JD组",
+      "detailMemberDays": 8.5,
+      "detailTotalDays": 7
+    },
+    {
+      "file": "2026.4.20-2025.4.24项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 17,
+      "projectId": 33,
+      "projectName": "智慧维修资金",
+      "source": "summary_vs_detail",
+      "summaryThisWeekDays": 23,
+      "detailMemberDays": 20
+    },
+    {
+      "file": "2026.4.20-2025.4.24项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 17,
+      "projectId": 33,
+      "projectName": "智慧维修资金",
+      "source": "summary_vs_resolved_entries",
+      "summaryThisWeekDays": 23,
+      "resolvedEntryDays": 20
+    },
+    {
+      "file": "2026.4.20-2025.4.24项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 17,
+      "projectId": 122,
+      "projectName": "济南市不动产登记系统功能拓展",
+      "source": "summary_vs_detail",
+      "summaryThisWeekDays": 11.5,
+      "detailMemberDays": 21
+    },
+    {
+      "file": "2026.4.20-2025.4.24项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 17,
+      "projectId": 122,
+      "projectName": "济南市不动产登记系统功能拓展",
+      "source": "summary_vs_resolved_entries",
+      "summaryThisWeekDays": 11.5,
+      "resolvedEntryDays": 21
+    },
+    {
+      "file": "2026.4.20-2025.4.24项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 17,
+      "projectId": 126,
+      "projectName": "济南不动产登记电子监督系统功能拓展",
+      "source": "summary_vs_detail",
+      "summaryThisWeekDays": 3.75,
+      "detailMemberDays": 13.74
+    },
+    {
+      "file": "2026.4.20-2025.4.24项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 17,
+      "projectId": 126,
+      "projectName": "济南不动产登记电子监督系统功能拓展",
+      "source": "summary_vs_resolved_entries",
+      "summaryThisWeekDays": 3.75,
+      "resolvedEntryDays": 13.74
+    },
+    {
+      "file": "2026.4.20-2025.4.24项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 17,
+      "projectId": 136,
+      "projectName": "济南房产交易管理平台运行维护",
+      "source": "summary_vs_detail",
+      "summaryThisWeekDays": 13,
+      "detailMemberDays": 22
+    },
+    {
+      "file": "2026.4.20-2025.4.24项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 17,
+      "projectId": 136,
+      "projectName": "济南房产交易管理平台运行维护",
+      "source": "summary_vs_resolved_entries",
+      "summaryThisWeekDays": 13,
+      "resolvedEntryDays": 22
+    },
+    {
+      "file": "2026.4.20-2025.4.24项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 17,
+      "projectId": 148,
+      "projectName": "基层经费监管系统维护与升级",
+      "source": "summary_vs_detail",
+      "summaryThisWeekDays": 7,
+      "detailMemberDays": 8.5
+    },
+    {
+      "file": "2026.4.20-2025.4.24项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 17,
+      "projectId": 148,
+      "projectName": "基层经费监管系统维护与升级",
+      "source": "summary_vs_resolved_entries",
+      "summaryThisWeekDays": 7,
+      "resolvedEntryDays": 8.5
+    },
+    {
+      "file": "2026.4.26-2025.4.30项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 18,
+      "projectId": 122,
+      "projectName": "济南市不动产登记系统功能拓展",
+      "source": "summary_vs_detail",
+      "summaryThisWeekDays": 8,
+      "detailMemberDays": 17
+    },
+    {
+      "file": "2026.4.26-2025.4.30项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 18,
+      "projectId": 122,
+      "projectName": "济南市不动产登记系统功能拓展",
+      "source": "summary_vs_resolved_entries",
+      "summaryThisWeekDays": 8,
+      "resolvedEntryDays": 17
+    },
+    {
+      "file": "2026.4.26-2025.4.30项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 18,
+      "projectId": 126,
+      "projectName": "济南不动产登记电子监督系统功能拓展",
+      "source": "summary_vs_detail",
+      "summaryThisWeekDays": 3.25,
+      "detailMemberDays": 17.75
+    },
+    {
+      "file": "2026.4.26-2025.4.30项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 18,
+      "projectId": 126,
+      "projectName": "济南不动产登记电子监督系统功能拓展",
+      "source": "summary_vs_resolved_entries",
+      "summaryThisWeekDays": 3.25,
+      "resolvedEntryDays": 17.75
+    },
+    {
+      "file": "2026.4.26-2025.4.30项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 18,
+      "projectId": 136,
+      "projectName": "济南房产交易管理平台运行维护",
+      "source": "summary_vs_detail",
+      "summaryThisWeekDays": 5,
+      "detailMemberDays": 12.5
+    },
+    {
+      "file": "2026.4.26-2025.4.30项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 18,
+      "projectId": 136,
+      "projectName": "济南房产交易管理平台运行维护",
+      "source": "summary_vs_resolved_entries",
+      "summaryThisWeekDays": 5,
+      "resolvedEntryDays": 12.5
+    },
+    {
+      "file": "2026.5.6-2025.5.9项目周报汇总 .xlsx",
+      "reportYear": 2026,
+      "reportWeek": 19,
+      "projectId": 122,
+      "projectName": "济南市不动产登记系统功能拓展",
+      "source": "summary_vs_detail",
+      "summaryThisWeekDays": 9.5,
+      "detailMemberDays": 21.5
+    },
+    {
+      "file": "2026.5.6-2025.5.9项目周报汇总 .xlsx",
+      "reportYear": 2026,
+      "reportWeek": 19,
+      "projectId": 122,
+      "projectName": "济南市不动产登记系统功能拓展",
+      "source": "summary_vs_resolved_entries",
+      "summaryThisWeekDays": 9.5,
+      "resolvedEntryDays": 21.5
+    },
+    {
+      "file": "2026.5.6-2025.5.9项目周报汇总 .xlsx",
+      "reportYear": 2026,
+      "reportWeek": 19,
+      "projectId": 126,
+      "projectName": "济南不动产登记电子监督系统功能拓展",
+      "source": "summary_vs_detail",
+      "summaryThisWeekDays": 1,
+      "detailMemberDays": 8
+    },
+    {
+      "file": "2026.5.6-2025.5.9项目周报汇总 .xlsx",
+      "reportYear": 2026,
+      "reportWeek": 19,
+      "projectId": 126,
+      "projectName": "济南不动产登记电子监督系统功能拓展",
+      "source": "summary_vs_resolved_entries",
+      "summaryThisWeekDays": 1,
+      "resolvedEntryDays": 8
+    },
+    {
+      "file": "2026.5.6-2025.5.9项目周报汇总 .xlsx",
+      "reportYear": 2026,
+      "reportWeek": 19,
+      "projectId": 136,
+      "projectName": "济南房产交易管理平台运行维护",
+      "source": "summary_vs_detail",
+      "summaryThisWeekDays": 10.5,
+      "detailMemberDays": 17.6
+    },
+    {
+      "file": "2026.5.6-2025.5.9项目周报汇总 .xlsx",
+      "reportYear": 2026,
+      "reportWeek": 19,
+      "projectId": 136,
+      "projectName": "济南房产交易管理平台运行维护",
+      "source": "summary_vs_resolved_entries",
+      "summaryThisWeekDays": 10.5,
+      "resolvedEntryDays": 17.6
+    },
+    {
+      "file": "2026.5.11-2025.5.15项目周报汇总 .xlsx",
+      "reportYear": 2026,
+      "reportWeek": 20,
+      "projectId": 122,
+      "projectName": "济南市不动产登记系统功能拓展",
+      "source": "summary_vs_detail",
+      "summaryThisWeekDays": 13,
+      "detailMemberDays": 24.63
+    },
+    {
+      "file": "2026.5.11-2025.5.15项目周报汇总 .xlsx",
+      "reportYear": 2026,
+      "reportWeek": 20,
+      "projectId": 122,
+      "projectName": "济南市不动产登记系统功能拓展",
+      "source": "summary_vs_resolved_entries",
+      "summaryThisWeekDays": 13,
+      "resolvedEntryDays": 24.63
+    },
+    {
+      "file": "2026.5.11-2025.5.15项目周报汇总 .xlsx",
+      "reportYear": 2026,
+      "reportWeek": 20,
+      "projectId": 126,
+      "projectName": "济南不动产登记电子监督系统功能拓展",
+      "source": "summary_vs_detail",
+      "summaryThisWeekDays": 0,
+      "detailMemberDays": 5.5
+    },
+    {
+      "file": "2026.5.11-2025.5.15项目周报汇总 .xlsx",
+      "reportYear": 2026,
+      "reportWeek": 20,
+      "projectId": 126,
+      "projectName": "济南不动产登记电子监督系统功能拓展",
+      "source": "summary_vs_resolved_entries",
+      "summaryThisWeekDays": 0,
+      "resolvedEntryDays": 5.5
+    },
+    {
+      "file": "2026.5.11-2025.5.15项目周报汇总 .xlsx",
+      "reportYear": 2026,
+      "reportWeek": 20,
+      "projectId": 136,
+      "projectName": "济南房产交易管理平台运行维护",
+      "source": "summary_vs_detail",
+      "summaryThisWeekDays": 11,
+      "detailMemberDays": 20
+    },
+    {
+      "file": "2026.5.11-2025.5.15项目周报汇总 .xlsx",
+      "reportYear": 2026,
+      "reportWeek": 20,
+      "projectId": 136,
+      "projectName": "济南房产交易管理平台运行维护",
+      "source": "summary_vs_resolved_entries",
+      "summaryThisWeekDays": 11,
+      "resolvedEntryDays": 20
+    },
+    {
+      "file": "2026.5.11-2025.5.15项目周报汇总 .xlsx",
+      "reportYear": 2026,
+      "reportWeek": 20,
+      "projectId": 144,
+      "projectName": "日照银行智慧社区维护与升级",
+      "source": "summary_vs_resolved_entries",
+      "summaryThisWeekDays": 41,
+      "resolvedEntryDays": 0
+    },
+    {
+      "file": "2026.5.18-2025.5.22项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 21,
+      "projectId": 122,
+      "projectName": "济南市不动产登记系统功能拓展",
+      "source": "summary_vs_detail",
+      "summaryThisWeekDays": 12,
+      "detailMemberDays": 18.5
+    },
+    {
+      "file": "2026.5.18-2025.5.22项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 21,
+      "projectId": 122,
+      "projectName": "济南市不动产登记系统功能拓展",
+      "source": "summary_vs_resolved_entries",
+      "summaryThisWeekDays": 12,
+      "resolvedEntryDays": 18.5
+    },
+    {
+      "file": "2026.5.18-2025.5.22项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 21,
+      "projectId": 126,
+      "projectName": "济南不动产登记电子监督系统功能拓展",
+      "source": "summary_vs_detail",
+      "summaryThisWeekDays": 0,
+      "detailMemberDays": 8
+    },
+    {
+      "file": "2026.5.18-2025.5.22项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 21,
+      "projectId": 126,
+      "projectName": "济南不动产登记电子监督系统功能拓展",
+      "source": "summary_vs_resolved_entries",
+      "summaryThisWeekDays": 0,
+      "resolvedEntryDays": 8
+    },
+    {
+      "file": "2026.5.18-2025.5.22项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 21,
+      "projectId": 136,
+      "projectName": "济南房产交易管理平台运行维护",
+      "source": "summary_vs_detail",
+      "summaryThisWeekDays": 10,
+      "detailMemberDays": 18
+    },
+    {
+      "file": "2026.5.18-2025.5.22项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 21,
+      "projectId": 136,
+      "projectName": "济南房产交易管理平台运行维护",
+      "source": "summary_vs_resolved_entries",
+      "summaryThisWeekDays": 10,
+      "resolvedEntryDays": 18
+    },
+    {
+      "file": "2026.5.25-2025.5.29项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 22,
+      "projectId": 122,
+      "projectName": "济南市不动产登记系统功能拓展",
+      "source": "summary_vs_detail",
+      "summaryThisWeekDays": 12,
+      "detailMemberDays": 23.5
+    },
+    {
+      "file": "2026.5.25-2025.5.29项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 22,
+      "projectId": 122,
+      "projectName": "济南市不动产登记系统功能拓展",
+      "source": "summary_vs_resolved_entries",
+      "summaryThisWeekDays": 12,
+      "resolvedEntryDays": 23.5
+    },
+    {
+      "file": "2026.5.25-2025.5.29项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 22,
+      "projectId": 126,
+      "projectName": "济南不动产登记电子监督系统功能拓展",
+      "source": "summary_vs_detail",
+      "summaryThisWeekDays": 0,
+      "detailMemberDays": 6.75
+    },
+    {
+      "file": "2026.5.25-2025.5.29项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 22,
+      "projectId": 126,
+      "projectName": "济南不动产登记电子监督系统功能拓展",
+      "source": "summary_vs_resolved_entries",
+      "summaryThisWeekDays": 0,
+      "resolvedEntryDays": 6.75
+    },
+    {
+      "file": "2026.5.25-2025.5.29项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 22,
+      "projectId": 136,
+      "projectName": "济南房产交易管理平台运行维护",
+      "source": "summary_vs_detail",
+      "summaryThisWeekDays": 16,
+      "detailMemberDays": 24
+    },
+    {
+      "file": "2026.5.25-2025.5.29项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 22,
+      "projectId": 136,
+      "projectName": "济南房产交易管理平台运行维护",
+      "source": "summary_vs_resolved_entries",
+      "summaryThisWeekDays": 16,
+      "resolvedEntryDays": 24
+    },
+    {
+      "file": "2026.6.1-2025.6.5项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 23,
+      "projectId": 122,
+      "projectName": "济南市不动产登记系统功能拓展",
+      "source": "summary_vs_detail",
+      "summaryThisWeekDays": 11,
+      "detailMemberDays": 21.5
+    },
+    {
+      "file": "2026.6.1-2025.6.5项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 23,
+      "projectId": 122,
+      "projectName": "济南市不动产登记系统功能拓展",
+      "source": "summary_vs_resolved_entries",
+      "summaryThisWeekDays": 11,
+      "resolvedEntryDays": 21.5
+    },
+    {
+      "file": "2026.6.1-2025.6.5项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 23,
+      "projectId": 126,
+      "projectName": "济南不动产登记电子监督系统功能拓展",
+      "source": "summary_vs_detail",
+      "summaryThisWeekDays": 3.25,
+      "detailMemberDays": 10.75
+    },
+    {
+      "file": "2026.6.1-2025.6.5项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 23,
+      "projectId": 126,
+      "projectName": "济南不动产登记电子监督系统功能拓展",
+      "source": "summary_vs_resolved_entries",
+      "summaryThisWeekDays": 3.25,
+      "resolvedEntryDays": 10.75
+    },
+    {
+      "file": "2026.6.1-2025.6.5项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 23,
+      "projectId": 136,
+      "projectName": "济南房产交易管理平台运行维护",
+      "source": "summary_vs_detail",
+      "summaryThisWeekDays": 17.5,
+      "detailMemberDays": 27
+    },
+    {
+      "file": "2026.6.1-2025.6.5项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 23,
+      "projectId": 136,
+      "projectName": "济南房产交易管理平台运行维护",
+      "source": "summary_vs_resolved_entries",
+      "summaryThisWeekDays": 17.5,
+      "resolvedEntryDays": 27
+    },
+    {
+      "file": "2026.6.1-2025.6.5项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 23,
+      "projectId": 243,
+      "projectName": "日照市三平台融合、智慧物业、住宅专项维修资金系统信创改造",
+      "source": "summary_vs_resolved_entries",
+      "summaryThisWeekDays": 1,
+      "resolvedEntryDays": 0
+    }
+  ],
+  "addedMembers": [
+    {
+      "projectId": 33,
+      "projectName": "智慧维修资金",
+      "uid": "duanyouxuan",
+      "realName": "段佑轩",
+      "role": "member",
+      "status": "active",
+      "source": "weekly_report_import"
+    },
+    {
+      "projectId": 33,
+      "projectName": "智慧维修资金",
+      "uid": "jingxu",
+      "realName": "景旭",
+      "role": "member",
+      "status": "active",
+      "source": "weekly_report_import"
+    },
+    {
+      "projectId": 33,
+      "projectName": "智慧维修资金",
+      "uid": "lishuying",
+      "realName": "李淑英",
+      "role": "member",
+      "status": "active",
+      "source": "weekly_report_import"
+    },
+    {
+      "projectId": 33,
+      "projectName": "智慧维修资金",
+      "uid": "liucunshan",
+      "realName": "刘存山",
+      "role": "member",
+      "status": "active",
+      "source": "weekly_report_import"
+    },
+    {
+      "projectId": 33,
+      "projectName": "智慧维修资金",
+      "uid": "luhonglin",
+      "realName": "路红林",
+      "role": "member",
+      "status": "active",
+      "source": "weekly_report_import"
+    },
+    {
+      "projectId": 33,
+      "projectName": "智慧维修资金",
+      "uid": "marui",
+      "realName": "马睿",
+      "role": "member",
+      "status": "active",
+      "source": "weekly_report_import"
+    },
+    {
+      "projectId": 33,
+      "projectName": "智慧维修资金",
+      "uid": "niulijun",
+      "realName": "牛丽君",
+      "role": "member",
+      "status": "active",
+      "source": "weekly_report_import"
+    },
+    {
+      "projectId": 33,
+      "projectName": "智慧维修资金",
+      "uid": "shishoujie",
+      "realName": "时守杰",
+      "role": "member",
+      "status": "active",
+      "source": "weekly_report_import"
+    },
+    {
+      "projectId": 33,
+      "projectName": "智慧维修资金",
+      "uid": "songwenwen",
+      "realName": "宋雯雯",
+      "role": "member",
+      "status": "active",
+      "source": "weekly_report_import"
+    },
+    {
+      "projectId": 33,
+      "projectName": "智慧维修资金",
+      "uid": "sunda",
+      "realName": "孙达",
+      "role": "member",
+      "status": "active",
+      "source": "weekly_report_import"
+    },
+    {
+      "projectId": 33,
+      "projectName": "智慧维修资金",
+      "uid": "wandeyue",
+      "realName": "万德跃",
+      "role": "member",
+      "status": "active",
+      "source": "weekly_report_import"
+    },
+    {
+      "projectId": 33,
+      "projectName": "智慧维修资金",
+      "uid": "wangdezhi",
+      "realName": "王德智",
+      "role": "member",
+      "status": "active",
+      "source": "weekly_report_import"
+    },
+    {
+      "projectId": 33,
+      "projectName": "智慧维修资金",
+      "uid": "wangzhuang",
+      "realName": "王壮",
+      "role": "member",
+      "status": "active",
+      "source": "weekly_report_import"
+    },
+    {
+      "projectId": 33,
+      "projectName": "智慧维修资金",
+      "uid": "xujianfei",
+      "realName": "许建飞",
+      "role": "member",
+      "status": "active",
+      "source": "weekly_report_import"
+    },
+    {
+      "projectId": 33,
+      "projectName": "智慧维修资金",
+      "uid": "zhaoyanfeng",
+      "realName": "赵衍峰",
+      "role": "member",
+      "status": "active",
+      "source": "weekly_report_import"
+    },
+    {
+      "projectId": 126,
+      "projectName": "济南不动产登记电子监督系统功能拓展",
+      "uid": "wangjian",
+      "realName": "王建",
+      "role": "member",
+      "status": "active",
+      "source": "weekly_report_import"
+    },
+    {
+      "projectId": 136,
+      "projectName": "济南房产交易管理平台运行维护",
+      "uid": "duanyouxuan",
+      "realName": "段佑轩",
+      "role": "member",
+      "status": "active",
+      "source": "weekly_report_import"
+    },
+    {
+      "projectId": 136,
+      "projectName": "济南房产交易管理平台运行维护",
+      "uid": "huanzhengji",
+      "realName": "郇正基",
+      "role": "member",
+      "status": "active",
+      "source": "weekly_report_import"
+    },
+    {
+      "projectId": 136,
+      "projectName": "济南房产交易管理平台运行维护",
+      "uid": "jingxu",
+      "realName": "景旭",
+      "role": "member",
+      "status": "active",
+      "source": "weekly_report_import"
+    },
+    {
+      "projectId": 136,
+      "projectName": "济南房产交易管理平台运行维护",
+      "uid": "liucunshan",
+      "realName": "刘存山",
+      "role": "member",
+      "status": "active",
+      "source": "weekly_report_import"
+    },
+    {
+      "projectId": 136,
+      "projectName": "济南房产交易管理平台运行维护",
+      "uid": "niulijun",
+      "realName": "牛丽君",
+      "role": "member",
+      "status": "active",
+      "source": "weekly_report_import"
+    },
+    {
+      "projectId": 136,
+      "projectName": "济南房产交易管理平台运行维护",
+      "uid": "shishoujie",
+      "realName": "时守杰",
+      "role": "member",
+      "status": "active",
+      "source": "weekly_report_import"
+    },
+    {
+      "projectId": 136,
+      "projectName": "济南房产交易管理平台运行维护",
+      "uid": "wandeyue",
+      "realName": "万德跃",
+      "role": "member",
+      "status": "active",
+      "source": "weekly_report_import"
+    },
+    {
+      "projectId": 136,
+      "projectName": "济南房产交易管理平台运行维护",
+      "uid": "wangdezhi",
+      "realName": "王德智",
+      "role": "member",
+      "status": "active",
+      "source": "weekly_report_import"
+    },
+    {
+      "projectId": 136,
+      "projectName": "济南房产交易管理平台运行维护",
+      "uid": "wangyanlei",
+      "realName": "王延磊",
+      "role": "member",
+      "status": "active",
+      "source": "weekly_report_import"
+    },
+    {
+      "projectId": 136,
+      "projectName": "济南房产交易管理平台运行维护",
+      "uid": "wangzhuang",
+      "realName": "王壮",
+      "role": "member",
+      "status": "active",
+      "source": "weekly_report_import"
+    },
+    {
+      "projectId": 136,
+      "projectName": "济南房产交易管理平台运行维护",
+      "uid": "wushengao",
+      "realName": "吴胜傲",
+      "role": "member",
+      "status": "active",
+      "source": "weekly_report_import"
+    },
+    {
+      "projectId": 211,
+      "projectName": "汇智物业一体化信息管理平台",
+      "uid": "marui",
+      "realName": "马睿",
+      "role": "member",
+      "status": "active",
+      "source": "weekly_report_import"
+    },
+    {
+      "projectId": 211,
+      "projectName": "汇智物业一体化信息管理平台",
+      "uid": "zhaoyanfeng",
+      "realName": "赵衍峰",
+      "role": "member",
+      "status": "active",
+      "source": "weekly_report_import"
+    },
+    {
+      "projectId": 227,
+      "projectName": "阳信房源超市运维项目",
+      "uid": "wanghengtong",
+      "realName": "王恒通",
+      "role": "member",
+      "status": "active",
+      "source": "weekly_report_import"
+    },
+    {
+      "projectId": 233,
+      "projectName": "汇房云中介SaaS服务平台",
+      "uid": "lubo",
+      "realName": "卢波",
+      "role": "member",
+      "status": "active",
+      "source": "weekly_report_import"
+    },
+    {
+      "projectId": 233,
+      "projectName": "汇房云中介SaaS服务平台",
+      "uid": "wangshuai",
+      "realName": "王帅",
+      "role": "member",
+      "status": "active",
+      "source": "weekly_report_import"
+    },
+    {
+      "projectId": 241,
+      "projectName": "基础平台",
+      "uid": "caoqian",
+      "realName": "曹倩",
+      "role": "member",
+      "status": "active",
+      "source": "weekly_report_import"
+    },
+    {
+      "projectId": 241,
+      "projectName": "基础平台",
+      "uid": "chenyiming",
+      "realName": "陈一明",
+      "role": "member",
+      "status": "active",
+      "source": "weekly_report_import"
+    },
+    {
+      "projectId": 241,
+      "projectName": "基础平台",
+      "uid": "pengbukun",
+      "realName": "彭步坤",
+      "role": "member",
+      "status": "active",
+      "source": "weekly_report_import"
+    },
+    {
+      "projectId": 244,
+      "projectName": "车位使用权公证备案平台",
+      "uid": "xuxingxin",
+      "realName": "许兴欣",
+      "role": "member",
+      "status": "active",
+      "source": "weekly_report_import"
+    },
+    {
+      "projectId": 253,
+      "projectName": "济南市泉农通信息平台二期",
+      "uid": "duanyouxuan",
+      "realName": "段佑轩",
+      "role": "member",
+      "status": "active",
+      "source": "weekly_report_import"
+    },
+    {
+      "projectId": 253,
+      "projectName": "济南市泉农通信息平台二期",
+      "uid": "fengqingzhao",
+      "realName": "冯庆召",
+      "role": "member",
+      "status": "active",
+      "source": "weekly_report_import"
+    },
+    {
+      "projectId": 253,
+      "projectName": "济南市泉农通信息平台二期",
+      "uid": "hanhuabin",
+      "realName": "韩化斌",
+      "role": "member",
+      "status": "active",
+      "source": "weekly_report_import"
+    },
+    {
+      "projectId": 253,
+      "projectName": "济南市泉农通信息平台二期",
+      "uid": "liangchao",
+      "realName": "梁超",
+      "role": "member",
+      "status": "active",
+      "source": "weekly_report_import"
+    },
+    {
+      "projectId": 253,
+      "projectName": "济南市泉农通信息平台二期",
+      "uid": "wangcheng",
+      "realName": "王成",
+      "role": "member",
+      "status": "active",
+      "source": "weekly_report_import"
+    },
+    {
+      "projectId": 253,
+      "projectName": "济南市泉农通信息平台二期",
+      "uid": "wanghengtong",
+      "realName": "王恒通",
+      "role": "member",
+      "status": "active",
+      "source": "weekly_report_import"
+    },
+    {
+      "projectId": 253,
+      "projectName": "济南市泉农通信息平台二期",
+      "uid": "wangyanlei",
+      "realName": "王延磊",
+      "role": "member",
+      "status": "active",
+      "source": "weekly_report_import"
+    },
+    {
+      "projectId": 253,
+      "projectName": "济南市泉农通信息平台二期",
+      "uid": "yuanchang",
+      "realName": "袁畅",
+      "role": "member",
+      "status": "active",
+      "source": "weekly_report_import"
+    },
+    {
+      "projectId": 253,
+      "projectName": "济南市泉农通信息平台二期",
+      "uid": "zhangdawei",
+      "realName": "张大伟",
+      "role": "member",
+      "status": "active",
+      "source": "weekly_report_import"
+    },
+    {
+      "projectId": 253,
+      "projectName": "济南市泉农通信息平台二期",
+      "uid": "zhangjinzhi",
+      "realName": "张金枝",
+      "role": "member",
+      "status": "active",
+      "source": "weekly_report_import"
+    }
+  ],
+  "appliedReports": [
+    {
+      "file": "2026.2.24-2025.2.28项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 9,
+      "projectId": 118,
+      "projectName": "济南市房产交易管理平台拓展",
+      "reportId": 4,
+      "entryCount": 1,
+      "workItemCount": 4
+    },
+    {
+      "file": "2026.2.24-2025.2.28项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 9,
+      "projectId": 122,
+      "projectName": "济南市不动产登记系统功能拓展",
+      "reportId": 5,
+      "entryCount": 6,
+      "workItemCount": 16
+    },
+    {
+      "file": "2026.2.24-2025.2.28项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 9,
+      "projectId": 126,
+      "projectName": "济南不动产登记电子监督系统功能拓展",
+      "reportId": 6,
+      "entryCount": 3,
+      "workItemCount": 3
+    },
+    {
+      "file": "2026.2.24-2025.2.28项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 9,
+      "projectId": 127,
+      "projectName": "济南市不动产登记全量数据汇交及比对系统",
+      "reportId": 7,
+      "entryCount": 1,
+      "workItemCount": 1
+    },
+    {
+      "file": "2026.2.24-2025.2.28项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 9,
+      "projectId": 131,
+      "projectName": "济南市不动产登记预受理系统",
+      "reportId": 8,
+      "entryCount": 1,
+      "workItemCount": 11
+    },
+    {
+      "file": "2026.2.24-2025.2.28项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 9,
+      "projectId": 136,
+      "projectName": "济南房产交易管理平台运行维护",
+      "reportId": 9,
+      "entryCount": 10,
+      "workItemCount": 10
+    },
+    {
+      "file": "2026.2.24-2025.2.28项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 9,
+      "projectId": 144,
+      "projectName": "日照银行智慧社区维护与升级",
+      "reportId": 10,
+      "entryCount": 5,
+      "workItemCount": 16
+    },
+    {
+      "file": "2026.2.24-2025.2.28项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 9,
+      "projectId": 148,
+      "projectName": "基层经费监管系统维护与升级",
+      "reportId": 11,
+      "entryCount": 1,
+      "workItemCount": 1
+    },
+    {
+      "file": "2026.2.24-2025.2.28项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 9,
+      "projectId": 228,
+      "projectName": "济南市不动产登记中心不动产登记信息平台信创升级改造",
+      "reportId": 12,
+      "entryCount": 7,
+      "workItemCount": 7
+    },
+    {
+      "file": "2026.2.24-2025.2.28项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 9,
+      "projectId": 231,
+      "projectName": "济南房产交易与租赁服务平台",
+      "reportId": 13,
+      "entryCount": 3,
+      "workItemCount": 3
+    },
+    {
+      "file": "2026.2.24-2025.2.28项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 9,
+      "projectId": 232,
+      "projectName": "不动产登记人工智能数字人",
+      "reportId": 14,
+      "entryCount": 4,
+      "workItemCount": 4
+    },
+    {
+      "file": "2026.2.24-2025.2.28项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 9,
+      "projectId": 239,
+      "projectName": "山东省机关事务局职工房改房管理系统适配改造",
+      "reportId": 15,
+      "entryCount": 1,
+      "workItemCount": 1
+    },
+    {
+      "file": "2026.2.24-2025.2.28项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 9,
+      "projectId": 241,
+      "projectName": "基础平台",
+      "reportId": 16,
+      "entryCount": 4,
+      "workItemCount": 5
+    },
+    {
+      "file": "2026.2.24-2025.2.28项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 9,
+      "projectId": 243,
+      "projectName": "日照市三平台融合、智慧物业、住宅专项维修资金系统信创改造",
+      "reportId": 17,
+      "entryCount": 1,
+      "workItemCount": 1
+    },
+    {
+      "file": "2026.2.24-2025.2.28项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 9,
+      "projectId": 244,
+      "projectName": "车位使用权公证备案平台",
+      "reportId": 18,
+      "entryCount": 2,
+      "workItemCount": 2
+    },
+    {
+      "file": "2026.2.24-2025.2.28项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 9,
+      "projectId": 245,
+      "projectName": "济南市联合资产交易公示平台",
+      "reportId": 19,
+      "entryCount": 12,
+      "workItemCount": 12
+    },
+    {
+      "file": "2026.2.24-2025.2.28项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 9,
+      "projectId": 247,
+      "projectName": "住房租赁智慧管理与服务平台",
+      "reportId": 20,
+      "entryCount": 1,
+      "workItemCount": 2
+    },
+    {
+      "file": "2026.2.24-2025.2.28项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 9,
+      "projectId": 248,
+      "projectName": "卓识网安业务平台系统开发",
+      "reportId": 21,
+      "entryCount": 6,
+      "workItemCount": 7
+    },
+    {
+      "file": "2026.2.24-2025.2.28项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 9,
+      "projectId": 249,
+      "projectName": "滨州市智慧物业管理服务平台实施项目",
+      "reportId": 22,
+      "entryCount": 5,
+      "workItemCount": 6
+    },
+    {
+      "file": "2026.2.24-2025.2.28项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 9,
+      "projectId": 250,
+      "projectName": "宿松房产一体化平台",
+      "reportId": 23,
+      "entryCount": 3,
+      "workItemCount": 4
+    },
+    {
+      "file": "2026.2.24-2025.2.28项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 9,
+      "projectId": 253,
+      "projectName": "济南市泉农通信息平台二期",
+      "reportId": 495,
+      "entryCount": 2,
+      "workItemCount": 3
+    },
+    {
+      "file": "2026.3.2-2025.3.6项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 10,
+      "projectId": 33,
+      "projectName": "智慧维修资金",
+      "reportId": 496,
+      "entryCount": 4,
+      "workItemCount": 5
+    },
+    {
+      "file": "2026.3.2-2025.3.6项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 10,
+      "projectId": 118,
+      "projectName": "济南市房产交易管理平台拓展",
+      "reportId": 24,
+      "entryCount": 1,
+      "workItemCount": 4
+    },
+    {
+      "file": "2026.3.2-2025.3.6项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 10,
+      "projectId": 122,
+      "projectName": "济南市不动产登记系统功能拓展",
+      "reportId": 25,
+      "entryCount": 4,
+      "workItemCount": 13
+    },
+    {
+      "file": "2026.3.2-2025.3.6项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 10,
+      "projectId": 126,
+      "projectName": "济南不动产登记电子监督系统功能拓展",
+      "reportId": 26,
+      "entryCount": 2,
+      "workItemCount": 2
+    },
+    {
+      "file": "2026.3.2-2025.3.6项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 10,
+      "projectId": 127,
+      "projectName": "济南市不动产登记全量数据汇交及比对系统",
+      "reportId": 27,
+      "entryCount": 2,
+      "workItemCount": 2
+    },
+    {
+      "file": "2026.3.2-2025.3.6项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 10,
+      "projectId": 136,
+      "projectName": "济南房产交易管理平台运行维护",
+      "reportId": 28,
+      "entryCount": 11,
+      "workItemCount": 11
+    },
+    {
+      "file": "2026.3.2-2025.3.6项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 10,
+      "projectId": 137,
+      "projectName": "济南不动产登记平台运行维护",
+      "reportId": 29,
+      "entryCount": 4,
+      "workItemCount": 10
+    },
+    {
+      "file": "2026.3.2-2025.3.6项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 10,
+      "projectId": 144,
+      "projectName": "日照银行智慧社区维护与升级",
+      "reportId": 30,
+      "entryCount": 5,
+      "workItemCount": 16
+    },
+    {
+      "file": "2026.3.2-2025.3.6项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 10,
+      "projectId": 148,
+      "projectName": "基层经费监管系统维护与升级",
+      "reportId": 31,
+      "entryCount": 2,
+      "workItemCount": 2
+    },
+    {
+      "file": "2026.3.2-2025.3.6项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 10,
+      "projectId": 228,
+      "projectName": "济南市不动产登记中心不动产登记信息平台信创升级改造",
+      "reportId": 32,
+      "entryCount": 6,
+      "workItemCount": 7
+    },
+    {
+      "file": "2026.3.2-2025.3.6项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 10,
+      "projectId": 230,
+      "projectName": "汇智不动产登记电子监督系统",
+      "reportId": 33,
+      "entryCount": 3,
+      "workItemCount": 3
+    },
+    {
+      "file": "2026.3.2-2025.3.6项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 10,
+      "projectId": 231,
+      "projectName": "济南房产交易与租赁服务平台",
+      "reportId": 34,
+      "entryCount": 3,
+      "workItemCount": 3
+    },
+    {
+      "file": "2026.3.2-2025.3.6项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 10,
+      "projectId": 232,
+      "projectName": "不动产登记人工智能数字人",
+      "reportId": 35,
+      "entryCount": 4,
+      "workItemCount": 5
+    },
+    {
+      "file": "2026.3.2-2025.3.6项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 10,
+      "projectId": 233,
+      "projectName": "汇房云中介SaaS服务平台",
+      "reportId": 509,
+      "entryCount": 1,
+      "workItemCount": 1
+    },
+    {
+      "file": "2026.3.2-2025.3.6项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 10,
+      "projectId": 239,
+      "projectName": "山东省机关事务局职工房改房管理系统适配改造",
+      "reportId": 36,
+      "entryCount": 1,
+      "workItemCount": 1
+    },
+    {
+      "file": "2026.3.2-2025.3.6项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 10,
+      "projectId": 241,
+      "projectName": "基础平台",
+      "reportId": 37,
+      "entryCount": 4,
+      "workItemCount": 12
+    },
+    {
+      "file": "2026.3.2-2025.3.6项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 10,
+      "projectId": 243,
+      "projectName": "日照市三平台融合、智慧物业、住宅专项维修资金系统信创改造",
+      "reportId": 38,
+      "entryCount": 1,
+      "workItemCount": 1
+    },
+    {
+      "file": "2026.3.2-2025.3.6项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 10,
+      "projectId": 244,
+      "projectName": "车位使用权公证备案平台",
+      "reportId": 39,
+      "entryCount": 3,
+      "workItemCount": 3
+    },
+    {
+      "file": "2026.3.2-2025.3.6项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 10,
+      "projectId": 245,
+      "projectName": "济南市联合资产交易公示平台",
+      "reportId": 40,
+      "entryCount": 10,
+      "workItemCount": 11
+    },
+    {
+      "file": "2026.3.2-2025.3.6项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 10,
+      "projectId": 247,
+      "projectName": "住房租赁智慧管理与服务平台",
+      "reportId": 41,
+      "entryCount": 1,
+      "workItemCount": 2
+    },
+    {
+      "file": "2026.3.2-2025.3.6项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 10,
+      "projectId": 248,
+      "projectName": "卓识网安业务平台系统开发",
+      "reportId": 42,
+      "entryCount": 5,
+      "workItemCount": 6
+    },
+    {
+      "file": "2026.3.2-2025.3.6项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 10,
+      "projectId": 249,
+      "projectName": "滨州市智慧物业管理服务平台实施项目",
+      "reportId": 43,
+      "entryCount": 5,
+      "workItemCount": 9
+    },
+    {
+      "file": "2026.3.2-2025.3.6项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 10,
+      "projectId": 250,
+      "projectName": "宿松房产一体化平台",
+      "reportId": 44,
+      "entryCount": 3,
+      "workItemCount": 4
+    },
+    {
+      "file": "2026.3.2-2025.3.6项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 10,
+      "projectId": 253,
+      "projectName": "济南市泉农通信息平台二期",
+      "reportId": 519,
+      "entryCount": 2,
+      "workItemCount": 3
+    },
+    {
+      "file": "2026.3.9-2025.3.13项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 11,
+      "projectId": 33,
+      "projectName": "智慧维修资金",
+      "reportId": 520,
+      "entryCount": 5,
+      "workItemCount": 6
+    },
+    {
+      "file": "2026.3.9-2025.3.13项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 11,
+      "projectId": 118,
+      "projectName": "济南市房产交易管理平台拓展",
+      "reportId": 45,
+      "entryCount": 1,
+      "workItemCount": 2
+    },
+    {
+      "file": "2026.3.9-2025.3.13项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 11,
+      "projectId": 122,
+      "projectName": "济南市不动产登记系统功能拓展",
+      "reportId": 46,
+      "entryCount": 4,
+      "workItemCount": 11
+    },
+    {
+      "file": "2026.3.9-2025.3.13项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 11,
+      "projectId": 126,
+      "projectName": "济南不动产登记电子监督系统功能拓展",
+      "reportId": 47,
+      "entryCount": 3,
+      "workItemCount": 3
+    },
+    {
+      "file": "2026.3.9-2025.3.13项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 11,
+      "projectId": 127,
+      "projectName": "济南市不动产登记全量数据汇交及比对系统",
+      "reportId": 48,
+      "entryCount": 3,
+      "workItemCount": 3
+    },
+    {
+      "file": "2026.3.9-2025.3.13项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 11,
+      "projectId": 133,
+      "projectName": "济南市不动产登记云柜台系统",
+      "reportId": 49,
+      "entryCount": 1,
+      "workItemCount": 1
+    },
+    {
+      "file": "2026.3.9-2025.3.13项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 11,
+      "projectId": 136,
+      "projectName": "济南房产交易管理平台运行维护",
+      "reportId": 50,
+      "entryCount": 11,
+      "workItemCount": 11
+    },
+    {
+      "file": "2026.3.9-2025.3.13项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 11,
+      "projectId": 137,
+      "projectName": "济南不动产登记平台运行维护",
+      "reportId": 51,
+      "entryCount": 4,
+      "workItemCount": 10
+    },
+    {
+      "file": "2026.3.9-2025.3.13项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 11,
+      "projectId": 148,
+      "projectName": "基层经费监管系统维护与升级",
+      "reportId": 52,
+      "entryCount": 2,
+      "workItemCount": 3
+    },
+    {
+      "file": "2026.3.9-2025.3.13项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 11,
+      "projectId": 228,
+      "projectName": "济南市不动产登记中心不动产登记信息平台信创升级改造",
+      "reportId": 53,
+      "entryCount": 4,
+      "workItemCount": 5
+    },
+    {
+      "file": "2026.3.9-2025.3.13项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 11,
+      "projectId": 231,
+      "projectName": "济南房产交易与租赁服务平台",
+      "reportId": 54,
+      "entryCount": 3,
+      "workItemCount": 3
+    },
+    {
+      "file": "2026.3.9-2025.3.13项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 11,
+      "projectId": 232,
+      "projectName": "不动产登记人工智能数字人",
+      "reportId": 55,
+      "entryCount": 4,
+      "workItemCount": 4
+    },
+    {
+      "file": "2026.3.9-2025.3.13项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 11,
+      "projectId": 233,
+      "projectName": "汇房云中介SaaS服务平台",
+      "reportId": 56,
+      "entryCount": 2,
+      "workItemCount": 2
+    },
+    {
+      "file": "2026.3.9-2025.3.13项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 11,
+      "projectId": 237,
+      "projectName": "汇房云培训考试系统",
+      "reportId": 57,
+      "entryCount": 3,
+      "workItemCount": 3
+    },
+    {
+      "file": "2026.3.9-2025.3.13项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 11,
+      "projectId": 239,
+      "projectName": "山东省机关事务局职工房改房管理系统适配改造",
+      "reportId": 58,
+      "entryCount": 1,
+      "workItemCount": 1
+    },
+    {
+      "file": "2026.3.9-2025.3.13项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 11,
+      "projectId": 241,
+      "projectName": "基础平台",
+      "reportId": 59,
+      "entryCount": 3,
+      "workItemCount": 9
+    },
+    {
+      "file": "2026.3.9-2025.3.13项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 11,
+      "projectId": 243,
+      "projectName": "日照市三平台融合、智慧物业、住宅专项维修资金系统信创改造",
+      "reportId": 60,
+      "entryCount": 1,
+      "workItemCount": 1
+    },
+    {
+      "file": "2026.3.9-2025.3.13项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 11,
+      "projectId": 245,
+      "projectName": "济南市联合资产交易公示平台",
+      "reportId": 61,
+      "entryCount": 9,
+      "workItemCount": 9
+    },
+    {
+      "file": "2026.3.9-2025.3.13项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 11,
+      "projectId": 247,
+      "projectName": "住房租赁智慧管理与服务平台",
+      "reportId": 62,
+      "entryCount": 1,
+      "workItemCount": 3
+    },
+    {
+      "file": "2026.3.9-2025.3.13项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 11,
+      "projectId": 248,
+      "projectName": "卓识网安业务平台系统开发",
+      "reportId": 63,
+      "entryCount": 3,
+      "workItemCount": 3
+    },
+    {
+      "file": "2026.3.9-2025.3.13项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 11,
+      "projectId": 249,
+      "projectName": "滨州市智慧物业管理服务平台实施项目",
+      "reportId": 64,
+      "entryCount": 4,
+      "workItemCount": 7
+    },
+    {
+      "file": "2026.3.9-2025.3.13项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 11,
+      "projectId": 250,
+      "projectName": "宿松房产一体化平台",
+      "reportId": 65,
+      "entryCount": 4,
+      "workItemCount": 4
+    },
+    {
+      "file": "2026.3.9-2025.3.13项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 11,
+      "projectId": 253,
+      "projectName": "济南市泉农通信息平台二期",
+      "reportId": 542,
+      "entryCount": 2,
+      "workItemCount": 3
+    },
+    {
+      "file": "2026.3.16-2025.3.20项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 12,
+      "projectId": 122,
+      "projectName": "济南市不动产登记系统功能拓展",
+      "reportId": 66,
+      "entryCount": 4,
+      "workItemCount": 11
+    },
+    {
+      "file": "2026.3.16-2025.3.20项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 12,
+      "projectId": 126,
+      "projectName": "济南不动产登记电子监督系统功能拓展",
+      "reportId": 67,
+      "entryCount": 2,
+      "workItemCount": 2
+    },
+    {
+      "file": "2026.3.16-2025.3.20项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 12,
+      "projectId": 127,
+      "projectName": "济南市不动产登记全量数据汇交及比对系统",
+      "reportId": 68,
+      "entryCount": 3,
+      "workItemCount": 3
+    },
+    {
+      "file": "2026.3.16-2025.3.20项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 12,
+      "projectId": 136,
+      "projectName": "济南房产交易管理平台运行维护",
+      "reportId": 69,
+      "entryCount": 13,
+      "workItemCount": 17
+    },
+    {
+      "file": "2026.3.16-2025.3.20项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 12,
+      "projectId": 137,
+      "projectName": "济南不动产登记平台运行维护",
+      "reportId": 70,
+      "entryCount": 5,
+      "workItemCount": 5
+    },
+    {
+      "file": "2026.3.16-2025.3.20项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 12,
+      "projectId": 144,
+      "projectName": "日照银行智慧社区维护与升级",
+      "reportId": 71,
+      "entryCount": 7,
+      "workItemCount": 24
+    },
+    {
+      "file": "2026.3.16-2025.3.20项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 12,
+      "projectId": 148,
+      "projectName": "基层经费监管系统维护与升级",
+      "reportId": 72,
+      "entryCount": 2,
+      "workItemCount": 3
+    },
+    {
+      "file": "2026.3.16-2025.3.20项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 12,
+      "projectId": 211,
+      "projectName": "汇智物业一体化信息管理平台",
+      "reportId": 73,
+      "entryCount": 5,
+      "workItemCount": 5
+    },
+    {
+      "file": "2026.3.16-2025.3.20项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 12,
+      "projectId": 228,
+      "projectName": "济南市不动产登记中心不动产登记信息平台信创升级改造",
+      "reportId": 74,
+      "entryCount": 4,
+      "workItemCount": 9
+    },
+    {
+      "file": "2026.3.16-2025.3.20项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 12,
+      "projectId": 231,
+      "projectName": "济南房产交易与租赁服务平台",
+      "reportId": 75,
+      "entryCount": 3,
+      "workItemCount": 3
+    },
+    {
+      "file": "2026.3.16-2025.3.20项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 12,
+      "projectId": 232,
+      "projectName": "不动产登记人工智能数字人",
+      "reportId": 76,
+      "entryCount": 4,
+      "workItemCount": 4
+    },
+    {
+      "file": "2026.3.16-2025.3.20项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 12,
+      "projectId": 233,
+      "projectName": "汇房云中介SaaS服务平台",
+      "reportId": 77,
+      "entryCount": 4,
+      "workItemCount": 4
+    },
+    {
+      "file": "2026.3.16-2025.3.20项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 12,
+      "projectId": 239,
+      "projectName": "山东省机关事务局职工房改房管理系统适配改造",
+      "reportId": 78,
+      "entryCount": 2,
+      "workItemCount": 4
+    },
+    {
+      "file": "2026.3.16-2025.3.20项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 12,
+      "projectId": 241,
+      "projectName": "基础平台",
+      "reportId": 79,
+      "entryCount": 3,
+      "workItemCount": 10
+    },
+    {
+      "file": "2026.3.16-2025.3.20项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 12,
+      "projectId": 243,
+      "projectName": "日照市三平台融合、智慧物业、住宅专项维修资金系统信创改造",
+      "reportId": 80,
+      "entryCount": 1,
+      "workItemCount": 1
+    },
+    {
+      "file": "2026.3.16-2025.3.20项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 12,
+      "projectId": 245,
+      "projectName": "济南市联合资产交易公示平台",
+      "reportId": 81,
+      "entryCount": 9,
+      "workItemCount": 9
+    },
+    {
+      "file": "2026.3.16-2025.3.20项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 12,
+      "projectId": 247,
+      "projectName": "住房租赁智慧管理与服务平台",
+      "reportId": 82,
+      "entryCount": 1,
+      "workItemCount": 2
+    },
+    {
+      "file": "2026.3.16-2025.3.20项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 12,
+      "projectId": 248,
+      "projectName": "卓识网安业务平台系统开发",
+      "reportId": 83,
+      "entryCount": 3,
+      "workItemCount": 3
+    },
+    {
+      "file": "2026.3.16-2025.3.20项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 12,
+      "projectId": 249,
+      "projectName": "滨州市智慧物业管理服务平台实施项目",
+      "reportId": 84,
+      "entryCount": 2,
+      "workItemCount": 3
+    },
+    {
+      "file": "2026.3.16-2025.3.20项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 12,
+      "projectId": 250,
+      "projectName": "宿松房产一体化平台",
+      "reportId": 85,
+      "entryCount": 5,
+      "workItemCount": 6
+    },
+    {
+      "file": "2026.3.16-2025.3.20项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 12,
+      "projectId": 253,
+      "projectName": "济南市泉农通信息平台二期",
+      "reportId": 563,
+      "entryCount": 2,
+      "workItemCount": 3
+    },
+    {
+      "file": "2026.3.23-2025.3.27项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 13,
+      "projectId": 33,
+      "projectName": "智慧维修资金",
+      "reportId": 564,
+      "entryCount": 8,
+      "workItemCount": 10
+    },
+    {
+      "file": "2026.3.23-2025.3.27项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 13,
+      "projectId": 118,
+      "projectName": "济南市房产交易管理平台拓展",
+      "reportId": 86,
+      "entryCount": 1,
+      "workItemCount": 1
+    },
+    {
+      "file": "2026.3.23-2025.3.27项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 13,
+      "projectId": 122,
+      "projectName": "济南市不动产登记系统功能拓展",
+      "reportId": 87,
+      "entryCount": 5,
+      "workItemCount": 11
+    },
+    {
+      "file": "2026.3.23-2025.3.27项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 13,
+      "projectId": 127,
+      "projectName": "济南市不动产登记全量数据汇交及比对系统",
+      "reportId": 88,
+      "entryCount": 1,
+      "workItemCount": 1
+    },
+    {
+      "file": "2026.3.23-2025.3.27项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 13,
+      "projectId": 136,
+      "projectName": "济南房产交易管理平台运行维护",
+      "reportId": 89,
+      "entryCount": 12,
+      "workItemCount": 14
+    },
+    {
+      "file": "2026.3.23-2025.3.27项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 13,
+      "projectId": 137,
+      "projectName": "济南不动产登记平台运行维护",
+      "reportId": 90,
+      "entryCount": 5,
+      "workItemCount": 5
+    },
+    {
+      "file": "2026.3.23-2025.3.27项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 13,
+      "projectId": 144,
+      "projectName": "日照银行智慧社区维护与升级",
+      "reportId": 91,
+      "entryCount": 9,
+      "workItemCount": 30
+    },
+    {
+      "file": "2026.3.23-2025.3.27项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 13,
+      "projectId": 148,
+      "projectName": "基层经费监管系统维护与升级",
+      "reportId": 92,
+      "entryCount": 2,
+      "workItemCount": 3
+    },
+    {
+      "file": "2026.3.23-2025.3.27项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 13,
+      "projectId": 228,
+      "projectName": "济南市不动产登记中心不动产登记信息平台信创升级改造",
+      "reportId": 93,
+      "entryCount": 6,
+      "workItemCount": 6
+    },
+    {
+      "file": "2026.3.23-2025.3.27项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 13,
+      "projectId": 230,
+      "projectName": "汇智不动产登记电子监督系统",
+      "reportId": 94,
+      "entryCount": 2,
+      "workItemCount": 2
+    },
+    {
+      "file": "2026.3.23-2025.3.27项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 13,
+      "projectId": 231,
+      "projectName": "济南房产交易与租赁服务平台",
+      "reportId": 95,
+      "entryCount": 3,
+      "workItemCount": 3
+    },
+    {
+      "file": "2026.3.23-2025.3.27项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 13,
+      "projectId": 232,
+      "projectName": "不动产登记人工智能数字人",
+      "reportId": 96,
+      "entryCount": 4,
+      "workItemCount": 5
+    },
+    {
+      "file": "2026.3.23-2025.3.27项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 13,
+      "projectId": 233,
+      "projectName": "汇房云中介SaaS服务平台",
+      "reportId": 97,
+      "entryCount": 3,
+      "workItemCount": 3
+    },
+    {
+      "file": "2026.3.23-2025.3.27项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 13,
+      "projectId": 237,
+      "projectName": "汇房云培训考试系统",
+      "reportId": 98,
+      "entryCount": 1,
+      "workItemCount": 1
+    },
+    {
+      "file": "2026.3.23-2025.3.27项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 13,
+      "projectId": 239,
+      "projectName": "山东省机关事务局职工房改房管理系统适配改造",
+      "reportId": 99,
+      "entryCount": 2,
+      "workItemCount": 4
+    },
+    {
+      "file": "2026.3.23-2025.3.27项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 13,
+      "projectId": 241,
+      "projectName": "基础平台",
+      "reportId": 100,
+      "entryCount": 3,
+      "workItemCount": 9
+    },
+    {
+      "file": "2026.3.23-2025.3.27项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 13,
+      "projectId": 243,
+      "projectName": "日照市三平台融合、智慧物业、住宅专项维修资金系统信创改造",
+      "reportId": 101,
+      "entryCount": 2,
+      "workItemCount": 2
+    },
+    {
+      "file": "2026.3.23-2025.3.27项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 13,
+      "projectId": 244,
+      "projectName": "车位使用权公证备案平台",
+      "reportId": 102,
+      "entryCount": 2,
+      "workItemCount": 2
+    },
+    {
+      "file": "2026.3.23-2025.3.27项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 13,
+      "projectId": 245,
+      "projectName": "济南市联合资产交易公示平台",
+      "reportId": 103,
+      "entryCount": 6,
+      "workItemCount": 6
+    },
+    {
+      "file": "2026.3.23-2025.3.27项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 13,
+      "projectId": 247,
+      "projectName": "住房租赁智慧管理与服务平台",
+      "reportId": 104,
+      "entryCount": 2,
+      "workItemCount": 3
+    },
+    {
+      "file": "2026.3.23-2025.3.27项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 13,
+      "projectId": 248,
+      "projectName": "卓识网安业务平台系统开发",
+      "reportId": 105,
+      "entryCount": 3,
+      "workItemCount": 3
+    },
+    {
+      "file": "2026.3.23-2025.3.27项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 13,
+      "projectId": 249,
+      "projectName": "滨州市智慧物业管理服务平台实施项目",
+      "reportId": 106,
+      "entryCount": 4,
+      "workItemCount": 4
+    },
+    {
+      "file": "2026.3.23-2025.3.27项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 13,
+      "projectId": 250,
+      "projectName": "宿松房产一体化平台",
+      "reportId": 107,
+      "entryCount": 4,
+      "workItemCount": 4
+    },
+    {
+      "file": "2026.3.23-2025.3.27项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 13,
+      "projectId": 251,
+      "projectName": "智慧房产产品线项目",
+      "reportId": 108,
+      "entryCount": 4,
+      "workItemCount": 4
+    },
+    {
+      "file": "2026.3.23-2025.3.27项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 13,
+      "projectId": 253,
+      "projectName": "济南市泉农通信息平台二期",
+      "reportId": 588,
+      "entryCount": 5,
+      "workItemCount": 9
+    },
+    {
+      "file": "2026.3.30-2025.4.3项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 14,
+      "projectId": 33,
+      "projectName": "智慧维修资金",
+      "reportId": 589,
+      "entryCount": 10,
+      "workItemCount": 10
+    },
+    {
+      "file": "2026.3.30-2025.4.3项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 14,
+      "projectId": 118,
+      "projectName": "济南市房产交易管理平台拓展",
+      "reportId": 109,
+      "entryCount": 1,
+      "workItemCount": 1
+    },
+    {
+      "file": "2026.3.30-2025.4.3项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 14,
+      "projectId": 122,
+      "projectName": "济南市不动产登记系统功能拓展",
+      "reportId": 110,
+      "entryCount": 8,
+      "workItemCount": 16
+    },
+    {
+      "file": "2026.3.30-2025.4.3项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 14,
+      "projectId": 126,
+      "projectName": "济南不动产登记电子监督系统功能拓展",
+      "reportId": 111,
+      "entryCount": 1,
+      "workItemCount": 1
+    },
+    {
+      "file": "2026.3.30-2025.4.3项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 14,
+      "projectId": 127,
+      "projectName": "济南市不动产登记全量数据汇交及比对系统",
+      "reportId": 112,
+      "entryCount": 2,
+      "workItemCount": 2
+    },
+    {
+      "file": "2026.3.30-2025.4.3项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 14,
+      "projectId": 136,
+      "projectName": "济南房产交易管理平台运行维护",
+      "reportId": 113,
+      "entryCount": 15,
+      "workItemCount": 15
+    },
+    {
+      "file": "2026.3.30-2025.4.3项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 14,
+      "projectId": 137,
+      "projectName": "济南不动产登记平台运行维护",
+      "reportId": 114,
+      "entryCount": 5,
+      "workItemCount": 5
+    },
+    {
+      "file": "2026.3.30-2025.4.3项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 14,
+      "projectId": 144,
+      "projectName": "日照银行智慧社区维护与升级",
+      "reportId": 115,
+      "entryCount": 11,
+      "workItemCount": 33
+    },
+    {
+      "file": "2026.3.30-2025.4.3项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 14,
+      "projectId": 148,
+      "projectName": "基层经费监管系统维护与升级",
+      "reportId": 116,
+      "entryCount": 1,
+      "workItemCount": 1
+    },
+    {
+      "file": "2026.3.30-2025.4.3项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 14,
+      "projectId": 228,
+      "projectName": "济南市不动产登记中心不动产登记信息平台信创升级改造",
+      "reportId": 117,
+      "entryCount": 5,
+      "workItemCount": 6
+    },
+    {
+      "file": "2026.3.30-2025.4.3项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 14,
+      "projectId": 231,
+      "projectName": "济南房产交易与租赁服务平台",
+      "reportId": 118,
+      "entryCount": 3,
+      "workItemCount": 3
+    },
+    {
+      "file": "2026.3.30-2025.4.3项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 14,
+      "projectId": 232,
+      "projectName": "不动产登记人工智能数字人",
+      "reportId": 119,
+      "entryCount": 3,
+      "workItemCount": 3
+    },
+    {
+      "file": "2026.3.30-2025.4.3项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 14,
+      "projectId": 233,
+      "projectName": "汇房云中介SaaS服务平台",
+      "reportId": 120,
+      "entryCount": 3,
+      "workItemCount": 3
+    },
+    {
+      "file": "2026.3.30-2025.4.3项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 14,
+      "projectId": 239,
+      "projectName": "山东省机关事务局职工房改房管理系统适配改造",
+      "reportId": 121,
+      "entryCount": 2,
+      "workItemCount": 4
+    },
+    {
+      "file": "2026.3.30-2025.4.3项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 14,
+      "projectId": 241,
+      "projectName": "基础平台",
+      "reportId": 603,
+      "entryCount": 2,
+      "workItemCount": 2
+    },
+    {
+      "file": "2026.3.30-2025.4.3项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 14,
+      "projectId": 243,
+      "projectName": "日照市三平台融合、智慧物业、住宅专项维修资金系统信创改造",
+      "reportId": 122,
+      "entryCount": 6,
+      "workItemCount": 7
+    },
+    {
+      "file": "2026.3.30-2025.4.3项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 14,
+      "projectId": 245,
+      "projectName": "济南市联合资产交易公示平台",
+      "reportId": 123,
+      "entryCount": 4,
+      "workItemCount": 4
+    },
+    {
+      "file": "2026.3.30-2025.4.3项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 14,
+      "projectId": 247,
+      "projectName": "住房租赁智慧管理与服务平台",
+      "reportId": 124,
+      "entryCount": 2,
+      "workItemCount": 2
+    },
+    {
+      "file": "2026.3.30-2025.4.3项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 14,
+      "projectId": 248,
+      "projectName": "卓识网安业务平台系统开发",
+      "reportId": 125,
+      "entryCount": 4,
+      "workItemCount": 4
+    },
+    {
+      "file": "2026.3.30-2025.4.3项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 14,
+      "projectId": 249,
+      "projectName": "滨州市智慧物业管理服务平台实施项目",
+      "reportId": 126,
+      "entryCount": 4,
+      "workItemCount": 4
+    },
+    {
+      "file": "2026.3.30-2025.4.3项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 14,
+      "projectId": 250,
+      "projectName": "宿松房产一体化平台",
+      "reportId": 127,
+      "entryCount": 4,
+      "workItemCount": 4
+    },
+    {
+      "file": "2026.3.30-2025.4.3项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 14,
+      "projectId": 251,
+      "projectName": "智慧房产产品线项目",
+      "reportId": 128,
+      "entryCount": 6,
+      "workItemCount": 6
+    },
+    {
+      "file": "2026.3.30-2025.4.3项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 14,
+      "projectId": 252,
+      "projectName": "数据治理平台",
+      "reportId": 129,
+      "entryCount": 2,
+      "workItemCount": 5
+    },
+    {
+      "file": "2026.3.30-2025.4.3项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 14,
+      "projectId": 253,
+      "projectName": "济南市泉农通信息平台二期",
+      "reportId": 612,
+      "entryCount": 5,
+      "workItemCount": 10
+    },
+    {
+      "file": "2026.4.6-2025.4.10项目周报汇总 .xlsx",
+      "reportYear": 2026,
+      "reportWeek": 15,
+      "projectId": 33,
+      "projectName": "智慧维修资金",
+      "reportId": 613,
+      "entryCount": 5,
+      "workItemCount": 6
+    },
+    {
+      "file": "2026.4.6-2025.4.10项目周报汇总 .xlsx",
+      "reportYear": 2026,
+      "reportWeek": 15,
+      "projectId": 122,
+      "projectName": "济南市不动产登记系统功能拓展",
+      "reportId": 130,
+      "entryCount": 9,
+      "workItemCount": 18
+    },
+    {
+      "file": "2026.4.6-2025.4.10项目周报汇总 .xlsx",
+      "reportYear": 2026,
+      "reportWeek": 15,
+      "projectId": 126,
+      "projectName": "济南不动产登记电子监督系统功能拓展",
+      "reportId": 131,
+      "entryCount": 1,
+      "workItemCount": 1
+    },
+    {
+      "file": "2026.4.6-2025.4.10项目周报汇总 .xlsx",
+      "reportYear": 2026,
+      "reportWeek": 15,
+      "projectId": 127,
+      "projectName": "济南市不动产登记全量数据汇交及比对系统",
+      "reportId": 132,
+      "entryCount": 1,
+      "workItemCount": 1
+    },
+    {
+      "file": "2026.4.6-2025.4.10项目周报汇总 .xlsx",
+      "reportYear": 2026,
+      "reportWeek": 15,
+      "projectId": 136,
+      "projectName": "济南房产交易管理平台运行维护",
+      "reportId": 133,
+      "entryCount": 10,
+      "workItemCount": 12
+    },
+    {
+      "file": "2026.4.6-2025.4.10项目周报汇总 .xlsx",
+      "reportYear": 2026,
+      "reportWeek": 15,
+      "projectId": 137,
+      "projectName": "济南不动产登记平台运行维护",
+      "reportId": 134,
+      "entryCount": 5,
+      "workItemCount": 5
+    },
+    {
+      "file": "2026.4.6-2025.4.10项目周报汇总 .xlsx",
+      "reportYear": 2026,
+      "reportWeek": 15,
+      "projectId": 144,
+      "projectName": "日照银行智慧社区维护与升级",
+      "reportId": 135,
+      "entryCount": 11,
+      "workItemCount": 36
+    },
+    {
+      "file": "2026.4.6-2025.4.10项目周报汇总 .xlsx",
+      "reportYear": 2026,
+      "reportWeek": 15,
+      "projectId": 148,
+      "projectName": "基层经费监管系统维护与升级",
+      "reportId": 136,
+      "entryCount": 1,
+      "workItemCount": 1
+    },
+    {
+      "file": "2026.4.6-2025.4.10项目周报汇总 .xlsx",
+      "reportYear": 2026,
+      "reportWeek": 15,
+      "projectId": 228,
+      "projectName": "济南市不动产登记中心不动产登记信息平台信创升级改造",
+      "reportId": 137,
+      "entryCount": 7,
+      "workItemCount": 7
+    },
+    {
+      "file": "2026.4.6-2025.4.10项目周报汇总 .xlsx",
+      "reportYear": 2026,
+      "reportWeek": 15,
+      "projectId": 229,
+      "projectName": "日照市智慧物业监管服务平台系统运维",
+      "reportId": 138,
+      "entryCount": 2,
+      "workItemCount": 2
+    },
+    {
+      "file": "2026.4.6-2025.4.10项目周报汇总 .xlsx",
+      "reportYear": 2026,
+      "reportWeek": 15,
+      "projectId": 231,
+      "projectName": "济南房产交易与租赁服务平台",
+      "reportId": 139,
+      "entryCount": 3,
+      "workItemCount": 3
+    },
+    {
+      "file": "2026.4.6-2025.4.10项目周报汇总 .xlsx",
+      "reportYear": 2026,
+      "reportWeek": 15,
+      "projectId": 232,
+      "projectName": "不动产登记人工智能数字人",
+      "reportId": 140,
+      "entryCount": 3,
+      "workItemCount": 4
+    },
+    {
+      "file": "2026.4.6-2025.4.10项目周报汇总 .xlsx",
+      "reportYear": 2026,
+      "reportWeek": 15,
+      "projectId": 233,
+      "projectName": "汇房云中介SaaS服务平台",
+      "reportId": 141,
+      "entryCount": 3,
+      "workItemCount": 3
+    },
+    {
+      "file": "2026.4.6-2025.4.10项目周报汇总 .xlsx",
+      "reportYear": 2026,
+      "reportWeek": 15,
+      "projectId": 239,
+      "projectName": "山东省机关事务局职工房改房管理系统适配改造",
+      "reportId": 142,
+      "entryCount": 2,
+      "workItemCount": 4
+    },
+    {
+      "file": "2026.4.6-2025.4.10项目周报汇总 .xlsx",
+      "reportYear": 2026,
+      "reportWeek": 15,
+      "projectId": 241,
+      "projectName": "基础平台",
+      "reportId": 627,
+      "entryCount": 1,
+      "workItemCount": 1
+    },
+    {
+      "file": "2026.4.6-2025.4.10项目周报汇总 .xlsx",
+      "reportYear": 2026,
+      "reportWeek": 15,
+      "projectId": 243,
+      "projectName": "日照市三平台融合、智慧物业、住宅专项维修资金系统信创改造",
+      "reportId": 143,
+      "entryCount": 7,
+      "workItemCount": 9
+    },
+    {
+      "file": "2026.4.6-2025.4.10项目周报汇总 .xlsx",
+      "reportYear": 2026,
+      "reportWeek": 15,
+      "projectId": 245,
+      "projectName": "济南市联合资产交易公示平台",
+      "reportId": 144,
+      "entryCount": 5,
+      "workItemCount": 5
+    },
+    {
+      "file": "2026.4.6-2025.4.10项目周报汇总 .xlsx",
+      "reportYear": 2026,
+      "reportWeek": 15,
+      "projectId": 248,
+      "projectName": "卓识网安业务平台系统开发",
+      "reportId": 145,
+      "entryCount": 4,
+      "workItemCount": 4
+    },
+    {
+      "file": "2026.4.6-2025.4.10项目周报汇总 .xlsx",
+      "reportYear": 2026,
+      "reportWeek": 15,
+      "projectId": 249,
+      "projectName": "滨州市智慧物业管理服务平台实施项目",
+      "reportId": 146,
+      "entryCount": 3,
+      "workItemCount": 3
+    },
+    {
+      "file": "2026.4.6-2025.4.10项目周报汇总 .xlsx",
+      "reportYear": 2026,
+      "reportWeek": 15,
+      "projectId": 250,
+      "projectName": "宿松房产一体化平台",
+      "reportId": 290,
+      "entryCount": 3,
+      "workItemCount": 3
+    },
+    {
+      "file": "2026.4.6-2025.4.10项目周报汇总 .xlsx",
+      "reportYear": 2026,
+      "reportWeek": 15,
+      "projectId": 251,
+      "projectName": "智慧房产产品线项目",
+      "reportId": 291,
+      "entryCount": 6,
+      "workItemCount": 7
+    },
+    {
+      "file": "2026.4.6-2025.4.10项目周报汇总 .xlsx",
+      "reportYear": 2026,
+      "reportWeek": 15,
+      "projectId": 252,
+      "projectName": "数据治理平台",
+      "reportId": 292,
+      "entryCount": 2,
+      "workItemCount": 4
+    },
+    {
+      "file": "2026.4.6-2025.4.10项目周报汇总 .xlsx",
+      "reportYear": 2026,
+      "reportWeek": 15,
+      "projectId": 253,
+      "projectName": "济南市泉农通信息平台二期",
+      "reportId": 635,
+      "entryCount": 6,
+      "workItemCount": 11
+    },
+    {
+      "file": "2026.4.13-2025.4.17项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 16,
+      "projectId": 33,
+      "projectName": "智慧维修资金",
+      "reportId": 636,
+      "entryCount": 4,
+      "workItemCount": 4
+    },
+    {
+      "file": "2026.4.13-2025.4.17项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 16,
+      "projectId": 118,
+      "projectName": "济南市房产交易管理平台拓展",
+      "reportId": 293,
+      "entryCount": 1,
+      "workItemCount": 1
+    },
+    {
+      "file": "2026.4.13-2025.4.17项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 16,
+      "projectId": 122,
+      "projectName": "济南市不动产登记系统功能拓展",
+      "reportId": 294,
+      "entryCount": 7,
+      "workItemCount": 14
+    },
+    {
+      "file": "2026.4.13-2025.4.17项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 16,
+      "projectId": 126,
+      "projectName": "济南不动产登记电子监督系统功能拓展",
+      "reportId": 295,
+      "entryCount": 7,
+      "workItemCount": 9
+    },
+    {
+      "file": "2026.4.13-2025.4.17项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 16,
+      "projectId": 136,
+      "projectName": "济南房产交易管理平台运行维护",
+      "reportId": 296,
+      "entryCount": 12,
+      "workItemCount": 13
+    },
+    {
+      "file": "2026.4.13-2025.4.17项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 16,
+      "projectId": 137,
+      "projectName": "济南不动产登记平台运行维护",
+      "reportId": 297,
+      "entryCount": 5,
+      "workItemCount": 5
+    },
+    {
+      "file": "2026.4.13-2025.4.17项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 16,
+      "projectId": 144,
+      "projectName": "日照银行智慧社区维护与升级",
+      "reportId": 298,
+      "entryCount": 11,
+      "workItemCount": 34
+    },
+    {
+      "file": "2026.4.13-2025.4.17项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 16,
+      "projectId": 148,
+      "projectName": "基层经费监管系统维护与升级",
+      "reportId": 299,
+      "entryCount": 2,
+      "workItemCount": 3
+    },
+    {
+      "file": "2026.4.13-2025.4.17项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 16,
+      "projectId": 227,
+      "projectName": "阳信房源超市运维项目",
+      "reportId": 300,
+      "entryCount": 3,
+      "workItemCount": 3
+    },
+    {
+      "file": "2026.4.13-2025.4.17项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 16,
+      "projectId": 228,
+      "projectName": "济南市不动产登记中心不动产登记信息平台信创升级改造",
+      "reportId": 301,
+      "entryCount": 8,
+      "workItemCount": 9
+    },
+    {
+      "file": "2026.4.13-2025.4.17项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 16,
+      "projectId": 229,
+      "projectName": "日照市智慧物业监管服务平台系统运维",
+      "reportId": 302,
+      "entryCount": 1,
+      "workItemCount": 2
+    },
+    {
+      "file": "2026.4.13-2025.4.17项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 16,
+      "projectId": 231,
+      "projectName": "济南房产交易与租赁服务平台",
+      "reportId": 303,
+      "entryCount": 3,
+      "workItemCount": 3
+    },
+    {
+      "file": "2026.4.13-2025.4.17项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 16,
+      "projectId": 232,
+      "projectName": "不动产登记人工智能数字人",
+      "reportId": 304,
+      "entryCount": 2,
+      "workItemCount": 2
+    },
+    {
+      "file": "2026.4.13-2025.4.17项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 16,
+      "projectId": 233,
+      "projectName": "汇房云中介SaaS服务平台",
+      "reportId": 305,
+      "entryCount": 6,
+      "workItemCount": 6
+    },
+    {
+      "file": "2026.4.13-2025.4.17项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 16,
+      "projectId": 237,
+      "projectName": "汇房云培训考试系统",
+      "reportId": 306,
+      "entryCount": 1,
+      "workItemCount": 1
+    },
+    {
+      "file": "2026.4.13-2025.4.17项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 16,
+      "projectId": 239,
+      "projectName": "山东省机关事务局职工房改房管理系统适配改造",
+      "reportId": 307,
+      "entryCount": 2,
+      "workItemCount": 3
+    },
+    {
+      "file": "2026.4.13-2025.4.17项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 16,
+      "projectId": 241,
+      "projectName": "基础平台",
+      "reportId": 308,
+      "entryCount": 2,
+      "workItemCount": 2
+    },
+    {
+      "file": "2026.4.13-2025.4.17项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 16,
+      "projectId": 243,
+      "projectName": "日照市三平台融合、智慧物业、住宅专项维修资金系统信创改造",
+      "reportId": 309,
+      "entryCount": 7,
+      "workItemCount": 9
+    },
+    {
+      "file": "2026.4.13-2025.4.17项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 16,
+      "projectId": 244,
+      "projectName": "车位使用权公证备案平台",
+      "reportId": 310,
+      "entryCount": 2,
+      "workItemCount": 2
+    },
+    {
+      "file": "2026.4.13-2025.4.17项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 16,
+      "projectId": 245,
+      "projectName": "济南市联合资产交易公示平台",
+      "reportId": 311,
+      "entryCount": 5,
+      "workItemCount": 5
+    },
+    {
+      "file": "2026.4.13-2025.4.17项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 16,
+      "projectId": 248,
+      "projectName": "卓识网安业务平台系统开发",
+      "reportId": 312,
+      "entryCount": 4,
+      "workItemCount": 4
+    },
+    {
+      "file": "2026.4.13-2025.4.17项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 16,
+      "projectId": 249,
+      "projectName": "滨州市智慧物业管理服务平台实施项目",
+      "reportId": 313,
+      "entryCount": 4,
+      "workItemCount": 4
+    },
+    {
+      "file": "2026.4.13-2025.4.17项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 16,
+      "projectId": 250,
+      "projectName": "宿松房产一体化平台",
+      "reportId": 314,
+      "entryCount": 3,
+      "workItemCount": 3
+    },
+    {
+      "file": "2026.4.13-2025.4.17项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 16,
+      "projectId": 251,
+      "projectName": "智慧房产产品线项目",
+      "reportId": 315,
+      "entryCount": 6,
+      "workItemCount": 8
+    },
+    {
+      "file": "2026.4.13-2025.4.17项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 16,
+      "projectId": 252,
+      "projectName": "数据治理平台",
+      "reportId": 316,
+      "entryCount": 2,
+      "workItemCount": 6
+    },
+    {
+      "file": "2026.4.13-2025.4.17项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 16,
+      "projectId": 253,
+      "projectName": "济南市泉农通信息平台二期",
+      "reportId": 661,
+      "entryCount": 7,
+      "workItemCount": 14
+    },
+    {
+      "file": "2026.4.20-2025.4.24项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 17,
+      "projectId": 33,
+      "projectName": "智慧维修资金",
+      "reportId": 662,
+      "entryCount": 4,
+      "workItemCount": 6
+    },
+    {
+      "file": "2026.4.20-2025.4.24项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 17,
+      "projectId": 118,
+      "projectName": "济南市房产交易管理平台拓展",
+      "reportId": 317,
+      "entryCount": 1,
+      "workItemCount": 2
+    },
+    {
+      "file": "2026.4.20-2025.4.24项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 17,
+      "projectId": 122,
+      "projectName": "济南市不动产登记系统功能拓展",
+      "reportId": 318,
+      "entryCount": 6,
+      "workItemCount": 14
+    },
+    {
+      "file": "2026.4.20-2025.4.24项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 17,
+      "projectId": 126,
+      "projectName": "济南不动产登记电子监督系统功能拓展",
+      "reportId": 319,
+      "entryCount": 6,
+      "workItemCount": 10
+    },
+    {
+      "file": "2026.4.20-2025.4.24项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 17,
+      "projectId": 136,
+      "projectName": "济南房产交易管理平台运行维护",
+      "reportId": 320,
+      "entryCount": 12,
+      "workItemCount": 13
+    },
+    {
+      "file": "2026.4.20-2025.4.24项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 17,
+      "projectId": 137,
+      "projectName": "济南不动产登记平台运行维护",
+      "reportId": 321,
+      "entryCount": 5,
+      "workItemCount": 5
+    },
+    {
+      "file": "2026.4.20-2025.4.24项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 17,
+      "projectId": 144,
+      "projectName": "日照银行智慧社区维护与升级",
+      "reportId": 322,
+      "entryCount": 9,
+      "workItemCount": 35
+    },
+    {
+      "file": "2026.4.20-2025.4.24项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 17,
+      "projectId": 148,
+      "projectName": "基层经费监管系统维护与升级",
+      "reportId": 323,
+      "entryCount": 3,
+      "workItemCount": 4
+    },
+    {
+      "file": "2026.4.20-2025.4.24项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 17,
+      "projectId": 228,
+      "projectName": "济南市不动产登记中心不动产登记信息平台信创升级改造",
+      "reportId": 324,
+      "entryCount": 9,
+      "workItemCount": 10
+    },
+    {
+      "file": "2026.4.20-2025.4.24项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 17,
+      "projectId": 229,
+      "projectName": "日照市智慧物业监管服务平台系统运维",
+      "reportId": 325,
+      "entryCount": 1,
+      "workItemCount": 1
+    },
+    {
+      "file": "2026.4.20-2025.4.24项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 17,
+      "projectId": 231,
+      "projectName": "济南房产交易与租赁服务平台",
+      "reportId": 326,
+      "entryCount": 3,
+      "workItemCount": 3
+    },
+    {
+      "file": "2026.4.20-2025.4.24项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 17,
+      "projectId": 232,
+      "projectName": "不动产登记人工智能数字人",
+      "reportId": 327,
+      "entryCount": 1,
+      "workItemCount": 1
+    },
+    {
+      "file": "2026.4.20-2025.4.24项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 17,
+      "projectId": 233,
+      "projectName": "汇房云中介SaaS服务平台",
+      "reportId": 328,
+      "entryCount": 4,
+      "workItemCount": 4
+    },
+    {
+      "file": "2026.4.20-2025.4.24项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 17,
+      "projectId": 237,
+      "projectName": "汇房云培训考试系统",
+      "reportId": 329,
+      "entryCount": 2,
+      "workItemCount": 2
+    },
+    {
+      "file": "2026.4.20-2025.4.24项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 17,
+      "projectId": 239,
+      "projectName": "山东省机关事务局职工房改房管理系统适配改造",
+      "reportId": 330,
+      "entryCount": 2,
+      "workItemCount": 3
+    },
+    {
+      "file": "2026.4.20-2025.4.24项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 17,
+      "projectId": 241,
+      "projectName": "基础平台",
+      "reportId": 331,
+      "entryCount": 2,
+      "workItemCount": 2
+    },
+    {
+      "file": "2026.4.20-2025.4.24项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 17,
+      "projectId": 243,
+      "projectName": "日照市三平台融合、智慧物业、住宅专项维修资金系统信创改造",
+      "reportId": 332,
+      "entryCount": 7,
+      "workItemCount": 9
+    },
+    {
+      "file": "2026.4.20-2025.4.24项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 17,
+      "projectId": 244,
+      "projectName": "车位使用权公证备案平台",
+      "reportId": 333,
+      "entryCount": 4,
+      "workItemCount": 4
+    },
+    {
+      "file": "2026.4.20-2025.4.24项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 17,
+      "projectId": 245,
+      "projectName": "济南市联合资产交易公示平台",
+      "reportId": 334,
+      "entryCount": 5,
+      "workItemCount": 5
+    },
+    {
+      "file": "2026.4.20-2025.4.24项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 17,
+      "projectId": 248,
+      "projectName": "卓识网安业务平台系统开发",
+      "reportId": 335,
+      "entryCount": 3,
+      "workItemCount": 3
+    },
+    {
+      "file": "2026.4.20-2025.4.24项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 17,
+      "projectId": 249,
+      "projectName": "滨州市智慧物业管理服务平台实施项目",
+      "reportId": 336,
+      "entryCount": 3,
+      "workItemCount": 4
+    },
+    {
+      "file": "2026.4.20-2025.4.24项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 17,
+      "projectId": 250,
+      "projectName": "宿松房产一体化平台",
+      "reportId": 337,
+      "entryCount": 4,
+      "workItemCount": 4
+    },
+    {
+      "file": "2026.4.20-2025.4.24项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 17,
+      "projectId": 251,
+      "projectName": "智慧房产产品线项目",
+      "reportId": 338,
+      "entryCount": 6,
+      "workItemCount": 7
+    },
+    {
+      "file": "2026.4.20-2025.4.24项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 17,
+      "projectId": 252,
+      "projectName": "数据治理平台",
+      "reportId": 339,
+      "entryCount": 1,
+      "workItemCount": 3
+    },
+    {
+      "file": "2026.4.20-2025.4.24项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 17,
+      "projectId": 253,
+      "projectName": "济南市泉农通信息平台二期",
+      "reportId": 686,
+      "entryCount": 9,
+      "workItemCount": 17
+    },
+    {
+      "file": "2026.4.26-2025.4.30项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 18,
+      "projectId": 33,
+      "projectName": "智慧维修资金",
+      "reportId": 687,
+      "entryCount": 7,
+      "workItemCount": 8
+    },
+    {
+      "file": "2026.4.26-2025.4.30项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 18,
+      "projectId": 118,
+      "projectName": "济南市房产交易管理平台拓展",
+      "reportId": 340,
+      "entryCount": 1,
+      "workItemCount": 3
+    },
+    {
+      "file": "2026.4.26-2025.4.30项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 18,
+      "projectId": 122,
+      "projectName": "济南市不动产登记系统功能拓展",
+      "reportId": 341,
+      "entryCount": 6,
+      "workItemCount": 12
+    },
+    {
+      "file": "2026.4.26-2025.4.30项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 18,
+      "projectId": 126,
+      "projectName": "济南不动产登记电子监督系统功能拓展",
+      "reportId": 342,
+      "entryCount": 6,
+      "workItemCount": 6
+    },
+    {
+      "file": "2026.4.26-2025.4.30项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 18,
+      "projectId": 136,
+      "projectName": "济南房产交易管理平台运行维护",
+      "reportId": 343,
+      "entryCount": 9,
+      "workItemCount": 12
+    },
+    {
+      "file": "2026.4.26-2025.4.30项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 18,
+      "projectId": 137,
+      "projectName": "济南不动产登记平台运行维护",
+      "reportId": 344,
+      "entryCount": 5,
+      "workItemCount": 5
+    },
+    {
+      "file": "2026.4.26-2025.4.30项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 18,
+      "projectId": 144,
+      "projectName": "日照银行智慧社区维护与升级",
+      "reportId": 345,
+      "entryCount": 9,
+      "workItemCount": 35
+    },
+    {
+      "file": "2026.4.26-2025.4.30项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 18,
+      "projectId": 148,
+      "projectName": "基层经费监管系统维护与升级",
+      "reportId": 346,
+      "entryCount": 2,
+      "workItemCount": 2
+    },
+    {
+      "file": "2026.4.26-2025.4.30项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 18,
+      "projectId": 227,
+      "projectName": "阳信房源超市运维项目",
+      "reportId": 347,
+      "entryCount": 2,
+      "workItemCount": 2
+    },
+    {
+      "file": "2026.4.26-2025.4.30项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 18,
+      "projectId": 228,
+      "projectName": "济南市不动产登记中心不动产登记信息平台信创升级改造",
+      "reportId": 348,
+      "entryCount": 7,
+      "workItemCount": 8
+    },
+    {
+      "file": "2026.4.26-2025.4.30项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 18,
+      "projectId": 229,
+      "projectName": "日照市智慧物业监管服务平台系统运维",
+      "reportId": 349,
+      "entryCount": 1,
+      "workItemCount": 1
+    },
+    {
+      "file": "2026.4.26-2025.4.30项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 18,
+      "projectId": 231,
+      "projectName": "济南房产交易与租赁服务平台",
+      "reportId": 350,
+      "entryCount": 3,
+      "workItemCount": 3
+    },
+    {
+      "file": "2026.4.26-2025.4.30项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 18,
+      "projectId": 232,
+      "projectName": "不动产登记人工智能数字人",
+      "reportId": 351,
+      "entryCount": 1,
+      "workItemCount": 1
+    },
+    {
+      "file": "2026.4.26-2025.4.30项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 18,
+      "projectId": 233,
+      "projectName": "汇房云中介SaaS服务平台",
+      "reportId": 352,
+      "entryCount": 4,
+      "workItemCount": 4
+    },
+    {
+      "file": "2026.4.26-2025.4.30项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 18,
+      "projectId": 237,
+      "projectName": "汇房云培训考试系统",
+      "reportId": 353,
+      "entryCount": 1,
+      "workItemCount": 1
+    },
+    {
+      "file": "2026.4.26-2025.4.30项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 18,
+      "projectId": 239,
+      "projectName": "山东省机关事务局职工房改房管理系统适配改造",
+      "reportId": 354,
+      "entryCount": 2,
+      "workItemCount": 3
+    },
+    {
+      "file": "2026.4.26-2025.4.30项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 18,
+      "projectId": 241,
+      "projectName": "基础平台",
+      "reportId": 355,
+      "entryCount": 2,
+      "workItemCount": 2
+    },
+    {
+      "file": "2026.4.26-2025.4.30项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 18,
+      "projectId": 243,
+      "projectName": "日照市三平台融合、智慧物业、住宅专项维修资金系统信创改造",
+      "reportId": 356,
+      "entryCount": 6,
+      "workItemCount": 7
+    },
+    {
+      "file": "2026.4.26-2025.4.30项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 18,
+      "projectId": 244,
+      "projectName": "车位使用权公证备案平台",
+      "reportId": 357,
+      "entryCount": 7,
+      "workItemCount": 7
+    },
+    {
+      "file": "2026.4.26-2025.4.30项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 18,
+      "projectId": 245,
+      "projectName": "济南市联合资产交易公示平台",
+      "reportId": 358,
+      "entryCount": 5,
+      "workItemCount": 5
+    },
+    {
+      "file": "2026.4.26-2025.4.30项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 18,
+      "projectId": 248,
+      "projectName": "卓识网安业务平台系统开发",
+      "reportId": 359,
+      "entryCount": 3,
+      "workItemCount": 3
+    },
+    {
+      "file": "2026.4.26-2025.4.30项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 18,
+      "projectId": 249,
+      "projectName": "滨州市智慧物业管理服务平台实施项目",
+      "reportId": 360,
+      "entryCount": 1,
+      "workItemCount": 2
+    },
+    {
+      "file": "2026.4.26-2025.4.30项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 18,
+      "projectId": 250,
+      "projectName": "宿松房产一体化平台",
+      "reportId": 361,
+      "entryCount": 4,
+      "workItemCount": 4
+    },
+    {
+      "file": "2026.4.26-2025.4.30项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 18,
+      "projectId": 251,
+      "projectName": "智慧房产产品线项目",
+      "reportId": 362,
+      "entryCount": 6,
+      "workItemCount": 6
+    },
+    {
+      "file": "2026.4.26-2025.4.30项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 18,
+      "projectId": 252,
+      "projectName": "数据治理平台",
+      "reportId": 363,
+      "entryCount": 1,
+      "workItemCount": 3
+    },
+    {
+      "file": "2026.4.26-2025.4.30项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 18,
+      "projectId": 253,
+      "projectName": "济南市泉农通信息平台二期",
+      "reportId": 712,
+      "entryCount": 7,
+      "workItemCount": 12
+    },
+    {
+      "file": "2026.5.6-2025.5.9项目周报汇总 .xlsx",
+      "reportYear": 2026,
+      "reportWeek": 19,
+      "projectId": 33,
+      "projectName": "智慧维修资金",
+      "reportId": 713,
+      "entryCount": 6,
+      "workItemCount": 7
+    },
+    {
+      "file": "2026.5.6-2025.5.9项目周报汇总 .xlsx",
+      "reportYear": 2026,
+      "reportWeek": 19,
+      "projectId": 118,
+      "projectName": "济南市房产交易管理平台拓展",
+      "reportId": 364,
+      "entryCount": 1,
+      "workItemCount": 2
+    },
+    {
+      "file": "2026.5.6-2025.5.9项目周报汇总 .xlsx",
+      "reportYear": 2026,
+      "reportWeek": 19,
+      "projectId": 122,
+      "projectName": "济南市不动产登记系统功能拓展",
+      "reportId": 365,
+      "entryCount": 7,
+      "workItemCount": 12
+    },
+    {
+      "file": "2026.5.6-2025.5.9项目周报汇总 .xlsx",
+      "reportYear": 2026,
+      "reportWeek": 19,
+      "projectId": 126,
+      "projectName": "济南不动产登记电子监督系统功能拓展",
+      "reportId": 366,
+      "entryCount": 5,
+      "workItemCount": 5
+    },
+    {
+      "file": "2026.5.6-2025.5.9项目周报汇总 .xlsx",
+      "reportYear": 2026,
+      "reportWeek": 19,
+      "projectId": 127,
+      "projectName": "济南市不动产登记全量数据汇交及比对系统",
+      "reportId": 367,
+      "entryCount": 1,
+      "workItemCount": 1
+    },
+    {
+      "file": "2026.5.6-2025.5.9项目周报汇总 .xlsx",
+      "reportYear": 2026,
+      "reportWeek": 19,
+      "projectId": 136,
+      "projectName": "济南房产交易管理平台运行维护",
+      "reportId": 368,
+      "entryCount": 10,
+      "workItemCount": 12
+    },
+    {
+      "file": "2026.5.6-2025.5.9项目周报汇总 .xlsx",
+      "reportYear": 2026,
+      "reportWeek": 19,
+      "projectId": 137,
+      "projectName": "济南不动产登记平台运行维护",
+      "reportId": 369,
+      "entryCount": 5,
+      "workItemCount": 5
+    },
+    {
+      "file": "2026.5.6-2025.5.9项目周报汇总 .xlsx",
+      "reportYear": 2026,
+      "reportWeek": 19,
+      "projectId": 144,
+      "projectName": "日照银行智慧社区维护与升级",
+      "reportId": 370,
+      "entryCount": 9,
+      "workItemCount": 35
+    },
+    {
+      "file": "2026.5.6-2025.5.9项目周报汇总 .xlsx",
+      "reportYear": 2026,
+      "reportWeek": 19,
+      "projectId": 148,
+      "projectName": "基层经费监管系统维护与升级",
+      "reportId": 371,
+      "entryCount": 1,
+      "workItemCount": 1
+    },
+    {
+      "file": "2026.5.6-2025.5.9项目周报汇总 .xlsx",
+      "reportYear": 2026,
+      "reportWeek": 19,
+      "projectId": 227,
+      "projectName": "阳信房源超市运维项目",
+      "reportId": 372,
+      "entryCount": 1,
+      "workItemCount": 1
+    },
+    {
+      "file": "2026.5.6-2025.5.9项目周报汇总 .xlsx",
+      "reportYear": 2026,
+      "reportWeek": 19,
+      "projectId": 228,
+      "projectName": "济南市不动产登记中心不动产登记信息平台信创升级改造",
+      "reportId": 373,
+      "entryCount": 2,
+      "workItemCount": 2
+    },
+    {
+      "file": "2026.5.6-2025.5.9项目周报汇总 .xlsx",
+      "reportYear": 2026,
+      "reportWeek": 19,
+      "projectId": 229,
+      "projectName": "日照市智慧物业监管服务平台系统运维",
+      "reportId": 374,
+      "entryCount": 2,
+      "workItemCount": 2
+    },
+    {
+      "file": "2026.5.6-2025.5.9项目周报汇总 .xlsx",
+      "reportYear": 2026,
+      "reportWeek": 19,
+      "projectId": 231,
+      "projectName": "济南房产交易与租赁服务平台",
+      "reportId": 375,
+      "entryCount": 3,
+      "workItemCount": 3
+    },
+    {
+      "file": "2026.5.6-2025.5.9项目周报汇总 .xlsx",
+      "reportYear": 2026,
+      "reportWeek": 19,
+      "projectId": 232,
+      "projectName": "不动产登记人工智能数字人",
+      "reportId": 376,
+      "entryCount": 3,
+      "workItemCount": 3
+    },
+    {
+      "file": "2026.5.6-2025.5.9项目周报汇总 .xlsx",
+      "reportYear": 2026,
+      "reportWeek": 19,
+      "projectId": 233,
+      "projectName": "汇房云中介SaaS服务平台",
+      "reportId": 377,
+      "entryCount": 3,
+      "workItemCount": 3
+    },
+    {
+      "file": "2026.5.6-2025.5.9项目周报汇总 .xlsx",
+      "reportYear": 2026,
+      "reportWeek": 19,
+      "projectId": 237,
+      "projectName": "汇房云培训考试系统",
+      "reportId": 378,
+      "entryCount": 1,
+      "workItemCount": 1
+    },
+    {
+      "file": "2026.5.6-2025.5.9项目周报汇总 .xlsx",
+      "reportYear": 2026,
+      "reportWeek": 19,
+      "projectId": 239,
+      "projectName": "山东省机关事务局职工房改房管理系统适配改造",
+      "reportId": 379,
+      "entryCount": 2,
+      "workItemCount": 2
+    },
+    {
+      "file": "2026.5.6-2025.5.9项目周报汇总 .xlsx",
+      "reportYear": 2026,
+      "reportWeek": 19,
+      "projectId": 241,
+      "projectName": "基础平台",
+      "reportId": 730,
+      "entryCount": 1,
+      "workItemCount": 1
+    },
+    {
+      "file": "2026.5.6-2025.5.9项目周报汇总 .xlsx",
+      "reportYear": 2026,
+      "reportWeek": 19,
+      "projectId": 243,
+      "projectName": "日照市三平台融合、智慧物业、住宅专项维修资金系统信创改造",
+      "reportId": 380,
+      "entryCount": 3,
+      "workItemCount": 4
+    },
+    {
+      "file": "2026.5.6-2025.5.9项目周报汇总 .xlsx",
+      "reportYear": 2026,
+      "reportWeek": 19,
+      "projectId": 244,
+      "projectName": "车位使用权公证备案平台",
+      "reportId": 381,
+      "entryCount": 4,
+      "workItemCount": 4
+    },
+    {
+      "file": "2026.5.6-2025.5.9项目周报汇总 .xlsx",
+      "reportYear": 2026,
+      "reportWeek": 19,
+      "projectId": 245,
+      "projectName": "济南市联合资产交易公示平台",
+      "reportId": 382,
+      "entryCount": 8,
+      "workItemCount": 8
+    },
+    {
+      "file": "2026.5.6-2025.5.9项目周报汇总 .xlsx",
+      "reportYear": 2026,
+      "reportWeek": 19,
+      "projectId": 249,
+      "projectName": "滨州市智慧物业管理服务平台实施项目",
+      "reportId": 383,
+      "entryCount": 6,
+      "workItemCount": 9
+    },
+    {
+      "file": "2026.5.6-2025.5.9项目周报汇总 .xlsx",
+      "reportYear": 2026,
+      "reportWeek": 19,
+      "projectId": 250,
+      "projectName": "宿松房产一体化平台",
+      "reportId": 384,
+      "entryCount": 3,
+      "workItemCount": 4
+    },
+    {
+      "file": "2026.5.6-2025.5.9项目周报汇总 .xlsx",
+      "reportYear": 2026,
+      "reportWeek": 19,
+      "projectId": 251,
+      "projectName": "智慧房产产品线项目",
+      "reportId": 385,
+      "entryCount": 5,
+      "workItemCount": 5
+    },
+    {
+      "file": "2026.5.6-2025.5.9项目周报汇总 .xlsx",
+      "reportYear": 2026,
+      "reportWeek": 19,
+      "projectId": 252,
+      "projectName": "数据治理平台",
+      "reportId": 386,
+      "entryCount": 2,
+      "workItemCount": 7
+    },
+    {
+      "file": "2026.5.6-2025.5.9项目周报汇总 .xlsx",
+      "reportYear": 2026,
+      "reportWeek": 19,
+      "projectId": 253,
+      "projectName": "济南市泉农通信息平台二期",
+      "reportId": 738,
+      "entryCount": 8,
+      "workItemCount": 11
+    },
+    {
+      "file": "2026.5.11-2025.5.15项目周报汇总 .xlsx",
+      "reportYear": 2026,
+      "reportWeek": 20,
+      "projectId": 33,
+      "projectName": "智慧维修资金",
+      "reportId": 739,
+      "entryCount": 7,
+      "workItemCount": 8
+    },
+    {
+      "file": "2026.5.11-2025.5.15项目周报汇总 .xlsx",
+      "reportYear": 2026,
+      "reportWeek": 20,
+      "projectId": 118,
+      "projectName": "济南市房产交易管理平台拓展",
+      "reportId": 387,
+      "entryCount": 1,
+      "workItemCount": 3
+    },
+    {
+      "file": "2026.5.11-2025.5.15项目周报汇总 .xlsx",
+      "reportYear": 2026,
+      "reportWeek": 20,
+      "projectId": 122,
+      "projectName": "济南市不动产登记系统功能拓展",
+      "reportId": 388,
+      "entryCount": 7,
+      "workItemCount": 15
+    },
+    {
+      "file": "2026.5.11-2025.5.15项目周报汇总 .xlsx",
+      "reportYear": 2026,
+      "reportWeek": 20,
+      "projectId": 126,
+      "projectName": "济南不动产登记电子监督系统功能拓展",
+      "reportId": 389,
+      "entryCount": 4,
+      "workItemCount": 4
+    },
+    {
+      "file": "2026.5.11-2025.5.15项目周报汇总 .xlsx",
+      "reportYear": 2026,
+      "reportWeek": 20,
+      "projectId": 127,
+      "projectName": "济南市不动产登记全量数据汇交及比对系统",
+      "reportId": 390,
+      "entryCount": 1,
+      "workItemCount": 1
+    },
+    {
+      "file": "2026.5.11-2025.5.15项目周报汇总 .xlsx",
+      "reportYear": 2026,
+      "reportWeek": 20,
+      "projectId": 136,
+      "projectName": "济南房产交易管理平台运行维护",
+      "reportId": 391,
+      "entryCount": 10,
+      "workItemCount": 12
+    },
+    {
+      "file": "2026.5.11-2025.5.15项目周报汇总 .xlsx",
+      "reportYear": 2026,
+      "reportWeek": 20,
+      "projectId": 137,
+      "projectName": "济南不动产登记平台运行维护",
+      "reportId": 392,
+      "entryCount": 5,
+      "workItemCount": 5
+    },
+    {
+      "file": "2026.5.11-2025.5.15项目周报汇总 .xlsx",
+      "reportYear": 2026,
+      "reportWeek": 20,
+      "projectId": 148,
+      "projectName": "基层经费监管系统维护与升级",
+      "reportId": 393,
+      "entryCount": 2,
+      "workItemCount": 2
+    },
+    {
+      "file": "2026.5.11-2025.5.15项目周报汇总 .xlsx",
+      "reportYear": 2026,
+      "reportWeek": 20,
+      "projectId": 228,
+      "projectName": "济南市不动产登记中心不动产登记信息平台信创升级改造",
+      "reportId": 394,
+      "entryCount": 4,
+      "workItemCount": 4
+    },
+    {
+      "file": "2026.5.11-2025.5.15项目周报汇总 .xlsx",
+      "reportYear": 2026,
+      "reportWeek": 20,
+      "projectId": 229,
+      "projectName": "日照市智慧物业监管服务平台系统运维",
+      "reportId": 395,
+      "entryCount": 3,
+      "workItemCount": 3
+    },
+    {
+      "file": "2026.5.11-2025.5.15项目周报汇总 .xlsx",
+      "reportYear": 2026,
+      "reportWeek": 20,
+      "projectId": 231,
+      "projectName": "济南房产交易与租赁服务平台",
+      "reportId": 396,
+      "entryCount": 3,
+      "workItemCount": 3
+    },
+    {
+      "file": "2026.5.11-2025.5.15项目周报汇总 .xlsx",
+      "reportYear": 2026,
+      "reportWeek": 20,
+      "projectId": 232,
+      "projectName": "不动产登记人工智能数字人",
+      "reportId": 397,
+      "entryCount": 3,
+      "workItemCount": 3
+    },
+    {
+      "file": "2026.5.11-2025.5.15项目周报汇总 .xlsx",
+      "reportYear": 2026,
+      "reportWeek": 20,
+      "projectId": 233,
+      "projectName": "汇房云中介SaaS服务平台",
+      "reportId": 398,
+      "entryCount": 2,
+      "workItemCount": 2
+    },
+    {
+      "file": "2026.5.11-2025.5.15项目周报汇总 .xlsx",
+      "reportYear": 2026,
+      "reportWeek": 20,
+      "projectId": 237,
+      "projectName": "汇房云培训考试系统",
+      "reportId": 399,
+      "entryCount": 1,
+      "workItemCount": 1
+    },
+    {
+      "file": "2026.5.11-2025.5.15项目周报汇总 .xlsx",
+      "reportYear": 2026,
+      "reportWeek": 20,
+      "projectId": 239,
+      "projectName": "山东省机关事务局职工房改房管理系统适配改造",
+      "reportId": 400,
+      "entryCount": 2,
+      "workItemCount": 3
+    },
+    {
+      "file": "2026.5.11-2025.5.15项目周报汇总 .xlsx",
+      "reportYear": 2026,
+      "reportWeek": 20,
+      "projectId": 241,
+      "projectName": "基础平台",
+      "reportId": 754,
+      "entryCount": 1,
+      "workItemCount": 2
+    },
+    {
+      "file": "2026.5.11-2025.5.15项目周报汇总 .xlsx",
+      "reportYear": 2026,
+      "reportWeek": 20,
+      "projectId": 243,
+      "projectName": "日照市三平台融合、智慧物业、住宅专项维修资金系统信创改造",
+      "reportId": 401,
+      "entryCount": 3,
+      "workItemCount": 4
+    },
+    {
+      "file": "2026.5.11-2025.5.15项目周报汇总 .xlsx",
+      "reportYear": 2026,
+      "reportWeek": 20,
+      "projectId": 244,
+      "projectName": "车位使用权公证备案平台",
+      "reportId": 402,
+      "entryCount": 3,
+      "workItemCount": 3
+    },
+    {
+      "file": "2026.5.11-2025.5.15项目周报汇总 .xlsx",
+      "reportYear": 2026,
+      "reportWeek": 20,
+      "projectId": 245,
+      "projectName": "济南市联合资产交易公示平台",
+      "reportId": 403,
+      "entryCount": 6,
+      "workItemCount": 6
+    },
+    {
+      "file": "2026.5.11-2025.5.15项目周报汇总 .xlsx",
+      "reportYear": 2026,
+      "reportWeek": 20,
+      "projectId": 249,
+      "projectName": "滨州市智慧物业管理服务平台实施项目",
+      "reportId": 404,
+      "entryCount": 4,
+      "workItemCount": 5
+    },
+    {
+      "file": "2026.5.11-2025.5.15项目周报汇总 .xlsx",
+      "reportYear": 2026,
+      "reportWeek": 20,
+      "projectId": 250,
+      "projectName": "宿松房产一体化平台",
+      "reportId": 405,
+      "entryCount": 5,
+      "workItemCount": 5
+    },
+    {
+      "file": "2026.5.11-2025.5.15项目周报汇总 .xlsx",
+      "reportYear": 2026,
+      "reportWeek": 20,
+      "projectId": 251,
+      "projectName": "智慧房产产品线项目",
+      "reportId": 406,
+      "entryCount": 6,
+      "workItemCount": 7
+    },
+    {
+      "file": "2026.5.11-2025.5.15项目周报汇总 .xlsx",
+      "reportYear": 2026,
+      "reportWeek": 20,
+      "projectId": 252,
+      "projectName": "数据治理平台",
+      "reportId": 407,
+      "entryCount": 2,
+      "workItemCount": 5
+    },
+    {
+      "file": "2026.5.11-2025.5.15项目周报汇总 .xlsx",
+      "reportYear": 2026,
+      "reportWeek": 20,
+      "projectId": 253,
+      "projectName": "济南市泉农通信息平台二期",
+      "reportId": 762,
+      "entryCount": 6,
+      "workItemCount": 7
+    },
+    {
+      "file": "2026.5.18-2025.5.22项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 21,
+      "projectId": 33,
+      "projectName": "智慧维修资金",
+      "reportId": 763,
+      "entryCount": 7,
+      "workItemCount": 8
+    },
+    {
+      "file": "2026.5.18-2025.5.22项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 21,
+      "projectId": 118,
+      "projectName": "济南市房产交易管理平台拓展",
+      "reportId": 408,
+      "entryCount": 1,
+      "workItemCount": 3
+    },
+    {
+      "file": "2026.5.18-2025.5.22项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 21,
+      "projectId": 122,
+      "projectName": "济南市不动产登记系统功能拓展",
+      "reportId": 409,
+      "entryCount": 6,
+      "workItemCount": 12
+    },
+    {
+      "file": "2026.5.18-2025.5.22项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 21,
+      "projectId": 126,
+      "projectName": "济南不动产登记电子监督系统功能拓展",
+      "reportId": 410,
+      "entryCount": 4,
+      "workItemCount": 4
+    },
+    {
+      "file": "2026.5.18-2025.5.22项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 21,
+      "projectId": 127,
+      "projectName": "济南市不动产登记全量数据汇交及比对系统",
+      "reportId": 411,
+      "entryCount": 1,
+      "workItemCount": 1
+    },
+    {
+      "file": "2026.5.18-2025.5.22项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 21,
+      "projectId": 136,
+      "projectName": "济南房产交易管理平台运行维护",
+      "reportId": 412,
+      "entryCount": 9,
+      "workItemCount": 12
+    },
+    {
+      "file": "2026.5.18-2025.5.22项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 21,
+      "projectId": 137,
+      "projectName": "济南不动产登记平台运行维护",
+      "reportId": 413,
+      "entryCount": 5,
+      "workItemCount": 5
+    },
+    {
+      "file": "2026.5.18-2025.5.22项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 21,
+      "projectId": 144,
+      "projectName": "日照银行智慧社区维护与升级",
+      "reportId": 414,
+      "entryCount": 9,
+      "workItemCount": 37
+    },
+    {
+      "file": "2026.5.18-2025.5.22项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 21,
+      "projectId": 148,
+      "projectName": "基层经费监管系统维护与升级",
+      "reportId": 415,
+      "entryCount": 1,
+      "workItemCount": 1
+    },
+    {
+      "file": "2026.5.18-2025.5.22项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 21,
+      "projectId": 228,
+      "projectName": "济南市不动产登记中心不动产登记信息平台信创升级改造",
+      "reportId": 416,
+      "entryCount": 4,
+      "workItemCount": 4
+    },
+    {
+      "file": "2026.5.18-2025.5.22项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 21,
+      "projectId": 229,
+      "projectName": "日照市智慧物业监管服务平台系统运维",
+      "reportId": 417,
+      "entryCount": 2,
+      "workItemCount": 2
+    },
+    {
+      "file": "2026.5.18-2025.5.22项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 21,
+      "projectId": 231,
+      "projectName": "济南房产交易与租赁服务平台",
+      "reportId": 418,
+      "entryCount": 3,
+      "workItemCount": 3
+    },
+    {
+      "file": "2026.5.18-2025.5.22项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 21,
+      "projectId": 232,
+      "projectName": "不动产登记人工智能数字人",
+      "reportId": 419,
+      "entryCount": 3,
+      "workItemCount": 3
+    },
+    {
+      "file": "2026.5.18-2025.5.22项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 21,
+      "projectId": 233,
+      "projectName": "汇房云中介SaaS服务平台",
+      "reportId": 420,
+      "entryCount": 2,
+      "workItemCount": 2
+    },
+    {
+      "file": "2026.5.18-2025.5.22项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 21,
+      "projectId": 237,
+      "projectName": "汇房云培训考试系统",
+      "reportId": 421,
+      "entryCount": 1,
+      "workItemCount": 1
+    },
+    {
+      "file": "2026.5.18-2025.5.22项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 21,
+      "projectId": 239,
+      "projectName": "山东省机关事务局职工房改房管理系统适配改造",
+      "reportId": 422,
+      "entryCount": 2,
+      "workItemCount": 3
+    },
+    {
+      "file": "2026.5.18-2025.5.22项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 21,
+      "projectId": 241,
+      "projectName": "基础平台",
+      "reportId": 423,
+      "entryCount": 3,
+      "workItemCount": 4
+    },
+    {
+      "file": "2026.5.18-2025.5.22项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 21,
+      "projectId": 243,
+      "projectName": "日照市三平台融合、智慧物业、住宅专项维修资金系统信创改造",
+      "reportId": 424,
+      "entryCount": 1,
+      "workItemCount": 1
+    },
+    {
+      "file": "2026.5.18-2025.5.22项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 21,
+      "projectId": 244,
+      "projectName": "车位使用权公证备案平台",
+      "reportId": 781,
+      "entryCount": 1,
+      "workItemCount": 1
+    },
+    {
+      "file": "2026.5.18-2025.5.22项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 21,
+      "projectId": 245,
+      "projectName": "济南市联合资产交易公示平台",
+      "reportId": 425,
+      "entryCount": 5,
+      "workItemCount": 5
+    },
+    {
+      "file": "2026.5.18-2025.5.22项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 21,
+      "projectId": 249,
+      "projectName": "滨州市智慧物业管理服务平台实施项目",
+      "reportId": 426,
+      "entryCount": 4,
+      "workItemCount": 7
+    },
+    {
+      "file": "2026.5.18-2025.5.22项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 21,
+      "projectId": 250,
+      "projectName": "宿松房产一体化平台",
+      "reportId": 427,
+      "entryCount": 6,
+      "workItemCount": 6
+    },
+    {
+      "file": "2026.5.18-2025.5.22项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 21,
+      "projectId": 251,
+      "projectName": "智慧房产产品线项目",
+      "reportId": 428,
+      "entryCount": 5,
+      "workItemCount": 5
+    },
+    {
+      "file": "2026.5.18-2025.5.22项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 21,
+      "projectId": 252,
+      "projectName": "数据治理平台",
+      "reportId": 429,
+      "entryCount": 2,
+      "workItemCount": 6
+    },
+    {
+      "file": "2026.5.18-2025.5.22项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 21,
+      "projectId": 253,
+      "projectName": "济南市泉农通信息平台二期",
+      "reportId": 787,
+      "entryCount": 5,
+      "workItemCount": 10
+    },
+    {
+      "file": "2026.5.25-2025.5.29项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 22,
+      "projectId": 33,
+      "projectName": "智慧维修资金",
+      "reportId": 788,
+      "entryCount": 7,
+      "workItemCount": 7
+    },
+    {
+      "file": "2026.5.25-2025.5.29项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 22,
+      "projectId": 122,
+      "projectName": "济南市不动产登记系统功能拓展",
+      "reportId": 430,
+      "entryCount": 7,
+      "workItemCount": 16
+    },
+    {
+      "file": "2026.5.25-2025.5.29项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 22,
+      "projectId": 126,
+      "projectName": "济南不动产登记电子监督系统功能拓展",
+      "reportId": 431,
+      "entryCount": 3,
+      "workItemCount": 3
+    },
+    {
+      "file": "2026.5.25-2025.5.29项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 22,
+      "projectId": 136,
+      "projectName": "济南房产交易管理平台运行维护",
+      "reportId": 432,
+      "entryCount": 12,
+      "workItemCount": 15
+    },
+    {
+      "file": "2026.5.25-2025.5.29项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 22,
+      "projectId": 137,
+      "projectName": "济南不动产登记平台运行维护",
+      "reportId": 433,
+      "entryCount": 5,
+      "workItemCount": 5
+    },
+    {
+      "file": "2026.5.25-2025.5.29项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 22,
+      "projectId": 144,
+      "projectName": "日照银行智慧社区维护与升级",
+      "reportId": 434,
+      "entryCount": 9,
+      "workItemCount": 37
+    },
+    {
+      "file": "2026.5.25-2025.5.29项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 22,
+      "projectId": 148,
+      "projectName": "基层经费监管系统维护与升级",
+      "reportId": 435,
+      "entryCount": 2,
+      "workItemCount": 2
+    },
+    {
+      "file": "2026.5.25-2025.5.29项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 22,
+      "projectId": 228,
+      "projectName": "济南市不动产登记中心不动产登记信息平台信创升级改造",
+      "reportId": 436,
+      "entryCount": 3,
+      "workItemCount": 3
+    },
+    {
+      "file": "2026.5.25-2025.5.29项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 22,
+      "projectId": 229,
+      "projectName": "日照市智慧物业监管服务平台系统运维",
+      "reportId": 437,
+      "entryCount": 2,
+      "workItemCount": 2
+    },
+    {
+      "file": "2026.5.25-2025.5.29项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 22,
+      "projectId": 231,
+      "projectName": "济南房产交易与租赁服务平台",
+      "reportId": 438,
+      "entryCount": 3,
+      "workItemCount": 3
+    },
+    {
+      "file": "2026.5.25-2025.5.29项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 22,
+      "projectId": 232,
+      "projectName": "不动产登记人工智能数字人",
+      "reportId": 439,
+      "entryCount": 3,
+      "workItemCount": 3
+    },
+    {
+      "file": "2026.5.25-2025.5.29项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 22,
+      "projectId": 233,
+      "projectName": "汇房云中介SaaS服务平台",
+      "reportId": 440,
+      "entryCount": 3,
+      "workItemCount": 3
+    },
+    {
+      "file": "2026.5.25-2025.5.29项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 22,
+      "projectId": 237,
+      "projectName": "汇房云培训考试系统",
+      "reportId": 441,
+      "entryCount": 1,
+      "workItemCount": 1
+    },
+    {
+      "file": "2026.5.25-2025.5.29项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 22,
+      "projectId": 239,
+      "projectName": "山东省机关事务局职工房改房管理系统适配改造",
+      "reportId": 442,
+      "entryCount": 2,
+      "workItemCount": 3
+    },
+    {
+      "file": "2026.5.25-2025.5.29项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 22,
+      "projectId": 241,
+      "projectName": "基础平台",
+      "reportId": 443,
+      "entryCount": 3,
+      "workItemCount": 3
+    },
+    {
+      "file": "2026.5.25-2025.5.29项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 22,
+      "projectId": 243,
+      "projectName": "日照市三平台融合、智慧物业、住宅专项维修资金系统信创改造",
+      "reportId": 444,
+      "entryCount": 1,
+      "workItemCount": 1
+    },
+    {
+      "file": "2026.5.25-2025.5.29项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 22,
+      "projectId": 244,
+      "projectName": "车位使用权公证备案平台",
+      "reportId": 445,
+      "entryCount": 2,
+      "workItemCount": 2
+    },
+    {
+      "file": "2026.5.25-2025.5.29项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 22,
+      "projectId": 245,
+      "projectName": "济南市联合资产交易公示平台",
+      "reportId": 446,
+      "entryCount": 4,
+      "workItemCount": 4
+    },
+    {
+      "file": "2026.5.25-2025.5.29项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 22,
+      "projectId": 248,
+      "projectName": "卓识网安业务平台系统开发",
+      "reportId": 447,
+      "entryCount": 3,
+      "workItemCount": 3
+    },
+    {
+      "file": "2026.5.25-2025.5.29项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 22,
+      "projectId": 249,
+      "projectName": "滨州市智慧物业管理服务平台实施项目",
+      "reportId": 448,
+      "entryCount": 4,
+      "workItemCount": 5
+    },
+    {
+      "file": "2026.5.25-2025.5.29项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 22,
+      "projectId": 250,
+      "projectName": "宿松房产一体化平台",
+      "reportId": 449,
+      "entryCount": 6,
+      "workItemCount": 6
+    },
+    {
+      "file": "2026.5.25-2025.5.29项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 22,
+      "projectId": 251,
+      "projectName": "智慧房产产品线项目",
+      "reportId": 450,
+      "entryCount": 5,
+      "workItemCount": 5
+    },
+    {
+      "file": "2026.5.25-2025.5.29项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 22,
+      "projectId": 252,
+      "projectName": "数据治理平台",
+      "reportId": 451,
+      "entryCount": 2,
+      "workItemCount": 8
+    },
+    {
+      "file": "2026.5.25-2025.5.29项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 22,
+      "projectId": 253,
+      "projectName": "济南市泉农通信息平台二期",
+      "reportId": 811,
+      "entryCount": 5,
+      "workItemCount": 9
+    },
+    {
+      "file": "2026.6.1-2025.6.5项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 23,
+      "projectId": 33,
+      "projectName": "智慧维修资金",
+      "reportId": 812,
+      "entryCount": 7,
+      "workItemCount": 8
+    },
+    {
+      "file": "2026.6.1-2025.6.5项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 23,
+      "projectId": 118,
+      "projectName": "济南市房产交易管理平台拓展",
+      "reportId": 452,
+      "entryCount": 1,
+      "workItemCount": 3
+    },
+    {
+      "file": "2026.6.1-2025.6.5项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 23,
+      "projectId": 122,
+      "projectName": "济南市不动产登记系统功能拓展",
+      "reportId": 453,
+      "entryCount": 7,
+      "workItemCount": 9
+    },
+    {
+      "file": "2026.6.1-2025.6.5项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 23,
+      "projectId": 126,
+      "projectName": "济南不动产登记电子监督系统功能拓展",
+      "reportId": 454,
+      "entryCount": 4,
+      "workItemCount": 4
+    },
+    {
+      "file": "2026.6.1-2025.6.5项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 23,
+      "projectId": 131,
+      "projectName": "济南市不动产登记预受理系统",
+      "reportId": 455,
+      "entryCount": 1,
+      "workItemCount": 1
+    },
+    {
+      "file": "2026.6.1-2025.6.5项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 23,
+      "projectId": 136,
+      "projectName": "济南房产交易管理平台运行维护",
+      "reportId": 456,
+      "entryCount": 14,
+      "workItemCount": 15
+    },
+    {
+      "file": "2026.6.1-2025.6.5项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 23,
+      "projectId": 137,
+      "projectName": "济南不动产登记平台运行维护",
+      "reportId": 457,
+      "entryCount": 5,
+      "workItemCount": 5
+    },
+    {
+      "file": "2026.6.1-2025.6.5项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 23,
+      "projectId": 144,
+      "projectName": "日照银行智慧社区维护与升级",
+      "reportId": 458,
+      "entryCount": 9,
+      "workItemCount": 40
+    },
+    {
+      "file": "2026.6.1-2025.6.5项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 23,
+      "projectId": 148,
+      "projectName": "基层经费监管系统维护与升级",
+      "reportId": 459,
+      "entryCount": 2,
+      "workItemCount": 2
+    },
+    {
+      "file": "2026.6.1-2025.6.5项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 23,
+      "projectId": 228,
+      "projectName": "济南市不动产登记中心不动产登记信息平台信创升级改造",
+      "reportId": 460,
+      "entryCount": 3,
+      "workItemCount": 3
+    },
+    {
+      "file": "2026.6.1-2025.6.5项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 23,
+      "projectId": 229,
+      "projectName": "日照市智慧物业监管服务平台系统运维",
+      "reportId": 461,
+      "entryCount": 2,
+      "workItemCount": 2
+    },
+    {
+      "file": "2026.6.1-2025.6.5项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 23,
+      "projectId": 231,
+      "projectName": "济南房产交易与租赁服务平台",
+      "reportId": 462,
+      "entryCount": 3,
+      "workItemCount": 3
+    },
+    {
+      "file": "2026.6.1-2025.6.5项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 23,
+      "projectId": 232,
+      "projectName": "不动产登记人工智能数字人",
+      "reportId": 463,
+      "entryCount": 2,
+      "workItemCount": 2
+    },
+    {
+      "file": "2026.6.1-2025.6.5项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 23,
+      "projectId": 233,
+      "projectName": "汇房云中介SaaS服务平台",
+      "reportId": 464,
+      "entryCount": 3,
+      "workItemCount": 3
+    },
+    {
+      "file": "2026.6.1-2025.6.5项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 23,
+      "projectId": 237,
+      "projectName": "汇房云培训考试系统",
+      "reportId": 465,
+      "entryCount": 1,
+      "workItemCount": 1
+    },
+    {
+      "file": "2026.6.1-2025.6.5项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 23,
+      "projectId": 239,
+      "projectName": "山东省机关事务局职工房改房管理系统适配改造",
+      "reportId": 466,
+      "entryCount": 2,
+      "workItemCount": 3
+    },
+    {
+      "file": "2026.6.1-2025.6.5项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 23,
+      "projectId": 241,
+      "projectName": "基础平台",
+      "reportId": 467,
+      "entryCount": 2,
+      "workItemCount": 3
+    },
+    {
+      "file": "2026.6.1-2025.6.5项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 23,
+      "projectId": 244,
+      "projectName": "车位使用权公证备案平台",
+      "reportId": 468,
+      "entryCount": 2,
+      "workItemCount": 2
+    },
+    {
+      "file": "2026.6.1-2025.6.5项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 23,
+      "projectId": 245,
+      "projectName": "济南市联合资产交易公示平台",
+      "reportId": 469,
+      "entryCount": 3,
+      "workItemCount": 3
+    },
+    {
+      "file": "2026.6.1-2025.6.5项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 23,
+      "projectId": 248,
+      "projectName": "卓识网安业务平台系统开发",
+      "reportId": 470,
+      "entryCount": 3,
+      "workItemCount": 3
+    },
+    {
+      "file": "2026.6.1-2025.6.5项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 23,
+      "projectId": 249,
+      "projectName": "滨州市智慧物业管理服务平台实施项目",
+      "reportId": 471,
+      "entryCount": 1,
+      "workItemCount": 2
+    },
+    {
+      "file": "2026.6.1-2025.6.5项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 23,
+      "projectId": 250,
+      "projectName": "宿松房产一体化平台",
+      "reportId": 472,
+      "entryCount": 7,
+      "workItemCount": 7
+    },
+    {
+      "file": "2026.6.1-2025.6.5项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 23,
+      "projectId": 251,
+      "projectName": "智慧房产产品线项目",
+      "reportId": 473,
+      "entryCount": 5,
+      "workItemCount": 6
+    },
+    {
+      "file": "2026.6.1-2025.6.5项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 23,
+      "projectId": 252,
+      "projectName": "数据治理平台",
+      "reportId": 474,
+      "entryCount": 2,
+      "workItemCount": 4
+    },
+    {
+      "file": "2026.6.1-2025.6.5项目周报汇总.xlsx",
+      "reportYear": 2026,
+      "reportWeek": 23,
+      "projectId": 253,
+      "projectName": "济南市泉农通信息平台二期",
+      "reportId": 836,
+      "entryCount": 6,
+      "workItemCount": 7
+    }
+  ],
+  "failedReports": []
+}

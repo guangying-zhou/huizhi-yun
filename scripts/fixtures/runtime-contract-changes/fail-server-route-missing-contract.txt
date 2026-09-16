@@ -1,0 +1,3 @@
+# A route test alone does not document the externally visible API change.
+data-runtime/internal/server/server.go
+data-runtime/internal/server/runtime_auth_test.go

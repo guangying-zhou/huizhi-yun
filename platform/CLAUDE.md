@@ -1,0 +1,155 @@
+# platform/CLAUDE.md
+
+Module-specific guidance for `platform/`. Root-level guidance still applies.
+
+## Module Role
+
+`platform/` is the 汇智云 control-plane application. It is not a tenant business app and is not based on `@hzy/foundation`.
+
+Owns:
+
+- Platform operations console: app registry, tenant onboarding, subscriptions, deployment sites, deployments, licenses, role/template governance.
+- Identity Plane and runtime governance contracts.
+- Authorization templates, role templates, scopes, policy bundle and revocation governance.
+- App Registry, GitLab release import, manifest materialization, resource/action discovery.
+- Deployment, license, bundle, heartbeat and runtime status APIs.
+
+Does not own:
+
+- Business app domain data such as Aims projects, Codocs documents, Altoc contracts or Assets inventory.
+- Customer-side runtime details owned by `console/`: tenant profile, system settings, integration config and credential vault contents.
+- Directory-runtime business records that belong to Console directory-runtime or migration sources.
+
+Do not add `extends: ['../foundation']` here. The direction is business apps/Foundation consuming platform SDK or adapter capabilities, not Platform consuming Foundation.
+
+## Commands
+
+People 生命周期授权只经 Console-owned `console.platform.employment-sync.v1` / `console.platform.offboarding-revoke.v1` 进入 internal API。Platform 必须验证固定 Console principal、tenant/deployment 绑定与完整 HMAC envelope，并在 authorization mutation 同一事务推进 employee revision watermark、写 succeeded receipt；不得信任 body tenant 或 actor，低 revision 必须零 mutation stale-skip。
+
+钉钉 HR 同步不得直接写 Platform。People 接受人员事实、Console 应用账号/目录生命周期后，由上述 Console-owned operation 自动更新授权来源与策略状态；正常入转调离不得依赖系统管理员手工“同步目录”或重发策略包。
+
+Default development port is `3011`.
+
+```bash
+pnpm --dir platform dev
+pnpm --dir platform lint
+pnpm --dir platform typecheck
+pnpm --dir platform build
+```
+
+Run lint/typecheck before commit or after critical changes. Docs-only changes do not need code checks unless they include generated code or schema snippets.
+
+Deployment, PM2, Cloudflare, runtime isolation, public routing, diagnostics and signing-key operational details are runbook material. For those tasks, read the relevant scripts and docs first, especially:
+
+- `../docs/Platform-Console-Prod-Dev-Isolation-Plan.md`
+- `deploy/nginx/*`
+- `nuxt.config.ts`
+- root `package.json` validation/probe scripts
+
+## Runtime Rules
+
+- Main DB defaults to `hzy_platform`; shared development control-plane DB is `hzy_platform_dev`.
+- Production Platform for `wiztek` deploys to Cloudflare by default at `huizhi.yun`; `pnpm run deploy:cloudflare` performs the full preflight and does not require an override. PM2/Nginx remains an optional self-hosted profile for deployments that explicitly require a fixed domestic IP.
+- Prod/dev must use separate env files, PM2 process names and release/workdirs; do not run prod/dev builds concurrently in the same checkout.
+- `/api/platform/diagnostics` is read-only, may expose runtime status/fingerprints, and must never return private key material.
+- Runtime config must come from runtime env first; build-time `runtimeConfig` is only a fallback.
+
+## Architecture Boundaries
+
+Schema domains:
+
+- Platform Domain: `platform_*`
+- Boundary Domain: `tenants`, `tenant_subscriptions`, `subscriptions`, `deployment_sites`, `deployments`, `licenses`, `policy_bundles`, `revocation_snapshots`, `deployment_heartbeats`, `tenant_runtime_credentials`, `tenant_runtime_instances`, `tenant_runtime_instance_apps`, `tenant_runtime_enrollments`, `tenant_runtime_heartbeats`
+- Tenant Domain: `tenant_*`
+
+Respect cross-domain FK rules in `docs/sql/HZY-Platform-SQL-DDL-Draft-v2.sql`; some tables intentionally store logical references without DB foreign keys.
+
+Source-of-truth docs:
+
+- `docs/sql/HZY-Platform-SQL-DDL-Draft-v2.sql`
+- `docs/HZY-Platform-Schema-Draft-v2.md`
+- `docs/HZY-Platform-Schema-Addendum-v2.4.md`
+- `docs/HZY-Platform-ERD-v2.md`
+- `../docs/App-Manifest-Spec.md`
+- `docs/Platform-Codebase-Upgrade-Matrix-v1.md`
+- `docs/Platform-Functional-and-UIUX-Design-v1.md`
+
+When changing schema, API contracts, module boundaries or app-registration behavior, update the relevant docs in the same turn.
+
+## Release And Manifest Rules
+
+- App version is stored in `platform_app_releases.release_version`. Standalone repositories normally use the same GitLab tag; monorepo tags use `<app_code>/vX.Y.Z`, with the full ref in `source_tag` and the app-local `vX.Y.Z` in `release_version`.
+- GitLab manifest import must read `platform_applications.manifest_path` and filter by `release_tag_prefix`; NULL prefix preserves standalone-repository compatibility.
+- `app.manifest.json` does not own version semantics; ignore legacy `version` / `displayVersion` if present.
+- Manifest snapshots are authoritative in `platform_app_manifest_resources` and `platform_app_manifest_resource_actions`.
+- `platform_app_manifest_resource_actions.action_code` is generated by DB; do not insert or update it from application code.
+- Permission coverage is warning-only. Missing coverage must not hard-block release publishing.
+- Data Runtime packages are synchronized and signature-verified through Platform Admin, then approved by moving the database-backed `stable` channel in `platform_runtime_release_channels`. `HZY_DATA_RUNTIME_APPROVED_VERSION` is migration-only bootstrap state and must not be used as the normal release workflow. Downgrades require an explicit Admin rollback approval and audit record.
+
+## Runtime Credentials And Signing
+
+- Do not reintroduce `platform_app_credentials`, `platform_applications.current_credential_id` or `tenant_app_credentials`.
+- Tenant runtime calls use `tenant_runtime_credentials`, keyed by `tenant_code`; Platform stores runtime token hash and lifecycle metadata only.
+- Tenant Runtime 首装使用短期单次 `tenant_runtime_enrollments`；Agent 入站兼容 token 与 Agent→Platform control token 只保存 hash。共享 Agent 以环境级 `tenant_runtime_instances` 表示，并通过 `tenant_runtime_instance_apps` 绑定各应用 deployment。
+- `/oauth/token`, OIDC client secret, user session and refresh token handling belong to customer-side `console/`.
+- Platform root signing keys use `alg='Ed25519'`; private material is referenced by `private_key_ref`, not stored inline in code.
+- Production must provide readable signing private material through the approved env/secret path.
+- Do not reintroduce `deployment_signing_keys`; deployment signing keys stay in customer-side `console/`.
+
+## API Layout
+
+External runtime contract lives under `server/api/v1`:
+
+- `/api/v1/auth/**`: auth boundary placeholders; token issuance is currently handled by `console/`.
+- `/api/v1/policy/**`: policy bundle metadata and download APIs.
+- `/api/v1/revocations/**`: revocation metadata and download APIs.
+- `/api/v1/runtime/**`: heartbeat, license status and transitional deployment runtime APIs.
+- `/api/v1/registry/**`: tenant-visible app registry and manifest APIs.
+
+Do not create `/api/v1/internal/**`.
+
+Management, private and compatibility APIs remain under `server/api/platform`:
+
+- `/api/platform/ops/**`: platform operations console.
+- `/api/platform/tenant-admin/**`: tenant admin console. People lifecycle authorization audit query uses `/api/platform/tenant-admin/lifecycle-audits`; authorization diagnostics use `/api/platform/tenant-admin/authorization-explain` and `/api/platform/tenant-admin/instance-conflict-explain`.
+- `/api/platform/runtime/**`: legacy runtime compatibility; prefer `/api/v1/**`.
+- `/api/platform/internal/**`: internal service APIs. Console Directory employment uses `/api/platform/internal/authorization/users/{uid}/employment` to sync People-driven main-position authorization after People projects active employment facts; Console Directory offboarding uses `/api/platform/internal/authorization/users/{uid}/offboarding` to reclaim People-driven user authorization sources after Console disables the login account; Console authorization runtime uses `/api/platform/internal/authorization/instance-conflict-explain` for read-only instance-level conflict explanation.
+- `/api/platform/auth/**`: platform auth/dev auth APIs.
+
+Business handlers live in `server/api/platform/_handlers/**`; route files re-export handlers. New frontend calls should use `/api/platform/ops/**` or `/api/platform/tenant-admin/**`, not legacy `/admin`.
+
+Application API siblings use the same dynamic segment name `[appCode]`, including the legacy numeric-ID detail/update/delete routes (their URL values remain numeric IDs). Do not mix `[id]` and `[appCode]` at that depth: H3's radix router can lose nested parameter routes such as release PATCH when the sibling is registered later. `applicationRouteDispatch.test.ts` exercises actual H3 dispatch in both registration orders.
+
+Access middleware is `server/middleware/platform-access.ts`. Runtime contract APIs require `Authorization: Bearer hzy_rt_...`; tenant-admin access must validate tenant context mismatches.
+The exact bootstrap paths `/api/v1/runtime/release-public-key`, `/api/v1/runtime/enroll` and `/api/v1/runtime/agent-heartbeat` are exceptions: they authenticate with public trust material, a single-use enrollment code, and a hashed Agent control token respectively. They must not be placed behind `hzy_rt_*` runtime-token middleware or widened to other runtime routes.
+
+## Implementation Notes
+
+- Use existing utilities before creating parallel helpers: `db.ts`, `access.ts`, `platformAuth.ts`, `platformOpsRbac.ts`, manifest/release helpers, `gitlab.ts`, `subscriptions.ts`, `onboardingFlow.ts`.
+- Database access goes through `server/utils/db.ts`; use `withTransaction` for multi-table writes.
+- Frontend uses Nuxt UI V4. Prefer module-local existing patterns and Nuxt UI components for standard controls.
+- Control-plane UI should be operational and dense, not marketing-like.
+- Do not use browser-native `alert`, `confirm`, `prompt` or `<dialog>`; use Nuxt UI `UModal` or an existing modal pattern.
+
+## Product Model Notes
+
+- A subscription plan includes core apps such as `console`, `account`, `workflow` plus optional business apps.
+- One enterprise can have only one active `tenant_subscriptions` row.
+- `platform_plan_apps.pin_release_id = NULL` means follow latest `released` version.
+- Tenant permissions should reference manifest action source through `source_manifest_action_id`, not a duplicated `source_manifest_id`.
+
+## Git And Docs
+
+`platform/` is a module in the root Git monorepo. Check its path-scoped status with:
+
+```bash
+git status --short -- platform
+```
+
+Update docs when changing:
+
+- Schema: `docs/sql/HZY-Platform-SQL-DDL-Draft-v2.sql`
+- ERD/relationship semantics: `docs/HZY-Platform-ERD-v2.md`
+- Release/manifest behavior: `docs/HZY-Platform-Schema-Addendum-v2.4.md` and `../docs/App-Manifest-Spec.md`
+- UI/product flow: `docs/Platform-Functional-and-UIUX-Design-v1.md` and `docs/Platform-Frontend-Product-Plan.md`
+- Code migration status: `docs/Platform-Codebase-Upgrade-Matrix-v1.md`

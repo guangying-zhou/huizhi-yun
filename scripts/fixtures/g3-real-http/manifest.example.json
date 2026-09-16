@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "kind": "hzy-g3-real-http",
+  "tenant": "g3-local",
+  "deployments": {
+    "console": "g3-console",
+    "aimsApp": "g3-aims-app",
+    "altocApp": "g3-altoc-app",
+    "aimsRuntime": "g3-aims-runtime",
+    "altocRuntime": "g3-altoc-runtime"
+  },
+  "ports": {
+    "aimsRuntime": 38081,
+    "altocRuntime": 38082,
+    "console": 38000,
+    "aims": 38002,
+    "altoc": 38003,
+    "gateway": 38443
+  },
+  "artifacts": {
+    "dataRuntimeBinary": ".local/g3-real-http/hzy-data-runtime",
+    "caCertificate": ".local/g3-real-http/ca.pem",
+    "gatewayCertificate": ".local/g3-real-http/gateway.pem",
+    "gatewayPrivateKey": ".local/g3-real-http/gateway-key.pem",
+    "explicitDotenv": "scripts/fixtures/g3-real-http/explicit-empty.env",
+    "runtimeCwd": "scripts/fixtures/g3-real-http/runtime-cwd"
+  },
+  "totalTimeoutMs": 180000,
+  "pollMs": 250
+}

@@ -1,0 +1,85 @@
+stages:
+  - lint
+  - build
+  - deploy
+
+variables:
+  DEPLOY_PATH: /opt/huizhi-yun/account
+  PM2_CONFIG_PATH: /opt/huizhi-yun/account/deploy/ecosystem.config.cjs
+  FOUNDATION_REPO: https://gitlab-ci-token:${CI_JOB_TOKEN}@gitlab.wiztek.cn/huizhi-yun/foundation.git
+  # CI 构建目录结构：/home/gitlab-runner/builds/.../huizhi-yun/account/
+  # foundation 位于：/home/gitlab-runner/builds/.../huizhi-yun/foundation/
+
+# ---- 缓存 node_modules ----
+cache:
+  key:
+    files:
+      - pnpm-lock.yaml
+  paths:
+    - node_modules/
+
+# ---- 前置: 拉取 foundation + 安装依赖 ----
+.install: &install
+  before_script:
+    # 拉取根仓库（含 foundation 子目录）到临时目录，提取 foundation
+    - rm -rf ../foundation /tmp/hzy-root
+    - git clone --depth 1 $FOUNDATION_REPO /tmp/hzy-root
+    - mv /tmp/hzy-root/foundation ../foundation
+    - rm -rf /tmp/hzy-root
+    # 创建临时 workspace 配置
+    - printf "packages:\n  - 'foundation'\n  - 'account'\n" > ../pnpm-workspace.yaml
+    - 'echo ''{"private":true,"pnpm":{"overrides":{"h3":"1.15.10"}}}'' > ../package.json'
+    # 在 workspace 根目录安装依赖
+    - cd .. && pnpm install --no-frozen-lockfile && cd account
+
+# ============ Lint & TypeCheck ============
+lint:
+  stage: lint
+  <<: *install
+  script:
+    - echo "Lint and typecheck skipped in CI (run locally before push)"
+  tags:
+    - deploy
+  only:
+    - merge_requests
+    - main
+
+# ============ Build ============
+build:
+  stage: build
+  <<: *install
+  script:
+    - pnpm build
+    - tar -czf output.tar.gz .output/
+  artifacts:
+    paths:
+      - output.tar.gz
+    expire_in: 1 day
+  tags:
+    - deploy
+  only:
+    - main
+
+# ============ Deploy ============
+deploy_production:
+  stage: deploy
+  dependencies:
+    - build
+  script:
+    - tar -xzf output.tar.gz
+    - mkdir -p $DEPLOY_PATH/deploy
+    - rsync -avz --delete .output/ $DEPLOY_PATH/.output/
+    - rsync -avz deploy/ecosystem.config.cjs $PM2_CONFIG_PATH
+    - test -f /opt/huizhi-yun/secrets/account/.env
+    - cp /opt/huizhi-yun/secrets/account/.env $DEPLOY_PATH/.env
+    - pm2 delete hzy-account 2>/dev/null || true
+    - pm2 start $PM2_CONFIG_PATH --only hzy-account
+    - pm2 save
+  environment:
+    name: production
+    url: https://account.wiztek.cn
+  tags:
+    - deploy
+  only:
+    - main
+  when: manual

@@ -1,0 +1,143 @@
+# Staging internal dev-stack router.
+# Public 80/443 can be handled by Nginx, which proxies to 127.0.0.1:3180.
+
+:3180 {
+	encode zstd gzip
+
+	route {
+		redir /aims /aims/ 308
+		redir /codocs /codocs/ 308
+		redir /altoc /altoc/ 308
+		redir /assets /assets/ 308
+		redir /finance /finance/ 308
+		redir /workflow /workflow/ 308
+		redir /collab /collab/ 308
+		redir /altoc/favicon.ico /altoc/logo.png 302
+		redir /altoc/favicon.png /altoc/logo.png 302
+
+		handle /codocs/ws* {
+			reverse_proxy 127.0.0.1:3107 {
+				header_up X-Forwarded-Proto {http.request.header.X-Forwarded-Proto}
+				header_up X-Forwarded-Host {http.request.header.X-Forwarded-Host}
+				header_up X-Forwarded-Port {http.request.header.X-Forwarded-Port}
+				header_up X-Forwarded-Prefix /codocs
+			}
+		}
+
+		@collab path /collab /collab/ /collab/*
+		handle @collab {
+			reverse_proxy 127.0.0.1:3107 {
+				header_up X-Forwarded-Proto {http.request.header.X-Forwarded-Proto}
+				header_up X-Forwarded-Host {http.request.header.X-Forwarded-Host}
+				header_up X-Forwarded-Port {http.request.header.X-Forwarded-Port}
+				header_up X-Forwarded-Prefix /collab
+			}
+		}
+
+		@aims path /aims /aims/ /aims/*
+		handle @aims {
+			reverse_proxy 127.0.0.1:3102 {
+				header_up X-Forwarded-Proto {http.request.header.X-Forwarded-Proto}
+				header_up X-Forwarded-Host {http.request.header.X-Forwarded-Host}
+				header_up X-Forwarded-Port {http.request.header.X-Forwarded-Port}
+				header_up X-Forwarded-Prefix /aims
+			}
+		}
+
+		@codocs path /codocs /codocs/ /codocs/*
+		handle @codocs {
+			reverse_proxy 127.0.0.1:3101 {
+				header_up X-Forwarded-Proto {http.request.header.X-Forwarded-Proto}
+				header_up X-Forwarded-Host {http.request.header.X-Forwarded-Host}
+				header_up X-Forwarded-Port {http.request.header.X-Forwarded-Port}
+				header_up X-Forwarded-Prefix /codocs
+			}
+		}
+
+		@altocApi path /altoc/api /altoc/api/ /altoc/api/*
+		handle @altocApi {
+			reverse_proxy https://altoc.isme.dev {
+				header_up Host altoc.isme.dev
+				header_up X-Forwarded-Proto {http.request.header.X-Forwarded-Proto}
+				header_up X-Forwarded-Host {http.request.header.X-Forwarded-Host}
+				header_up X-Forwarded-Port {http.request.header.X-Forwarded-Port}
+				header_up X-Forwarded-Prefix /altoc
+				transport http {
+					tls_server_name altoc.isme.dev
+				}
+			}
+		}
+
+		@altoc path /altoc /altoc/ /altoc/*
+		handle @altoc {
+			reverse_proxy https://altoc.isme.dev {
+				header_up Host altoc.isme.dev
+				header_up -Cookie
+				header_up X-Forwarded-Proto {http.request.header.X-Forwarded-Proto}
+				header_up X-Forwarded-Host {http.request.header.X-Forwarded-Host}
+				header_up X-Forwarded-Port {http.request.header.X-Forwarded-Port}
+				header_up X-Forwarded-Prefix /altoc
+				transport http {
+					tls_server_name altoc.isme.dev
+				}
+			}
+		}
+
+		@assets path /assets /assets/ /assets/*
+		handle @assets {
+			reverse_proxy 127.0.0.1:3104 {
+				header_up X-Forwarded-Proto {http.request.header.X-Forwarded-Proto}
+				header_up X-Forwarded-Host {http.request.header.X-Forwarded-Host}
+				header_up X-Forwarded-Port {http.request.header.X-Forwarded-Port}
+				header_up X-Forwarded-Prefix /assets
+			}
+		}
+
+		@workflow path /workflow /workflow/ /workflow/*
+		handle @workflow {
+			reverse_proxy 127.0.0.1:3105 {
+				header_up X-Forwarded-Proto {http.request.header.X-Forwarded-Proto}
+				header_up X-Forwarded-Host {http.request.header.X-Forwarded-Host}
+				header_up X-Forwarded-Port {http.request.header.X-Forwarded-Port}
+				header_up X-Forwarded-Prefix /workflow
+			}
+		}
+
+		@financeApi path /finance/api /finance/api/ /finance/api/*
+		handle @financeApi {
+			reverse_proxy https://finance.isme.dev {
+				header_up Host finance.isme.dev
+				header_up X-Forwarded-Proto {http.request.header.X-Forwarded-Proto}
+				header_up X-Forwarded-Host {http.request.header.X-Forwarded-Host}
+				header_up X-Forwarded-Port {http.request.header.X-Forwarded-Port}
+				header_up X-Forwarded-Prefix /finance
+				transport http {
+					tls_server_name finance.isme.dev
+				}
+			}
+		}
+
+		@finance path /finance /finance/ /finance/*
+		handle @finance {
+			reverse_proxy https://finance.isme.dev {
+				header_up Host finance.isme.dev
+				header_up -Cookie
+				header_up X-Forwarded-Proto {http.request.header.X-Forwarded-Proto}
+				header_up X-Forwarded-Host {http.request.header.X-Forwarded-Host}
+				header_up X-Forwarded-Port {http.request.header.X-Forwarded-Port}
+				header_up X-Forwarded-Prefix /finance
+				transport http {
+					tls_server_name finance.isme.dev
+				}
+			}
+		}
+
+		handle {
+			reverse_proxy 127.0.0.1:3100 {
+				header_up X-Forwarded-Proto {http.request.header.X-Forwarded-Proto}
+				header_up X-Forwarded-Host {http.request.header.X-Forwarded-Host}
+				header_up X-Forwarded-Port {http.request.header.X-Forwarded-Port}
+			}
+		}
+	}
+}

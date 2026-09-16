@@ -1,0 +1,97 @@
+import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
+import { test } from 'node:test'
+
+const source = (path: string) => readFileSync(new URL(`../${path}`, import.meta.url), 'utf8')
+
+test('WeCom login state is random, browser-bound, binding-scoped and single use', () => {
+  const state = source('server/utils/externalLoginState.ts')
+  const runtime = source('../data-runtime/internal/apps/console/auth_external_login.go')
+  const migration = source('../console/docs/sql/Console-SQL-Migration-v1.70-wecom-login-transactions.sql')
+  const start = source('server/api/auth/wecom-login.get.ts')
+  const callback = source('server/api/auth/wecom-callback.get.ts')
+
+  assert.match(state, /randomBytes\(32\)/)
+  assert.match(state, /stateSha256: sha256\(state\)/)
+  assert.match(state, /browserBindingSha256: sha256\(browserValue\)/)
+  assert.match(state, /issueConsoleExternalLoginTransaction/)
+  assert.match(state, /consumeConsoleExternalLoginTransaction/)
+  assert.doesNotMatch(state, /server\/utils\/db|queryRow|execute|withTransaction/)
+  assert.match(runtime, /tenantCode != a\.tenant/)
+  assert.match(runtime, /deploymentCode != strings\.TrimSpace\(deployment\)/)
+  assert.match(runtime, /LIMIT 1 FOR UPDATE/)
+  assert.match(runtime, /status='consumed',consumed_at=UTC_TIMESTAMP\(3\)/)
+  assert.doesNotMatch(migration, /`state`\s/)
+  assert.doesNotMatch(migration, /`browser_binding`\s/)
+  assert.match(start, /issueExternalLoginTransaction/)
+  assert.match(start, /state: transaction\.state/)
+  assert.doesNotMatch(start, /state=STATE/)
+  assert.match(callback, /consumeExternalLoginTransaction\(event, \{ provider: 'wecom', state \}\)[\s\S]*redeemWeComBrowserHandoff\(handoffTicket, event\)/)
+  assert.doesNotMatch(callback, /q\.target_app|q\.redirect|sessionId:\s*code/)
+})
+
+test('Console exchanges WeCom codes only through the typed Connector Runtime capability', () => {
+  const client = source('server/utils/wecom.ts')
+  const serviceIdentity = source('../data-runtime/internal/apps/console/auth_service_tokens.go')
+  const activation = source('server/utils/connectorRuntimeActivation.ts')
+  const activationRoute = source('server/api/v1/console/connector-runtime/identity-activation.post.ts')
+
+  assert.match(client, /audience: 'connector-runtime'/)
+  assert.match(client, /connector-runtime:identity:exchange/)
+  assert.match(client, /\/v1\/identity\/wecom\/authorizations/)
+  assert.match(client, /\/v1\/identity\/wecom\/handoffs\/redeem/)
+  assert.match(client, /integrationCode: INTEGRATION_CODE/)
+  assert.match(client, /handoffTicket/)
+  assert.doesNotMatch(client, /qyapi\.weixin\.qq\.com|cgi-bin\/gettoken|cgi-bin\/user\/get|corpsecret/)
+  assert.match(serviceIdentity, /"connector-runtime:identity:exchange"/)
+  assert.match(activation, /identity\.wecom\.browser-login/)
+  assert.match(activation, /\/v1\/identity\/wecom\/authorizations/)
+  assert.match(activation, /connector\.identityEnabled/)
+  assert.match(activationRoute, /requireSystemSettingsAccess\(event, 'admin'\)[\s\S]*readBody/)
+})
+
+test('WeCom browser callback terminates at Connector Runtime and returns a one-time handoff ticket', () => {
+  const start = source('server/api/auth/wecom-login.get.ts')
+  const callback = source('server/api/auth/wecom-callback.get.ts')
+  const client = source('server/utils/wecom.ts')
+
+  assert.match(start, /createWeComBrowserAuthorization\(transaction\.state, event\)/)
+  assert.match(start, /redirect_uri: authorization\.redirectUri/)
+  assert.doesNotMatch(start, /deriveWecomCallbackUrl/)
+  assert.match(callback, /handoffTicket/)
+  assert.match(callback, /redeemWeComBrowserHandoff\(handoffTicket, event\)/)
+  assert.doesNotMatch(callback, /getWecomUserByCode|q\.code/)
+  assert.match(client, /\/v1\/identity\/wecom\/authorizations/)
+  assert.match(client, /\/v1\/identity\/wecom\/handoffs\/redeem/)
+  assert.doesNotMatch(client, /authorizationCode: code/)
+})
+
+test('WeCom identity activation fails closed until its integration and credential are ready', () => {
+  const activation = source('server/utils/connectorRuntimeActivation.ts')
+  const readinessCheck = activation.indexOf('await requireIdentityProviderIntegration(input.event, provider)')
+  const runtimeProbe = activation.indexOf('getSystemParameter(\'connector.runtimeApiUrl\')', readinessCheck)
+  const settingUpdate = activation.indexOf('updateManagedSettingValue({', runtimeProbe)
+
+  assert.match(activation, /getIntegration\(event, contract\.integrationCode\)/)
+  assert.match(activation, /integrationCode: 'wecom\.default'/)
+  assert.match(activation, /integration\.integrationType !== provider/)
+  assert.match(activation, /integration\.status !== 'active'/)
+  assert.match(activation, /\['corpid', 'corpId', 'corp_id'\]/)
+  assert.match(activation, /\['agentid', 'agentId', 'agent_id'\]/)
+  assert.match(activation, /integration\.currentCredential\.status !== 'active'/)
+  assert.match(activation, /hasActiveIntegrationCredentialBinding\(event, contract\.integrationCode\)/)
+  assert.ok(readinessCheck > 0 && runtimeProbe > readinessCheck && settingUpdate > runtimeProbe)
+  assert.doesNotMatch(activation, /resolveVaultSecret|corpsecret|appSecret\s*[:=]/)
+})
+
+test('inactive external identities and disabled directory users fail closed', () => {
+  const identity = source('server/utils/authIdentity.ts')
+  const runtime = source('../data-runtime/internal/apps/console/auth_identities.go')
+  assert.match(identity, /resolveOrBindConsoleAuthIdentity\(event/)
+  assert.match(identity, /getConsoleDirectoryUser\(event, resolved\.data\.uid\)/)
+  assert.match(identity, /No active directory user found/)
+  assert.match(runtime, /identityStatus\.String != "active"/)
+  assert.match(runtime, /userStatus\.String != "active"/)
+  assert.match(runtime, /directory_identity_inactive/)
+  assert.doesNotMatch(identity, /server\/utils\/db|queryRow|execute|withTransaction/)
+})

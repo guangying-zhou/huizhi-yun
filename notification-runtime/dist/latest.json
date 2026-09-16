@@ -1,0 +1,11 @@
+{
+  "version": "0.1.1",
+  "files": {
+    "linux-arm64": "hzy-notification-runtime-0.1.1-linux-arm64.tar.gz",
+    "linux-amd64": "hzy-notification-runtime-0.1.1-linux-amd64.tar.gz"
+  },
+  "sha256": {
+    "linux-arm64": "e678c758f73e0ca639188a8b440b522631ade42bd7a6cde4e2fe8a594d7163de",
+    "linux-amd64": "2c3f85f42ebaaa9ead9b5e4656996b74907823a5f6c1cbf2cb41a1eb79e4200f"
+  }
+}

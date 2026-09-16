@@ -1,0 +1,146 @@
+workflow:
+  auto_cancel:
+    # 同一分支/MR 有新提交时，中断旧的可中断流水线，避免单 runner 长时间排队。
+    on_new_commit: interruptible
+
+default:
+  interruptible: true
+
+stages:
+  - verify
+
+variables:
+  CI: "true"
+
+  # release:check 中的 validate:monorepo-migration 会用 `git tag --merged` 精确统计
+  # 各组件迁移基线内的 tag 数量并与预期值比对。浅克隆拿不到全部 tag，会误报失败。
+  # 这里必须保持完整克隆，不是可优化项。
+  GIT_DEPTH: "0"
+
+  # 基础镜像参数化：默认仍指向官方 Docker Hub，不擅自改变供应链。
+  # 若 runner 所在网络拉取 Docker Hub 困难，在 GitLab CI/CD 变量中把
+  # NODE_IMAGE 覆盖为自建 Harbor 或可信加速器地址即可，无需改动本文件。
+  NODE_IMAGE: "node:24.18.0-bookworm"
+
+  # ---------------------------------------------------------------- npm / pnpm
+  # 中国大陆访问 registry.npmjs.org 是本流水线最大的耗时与失败来源。
+  # 走 npmmirror 官方镜像；pnpm-lock.yaml 为 lockfileVersion 9，
+  # resolution 只记录 integrity 哈希、不含 registry/tarball URL，
+  # 因此换源与 --frozen-lockfile 完全兼容，完整性校验不受影响。
+  NPM_CONFIG_REGISTRY: "https://registry.npmmirror.com"
+  # corepack 自身要按 packageManager 字段下载 pnpm，同样需要走镜像，
+  # 否则第一次网络请求仍会打到官方源。
+  COREPACK_NPM_REGISTRY: "https://registry.npmmirror.com"
+  # 弱网下 DNS/TLS 抖动常见，放宽重试与超时，避免单次瞬断导致整条流水线失败。
+  NPM_CONFIG_FETCH_RETRIES: "5"
+  NPM_CONFIG_FETCH_RETRY_MINTIMEOUT: "2000"
+  NPM_CONFIG_FETCH_RETRY_MAXTIMEOUT: "120000"
+  NPM_CONFIG_FETCH_TIMEOUT: "300000"
+  PNPM_STORE_DIR: "$CI_PROJECT_DIR/.pnpm-store"
+  # MR 只读取默认分支已经生成的缓存，避免每个提交重复上传大体积 store；
+  # 默认分支的 rule 会覆盖为 pull-push，继续负责刷新缓存。
+  CACHE_POLICY: "pull"
+
+  # codocs/slidev-service 依赖 playwright-chromium，安装时会从 cdn.playwright.dev
+  # 拉取约 170MB 的 Chrome for Testing——国内网络下这是单项最大的耗时来源。
+  # 本 job 只运行 release:check 的静态校验脚本（无 browser/e2e/slidev 相关步骤），
+  # 完全用不到浏览器，故跳过下载。
+  # 注意：这只影响 CI 校验环境。slidev-service 在运行时仍需要 Chromium，
+  # 其部署镜像必须自行安装浏览器，不能沿用此变量。
+  PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
+
+  # ------------------------------------------------------------------------ Go
+  GO_VERSION: "1.26.7"
+  GO_SHA256: "ffb5f8de10c62550dfddab66b36b57030721e0a44a3218e9e1181d7b59f121ca"
+  # 阿里云镜像优先以避开 Runner 到 dl.google.com 的偶发长时间阻塞；无论从哪个
+  # 地址下载，均必须通过上面的官方 SHA-256，镜像不能改变受信内容。
+  GO_DOWNLOAD_BASE: "https://mirrors.aliyun.com/golang"
+  GO_DOWNLOAD_FALLBACK_BASE: "https://golang.google.cn/dl"
+  GOPROXY: "https://goproxy.cn,direct"
+  GOSUMDB: "sum.golang.google.cn"
+  # 各 go.mod 声明 1.23/1.24，CI 安装的 1.26.7 已满足要求，不需要自动下载工具链。
+  # 固定为 local：将来某个 go.mod 提高版本时会明确报错，而不是在 CI 里静默拉取
+  # 一个未经 GO_SHA256 校验的工具链。
+  GOTOOLCHAIN: "local"
+  GOMODCACHE: "$CI_PROJECT_DIR/.cache/go/pkg/mod"
+  GOCACHE: "$CI_PROJECT_DIR/.cache/go/build"
+
+# pnpm 与 Go 使用独立缓存键：改一个 lockfile 不应作废另一侧的缓存。
+# 原先两者共用 pnpm-lock.yaml 作为键，前端依赖一变动就会连带丢弃 Go 构建缓存。
+.pnpm_cache: &pnpm_cache
+  key:
+    prefix: pnpm
+    files:
+      - pnpm-lock.yaml
+  paths:
+    - .pnpm-store/
+  policy: $CACHE_POLICY
+
+# GitLab 的 cache:key:files 最多接受 2 个文件；dev-agent 无外部依赖（没有 go.sum），
+# 未纳入键不影响正确性——缓存键只是性能启发，Go 自身仍会按 go.sum 校验并补下载缺失模块。
+.go_cache: &go_cache
+  key:
+    prefix: go
+    files:
+      - data-runtime/go.sum
+      - notification-runtime/go.sum
+  paths:
+    - .cache/go/
+  policy: $CACHE_POLICY
+
+release_check:
+  stage: verify
+  image: $NODE_IMAGE
+  tags:
+    - verify
+  # 只对基础设施类失败重试，不覆盖 script_failure——真实的校验失败必须立刻暴露，
+  # 不能靠重试掩盖。
+  retry:
+    max: 2
+    when:
+      - runner_system_failure
+      - stuck_or_timeout_failure
+      - api_failure
+  cache:
+    - *pnpm_cache
+    - *go_cache
+  before_script:
+    - |
+      # 前端/文档提交不安装 Go。基线缺失时 fail-safe 安装，供后续全量回退使用。
+      if git cat-file -e "${HZY_CI_DIFF_BASE}^{commit}" 2>/dev/null &&
+         git diff --quiet "$HZY_CI_DIFF_BASE" HEAD -- data-runtime notification-runtime dev-agent; then
+        export HZY_CI_SKIP_GO="1"
+        echo "No Go module changed; skipping Go toolchain installation."
+      else
+        export HZY_CI_SKIP_GO="0"
+        export HZY_GO_ARCHIVE="$CI_PROJECT_DIR/.cache/go/toolchains/go${GO_VERSION}.linux-amd64.tar.gz"
+        mkdir -p "$CI_PROJECT_DIR/.cache/go/toolchains"
+        if [ ! -f "$HZY_GO_ARCHIVE" ] || ! echo "$GO_SHA256  $HZY_GO_ARCHIVE" | sha256sum -c -; then
+          # 有总超时的主/备源避免单一下载地址无限占用 runner；临时文件校验通过后才入缓存。
+          curl -fL --retry 2 --retry-delay 2 --retry-connrefused --connect-timeout 10 --max-time 120 \
+            -o "${HZY_GO_ARCHIVE}.tmp" "${GO_DOWNLOAD_BASE}/go${GO_VERSION}.linux-amd64.tar.gz" ||
+          curl -fL --retry 2 --retry-delay 2 --retry-connrefused --connect-timeout 10 --max-time 120 \
+            -o "${HZY_GO_ARCHIVE}.tmp" "${GO_DOWNLOAD_FALLBACK_BASE}/go${GO_VERSION}.linux-amd64.tar.gz"
+          echo "$GO_SHA256  ${HZY_GO_ARCHIVE}.tmp" | sha256sum -c -
+          mv "${HZY_GO_ARCHIVE}.tmp" "$HZY_GO_ARCHIVE"
+        fi
+        tar -C /usr/local -xzf "$HZY_GO_ARCHIVE"
+        export PATH="/usr/local/go/bin:$PATH"
+        go version
+      fi
+    - corepack enable
+    - corepack pnpm config set store-dir "$PNPM_STORE_DIR"
+    # --prefer-offline：命中缓存的包不再回源，弱网下收益明显；
+    # 缺失的包仍会正常下载，不影响 --frozen-lockfile 的严格性。
+    - corepack pnpm install --frozen-lockfile --prefer-offline
+  script:
+    - corepack pnpm release:check -- --allow-incomplete-release-plan --affected
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      variables:
+        HZY_CI_DIFF_BASE: "$CI_MERGE_REQUEST_DIFF_BASE_SHA"
+        CACHE_POLICY: "pull"
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+      variables:
+        HZY_CI_DIFF_BASE: "$CI_COMMIT_BEFORE_SHA"
+        CACHE_POLICY: "pull-push"

@@ -1,0 +1,78 @@
+import { createHash, createHmac, timingSafeEqual } from 'node:crypto'
+
+export const POLICY_MAX_AGE_MS = 300_000
+
+export interface PolicyObjectStore {
+  get(key: string): Promise<{ text(): Promise<string>, etag: string } | null>
+  put(key: string, body: string, options: { onlyIf: { etagMatches?: string, etagDoesNotMatch?: string } }): Promise<unknown | null>
+}
+
+function objectKey(scope: string) {
+  if (!scope) throw new Error('policy store scope required')
+  return `policy/v1/${createHash('sha256').update(scope).digest('hex')}.json`
+}
+
+function mac(secret: string, body: string) {
+  if (!secret) throw new Error('policy store integrity key required')
+  return createHmac('sha256', secret).update(body).digest('hex')
+}
+
+function decode<T>(raw: string, scope: string, secret: string): { syncedAt: number, value: T } {
+  const envelope = JSON.parse(raw)
+  const expected = Buffer.from(mac(secret, envelope.body), 'hex')
+  const received = Buffer.from(String(envelope.mac || ''), 'hex')
+  if (received.length !== expected.length || !timingSafeEqual(received, expected)) throw new Error('policy store integrity failed')
+  const record = JSON.parse(envelope.body)
+  if (record.scope !== scope || !Number.isSafeInteger(record.syncedAt)) throw new Error('policy store context invalid')
+  return record
+}
+
+// Only the independent synchronizer writes these records after Platform signature
+// verification. HMAC seals the full metadata as well as the signed payload.
+export async function storePolicyBundle<T>(store: PolicyObjectStore, scope: string, secret: string, value: T, syncedAt: number) {
+  const key = objectKey(scope)
+  const record = { scope, syncedAt, value }
+  let encoded: string | undefined
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const current = await store.get(key)
+    if (current) {
+      // Rotation can replace a record sealed with the previous integrity key.
+      let previous: { syncedAt: number, value: T } | undefined
+      try {
+        previous = decode<T>(await current.text(), scope, secret)
+      } catch { /* replace invalid record by CAS */ }
+      if (previous && previous.syncedAt >= syncedAt) return previous
+    }
+    if (!encoded) {
+      const body = JSON.stringify(record)
+      encoded = JSON.stringify({ body, mac: mac(secret, body) })
+    }
+    const result = await store.put(key, encoded, {
+      onlyIf: current ? { etagMatches: current.etag } : { etagDoesNotMatch: '*' }
+    })
+    if (result !== null) return record
+  }
+  throw new Error('policy store concurrent update; retry sync')
+}
+
+export async function readPolicyBundle<T>(store: PolicyObjectStore, scope: string, secret: string, now = Date.now()) {
+  const object = await store.get(objectKey(scope))
+  if (!object) return null
+  const record = decode<T>(await object.text(), scope, secret)
+  if (record.syncedAt > now || now - record.syncedAt >= POLICY_MAX_AGE_MS) return null
+  return record
+}
+
+// Pending I/O is shared only within one request, never between Worker requests.
+const pendingReads = new WeakMap<object, Map<string, Promise<unknown>>>()
+export function coalescePolicyRead<T>(request: object, key: string, read: () => Promise<T>): Promise<T> {
+  let reads = pendingReads.get(request)
+  if (!reads) pendingReads.set(request, reads = new Map())
+  const pending = reads.get(key)
+  if (pending) return pending as Promise<T>
+  const result = Promise.resolve().then(read).finally(() => {
+    if (reads!.get(key) === result) reads!.delete(key)
+  })
+  reads.set(key, result)
+  return result
+}

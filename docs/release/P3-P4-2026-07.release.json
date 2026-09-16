@@ -1,0 +1,666 @@
+{
+  "schemaVersion": 2,
+  "releaseId": "P3-P4-2026-07",
+  "state": "superseded",
+  "generatedAt": "2026-07-09",
+  "repositories": [
+    {
+      "name": "root",
+      "path": ".",
+      "targetCommit": "7c75c821940c149941b1273003ad4f7910a8c460",
+      "baselineTag": null
+    },
+    {
+      "name": "platform",
+      "path": "platform",
+      "targetCommit": "fa79f711c5dff31f6030225532e8b7c387e5c428",
+      "baselineTag": null
+    },
+    {
+      "name": "console",
+      "path": "console",
+      "targetCommit": "bb77611880e1bb664bd92a995ea411fbd88cd5a0",
+      "baselineTag": null
+    },
+    {
+      "name": "people",
+      "path": "people",
+      "targetCommit": "c95cf77e91d92ad64a29bdda51fe4d86db750dd9",
+      "baselineTag": "v0.1.3"
+    },
+    {
+      "name": "altoc",
+      "path": "altoc",
+      "targetCommit": "72676f3f4f1b704728fe666bd89e8ab97c75dc9b",
+      "baselineTag": "v0.1.4"
+    },
+    {
+      "name": "aims",
+      "path": "aims",
+      "targetCommit": "df32c3e7fe3686490a5abe08e5666f392aae1885",
+      "baselineTag": "v0.1.1"
+    },
+    {
+      "name": "finance",
+      "path": "finance",
+      "targetCommit": "10ee629d7becdc19a97af87e2fc83b23d363c946",
+      "baselineTag": "v0.3.2"
+    },
+    {
+      "name": "workflow",
+      "path": "workflow",
+      "targetCommit": "8a29a67aaca3b12095a760cbbc324f857705fe3d",
+      "baselineTag": "v0.1.2"
+    },
+    {
+      "name": "codocs",
+      "path": "codocs",
+      "targetCommit": "970b2f5ee12abf1cc6fc989df5c5c0a1af32301d",
+      "baselineTag": "v0.2.2"
+    },
+    {
+      "name": "assets",
+      "path": "assets",
+      "targetCommit": "cda5d4d0021ca12ebd62f6e8961beab5287ed226",
+      "baselineTag": "v0.2.1"
+    }
+  ],
+  "dataRuntime": {
+    "versionFile": "data-runtime/VERSION",
+    "targetVersion": "0.3.95",
+    "repository": "root",
+    "packageScript": "data-runtime/scripts/package-release.sh",
+    "uploadScript": "data-runtime/scripts/upload-r2.sh",
+    "releaseTest": "data-runtime/scripts/release-scripts.test.mjs",
+    "manifestFile": "manifest.json",
+    "inventoryFile": "release.sha256",
+    "publicationMode": "stage-promote",
+    "activationPointer": "latest/version.txt",
+    "signatureContract": {
+      "algorithm": "Ed25519",
+      "required": true,
+      "signingKeyId": null,
+      "publicKeyProvisioning": "external-trusted-config",
+      "manifestSignature": "manifest.json.sig",
+      "artifactSignatureSuffix": ".sig"
+    },
+    "rollbackBinary": "/opt/hzy-data-runtime/hzy-data-runtime.previous",
+    "rollbackCommand": "hzy-data-runtime rollback --execute --confirm hzy-data-runtime.previous --change-id <change-id>",
+    "updateJournal": "/etc/hzy-data-runtime/update-journal.json",
+    "autoUpdatePolicy": "/etc/hzy-data-runtime/auto-update-policy.json",
+    "executionLock": "/run/lock/hzy-data-runtime-update.lock"
+  },
+  "deploymentPlan": {
+    "tenant": "wiztek",
+    "environment": "production",
+    "wranglerVersion": "4.110.0",
+    "evidenceFileMode": "0600",
+    "stages": [
+      {
+        "code": "preflight",
+        "components": ["release-contract", "release-check"],
+        "requiresApproval": false
+      },
+      {
+        "code": "schema-prerequisites",
+        "components": ["backup", "incremental-migrations"],
+        "requiresApproval": true
+      },
+      {
+        "code": "data-runtime",
+        "components": ["hzy-data-runtime"],
+        "requiresApproval": true,
+        "rollbackAnchor": "exact-previous-artifact-sha256"
+      },
+      {
+        "code": "control-plane",
+        "components": [
+          { "code": "platform", "repository": "platform", "deploymentMode": "pm2-nginx" },
+          { "code": "console", "repository": "console", "deploymentMode": "cloudflare-worker", "packageScript": "deploy:cloudflare" }
+        ],
+        "requiresApproval": true
+      },
+      {
+        "code": "service-grants-and-bundle",
+        "components": ["console-service-grants", "platform-policy-bundle", "console-bundle-refresh"],
+        "requiresApproval": true
+      },
+      {
+        "code": "tenant-gateway",
+        "components": [
+          { "code": "gateway", "deploymentMode": "cloudflare-worker", "config": "deploy/cloudflare/tenant-gateway/wrangler.jsonc" }
+        ],
+        "requiresApproval": true,
+        "rollbackAnchor": "exact-cloudflare-version-id"
+      },
+      {
+        "code": "people",
+        "components": [
+          { "code": "people", "repository": "people", "deploymentMode": "cloudflare-worker", "packageScript": "deploy:cloudflare" }
+        ],
+        "requiresApproval": true
+      },
+      {
+        "code": "business-bridges",
+        "components": [
+          { "code": "assets", "repository": "assets", "deploymentMode": "cloudflare-worker", "packageScript": "deploy:cloudflare" },
+          { "code": "codocs", "repository": "codocs", "deploymentMode": "cloudflare-worker", "packageScript": "deploy:cloudflare" },
+          { "code": "finance", "repository": "finance", "deploymentMode": "cloudflare-worker", "packageScript": "deploy:cloudflare" },
+          { "code": "workflow", "repository": "workflow", "deploymentMode": "cloudflare-worker", "packageScript": "deploy:cloudflare" },
+          { "code": "aims", "repository": "aims", "deploymentMode": "cloudflare-worker", "packageScript": "deploy:cloudflare" },
+          { "code": "altoc", "repository": "altoc", "deploymentMode": "cloudflare-worker", "packageScript": "deploy:cloudflare" }
+        ],
+        "requiresApproval": true
+      },
+      {
+        "code": "acceptance",
+        "components": ["read-canaries", "g2-3-labor-cost-loop", "g2-5-ops-knowledge-loop"],
+        "requiresApproval": true
+      },
+      {
+        "code": "rollback-drills",
+        "components": ["data-runtime-rollback-roll-forward", "gateway-rollback-roll-forward"],
+        "requiresApproval": true
+      }
+    ]
+  },
+  "schemaPlan": {
+    "targetMode": "upgrade",
+    "modules": {
+      "console": {
+        "bootstrap": [
+          {
+            "path": "console/docs/hzy_console_schema.sql",
+            "sha256": "154a5d162ec4be053b758b7c3500afee3d58ee92069e67d8009865709171f1a6",
+            "requiresEmptyDatabase": true
+          }
+        ],
+        "upgrade": [
+          {
+            "path": "console/docs/notification_idempotency_hash_incremental.sql",
+            "sha256": "8df592e331f17561e1059fb2b94d580a73f3e83e00c639de6c8238d747d361fd",
+            "sequence": 10
+          },
+          {
+            "path": "console/docs/notification_actionable_projection_incremental.sql",
+            "sha256": "1be9b288920cb0c007bd953e54b7af1790cb386d9bef077505d5cb10adef66d9",
+            "sequence": 20
+          },
+          {
+            "path": "console/docs/notification_actionable_target_app_20260710.sql",
+            "sha256": "4b787a51dab54372ea8e90e28b6eb862f5da4266bc0ce9993d0573aa31053601",
+            "sequence": 30
+          },
+          {
+            "path": "console/docs/directory_lifecycle_reliability_20260710.sql",
+            "sha256": "f1e471fe505232977e09adf0d6dea7c179f5b46ed6c14ad59ba1a84bb92ff667",
+            "sequence": 40
+          },
+          {
+            "path": "console/docs/notification_actionable_catalog_binding_20260711.sql",
+            "sha256": "af6244b123d81b32e55c35ee0bd65a38d23f8829659aed713dc1e4b02a8f9e93",
+            "sequence": 50
+          },
+          {
+            "path": "console/docs/platform_lifecycle_actionable_reliability_20260711.sql",
+            "sha256": "8a6afe08f3c92e974d1c8074c1f997bf3adc860a682dddcd71763d1a8a279803",
+            "sequence": 60
+          }
+        ]
+      },
+      "people": {
+        "bootstrap": [
+          {
+            "path": "people/docs/people_schema.sql",
+            "sha256": "d88915c44a3288adb92d4f37c345c7d0fb6ca2cac53944fe1b1dbf3c745c4bb1",
+            "requiresEmptyDatabase": true
+          }
+        ],
+        "upgrade": [
+          {
+            "path": "people/docs/people_standard_cost_incremental.sql",
+            "sha256": "9f5912c17f5fa83feb4760b2936a87566aae7d56b1bc9fd5aa49fbfc17d3488a",
+            "sequence": 10
+          },
+          {
+            "path": "people/docs/people_offboarding_tasks_20260710.sql",
+            "sha256": "38a636cfc0f7f06f3b928773ba5a6a9c2020363e0eaef729afdd4ab1a1f56515",
+            "sequence": 20
+          },
+          {
+            "path": "people/docs/people_assets_offboarding_projection_20260710.sql",
+            "sha256": "a8931b991e6ad9c54a59b886c2d10106bcf5371a4bf51b982837627d5a3722fb",
+            "sequence": 30
+          },
+          {
+            "path": "people/docs/migrations/20260710_contribution_scope_versions.sql",
+            "sha256": "c1baeacbaacd38e63858b26b2089782c39608c8a97cd14100edcae096a227d31",
+            "sequence": 40
+          },
+          {
+            "path": "people/docs/migrations/20260710_directory_lifecycle_versions.sql",
+            "sha256": "75e02a08e81590c79f58e3c52e489f9f17fb06a90369fe3561029a1214b60d7c",
+            "sequence": 50
+          },
+          {
+            "path": "people/docs/migrations/20260711_people_dead_letter_actionable_lifecycle.sql",
+            "sha256": "c8983a41a7502c971691194d1ac2b0c7f4bc9604962b81f1bdb131abf43b1607",
+            "sequence": 60
+          }
+        ]
+      },
+      "platform": {
+        "bootstrap": [
+          {
+            "path": "platform/docs/sql/HZY-Platform-SQL-DDL-Draft-v2.sql",
+            "sha256": "5d3ba1be6db17774c361c9c03c2fde612c92a37cccd58c71b29d987ca03727fd",
+            "requiresEmptyDatabase": true
+          }
+        ],
+        "upgrade": [
+          {
+            "path": "platform/docs/sql/HZY-Platform-SQL-Migration-v2.26-lifecycle-reliability.sql",
+            "sha256": "284d2636100ffbeb9a2a0f7c78031941c1305a9283a19dc3f32044fa8c81b73f",
+            "sequence": 10
+          }
+        ]
+      },
+      "finance": {
+        "bootstrap": [
+          {
+            "path": "finance/docs/finance_schema.sql",
+            "sha256": "dcd601fb407633977fa06e4a100446d694eefd25bcf67a83eb3ec964887b7686",
+            "requiresEmptyDatabase": true
+          }
+        ],
+        "upgrade": [
+          {
+            "path": "finance/docs/finance_people_cost_parameter_incremental.sql",
+            "sha256": "4bbcfffdd9702c4f2c6a4180f187c54225604a0169cadc634a782fc83d9d2e0b",
+            "sequence": 10
+          },
+          {
+            "path": "finance/docs/migrations/20260709_project_finance_readiness.sql",
+            "sha256": "4569d7553ecc6b18399f6100973d38c6cc0d5314c377c64a861954c78e0512cb",
+            "sequence": 20
+          },
+          {
+            "path": "finance/docs/migrations/20260710_finance_due_notifications.sql",
+            "sha256": "a92eed306c3e6a99d9ba8f8650e93aa054e189f64f71986b5939f661886e4b1c",
+            "sequence": 30
+          },
+          {
+            "path": "finance/docs/migrations/20260710_finance_integration_operations.sql",
+            "sha256": "4006e8fb4d9d6ecbe1ba5d659d5e11148936d666f2057f7026e06b55b33fcd86",
+            "sequence": 40
+          },
+          {
+            "path": "finance/docs/migrations/20260710_service_command_receipt.sql",
+            "sha256": "78a1d1680a673bf1871cee4c5bbf4ed54329e7295fd645cafa7f1c52b01af9b9",
+            "sequence": 50
+          },
+          {
+            "path": "finance/docs/migrations/20260711_finance_dead_letter_actionable_lifecycle.sql",
+            "sha256": "645cacf394e1cd5eb1a01c7775c7e9df4c95034a9307894263c49e91fe442a41",
+            "sequence": 60
+          }
+        ]
+      },
+      "workflow": {
+        "bootstrap": [
+          {
+            "path": "workflow/docs/workflow_schema.sql",
+            "sha256": "46705ce5682889014b1b6c1660646468ea3b8c1551bbc3a98cd501beb5d4e76a",
+            "requiresEmptyDatabase": true
+          }
+        ],
+        "upgrade": [
+          {
+            "path": "workflow/docs/migrations/010_service_command_receipt.sql",
+            "sha256": "78a1d1680a673bf1871cee4c5bbf4ed54329e7295fd645cafa7f1c52b01af9b9",
+            "sequence": 10
+          }
+        ]
+      },
+      "aims": {
+        "bootstrap": [
+          {
+            "path": "aims/docs/aims_schema.sql",
+            "sha256": "248a6434b7eacf620167449a08d03025a07b05e14c64837e4ef7258a0b910f1e",
+            "requiresEmptyDatabase": true
+          }
+        ],
+        "upgrade": [
+          {
+            "path": "aims/docs/migration_v5.0_integration_operation_outbox.sql",
+            "sha256": "0a4a79ca15933245c1dbf428805d88b80add3941862a3af3f103a541353eec12",
+            "sequence": 10
+          },
+          {
+            "path": "aims/docs/migration_v5.1_service_command_receipt_deployment_identity.sql",
+            "sha256": "76f45e3824d405f0c9db9dd0eee26684d2fca3362aaebd809b195a50b3426ebe",
+            "sequence": 20
+          },
+          {
+            "path": "aims/docs/migration_v5.2_due_notifications.sql",
+            "sha256": "b5aecbdcb14ec8b0b32c3a2faa50a4a37a1fc58c2e470c67b6405821451b7770",
+            "sequence": 30
+          },
+          {
+            "path": "aims/docs/migration_v5.3_people_contribution_snapshot_versions.sql",
+            "sha256": "51455850794e6b703e2a738407c2ef88ff7e19dfaf87cf663b8c2bffbde29c35",
+            "sequence": 40
+          },
+          {
+            "path": "aims/docs/migration_v5.4_service_ticket_delivery_generation.sql",
+            "sha256": "a8a673c205a04c69cbea5d9bc81af3c7e6ccbe29927db7def0565f50cbc03a00",
+            "sequence": 50
+          },
+          {
+            "path": "aims/docs/migration_v5.5_dead_letter_actionable_lifecycle.sql",
+            "sha256": "b1d080071db80b4d0903dc7a009b0decec1eeb926deff04ac609d24ae353f506",
+            "sequence": 60
+          }
+        ]
+      },
+      "altoc": {
+        "bootstrap": [
+          {
+            "path": "altoc/docs/altoc_schema.sql",
+            "sha256": "ce185c3200d2bdcc8090f552e30a35f979c1ed9e1d7edc17265a8ed8ac5ef145",
+            "requiresEmptyDatabase": true
+          }
+        ],
+        "upgrade": [
+          {
+            "path": "altoc/docs/migrations/030_contract_delivery_asset_and_service_agreement.sql",
+            "sha256": "176468d2ba51fe42339743b66db74b714b1c3544dd33a855724394fa57c68136"
+          },
+          {
+            "path": "altoc/docs/migrations/031_service_agreement_ticket_sla.sql",
+            "sha256": "84726a2cc82b055dfae3cffea4b7b4c440edb344a2cdf9e4c4cb26bb1577bdb6"
+          },
+          {
+            "path": "altoc/docs/migrations/032_contract_project_grouping.sql",
+            "sha256": "6d26075275f41f177a29558074ee6cad0e2309a587bea695db665887332bce8a"
+          },
+          {
+            "path": "altoc/docs/migrations/033_contract_master_flag.sql",
+            "sha256": "6b4a48b277ca5316f1a6203dbd00b1eacb35369ea9b74a65dee02c5a8a9a5e34"
+          },
+          {
+            "path": "altoc/docs/migrations/034_structured_fulfillment_project_relations.sql",
+            "sha256": "008c050a4b05c8432805399d0c7200386650d472be3788ec84086b2078b80b5d"
+          },
+          {
+            "path": "altoc/docs/migrations/035_service_agreement_coverage_identity.sql",
+            "sha256": "f93721395583c2d7428aff2114e693725d03bda26e4b9897cda8e55ccb47105f"
+          },
+          {
+            "path": "altoc/docs/migrations/036_cost_profit_accounting.sql",
+            "sha256": "f2083e86fff6574fce4c770393db22341aac7ff224a0c48aca9cdf61ea57431d"
+          },
+          {
+            "path": "altoc/docs/migrations/037_profit_summary_freeze_guardrails.sql",
+            "sha256": "d806142a6f6f0c4c9fd321273900f39928d1a69da762bbc3f577e445f52901a0"
+          },
+          {
+            "path": "altoc/docs/migrations/038_service_ticket_ops_knowledge_reservation.sql",
+            "sha256": "5d7dc78903fc5e6daa8098a65146788727415a78e9bcd1a7f77a37e6eb6802cc"
+          },
+          {
+            "path": "altoc/docs/migrations/039_integration_operation_outbox.sql",
+            "sha256": "901be1473077bb1a8d2d23fde9c9e98c292dbdd09a8fe5937a7cd997c1f14180"
+          },
+          {
+            "path": "altoc/docs/migrations/040_service_command_receipt_deployment_identity.sql",
+            "sha256": "76f45e3824d405f0c9db9dd0eee26684d2fca3362aaebd809b195a50b3426ebe"
+          },
+          {
+            "path": "altoc/docs/migrations/041_receivable_due_notifications.sql",
+            "sha256": "d8d15d7232915681540d002df2e80bd534343ad23c504d710947ab6121635b8c"
+          },
+          {
+            "path": "altoc/docs/migrations/042_assets_delivery_status_projection.sql",
+            "sha256": "c1b1443a3723d309397d8160842d92fd0b853d9e6cac9be5215a221bca1632ed"
+          },
+          {
+            "path": "altoc/docs/migrations/043_service_ticket_aims_reliable_dispatch.sql",
+            "sha256": "e0b47a702411bf48d261af3567f731aa70955a856f3e905296d6320941747246"
+          },
+          {
+            "path": "altoc/docs/migrations/044_dead_letter_actionable_lifecycle.sql",
+            "sha256": "b1d080071db80b4d0903dc7a009b0decec1eeb926deff04ac609d24ae353f506"
+          }
+        ]
+      },
+      "codocs": {
+        "bootstrap": [
+          {
+            "path": "codocs/docs/codocs_schema.sql",
+            "sha256": "5e4f0311e5de515995fc9ec7d0bbc99f09f2681e34ee20fdfc4d9e7d255de588",
+            "requiresEmptyDatabase": true
+          }
+        ],
+        "upgrade": [
+          {
+            "path": "codocs/docs/migration_v1.3_ops_knowledge_acl_hardening.sql",
+            "sha256": "5af8c05d37c574cb7cfa2d796d4182a6e09ca57db4a509d78a49838308678954"
+          },
+          {
+            "path": "codocs/docs/migration_v1.4_service_command_receipt.sql",
+            "sha256": "a447622ff02e2a26ceed2bad9dfa68054034358331c809f5f526a30164bf92e3"
+          }
+        ]
+      },
+      "assets": {
+        "bootstrap": [
+          {
+            "path": "assets/docs/assets_schema.sql",
+            "sha256": "5a2b58b0d1ab34e2eedc4073d21c43b7d47d301f362afa940008aa3d586156af",
+            "requiresEmptyDatabase": true
+          }
+        ],
+        "upgrade": [
+          {
+            "path": "assets/docs/assets_service_command_receipt_20260710.sql",
+            "sha256": "a4851a078c1dc8403c65f0fd880267c3782eee55aaf4d2f72cf29bf1ddc67055",
+            "sequence": 10
+          },
+          {
+            "path": "assets/docs/assets_notification_checkpoint_20260710.sql",
+            "sha256": "041b3e34e10cbe0b6570073a3199a3dfb1411689450dbd7e5a887b28358f15a2",
+            "sequence": 20
+          },
+          {
+            "path": "assets/docs/assets_customer_delivery_responsibility_20260710.sql",
+            "sha256": "101533a2ddf8863f52936dd007ec62fbb2997b15988dd7ef2ccd7bd48a665853",
+            "sequence": 30
+          },
+          {
+            "path": "assets/docs/assets_offboarding_recovery_20260710.sql",
+            "sha256": "ec7739bcdc1464c87cb094006fe9c0eb6b042544a23cfc6427e2f5cb04b32c35",
+            "sequence": 40
+          },
+          {
+            "path": "assets/docs/migrations/20260710_assets_integration_operations.sql",
+            "sha256": "bb711c8ef39019864f308b94da8980faa4642f865633703454a540621d7835ba",
+            "sequence": 50
+          },
+          {
+            "path": "assets/docs/migrations/20260711_assets_dead_letter_actionable_lifecycle.sql",
+            "sha256": "42a23963fcb92758e2510d679655a44c32e48d15aaf98fe2857b95e6a7083b5d",
+            "sequence": 60
+          }
+        ]
+      }
+    }
+  },
+  "applicationContracts": [
+    {
+      "appCode": "people",
+      "manifest": "people/app.manifest.json",
+      "resources": {
+        "employees": ["view", "edit"],
+        "assignments": ["view", "edit", "approve"],
+        "offboarding_tasks": ["view", "edit", "confirm", "cancel", "admin"],
+        "cost_snapshots": ["view", "edit", "approve"],
+        "performance_cycles": ["view", "edit", "approve"],
+        "integration_operations": ["view", "replay"]
+      }
+    },
+    {
+      "appCode": "altoc",
+      "manifest": "altoc/app.manifest.json",
+      "resources": {
+        "contract": ["view", "edit", "finance-summary:sync"],
+        "service_ticket": ["view", "edit", "close", "delivery-result:sync"],
+        "maintenance_contract": ["view", "edit"]
+      }
+    },
+    {
+      "appCode": "aims",
+      "manifest": "aims/app.manifest.json",
+      "resources": {
+        "projects": ["view", "create", "edit"],
+        "work_items": ["view", "create", "edit"]
+      }
+    },
+    {
+      "appCode": "finance",
+      "manifest": "finance/app.manifest.json",
+      "resources": {
+        "invoices": ["view", "edit", "approve", "issue", "admin"],
+        "project_accounting": ["view", "edit"],
+        "performance": ["view", "edit"]
+      }
+    },
+    {
+      "appCode": "codocs",
+      "manifest": "codocs/app.manifest.json",
+      "resources": {
+        "documents": ["view", "create", "edit"],
+        "projects": ["view", "create", "edit"]
+      }
+    },
+    {
+      "appCode": "assets",
+      "manifest": "assets/app.manifest.json",
+      "resources": {
+        "deliveries": ["view", "edit"],
+        "environments": ["view", "edit"],
+        "offboarding_recoveries": ["view", "edit", "admin"]
+      }
+    }
+  ],
+  "subscriptionContract": {
+    "seed": "platform/docs/sql/HZY-Platform-Seed-Plans-v2.3.sql",
+    "catalogApps": ["people", "altoc", "aims", "finance", "codocs", "assets"],
+    "planApps": {
+      "advanced": ["people", "altoc", "aims", "finance", "codocs", "assets"]
+    }
+  },
+  "serviceGrantContracts": [
+    {
+      "file": "console/docs/sql/Console-SQL-Seed-v1.21-people-finance-runtime-clients.sql",
+      "contains": ["people.runtime", "finance:read", "people:read", "people:write"]
+    },
+    {
+      "file": "console/docs/sql/Console-SQL-Seed-v1.24-people-aims-contribution-grants.sql",
+      "contains": ["'aims'", "'read'", "people-collect-aims-contributions"]
+    },
+    {
+      "file": "console/docs/sql/Console-SQL-Seed-v1.31-altoc-service-command-grants.sql",
+      "contains": ["altoc:receivable", "altoc:service-ticket:delivery-result", "altoc:contract:finance-summary:sync"]
+    },
+    {
+      "file": "console/docs/sql/Console-SQL-Seed-v1.32-assets-service-api-grants.sql",
+      "contains": ["'assets'", "'read'", "'write'", "altoc-assets-delivery-view-and-document-write", "/api/v1/service/deliveries/{deliveryCode}/documents"]
+    },
+    {
+      "file": "console/docs/sql/Console-SQL-Seed-v1.33-altoc-aims-codocs-service-grants.sql",
+      "contains": ["'aims'", "codocs:documents", "'write'"]
+    },
+    {
+      "file": "console/docs/sql/Console-SQL-Seed-v1.35-authorization-lifecycle-notifications.sql",
+      "contains": ["notification.authorizationLifecycleRecipients", "JSON_ARRAY()", "operation logs"]
+    },
+    {
+      "file": "console/docs/sql/Console-SQL-Seed-v1.36-integration-operation-dead-letter-notifications.sql",
+      "contains": ["notification.integrationOperationRecipients", "'notifications'", "'publish'", "integration-operation-dead-letter"]
+    },
+    {
+      "file": "console/docs/sql/Console-SQL-Seed-v1.38-console-runtime-people-notification-details.sql",
+      "contains": ["console.runtime", "people:notification-details", "authorize"]
+    },
+    {
+      "file": "console/docs/sql/Console-SQL-Seed-v1.39-console-runtime-finance-notification-details.sql",
+      "contains": ["console.runtime", "finance:notification-details", "authorize"]
+    },
+    {
+      "file": "console/docs/sql/Console-SQL-Seed-v1.40-console-runtime-altoc-notification-details.sql",
+      "contains": ["console.runtime", "altoc:notification-details", "authorize"]
+    },
+    {
+      "file": "console/docs/sql/Console-SQL-Seed-v1.41-people-assets-offboarding-recovery.sql",
+      "contains": ["assets:offboarding-recovery", "sync", "people-project-effective-offboarding-to-assets"]
+    },
+    {
+      "file": "console/docs/sql/Console-SQL-Seed-v1.43-altoc-finance-workflow-invoice-grants.sql",
+      "contains": ["finance:invoice-request", "workflow:invoice-request", "invoice-requests/create", "finance-invoice-approval"]
+    },
+    {
+      "file": "console/docs/sql/Console-SQL-Seed-v1.44-service-ticket-aims-reliable-grants.sql",
+      "contains": ["aims:service-ticket:work-item", "altoc:service-ticket:delivery-result", "work-item/receive"]
+    },
+    {
+      "file": "console/docs/sql/Console-SQL-Seed-v1.45-people-directory-lifecycle-reliable-grants.sql",
+      "contains": ["console:directory-employment", "console:directory-offboarding", "people-directory-lifecycle-reliable-command"]
+    },
+    {
+      "file": "console/docs/sql/Console-SQL-Seed-v1.46-finance-assets-dead-letter-notification-grants.sql",
+      "contains": ["'assets'", "'finance'", "'notifications'", "'publish'", "integration-operation-dead-letter"]
+    },
+    {
+      "file": "console/docs/sql/Console-SQL-Seed-v1.47-people-dead-letter-notification-grants.sql",
+      "contains": ["'people'", "'notifications'", "'publish'", "integration-operation-dead-letter"]
+    }
+  ],
+  "gatewayContract": {
+    "source": "deploy/cloudflare/tenant-gateway/src/index.js",
+    "tests": [
+      "deploy/cloudflare/tenant-gateway/test/cache-policy.test.mjs",
+      "deploy/cloudflare/tenant-gateway/test/routing-context.test.mjs"
+    ],
+    "contains": [
+      "appCode: 'people'",
+      "prefix: '/people/'",
+      "x-hzy-gateway-token",
+      "x-hzy-tenant",
+      "x-hzy-deployment",
+      "x-hzy-environment",
+      "stripInternalHeaders(headers)"
+    ]
+  },
+  "demoData": {
+    "required": true,
+    "manifest": "docs/demo/p3-p4/manifest.json",
+    "runner": "scripts/run-p3-p4-demo-data.mjs",
+    "readAcceptance": {
+      "script": "scripts/accept-people-g2-2-reads.mjs",
+      "test": "scripts/accept-people-g2-2-reads.test.mjs",
+      "packageScript": "accept:people-g2-2-reads"
+    },
+    "laborCostLoopAcceptance": {
+      "script": "scripts/accept-g2-3-labor-cost-loop.mjs",
+      "test": "scripts/accept-g2-3-labor-cost-loop.test.mjs",
+      "packageScript": "accept:g2-3-labor-cost-loop"
+    },
+    "files": [
+      "docs/demo/p3-p4/README.md",
+      "docs/demo/p3-p4/seed.sql",
+      "docs/demo/p3-p4/verify.sql",
+      "docs/demo/p3-p4/cleanup.sql"
+    ]
+  }
+}

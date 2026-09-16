@@ -1,0 +1,3 @@
+# Contract documentation alone cannot replace a same-app Go test.
+data-runtime/internal/apps/people/performance_cycles.go
+docs/Tenant-Runtime-API-Contract-v1.md

@@ -1,0 +1,70 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "hzy-tenant-gateway",
+  "main": "src/index.js",
+  "compatibility_date": "2026-05-23",
+  "workers_dev": true,
+  "observability": {
+    "enabled": true
+  },
+  "triggers": {
+    "crons": ["*/5 * * * *"]
+  },
+  "routes": [
+    {
+      "pattern": "*.huizhi.yun/*",
+      "zone_name": "huizhi.yun"
+    }
+  ],
+  "services": [
+    {
+      "binding": "HZY_PLATFORM_SERVICE",
+      "service": "hzy-platform"
+    },
+    {
+      "binding": "HZY_CONSOLE_SERVICE",
+      "service": "hzy-console-prod"
+    },
+    {
+      "binding": "HZY_AIMS_SERVICE",
+      "service": "hzy-aims"
+    },
+    {
+      "binding": "HZY_ALTOC_SERVICE",
+      "service": "hzy-altoc"
+    },
+    {
+      "binding": "HZY_FINANCE_SERVICE",
+      "service": "hzy-finance"
+    },
+    {
+      "binding": "HZY_PEOPLE_SERVICE",
+      "service": "hzy-people"
+    },
+    {
+      "binding": "HZY_WORKFLOW_SERVICE",
+      "service": "hzy-workflow"
+    }
+  ],
+  "vars": {
+    "HZY_POLICY_SYNC_HOSTS": "",
+    "HZY_TENANT_GATEWAY_REGISTRY_URL": "https://huizhi.yun/api/platform/internal/tenant-gateway/resolve",
+    "HZY_TENANT_GATEWAY_SCHEDULER_SHARD_COUNT": "1",
+    "HZY_TENANT_DOMAIN_SUFFIX": "huizhi.yun",
+    "HZY_TENANT_GATEWAY_RESERVED_SUBDOMAINS": "admin,aims,align,altoc,api,app,apps,assets,auth,billing,cdn,cdn-cgi,codocs,collab,console,dash,dashboard,dev,docs,downloads,finance,help,hrm,id,insights,login,mail,oauth,observability,people,platform,root,rum,sso,static,status,staging,support,test,webdev,workflow,www",
+    "HZY_TENANT_GATEWAY_RESERVED_SUBDOMAIN_PREFIXES": "dev-agent-",
+    "HZY_TENANT_GATEWAY_RESERVED_SUBDOMAIN_SUFFIXES": "-data-runtime",
+    "HZY_DEFAULT_TENANT": "wiztek",
+    "HZY_CONSOLE_ORIGIN": "https://console.huizhi.yun",
+    "HZY_FINANCE_ORIGIN": "https://finance.huizhi.yun",
+    "HZY_ALTOC_ORIGIN": "https://altoc.huizhi.yun",
+    "HZY_AIMS_ORIGIN": "https://aims.huizhi.yun",
+    "HZY_ASSETS_ORIGIN": "https://assets.huizhi.yun",
+    "HZY_CODOCS_ORIGIN": "https://codocs.huizhi.yun",
+    "HZY_PEOPLE_ORIGIN": "https://people.huizhi.yun",
+    "HZY_WORKFLOW_ORIGIN": "https://workflow.huizhi.yun",
+    "HZY_WEBDEV_ORIGIN": "https://webdev.huizhi.yun",
+    "HZY_COLLAB_ORIGIN": "https://hzy-collab-codocs-poc.zhouguangying.workers.dev",
+    "HZY_OBSERVABILITY_ORIGIN": "https://hzy-observability.zhouguangying.workers.dev"
+  }
+}

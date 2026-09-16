@@ -1,0 +1,19 @@
+[Unit]
+Description=CodeInsight Stage A - Sync commit metadata (GitLab + SVN)
+After=network.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/Dev/WizOA/codeinsight
+EnvironmentFile=-/etc/codeinsight-ingestion.env
+ExecStart=/usr/bin/flock -n /var/lock/codeinsight-sync-commits.lock bash -lc '\
+  PYTHONUNBUFFERED=1 ${PYTHON_BIN:-python3} server/scripts/sync_gitlab_commits.py --mode metadata ${INCLUDE_INVALID:+--include-invalid} ${GITLAB_URL:+--gitlab-url "$GITLAB_URL"} ${GITLAB_TOKEN:+--gitlab-token "$GITLAB_TOKEN"}; \
+  PYTHONUNBUFFERED=1 ${PYTHON_BIN:-python3} server/scripts/sync_svn_commits.py --mode metadata ${INCLUDE_INVALID:+--include-invalid} \
+'
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7
+MemorySwapMax=infinity
+
+[Install]
+WantedBy=multi-user.target

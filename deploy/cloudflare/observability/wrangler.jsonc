@@ -1,0 +1,27 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "hzy-observability",
+  "main": "src/index.js",
+  "compatibility_date": "2026-05-24",
+  "workers_dev": true,
+  "observability": {
+    "enabled": true
+  },
+  "analytics_engine_datasets": [
+    {
+      "binding": "HUIZHI_YUN_ANALYTICS_ENGINE",
+      "dataset": "analytics_events"
+    }
+  ],
+  "d1_databases": [
+    {
+      "binding": "RUM_DB",
+      "database_name": "hzy-observability",
+      "database_id": "6a4528a6-c37a-4018-8cb4-d51d06a4421a",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "vars": {
+    "NODE_ENV": "production"
+  }
+}

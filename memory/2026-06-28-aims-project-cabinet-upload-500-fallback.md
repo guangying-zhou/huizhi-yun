@@ -1,0 +1,24 @@
+# Aims project cabinet upload 500 fallback
+
+- Time: 2026-06-28 12:06 ADT
+- Symptom: Aims project other-document upload returned HTTP 500 after switching non-Markdown project files from Codocs department cabinet to project cabinet.
+- Evidence:
+  - Production `POST https://wiztek.huizhi.yun/codocs/api/v1/project-cabinet/upload` returns 401 without a service token, proving the new Codocs route is deployed and reachable.
+  - Production direct Codocs `POST https://codocs.huizhi.yun/codocs/api/v1/project-cabinet/upload` also returns 401 without a service token, proving the direct service origin used by Aims is deployed.
+  - Production direct Codocs `POST https://codocs.huizhi.yun/codocs/api/dept-cabinet/upload` returns 400 without a multipart body, proving the legacy fallback endpoint is also reachable on the direct service origin.
+  - Production data-runtime `/runtime/healthz` reports version `0.3.86` built at `2026-06-28T14:47:26Z`, so the runtime service is current.
+  - The remaining likely failure is the project-cabinet metadata write/read path, especially `cabinet_files.project_code` schema or route compatibility.
+- Root cause hypothesis: Codocs project-cabinet OSS upload can succeed, but metadata registration can fail when the tenant database/schema or runtime route is not fully ready for `cabinet_files.project_code`. Aims surfaced this as a generic 500 and had no compatibility path.
+- Fix:
+  - Aims now prefers Codocs `/api/v1/project-cabinet/upload`.
+  - For service-side project-cabinet metadata/runtime failures only, Aims falls back to the legacy cabinet upload endpoint while still passing `project_code`, producing the project OSS path `codocs/projects/{projectCode}/cabinet/...` and indexing the file in Aims.
+  - Auth/permission/client validation errors (`400/401/403`) do not fall back.
+  - Codocs project-cabinet download URL generation now falls back to legacy metadata if project metadata lookup fails and Aims provides an exact `expected_oss_path` under the project cabinet prefix.
+- Regression test:
+  - `aims/test/codocsProjectCabinetFallback.test.ts` covers fallback eligibility for metadata/schema/5xx failures and rejection for caller/auth errors.
+- Validation:
+  - `aims`: `pnpm test`, `pnpm lint`, `pnpm typecheck`
+  - `codocs`: `pnpm lint`; filtered `pnpm typecheck` showed no project-cabinet related errors
+  - `data-runtime`: `go test ./...`
+  - `git diff --check` in root, Aims, and Codocs
+- Status: DONE_WITH_CONCERNS. Full production confirmation still requires redeploying Aims/Codocs and retrying the upload, or applying the `cabinet_files.project_code` migration so the preferred project-cabinet metadata path works without fallback.

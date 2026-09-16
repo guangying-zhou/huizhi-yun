@@ -1,0 +1,14 @@
+fastapi==0.135.2
+uvicorn==0.42.0
+requests>=2.31.0
+mysql-connector-python>=8.0.0
+unidiff>=0.7.5
+python-dotenv>=0.21.0
+# Async database support
+aiomysql>=0.2.0
+sqlalchemy[asyncio]>=2.0.0
+# Enhanced validation
+pydantic[email]>=2.0.0
+pydantic-settings>=2.0.0
+# Scheduler for background tasks
+apscheduler>=3.10.0

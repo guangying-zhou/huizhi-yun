@@ -1,0 +1,4 @@
+# Runtime route wiring: server-domain test plus a shared runtime contract.
+data-runtime/internal/server/server.go
+data-runtime/internal/server/runtime_auth_test.go
+docs/MODULE_CONTRACTS.md
