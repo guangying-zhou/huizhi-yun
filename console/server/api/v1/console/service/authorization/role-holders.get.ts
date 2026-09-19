@@ -1,3 +1,4 @@
+import { evaluateEnterpriseEntitlement } from '~~/server/utils/enterpriseEntitlement'
 import { createError, setHeader } from 'h3'
 import {
   getCachedBundleInvalidReason,
@@ -32,8 +33,8 @@ export default defineEventHandler(async (event) => {
       const config = loadPlatformRuntimeConfig(event)
       const cacheScope = resolvePlatformRuntimeCacheScope(config, event)
       const [activation, bundle] = await Promise.all([
-        readActivationStatus(config.bundleCacheDir, cacheScope),
-        readCachedBundle(config.bundleCacheDir, cacheScope)
+        readActivationStatus(config.bundleCacheDir, cacheScope, event),
+        readCachedBundle(config.bundleCacheDir, cacheScope, event)
       ])
       const invalidReason = getCachedBundleInvalidReason(bundle)
       if (
@@ -52,6 +53,9 @@ export default defineEventHandler(async (event) => {
           message: 'authorization_role_holders_policy_unavailable'
         })
       }
+
+      const enterprise = evaluateEnterpriseEntitlement(bundle.payload, binding.tenantId)
+      if (!enterprise.allowed) throw createError({ statusCode: 403, message: 'Enterprise access is not active', data: { code: enterprise.reason } })
 
       const roles = buildRoleHolderProjection(bundle.payload, roleCodes)
       return {

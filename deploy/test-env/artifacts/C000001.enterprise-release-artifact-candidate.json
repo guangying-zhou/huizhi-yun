@@ -1,0 +1,40 @@
+{
+  "schemaVersion": "enterprise-release-artifact.v1",
+  "releaseState": "candidate",
+  "deploymentState": "not-deployed",
+  "sourceCommit": "7a0cde51da075e3ee8ad827a89c5fe109dd4f8be",
+  "enterpriseHost": {
+    "commit": "7a0cde51da075e3ee8ad827a89c5fe109dd4f8be",
+    "treeSha1": "13e2306f2eb849255cf9e6844a842a93955ed700",
+    "manifestPath": "enterprise/app.manifest.json",
+    "manifestSha256": "a6b6f8f22da216d8d72c0d837b46a891b90aae57f3cdcca1f079fd6b2e898d07",
+    "permissionCatalogSha256": "f4a70f6782f0a07ec302d8ca8ccd9a083aa880c77c1677b0dda3726125cf4a0b"
+  },
+  "dataRuntime": {
+    "commit": "7a0cde51da075e3ee8ad827a89c5fe109dd4f8be",
+    "treeSha1": "6c582e2fa90455fb789b91e92e35c99bc4b5e080",
+    "versionPath": "data-runtime/VERSION",
+    "version": "0.3.219",
+    "versionSha256": "67b73e0365a5b7654c2473dbbb68bfe9fe28df2a56fc37daa2bc8804a28e8eaa"
+  },
+  "schemaMigrationPlan": {
+    "path": "deploy/test-env/artifacts/C000001.enterprise-migration-plan.json",
+    "sha256": "5aca7c7ff2b60eae1b8b72c442e951dace7de6245d5f07b87660522222e2e84b",
+    "version": "enterprise-shadow-copy.v1",
+    "reviewSha256": "5404dd29e3374a66cb7180670a2850ade0e61414ae250464775e58c16c5eda97"
+  },
+  "gateway": {
+    "sourcePath": "deploy/cloudflare/tenant-gateway/src/index.js",
+    "sourceSha256": "740bc83e52819c90fef857256248a889a45f64f9c44c73646fab5f84bfc18563",
+    "configPath": "deploy/cloudflare/tenant-gateway/wrangler.jsonc",
+    "configSha256": "92dac422367e359d27350261f714cdcc5f7e4e33a5440bb0922eb81c54acfa0f",
+    "crons": [
+      "*/5 * * * *"
+    ]
+  },
+  "rollbackRoute": {
+    "receiptPath": "deploy/test-env/artifacts/C000001.enterprise-host-full-candidate-20260914.json",
+    "receiptSha256": "d0d77650dc8bb75d08be0dd6f81e269c0e56cc3e90590853efab0926b1d2f617",
+    "version": "20cf726f-75e0-4ab3-abb0-574efbff6c1a"
+  }
+}

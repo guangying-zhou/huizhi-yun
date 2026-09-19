@@ -3,6 +3,8 @@
  * 使用 Console service token 调用 Codocs 模块间接口
  */
 import { buildAppHomeUrl, getRequestOrigin } from '@hzy/foundation/server/utils/appUrls'
+import { callCodocsProjectAccess } from './codocsProjectAccessClient'
+import { serviceAppFetch } from '@hzy/foundation/server/utils/appServiceBinding'
 import {
   resolveServiceAppBaseUrl,
   resolveTrustedServiceAppRoute
@@ -14,8 +16,7 @@ import {
 } from '@hzy/foundation/server/utils/serviceOidc'
 import {
   buildServiceCommandRuntimeHeaders,
-  hashServiceCommandPayload,
-  maybeCallTenantRuntime
+  hashServiceCommandPayload
 } from '@hzy/foundation/server/utils/tenantRuntimeClient'
 import { resolveTrustedTenantGatewayContext } from '@hzy/foundation/server/utils/tenantGatewayTrust'
 import { createError, getHeader, type H3Event } from 'h3'
@@ -37,38 +38,6 @@ interface CodocsFolderItem {
   updated_at: string
 }
 
-interface CodocsFolderListResponse {
-  success: boolean
-  data: {
-    items: CodocsFolderItem[]
-    total: number
-    page: number
-    limit: number
-  }
-}
-
-interface CodocsDocumentListResponse {
-  success: boolean
-  data: {
-    items: Array<{
-      id: number
-      uuid: string
-      title: string
-      doc_type: string
-      owner_uid: string
-      dept_code: string | null
-      project_code: string | null
-      folder_id: number | null
-      folder_name: string | null
-      content_size: number
-      updated_at: string
-    }>
-    total: number
-    page: number
-    limit: number
-  }
-}
-
 interface CodocsDocumentMetadataRow {
   uuid?: string
   title?: string | null
@@ -83,14 +52,6 @@ interface CodocsDocumentMetadataRow {
   last_editor_uid?: string | null
   created_at?: string | null
   updated_at?: string | null
-}
-
-interface CodocsRuntimePage<T> {
-  items?: T[]
-  total?: number
-  page?: number
-  pageSize?: number
-  limit?: number
 }
 
 interface CodocsDocumentSummaryResponse {
@@ -198,9 +159,6 @@ export interface DocumentAccessAuditLog {
   createdAt: string
 }
 
-const AIMS_TRUSTED_DOCUMENT_ACCESS_PROJECT_CODES_QUERY = 'aims_trusted_document_access_project_codes'
-const AIMS_TRUSTED_DOCUMENT_ACCESS_ROLES_QUERY = 'aims_trusted_document_access_roles'
-
 export interface DocumentAccessAuditListResult {
   items: DocumentAccessAuditLog[]
   total: number
@@ -267,13 +225,6 @@ interface CabinetDeleteResponse {
     recycledPath?: string | null
     missingOssObject?: boolean
   }
-}
-
-interface RuntimeSuccessEnvelope<T> {
-  success?: boolean
-  data?: T
-  code?: number
-  message?: string
 }
 
 function getCodocsConfig() {
@@ -462,6 +413,14 @@ async function getAuthHeaders(scope: CodocsServiceScope, event?: H3Event) {
   }
 }
 
+async function projectDocumentAuthHeaders(scope: CodocsServiceScope, event?: H3Event) {
+  if (event && resolveTrustedTenantGatewayContext(event) && !resolveTrustedServiceAppRoute(event, 'codocs')) {
+    throw createError({ statusCode: 503, message: 'Codocs 目标部署不可用' })
+  }
+  const token = await requestServiceAccessToken({ audience: 'codocs', scope, event })
+  return { Authorization: `Bearer ${token}`, ...trustedServiceRequestHeaders(event, 'codocs') }
+}
+
 function getUserCookieHeader(uid: string) {
   return { cookie: `auth_user=${encodeURIComponent(uid)}` }
 }
@@ -487,39 +446,6 @@ function throwCodocsServiceError(error: unknown, fallback: string): never {
   })
 }
 
-function unwrapRuntimeData<T>(value: unknown): T {
-  if (value && typeof value === 'object' && 'data' in value) {
-    const envelope = value as RuntimeSuccessEnvelope<T>
-    if (envelope.code !== undefined && envelope.code !== 0) {
-      throw createError({ statusCode: 502, message: envelope.message || 'Codocs tenant-runtime returned an error.' })
-    }
-    return envelope.data as T
-  }
-  return value as T
-}
-
-async function maybeCallCodocsRuntime<T>(
-  event: H3Event | undefined,
-  path: string,
-  options: {
-    method?: string
-    query?: Record<string, unknown>
-    body?: unknown
-    scope?: string
-  }
-) {
-  if (!event) return null
-  const runtime = await maybeCallTenantRuntime<unknown>(event, path, {
-    appCode: 'codocs',
-    scope: options.scope || (options.method && options.method !== 'GET' ? 'codocs.write' : 'codocs.read'),
-    method: options.method || 'GET',
-    query: options.query,
-    body: options.body
-  })
-  if (!runtime.handled) return null
-  return unwrapRuntimeData<T>(runtime.data)
-}
-
 /**
  * 在 Codocs 中创建文档，返回 codocs_uuid
  */
@@ -534,13 +460,22 @@ export async function createCodocsDocument(params: {
   projectCode?: string
   folderPath?: string
 }): Promise<void> {
+  if ((params.docType || 'project') === 'project') {
+    const result = await callCodocsProjectAccess<{ code: number, data: { uuid: string } }>(params.event, 'create', {
+      documentUuid: params.uuid, actorUid: params.ownerUid, title: params.title, content: params.content || '',
+      projectCode: params.projectCode, deptCode: params.deptCode, folderPath: params.folderPath
+    })
+    if (result.code !== 0 || result.data?.uuid !== params.uuid) throw createError({ statusCode: 502, message: 'Codocs 文档创建响应无效' })
+    return
+  }
   const apiRoot = await getCodocsServiceApiRoot(params.event)
 
-  const response = await $fetch<{ code?: number, success?: boolean, message?: string, data: { uuid: string } }, string>(
+  const response = await serviceAppFetch<{ code?: number, success?: boolean, message?: string, data: { uuid: string } }>(
+    params.event, 'codocs',
     `${apiRoot}/documents`,
     {
       method: 'POST',
-      headers: await getAuthHeaders('codocs:documents:write', params.event),
+      headers: { ...(await projectDocumentAuthHeaders('codocs:documents:write', params.event)), 'idempotency-key': params.uuid },
       body: {
         uuid: params.uuid,
         title: params.title,
@@ -611,6 +546,7 @@ export async function uploadCodocsProjectCabinetFile(params: {
   fileName: string
   data: Uint8Array
   contentType?: string
+  fileUuid?: string
 }) {
   const apiRoot = await getCodocsServiceApiRoot(params.event)
   const formData = new FormData()
@@ -619,6 +555,7 @@ export async function uploadCodocsProjectCabinetFile(params: {
   new Uint8Array(arrayBuffer).set(bytes)
 
   formData.append('owner_uid', params.ownerUid)
+  if (params.fileUuid) formData.append('document_uuid', params.fileUuid)
   formData.append('project_code', params.projectCode)
   if (params.deptCode) {
     formData.append('dept_code', params.deptCode)
@@ -626,9 +563,9 @@ export async function uploadCodocsProjectCabinetFile(params: {
   formData.append('file', new Blob([arrayBuffer], { type: params.contentType || 'application/octet-stream' }), params.fileName)
 
   try {
-    const response = await $fetch<CabinetUploadResponse, string>(`${apiRoot}/project-cabinet/upload`, {
+    const response = await serviceAppFetch<CabinetUploadResponse>(params.event, 'codocs', `${apiRoot}/project-cabinet/upload`, {
       method: 'POST',
-      headers: await getAuthHeaders('codocs:project-cabinet:upload', params.event),
+      headers: { ...(await projectDocumentAuthHeaders('codocs:project-cabinet:upload', params.event)), ...(params.fileUuid ? { 'idempotency-key': params.fileUuid } : {}) },
       body: formData,
       timeout: 300000
     })
@@ -649,15 +586,12 @@ export async function getCodocsProjectCabinetDownloadUrl(params: {
   expectedOssPath?: string
 }) {
   const apiRoot = await getCodocsServiceApiRoot(params.event)
-  const response = await $fetch<CabinetDownloadUrlResponse, string>(
-    `${apiRoot}/project-cabinet/${encodeURIComponent(params.fileUuid)}/download-url`,
+  const query = new URLSearchParams({ project_code: params.projectCode, ...(params.expectedOssPath ? { expected_oss_path: params.expectedOssPath } : {}) })
+  const response = await serviceAppFetch<CabinetDownloadUrlResponse>(
+    params.event, 'codocs', `${apiRoot}/project-cabinet/${encodeURIComponent(params.fileUuid)}/download-url?${query}`,
     {
       method: 'GET',
-      headers: await getAuthHeaders('codocs:project-cabinet:read', params.event),
-      query: {
-        project_code: params.projectCode,
-        ...(params.expectedOssPath ? { expected_oss_path: params.expectedOssPath } : {})
-      },
+      headers: await projectDocumentAuthHeaders('codocs:project-cabinet:read', params.event),
       timeout: CODOCS_CONTENT_TIMEOUT_MS
     }
   )
@@ -681,15 +615,12 @@ export async function getCodocsProjectCabinetPreviewUrl(params: {
   expectedOssPath?: string
 }) {
   const apiRoot = await getCodocsServiceApiRoot(params.event)
-  const response = await $fetch<CabinetPreviewUrlResponse, string>(
-    `${apiRoot}/project-cabinet/${encodeURIComponent(params.fileUuid)}/preview-url`,
+  const query = new URLSearchParams({ project_code: params.projectCode, ...(params.expectedOssPath ? { expected_oss_path: params.expectedOssPath } : {}) })
+  const response = await serviceAppFetch<CabinetPreviewUrlResponse>(
+    params.event, 'codocs', `${apiRoot}/project-cabinet/${encodeURIComponent(params.fileUuid)}/preview-url?${query}`,
     {
       method: 'GET',
-      headers: await getAuthHeaders('codocs:project-cabinet:read', params.event),
-      query: {
-        project_code: params.projectCode,
-        ...(params.expectedOssPath ? { expected_oss_path: params.expectedOssPath } : {})
-      },
+      headers: await projectDocumentAuthHeaders('codocs:project-cabinet:read', params.event),
       timeout: CODOCS_CONTENT_TIMEOUT_MS
     }
   )
@@ -711,11 +642,11 @@ export async function deleteCodocsProjectCabinetFile(params: {
 }) {
   const apiRoot = await getCodocsServiceApiRoot(params.event)
   try {
-    const response = await $fetch<CabinetDeleteResponse, string>(
-      `${apiRoot}/project-cabinet/${encodeURIComponent(params.fileUuid)}`,
+    const response = await serviceAppFetch<CabinetDeleteResponse>(
+      params.event, 'codocs', `${apiRoot}/project-cabinet/${encodeURIComponent(params.fileUuid)}`,
       {
         method: 'DELETE',
-        headers: await getAuthHeaders('codocs:project-cabinet:delete', params.event),
+        headers: { ...(await projectDocumentAuthHeaders('codocs:project-cabinet:delete', params.event)), 'idempotency-key': `delete:${params.fileUuid}` },
         body: {
           project_code: params.projectCode,
           ...(params.expectedOssPath ? { expected_oss_path: params.expectedOssPath } : {})
@@ -838,127 +769,13 @@ export async function searchProjectDocuments(params: {
   actorUid: string
   pageSize?: number
 }) {
-  const pageSize = Math.min(params.pageSize || 100, 200)
-
-  const [runtimeFolders, runtimeDocuments] = await Promise.all([
-    maybeCallCodocsRuntime<CodocsRuntimePage<CodocsFolderItem>>(
-      params.event,
-      '/v1/codocs/folders',
-      {
-        query: {
-          folder_type: 'project',
-          project_code: params.projectCode,
-          limit: pageSize,
-          page: 1,
-          current_user: params.actorUid,
-          actorUid: params.actorUid
-        },
-        scope: 'codocs.read'
-      }
-    ),
-    maybeCallCodocsRuntime<CodocsRuntimePage<CodocsDocumentListResponse['data']['items'][number]>>(
-      params.event,
-      '/v1/codocs/documents',
-      {
-        query: {
-          type: 'project',
-          project_code: params.projectCode,
-          limit: pageSize,
-          page: 1,
-          current_user: params.actorUid,
-          actorUid: params.actorUid
-        },
-        scope: 'codocs.read'
-      }
-    )
-  ])
-
-  if (runtimeFolders && runtimeDocuments) {
-    return {
-      code: 0,
-      data: {
-        folders: runtimeFolders.items || [],
-        items: (runtimeDocuments.items || []).map(item => ({
-          uuid: item.uuid,
-          title: item.title,
-          docType: item.doc_type,
-          ownerUid: item.owner_uid,
-          deptCode: item.dept_code,
-          projectCode: item.project_code,
-          folderId: item.folder_id,
-          folderName: item.folder_name,
-          contentSize: item.content_size,
-          aiAbstract: null,
-          updatedAt: item.updated_at
-        }))
-      }
-    }
-  }
-
-  const apiRoot = await getCodocsApiRoot()
-
-  const [foldersRes, documentsRes] = await Promise.all([
-    $fetch<CodocsFolderListResponse, string>(`${apiRoot}/folders`, {
-      headers: getUserCookieHeader(params.actorUid),
-      params: {
-        folder_type: 'project',
-        project_code: params.projectCode,
-        limit: pageSize,
-        page: 1
-      },
-      timeout: 10000
-    }),
-    $fetch<CodocsDocumentListResponse, string>(`${apiRoot}/documents`, {
-      headers: getUserCookieHeader(params.actorUid),
-      params: {
-        type: 'project',
-        project_code: params.projectCode,
-        limit: pageSize,
-        page: 1
-      },
-      timeout: 10000
-    })
-  ])
-
-  return {
-    code: 0,
-    data: {
-      folders: foldersRes.data?.items || [],
-      items: (documentsRes.data?.items || []).map(item => ({
-        uuid: item.uuid,
-        title: item.title,
-        docType: item.doc_type,
-        ownerUid: item.owner_uid,
-        deptCode: item.dept_code,
-        projectCode: item.project_code,
-        folderId: item.folder_id,
-        folderName: item.folder_name,
-        contentSize: item.content_size,
-        aiAbstract: null,
-        updatedAt: item.updated_at
-      }))
-    }
-  }
+  const { event, ...payload } = params
+  return await callCodocsProjectAccess<{ code: number, data: { folders: CodocsFolderItem[], items: Array<{ uuid: string, title: string, docType: string, ownerUid: string, deptCode: string | null, projectCode: string | null, folderId: number | null, folderName: string | null, contentSize: number, aiAbstract: string | null, updatedAt: string }> } }>(event, 'search', payload)
 }
 
 export async function getCodocsDocumentSummary(uuid: string, event?: H3Event) {
-  const runtimeSummary = await maybeCallCodocsRuntime<CodocsDocumentMetadataRow>(
-    event,
-    `/v1/codocs/documents/${encodeURIComponent(uuid)}`,
-    {
-      scope: 'codocs.read'
-    }
-  )
-  if (runtimeSummary) {
-    return normalizeCodocsDocumentSummary(runtimeSummary)
-  }
-
-  const apiRoot = await getCodocsServiceApiRoot(event)
-
-  return $fetch<CodocsDocumentSummaryResponse, string>(`${apiRoot}/documents/${uuid}/summary`, {
-    headers: await getAuthHeaders('codocs:documents:read', event),
-    timeout: CODOCS_SUMMARY_TIMEOUT_MS
-  })
+  const response = await callCodocsProjectAccess<{ code: number, data: CodocsDocumentMetadataRow }>(event, 'summary', { documentUuid: uuid })
+  return normalizeCodocsDocumentSummary(response.data)
 }
 
 export async function getCodocsDocumentAccessPolicy(params: {
@@ -968,34 +785,9 @@ export async function getCodocsDocumentAccessPolicy(params: {
   sourceProjectCode?: string
   operatorUid?: string
 }) {
-  const runtimePolicy = await maybeCallCodocsRuntime<DocumentAccessPolicy>(
-    params.event,
-    `/v1/codocs/document-access/policies/${encodeURIComponent(params.documentUuid)}`,
-    {
-      query: {
-        documentRefType: params.documentRefType,
-        sourceProjectCode: params.sourceProjectCode,
-        operator_uid: params.operatorUid
-      },
-      scope: 'codocs.read'
-    }
-  )
-  if (runtimePolicy) return runtimePolicy
-
-  const apiRoot = await getCodocsApiRoot(params.event)
-  const response = await $fetch<{ code: number, data: DocumentAccessPolicy }, string>(
-    `${apiRoot}/document-access/policies/${encodeURIComponent(params.documentUuid)}`,
-    {
-      headers: await getAuthHeaders('codocs:documents:read', params.event),
-      params: {
-        documentRefType: params.documentRefType,
-        sourceProjectCode: params.sourceProjectCode,
-        operator_uid: params.operatorUid
-      },
-      timeout: 10000
-    }
-  )
-  return response.data
+  const { event, ...payload } = params
+  const result = await callCodocsProjectAccess<{ code: number, data: DocumentAccessPolicy }>(event, 'policy-read', payload)
+  return result.data
 }
 
 export async function updateCodocsDocumentAccessPolicy(params: {
@@ -1013,41 +805,9 @@ export async function updateCodocsDocumentAccessPolicy(params: {
   grants: DocumentAccessGrantInput[]
   operatorUid: string
 }) {
-  const body = {
-    documentRefType: params.documentRefType,
-    sourceApp: params.sourceApp || 'aims',
-    sourceProjectCode: params.sourceProjectCode,
-    lifecycleStage: params.lifecycleStage,
-    confidentialityLevel: params.confidentialityLevel,
-    defaultPermission: params.defaultPermission,
-    allowInternalAccess: params.allowInternalAccess,
-    allowCrossProject: params.allowCrossProject,
-    readonly: params.readonly,
-    grants: params.grants,
-    operatorUid: params.operatorUid
-  }
-  const runtimePolicy = await maybeCallCodocsRuntime<DocumentAccessPolicy>(
-    params.event,
-    `/v1/codocs/document-access/policies/${encodeURIComponent(params.documentUuid)}`,
-    {
-      method: 'PUT',
-      scope: 'codocs.write',
-      body
-    }
-  )
-  if (runtimePolicy) return runtimePolicy
-
-  const apiRoot = await getCodocsApiRoot(params.event)
-  const response = await $fetch<{ code: number, data: DocumentAccessPolicy }, string>(
-    `${apiRoot}/document-access/policies/${encodeURIComponent(params.documentUuid)}`,
-    {
-      method: 'PUT',
-      headers: await getAuthHeaders('codocs:documents:write', params.event),
-      body,
-      timeout: 10000
-    }
-  )
-  return response.data
+  const { event, ...payload } = params
+  const result = await callCodocsProjectAccess<{ code: number, data: DocumentAccessPolicy }>(event, 'policy-update', payload)
+  return result.data
 }
 
 export async function checkCodocsDocumentAccess(params: {
@@ -1062,45 +822,9 @@ export async function checkCodocsDocumentAccess(params: {
   actorDeptCodes?: string[]
   actorRoles?: string[]
 }) {
-  const actorProjectCodes = [...new Set((params.actorProjectCodes || []).map(stringValue).filter(Boolean))]
-  const actorRoles = [...new Set((params.actorRoles || []).map(stringValue).filter(Boolean))]
-  const body = {
-    documentUuid: params.documentUuid,
-    documentRefType: params.documentRefType,
-    sourceApp: params.sourceApp || 'aims',
-    sourceProjectCode: params.sourceProjectCode,
-    action: params.action,
-    actorUid: params.actorUid,
-    actorProjectCodes,
-    actorDeptCodes: params.actorDeptCodes || [],
-    actorRoles
-  }
-  const runtimeAccess = await maybeCallCodocsRuntime<DocumentAccessCheckResult>(
-    params.event,
-    '/v1/codocs/document-access/check',
-    {
-      method: 'POST',
-      scope: 'codocs.read',
-      query: {
-        [AIMS_TRUSTED_DOCUMENT_ACCESS_PROJECT_CODES_QUERY]: actorProjectCodes.join(','),
-        [AIMS_TRUSTED_DOCUMENT_ACCESS_ROLES_QUERY]: actorRoles.join(',')
-      },
-      body
-    }
-  )
-  if (runtimeAccess) return runtimeAccess
-
-  const apiRoot = await getCodocsApiRoot(params.event)
-  const response = await $fetch<{ code: number, data: DocumentAccessCheckResult }, string>(
-    `${apiRoot}/document-access/check`,
-    {
-      method: 'POST',
-      headers: await getAuthHeaders('codocs:documents:read', params.event),
-      body,
-      timeout: 10000
-    }
-  )
-  return response.data
+  const { event, action: accessAction, ...payload } = params
+  const result = await callCodocsProjectAccess<{ code: number, data: DocumentAccessCheckResult }>(event, 'check', { ...payload, accessAction })
+  return result.data
 }
 
 export async function ensureCodocsDocumentPreviewAccess(params: {
@@ -1138,33 +862,9 @@ export async function listCodocsDocumentAccessAuditLogs(params: {
   page?: number
   pageSize?: number
 }) {
-  const query = {
-    documentUuid: params.documentUuid,
-    documentRefType: params.documentRefType,
-    sourceProjectCode: params.sourceProjectCode,
-    page: params.page || 1,
-    pageSize: params.pageSize || 20
-  }
-  const runtimeLogs = await maybeCallCodocsRuntime<DocumentAccessAuditListResult>(
-    params.event,
-    '/v1/codocs/document-access/audit-logs',
-    {
-      query,
-      scope: 'codocs.read'
-    }
-  )
-  if (runtimeLogs) return runtimeLogs
-
-  const apiRoot = await getCodocsApiRoot(params.event)
-  const response = await $fetch<{ code: number, data: DocumentAccessAuditListResult }, string>(
-    `${apiRoot}/document-access/audit-logs`,
-    {
-      headers: await getAuthHeaders('codocs:documents:read', params.event),
-      params: query,
-      timeout: 10000
-    }
-  )
-  return response.data
+  const { event, ...payload } = params
+  const result = await callCodocsProjectAccess<{ code: number, data: DocumentAccessAuditListResult }>(event, 'audit', payload)
+  return result.data
 }
 
 /**
@@ -1252,6 +952,9 @@ export async function getCodocsProjectDocumentContent(params: {
   actorUid: string
   projectCode: string
   documentUuid: string
+  // ADR-018：统一企业宿主以自己的身份调用，不借 aims.runtime。
+  // codocs 侧有与 Aims 并列的 enterprise 授权条目，scope 与 operationCode 相同。
+  sourceApp?: 'aims' | 'enterprise'
 }) {
   const actorUid = stringValue(params.actorUid)
   const projectCode = stringValue(params.projectCode)
@@ -1259,6 +962,7 @@ export async function getCodocsProjectDocumentContent(params: {
   if (!actorUid || !projectCode || !documentUuid) {
     throw createError({ statusCode: 400, message: '项目文档读取上下文不完整' })
   }
+  const sourceApp = params.sourceApp === 'enterprise' ? 'enterprise' : 'aims'
 
   const command = {
     actorUid,
@@ -1287,7 +991,15 @@ export async function getCodocsProjectDocumentContent(params: {
   const gateway = resolveTrustedTenantGatewayContext(params.event)
   const tenantCode = stringValue(gateway?.tenant || sourceAuth?.tenant)
   const deploymentCode = stringValue(gateway?.deployment || sourceAuth?.deployment)
-  if (!tenantCode || !deploymentCode) {
+  // 来源与目标 deployment 必须分别解析（与部门文档、公司周报同款）：经受信网关
+  // 到达 Codocs 时 `x-hzy-deployment` 是目标部署，把来源值当成目标会让签名与
+  // Codocs 侧的跨应用绑定同时对不上。
+  const targetRoute = resolveTrustedServiceAppRoute(params.event, 'codocs')
+  if (gateway && !targetRoute) {
+    throw createError({ statusCode: 503, message: 'Codocs 可信服务路由不可用' })
+  }
+  const targetDeploymentCode = stringValue(targetRoute?.deploymentCode || deploymentCode)
+  if (!tenantCode || !deploymentCode || !targetDeploymentCode) {
     throw createError({ statusCode: 503, message: 'Aims project document command tenant context is unavailable.' })
   }
   const requestId = stringValue(getHeader(params.event, 'x-request-id') || getHeader(params.event, 'x-correlation-id')) || crypto.randomUUID()
@@ -1303,22 +1015,25 @@ export async function getCodocsProjectDocumentContent(params: {
     requestId,
     tenantCode,
     sourceDeploymentCode: deploymentCode,
-    targetDeploymentCode: deploymentCode,
-    sourceApp: 'aims',
-    sourceClientId: 'aims.runtime',
+    targetDeploymentCode,
+    sourceApp,
+    // 来源应用与 source client 必须同源：codocs 的授权条目和 Runtime 合同
+    // 都要求 client 精确等于 <sourceApp>.runtime，交叉组合会被拒。
+    sourceClientId: `${sourceApp}.runtime`,
     targetApp: 'codocs',
     envelope: serviceCommand
   })
-  const response = await $fetch<CodocsDocumentContentResponse, string>(
-    url,
+  const response = await serviceAppFetch<CodocsDocumentContentResponse>(
+    params.event, 'codocs', url,
     {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${token}`,
         'x-request-id': requestId,
         ...forwardedCodocsContextHeaders(params.event),
+        ...(targetRoute ? trustedServiceRequestHeaders(params.event, 'codocs') : {}),
         'x-hzy-tenant': tenantCode,
-        'x-hzy-deployment': deploymentCode,
+        'x-hzy-deployment': targetDeploymentCode,
         ...signedHeaders
       },
       body: { serviceCommand },

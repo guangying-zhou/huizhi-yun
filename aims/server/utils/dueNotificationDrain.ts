@@ -27,6 +27,8 @@ interface RuntimePage {
   nextCursor?: string | null
 }
 
+type DueRuntimeCaller = <T>(path: '/v1/aims/service/notifications:scan-due' | '/v1/aims/service/notifications:acknowledge' | '/v1/aims/service/notifications:acknowledge-closure', body: Record<string, unknown>) => Promise<T>
+
 interface DirectoryEnvelope<T> {
   code?: number
   data?: T
@@ -58,16 +60,16 @@ function durableInAppNotificationId(error: unknown) {
   return result?.inApp?.status === 'fulfilled' ? notificationIdFromValue(result.inApp.value) : ''
 }
 
-async function acknowledge(candidate: AimsDueCandidate, notificationId: string, recipientUid: string) {
-  await callAimsDueNotificationRuntime('/v1/aims/service/notifications:acknowledge', {
+async function acknowledge(runtime: DueRuntimeCaller, candidate: AimsDueCandidate, notificationId: string, recipientUid: string) {
+  await runtime('/v1/aims/service/notifications:acknowledge', {
     eventVersion: candidate.eventVersion,
     notificationId,
     recipientUid
   })
 }
 
-async function acknowledgeClosure(closure: AimsDueClosure) {
-  await callAimsDueNotificationRuntime('/v1/aims/service/notifications:acknowledge-closure', { eventVersion: closure.checkpointEventVersion, nextVersion: closure.nextVersion })
+async function acknowledgeClosure(runtime: DueRuntimeCaller, closure: AimsDueClosure) {
+  await runtime('/v1/aims/service/notifications:acknowledge-closure', { eventVersion: closure.checkpointEventVersion, nextVersion: closure.nextVersion })
 }
 
 async function closeActionable(input: {
@@ -87,7 +89,7 @@ async function closeActionable(input: {
   })
 }
 
-async function closeDueCondition(closure: AimsDueClosure) {
+async function closeDueCondition(runtime: DueRuntimeCaller, closure: AimsDueClosure) {
   await closeActionable({
     actionableKey: closure.actionableKey,
     expectedVersion: closure.expectedVersion,
@@ -95,10 +97,10 @@ async function closeDueCondition(closure: AimsDueClosure) {
     state: closure.state,
     recipientUid: closure.recipientUid
   })
-  await acknowledgeClosure(closure)
+  await acknowledgeClosure(runtime, closure)
 }
 
-async function deliverCandidate(event: H3Event, candidate: AimsDueCandidate) {
+async function deliverCandidate(runtime: DueRuntimeCaller, event: H3Event, candidate: AimsDueCandidate) {
   const recipientUid = await resolveAimsDueRecipient(candidate, { findActiveUser })
   if (!recipientUid) throw new Error(`No active responsible recipient for ${candidate.actionableKey}`)
   const transition = aimsDueRecipientTransition(candidate, recipientUid)
@@ -150,10 +152,10 @@ async function deliverCandidate(event: H3Event, candidate: AimsDueCandidate) {
         })
         const notificationId = notificationIdFromValue(delivery.inApp.value)
         if (!notificationId) throw new Error(`Console did not return notification evidence for ${candidate.actionableKey}`)
-        await acknowledge(candidate, notificationId, recipientUid)
+        await acknowledge(runtime, candidate, notificationId, recipientUid)
       } catch (error) {
         const notificationId = durableInAppNotificationId(error)
-        if (notificationId) await acknowledge(candidate, notificationId, recipientUid)
+        if (notificationId) await acknowledge(runtime, candidate, notificationId, recipientUid)
         throw error
       }
     }
@@ -184,11 +186,15 @@ export async function drainAimsDueNotifications(options: {
   maxWallTimeMs?: number
   event?: H3Event
   taskContext?: Record<string, unknown>
+  // The unified scheduler wake supplies a generation-bound caller; the legacy
+  // cron uses the purpose-signed worker contract.
+  runtime?: DueRuntimeCaller
 } = {}) {
   if (!isAimsDueNotificationDeliveryEnabled()) {
     return { enabled: false, scanned: 0, delivered: 0, failed: 0, stoppedBy: 'feature_flag' }
   }
   requireAimsDueNotificationRuntimeBinding()
+  const runtime: DueRuntimeCaller = options.runtime || callAimsDueNotificationRuntime
   const eligibilityEvent = options.event || taskEligibilityEvent(options.taskContext)
   const pageSize = Math.min(Math.max(options.pageSize || 100, 1), 200)
   const maxPagesPerStream = Math.min(Math.max(options.maxPagesPerStream || 10, 1), 50)
@@ -207,11 +213,11 @@ export async function drainAimsDueNotifications(options: {
         stoppedBy = 'wall_time'
         return { enabled: true, asOf, scanned, delivered, failed, stoppedBy }
       }
-      const page = await callAimsDueNotificationRuntime<RuntimePage>('/v1/aims/service/notifications:scan-due', { stream, asOf, cursor: cursor || undefined, limit: pageSize })
+      const page = await runtime<RuntimePage>('/v1/aims/service/notifications:scan-due', { stream, asOf, cursor: cursor || undefined, limit: pageSize })
       const failedClosures = new Set<string>()
       for (const closure of page.closures || []) {
         try {
-          await closeDueCondition(closure)
+          await closeDueCondition(runtime, closure)
         } catch (error) {
           failed += 1
           failedClosures.add(`${stream}:${closure.workItemId}`)
@@ -222,7 +228,7 @@ export async function drainAimsDueNotifications(options: {
       for (const candidate of page.items) {
         if (failedClosures.has(`${stream}:${candidate.workItemId}`)) continue
         try {
-          await deliverCandidate(eligibilityEvent, candidate)
+          await deliverCandidate(runtime, eligibilityEvent, candidate)
           delivered += 1
         } catch (error) {
           failed += 1

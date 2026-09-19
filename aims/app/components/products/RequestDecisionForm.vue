@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import { useAimsModule } from '../../../layer/useAimsModule'
+
+const { moduleUrl } = useAimsModule()
 const props = defineProps<{ productCode: string, workspaceRevision: number, request: { biz_id: string, title: string, revision: number, decision_status: string } }>()
 const emit = defineEmits<{ saved: [], cancel: [] }>()
 const labels: Record<string, string> = { evaluating: '进入评估', accepted: '采纳', deferred: '暂缓', rejected: '拒绝' }
@@ -27,7 +30,7 @@ async function submit() {
     if (!(await confirm({ title: '确认产品需求决定', message: `${props.request.title}\n决定：${labels[target.value]}\n原因：${reason.value || '首次进入评估'}${needsImpact ? `\n影响：${impactNote.value}` : ''}`, tone: target.value === 'rejected' || needsImpact ? 'warning' : 'default', confirmLabel: '确认决定' }))) return
     const payload = JSON.stringify(body)
     if (retry?.payload !== payload) retry = { payload, key: crypto.randomUUID() }
-    const response = await $fetch<{ code: number }>(`/api/v1/products/${encodeURIComponent(props.productCode)}/requests/${props.request.biz_id}/decision`, { method: 'POST', body, headers: { 'Idempotency-Key': retry.key } })
+    const response = await $fetch<{ code: number }>(moduleUrl(`/api/v1/products/${encodeURIComponent(props.productCode)}/requests/${props.request.biz_id}/decision`), { method: 'POST', body, headers: { 'Idempotency-Key': retry.key } })
     if (response.code !== 0) throw new Error('评审结果不完整，请重试')
     emit('saved')
   } catch (cause) {

@@ -1,9 +1,19 @@
 <script setup lang="ts">
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
-import type { WorkItem } from '~/types/aims'
-import { typeConfig, priorityConfig, severityConfig, getStatusLabel } from '~/config/work-item'
+import { useAimsModule } from '../../../../layer/useAimsModule'
+import type { WorkItem } from '../../../types/aims'
+import { typeConfig, priorityConfig, severityConfig, getStatusLabel } from '../../../config/work-item'
+import { useProjectStore } from '../../../stores/project'
+import { useWorkItemStore } from '../../../stores/workItem'
+import MarkdownContent from '../../../components/MarkdownContent.vue'
+import ProjectNavbar from '../../../components/project/ProjectNavbar.vue'
+import RoutineQuarterReview from '../../../components/routine/RoutineQuarterReview.vue'
+import RoutineTaskCreateModal from '../../../components/routine/RoutineTaskCreateModal.vue'
 
+
+// 同一份代码供独立应用与企业宿主使用：非宿主模式下 moduleUrl 原样返回路径。
+const { moduleUrl } = useAimsModule()
 definePageMeta({
   layoutHeader: true,
   layoutHeaderTitle: '看板',
@@ -294,7 +304,7 @@ async function prefetchDropValidation(item: WorkItem, fromColKey: string) {
 
   try {
     const res = await $fetch<{ code: number, data: { toStatus: string, transitionKey: string }[] }>(
-      `/api/v1/work-items/${item.id}/transitions`
+      moduleUrl(`/api/v1/work-items/${item.id}/transitions`)
     )
     if (token !== dragValidationToken || !dragState.value || dragState.value.item.id !== item.id) return
 
@@ -481,7 +491,7 @@ watch(childRouteActive, async (active, wasActive) => {
 async function openDetail(item: WorkItem) {
   // 执行中的任务、确认中任务、已完成任务统一跳转到执行页面
   if (item.status === 'in_progress' || item.status === 'in_review' || item.status === 'completed') {
-    navigateTo(`/projects/${projectId.value}/board/${item.id}/execution`)
+    navigateTo(moduleUrl(`/projects/${projectId.value}/board/${item.id}/execution`))
     return
   }
   selectedItem.value = item
@@ -492,7 +502,7 @@ async function openDetail(item: WorkItem) {
   linkedDocs.value = []
   try {
     const res = await $fetch<{ code: number, data: { toStatus: string, transitionKey: string }[] }>(
-      `/api/v1/work-items/${item.id}/transitions`
+      moduleUrl(`/api/v1/work-items/${item.id}/transitions`)
     )
     if (res.code === 0) {
       availableTransitions.value = res.data
@@ -513,7 +523,7 @@ async function handleStartExecution() {
     toast.add({ title: '已开始执行', color: 'success' })
     showDetail.value = false
     selectedItem.value = null
-    await navigateTo(`/projects/${projectId.value}/board/${itemId}/execution`)
+    await navigateTo(moduleUrl(`/projects/${projectId.value}/board/${itemId}/execution`))
   } catch (err: unknown) {
     const msg = (err as { data?: { message?: string } })?.data?.message || '操作失败'
     toast.add({ title: '开始执行失败', description: msg, color: 'error' })
@@ -552,7 +562,7 @@ const timeEntries = ref<{ id: number, entryDate: string, uid: string, hours: num
 
 async function loadTimeEntries(itemId: number) {
   try {
-    const res = await $fetch<{ code: number, data: any[] }>(`/api/v1/work-items/${itemId}/time-entries`)
+    const res = await $fetch<{ code: number, data: any[] }>(moduleUrl(`/api/v1/work-items/${itemId}/time-entries`))
     if (res.code === 0) {
       timeEntries.value = res.data
     }
@@ -567,7 +577,7 @@ const linkedDocs = ref<{ id: number, documentId: string }[]>([])
 
 async function loadLinkedDocs(itemId: number) {
   try {
-    const res = await $fetch<{ code: number, data: any[] }>(`/api/v1/work-items/${itemId}/documents`)
+    const res = await $fetch<{ code: number, data: any[] }>(moduleUrl(`/api/v1/work-items/${itemId}/documents`))
     if (res.code === 0) {
       linkedDocs.value = res.data
     }

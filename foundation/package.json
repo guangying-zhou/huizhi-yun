@@ -6,7 +6,7 @@
   "scripts": {
     "lint": "eslint .",
     "postinstall": "nuxt prepare",
-    "test": "tsx --test \"test/**/*.test.ts\"",
+    "test": "tsx --test \"test/**/*.test.ts\" && node --test test/*.test.mjs",
     "typecheck": "nuxt typecheck"
   },
   "main": "./nuxt.config.ts",

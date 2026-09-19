@@ -1,17 +1,21 @@
 <script setup lang="ts">
 import type { ApiResponse, IpAssetItem } from '~/types'
+import { useAssetsModule } from '../../../layer/useAssetsModule'
 
 const route = useRoute()
 const assetId = computed(() => String(route.params.id))
 const editOpen = ref(false)
 const linkProductOpen = ref(false)
 const documentOpen = ref(false)
+const { hosted, moduleUrl, cacheKey } = useAssetsModule()
 const { loadPermissions, hasPermission, loaded: permissionsLoaded } = usePermissions()
 await loadPermissions()
 const canEditIpAsset = computed(() => permissionsLoaded.value && hasPermission('ip_assets', 'edit'))
 const { loadDictionaries, getLabel } = useAssetLabels()
 await loadDictionaries()
-const { data: response, refresh, error } = await useFetch<ApiResponse<IpAssetItem>>(() => `/api/v1/ip-assets/${assetId.value}`)
+const { data: response, refresh, error } = await useFetch<ApiResponse<IpAssetItem>>(() => moduleUrl(`/api/v1/ip-assets/${assetId.value}`), {
+  key: cacheKey(`ip-asset:${assetId.value}`)
+})
 
 if (error.value?.statusCode === 404) {
   throw createError({ statusCode: 404, message: '知识产权资产不存在' })
@@ -76,12 +80,12 @@ const handleUpdated = async () => {
                   icon="i-lucide-arrow-left"
                   color="neutral"
                   variant="ghost"
-                  to="/ip-assets"
+                  :to="moduleUrl('/ip-assets')"
                 >
                   返回
                 </UButton>
                 <UButton
-                  v-if="canEditIpAsset"
+                  v-if="!hosted || canEditIpAsset"
                   icon="i-lucide-pencil"
                   color="primary"
                   variant="soft"
@@ -90,7 +94,7 @@ const handleUpdated = async () => {
                   编辑
                 </UButton>
                 <UButton
-                  v-if="canEditIpAsset"
+                  v-if="!hosted && canEditIpAsset"
                   icon="i-lucide-link-2"
                   color="primary"
                   variant="soft"
@@ -99,7 +103,7 @@ const handleUpdated = async () => {
                   关联产品
                 </UButton>
                 <UButton
-                  v-if="canEditIpAsset"
+                  v-if="!hosted && canEditIpAsset"
                   icon="i-lucide-file-text"
                   color="primary"
                   variant="soft"
@@ -118,21 +122,30 @@ const handleUpdated = async () => {
             <div><span class="text-muted">申请日期：</span>{{ asset.apply_date || '-' }}</div>
             <div><span class="text-muted">授权/有效日期：</span>{{ asset.effective_date || '-' }}</div>
             <div><span class="text-muted">到期日期：</span>{{ asset.expires_at || '-' }}</div>
-            <div><span class="text-muted">关联产品数：</span>{{ asset.product_count }}</div>
+            <div v-if="!hosted"><span class="text-muted">关联产品数：</span>{{ asset.product_count }}</div>
           </div>
           <p class="mt-4 text-sm text-muted">
             {{ asset.notes || '暂无备注' }}
           </p>
         </UCard>
 
-        <UCard>
+        <UAlert
+          v-if="hosted"
+          color="info"
+          variant="soft"
+          icon="i-lucide-info"
+          title="关联产品和文档尚未加载"
+          description="当前 Host 仅迁移知识产权资产主档读取；写入和关联范围合同完成后开放。"
+        />
+
+        <UCard v-if="!hosted">
           <template #header>
             <span class="font-semibold">关联产品</span>
           </template>
           <UTable :data="linkedProducts" :columns="productColumns" />
         </UCard>
 
-        <UCard>
+        <UCard v-if="!hosted">
           <template #header>
             <span class="font-semibold">关联文档</span>
           </template>
@@ -143,18 +156,21 @@ const handleUpdated = async () => {
   </UDashboardPanel>
 
   <AssetsIpAssetEditModal
+    v-if="!hosted || canEditIpAsset"
     :open="editOpen"
     :asset="asset || null"
     @update:open="editOpen = $event"
     @updated="handleUpdated"
   />
   <AssetsIpAssetProductLinkModal
+    v-if="!hosted && canEditIpAsset"
     :open="linkProductOpen"
     :asset="asset || null"
     @update:open="linkProductOpen = $event"
     @created="handleUpdated"
   />
   <AssetsIpAssetDocumentLinkModal
+    v-if="!hosted && canEditIpAsset"
     :open="documentOpen"
     :asset="asset || null"
     @update:open="documentOpen = $event"

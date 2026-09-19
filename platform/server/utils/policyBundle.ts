@@ -20,6 +20,8 @@ import {
 } from '~~/server/utils/tenantDeploymentSettings'
 import { collectConfiguredBaselinePermissions } from '~~/server/utils/policyBundleBaseline'
 import { STATIC_ROLE_CONFLICT_RULES, type StaticRoleConflictRule } from '~~/server/utils/staticRoleConflicts'
+import { loadEnterpriseHostModuleRoutes, applyEnterpriseHostModuleRoutes, enterpriseHostRoutesMatch } from './enterpriseModuleRoutes'
+import { loadBundleEnterpriseEntitlement, enterpriseModuleAvailability, bundleEnterpriseEntitlementMatches, ENTERPRISE_MODULE_CATALOG_SQL } from '~~/server/utils/enterpriseEntitlementBundle'
 
 const POLICY_BUNDLE_SCHEMA_VERSION = POLICY_BUNDLE_V2_SCHEMA_VERSION
 const POLICY_BUNDLE_SIGNATURE_ALG = 'Ed25519'
@@ -1030,9 +1032,15 @@ export async function buildPolicyBundlePayload(input: string | {
   const deploymentSite = await findDeploymentSiteProjection(tenantCode, environment)
   const tenantSettings = parseTenantSettings(tenant.settingsJson)
   const consoleLogin = consoleLoginSettings(tenantSettings, environment)
-  const appCodes = await collectTenantAppCodes(tenantCode, environment, deployments)
-  const baselinePermissions = await collectConfiguredBaselinePermissions(appCodes)
   const generatedAt = new Date().toISOString()
+  const enterpriseEntitlement = await loadBundleEnterpriseEntitlement(queryRow, tenantCode, tenant.status, generatedAt)
+  const legacyAppCodes = await collectTenantAppCodes(tenantCode, environment, deployments)
+  const appCodes = enterpriseEntitlement
+    ? (await queryRows<Array<RowDataPacket & { appCode: string }>>(ENTERPRISE_MODULE_CATALOG_SQL)).map(row => row.appCode)
+    : legacyAppCodes
+  // Full product qualification must not expand baseline grants or system-role app mappings.
+  // Explicit tenant role grants remain authoritative and use the full resource catalog.
+  const baselinePermissions = await collectConfiguredBaselinePermissions(legacyAppCodes)
 
   const [
     applications,
@@ -1081,10 +1089,13 @@ export async function buildPolicyBundlePayload(input: string | {
     collectAppRolePermissions(appCodes),
     collectAppRoleScopes(appCodes),
     collectSystemRoles(),
-    collectSystemAppRoleMaps(appCodes),
+    collectSystemAppRoleMaps(legacyAppCodes),
     collectCapabilities(tenantCode, environment),
     collectRoleConflictRules(tenantCode)
   ])
+
+  const enterpriseHostRoutes = enterpriseEntitlement ? await loadEnterpriseHostModuleRoutes(queryRow, tenantCode, environment) : []
+  const routedApplications = enterpriseEntitlement ? applyEnterpriseHostModuleRoutes(applications, enterpriseHostRoutes) : applications
 
   const v2Compat = buildPolicyBundleV2CompatFields({
     tenantCode,
@@ -1103,6 +1114,7 @@ export async function buildPolicyBundlePayload(input: string | {
     schemaVersion: POLICY_BUNDLE_SCHEMA_VERSION,
     ...v2Compat,
     generatedAt,
+    ...(enterpriseEntitlement ? { enterpriseEntitlement, enterpriseHostRoutes, moduleAvailability: enterpriseModuleAvailability(applications, deployments, enterpriseHostRoutes) } : {}),
     environment,
     tenant: {
       tenantCode: tenant.tenantCode,
@@ -1135,7 +1147,7 @@ export async function buildPolicyBundlePayload(input: string | {
       routeSource: item.routeSource,
       status: item.status
     })),
-    applications,
+    applications: routedApplications,
     manifestResources,
     manifestActions,
     subjects,
@@ -1392,10 +1404,8 @@ export async function findOrGeneratePolicyBundleForDeployment(input: {
     version
   })
 
-  if (existing || version) {
-    return existing
-  }
-
+  const tenant = await findTenant(input.tenantCode)
+  if (!tenant) throw createError({ statusCode: 404, message: 'Tenant not found' })
   const deployment = await queryRow<DeploymentEnvironmentRow>(
     `SELECT environment
      FROM deployments
@@ -1404,15 +1414,29 @@ export async function findOrGeneratePolicyBundleForDeployment(input: {
      LIMIT 1`,
     [input.deploymentId, input.tenantCode]
   )
+  if (!deployment) throw createError({ statusCode: 404, message: 'Deployment not found for tenant' })
+  const environment = deployment.environment
+  const currentEntitlement = await loadBundleEnterpriseEntitlement(queryRow, input.tenantCode, tenant.status, new Date().toISOString())
+  const hostRoutes = currentEntitlement ? await loadEnterpriseHostModuleRoutes(queryRow, input.tenantCode, environment) : []
+  if (existing && enterpriseHostRoutesMatch(parsePolicyBundlePayload(existing.bundle_payload_json), hostRoutes) && bundleEnterpriseEntitlementMatches(parsePolicyBundlePayload(existing.bundle_payload_json), currentEntitlement)) return existing
+  if (version) {
+    if (existing) throw createError({ statusCode: 409, message: 'Requested policy bundle has stale enterprise entitlement' })
+    return null
+  }
 
   await generatePolicyBundle({
     tenantCode: input.tenantCode,
     environment: deployment?.environment || DEFAULT_DEPLOYMENT_ENVIRONMENT
   })
 
-  return findPolicyBundleForDeployment({
-    deploymentId: input.deploymentId
-  })
+  const generated = await findPolicyBundleForDeployment({ deploymentId: input.deploymentId })
+  const latestTenant = await findTenant(input.tenantCode)
+  const latestEntitlement = await loadBundleEnterpriseEntitlement(queryRow, input.tenantCode, latestTenant?.status || 'suspended', new Date().toISOString())
+  const latestHostRoutes = latestEntitlement ? await loadEnterpriseHostModuleRoutes(queryRow, input.tenantCode, environment) : []
+  if (generated && (!enterpriseHostRoutesMatch(parsePolicyBundlePayload(generated.bundle_payload_json), latestHostRoutes) || !bundleEnterpriseEntitlementMatches(parsePolicyBundlePayload(generated.bundle_payload_json), latestEntitlement))) {
+    throw createError({ statusCode: 503, message: 'Enterprise entitlement changed during bundle generation; retry required' })
+  }
+  return generated
 }
 
 export function parsePolicyBundlePayload(value: unknown) {

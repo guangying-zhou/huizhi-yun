@@ -31,6 +31,7 @@ test('policy sync uses its own signed Console Binding path without business drai
   assert.equal(new URL(request.url).pathname, '/api/internal/policy-bundle/sync')
   assert.equal(h.get('x-hzy-app-code'), 'console')
   assert.equal(h.get('x-hzy-deployment'), 'console-policy-test')
+  assert.equal(calls[0].signal?.aborted, false)
   const canonical = ['POST', '/api/internal/policy-bundle/sync', h.get('x-request-id'), 'policy-test',
     'console-policy-test', 'console', 'prod', 'https://runtime-policy-test.example.test', 'policy-test.huizhi.yun', h.get('x-hzy-scheduler-issued-at')].join('\n')
   assert.equal(h.get('x-hzy-scheduler-signature'), createHmac('sha256', 'gateway-secret').update(canonical).digest('hex'))
@@ -60,6 +61,7 @@ function schedulerEnv(overrides = {}) {
     HZY_TENANT_GATEWAY_SCHEDULER_MAX_WALL_TIME_MS: '1000',
     HZY_TENANT_GATEWAY_SCHEDULER_SHARD_COUNT: '4',
     HZY_TENANT_GATEWAY_SCHEDULER_SHARD_INDEX: '1',
+    HZY_POLICY_SYNC_CONSOLE_TIMEOUT_MS: '100000',
     ...overrides
   }
 }
@@ -522,4 +524,139 @@ test('all durable outbox apps are woken for scheduled integration operation drai
   for (const binding of ['HZY_AIMS_SERVICE', 'HZY_ALTOC_SERVICE', 'HZY_CONSOLE_SERVICE', 'HZY_FINANCE_SERVICE', 'HZY_PEOPLE_SERVICE', 'HZY_WORKFLOW_SERVICE']) {
     assert.match(config, new RegExp(binding), `${binding} must be declared in wrangler.jsonc`)
   }
+})
+
+test('unified Aims storage selection is signed per tenant without changing legacy wakes', async () => {
+  const wakes = []
+  await runScheduled(schedulerEnv(), async (input, init) => {
+    const request = asRequest(input, init)
+    const url = new URL(request.url)
+    if (url.pathname === '/internal/tenant-scheduler') return Response.json({ data: { items: [{ ...tenantRecord('unified-signature'), appCodes: ['aims'] }], nextCursor: null } })
+    if (url.pathname === '/internal/resolve') {
+      const record = resolvedTenantRecord('unified-signature')
+      record.apps.aims.enterpriseScheduler = { storage: 'unified', generation: '7' }
+      return Response.json({ data: record })
+    }
+    if (url.pathname === '/internal/runtime-bootstrap-token') return Response.json({ data: { token: 'bootstrap', expiresAt: new Date(Date.now() + 90000).toISOString() } })
+    wakes.push(request)
+    return Response.json({ code: 0 })
+  }, { now: () => 100 })
+  assert.equal(wakes.length, 1)
+  const h = wakes[0].headers
+  assert.equal(h.get('x-hzy-scheduler-storage'), 'unified')
+  assert.equal(h.get('x-hzy-scheduler-generation'), '7')
+  const canonical = ['POST', '/api/internal/integration-operations/drain', h.get('x-request-id'),
+    'unified-signature', 'dep-unified-signature', 'aims', 'prod', 'https://runtime-unified-signature.example.test',
+    'unified-signature.huizhi.yun', 'enterprise-scheduler-v1', 'unified', '7', h.get('x-hzy-scheduler-issued-at')].join('\n')
+  assert.equal(h.get('x-hzy-scheduler-signature'), createHmac('sha256', 'gateway-secret').update(canonical).digest('hex'))
+})
+
+test('disabled persisted scheduler selection never wakes a legacy worker', async () => {
+  let wakes = 0
+  await runScheduled(schedulerEnv(), async (input, init) => {
+    const request = asRequest(input, init)
+    const url = new URL(request.url)
+    if (url.pathname === '/internal/tenant-scheduler') return Response.json({ data: { items: [{ ...tenantRecord('disabled-selection'), appCodes: ['aims'] }], nextCursor: null } })
+    if (url.pathname === '/internal/resolve') {
+      const record = resolvedTenantRecord('disabled-selection')
+      record.apps.aims.enterpriseScheduler = { storage: 'disabled', generation: '7' }
+      return Response.json({ data: record })
+    }
+    if (url.pathname === '/internal/runtime-bootstrap-token') return Response.json({ data: { token: 'bootstrap', expiresAt: new Date(Date.now() + 90000).toISOString() } })
+    wakes++
+    return Response.json({ code: 0 })
+  }, { now: () => 100 })
+  assert.equal(wakes, 0)
+})
+
+test('malformed explicit scheduler selections never silently choose legacy storage', async () => {
+  const selections = [{}, null, { storage: 'unified', generation: 7 }, { storage: 'unified', generation: ' 7' },
+    { storage: 'unified', generation: '18446744073709551616' }, { storage: 'legacy', generation: '7' }]
+  for (const [index, selection] of selections.entries()) {
+    const code = `malformed-selection-${index}`
+    let wakes = 0
+    await runScheduled(schedulerEnv(), async (input, init) => {
+      const request = asRequest(input, init)
+      const url = new URL(request.url)
+      if (url.pathname === '/internal/tenant-scheduler') return Response.json({ data: { items: [{ ...tenantRecord(code), appCodes: ['aims'] }], nextCursor: null } })
+      if (url.pathname === '/internal/resolve') {
+        const record = resolvedTenantRecord(code)
+        record.apps.aims.enterpriseScheduler = selection
+        return Response.json({ data: record })
+      }
+      if (url.pathname === '/internal/runtime-bootstrap-token') return Response.json({ data: { token: 'bootstrap', expiresAt: new Date(Date.now() + 90000).toISOString() } })
+      wakes++
+      return Response.json({ code: 0 })
+    }, { now: () => 100 })
+    assert.equal(wakes, 0, `selection ${index} must fail closed`)
+  }
+})
+
+test('recovered Aims storage selection is signed per tenant without changing legacy wakes', async () => {
+  const wakes = []
+  await runScheduled(schedulerEnv(), async (input, init) => {
+    const request = asRequest(input, init)
+    const url = new URL(request.url)
+    if (url.pathname === '/internal/tenant-scheduler') return Response.json({ data: { items: [{ ...tenantRecord('recovered-signature'), appCodes: ['aims'] }], nextCursor: null } })
+    if (url.pathname === '/internal/resolve') {
+      const record = resolvedTenantRecord('recovered-signature')
+      record.apps.aims.enterpriseScheduler = { storage: 'recovered', generation: '7' }
+      return Response.json({ data: record })
+    }
+    if (url.pathname === '/internal/runtime-bootstrap-token') return Response.json({ data: { token: 'bootstrap', expiresAt: new Date(Date.now() + 90000).toISOString() } })
+    wakes.push(request)
+    return Response.json({ code: 0 })
+  }, { now: () => 100 })
+  assert.equal(wakes.length, 1)
+  const h = wakes[0].headers
+  assert.equal(h.get('x-hzy-scheduler-storage'), 'recovered')
+  assert.equal(h.get('x-hzy-scheduler-generation'), '7')
+  const canonical = ['POST', '/api/internal/integration-operations/drain', h.get('x-request-id'),
+    'recovered-signature', 'dep-recovered-signature', 'aims', 'prod', 'https://runtime-recovered-signature.example.test',
+    'recovered-signature.huizhi.yun', 'enterprise-scheduler-v1', 'recovered', '7', h.get('x-hzy-scheduler-issued-at')].join('\n')
+  assert.equal(h.get('x-hzy-scheduler-signature'), createHmac('sha256', 'gateway-secret').update(canonical).digest('hex'))
+})
+
+test('Assets is never woken without a persisted unified or recovered selection', async () => {
+  for (const selection of [undefined, { storage: 'disabled', generation: '7' }]) {
+    const wakes = []
+    await runScheduled(schedulerEnv(), async (input, init) => {
+      const request = asRequest(input, init)
+      const url = new URL(request.url)
+      if (url.pathname === '/internal/tenant-scheduler') return Response.json({ data: { items: [{ ...tenantRecord('assets-legacy'), appCodes: ['assets'] }], nextCursor: null } })
+      if (url.pathname === '/internal/resolve') {
+        const record = resolvedTenantRecord('assets-legacy')
+        record.apps.assets = { ...(record.apps.assets || {}), ...(selection ? { enterpriseScheduler: selection } : {}) }
+        return Response.json({ data: record })
+      }
+      if (url.pathname === '/internal/runtime-bootstrap-token') return Response.json({ data: { token: 'bootstrap', expiresAt: new Date(Date.now() + 90000).toISOString() } })
+      wakes.push(request)
+      return Response.json({ code: 0 })
+    }, { now: () => 100 })
+    assert.equal(wakes.length, 0, `assets woken with selection ${JSON.stringify(selection)}`)
+  }
+})
+
+test('unified Assets storage selection is signed for the Assets wake', async () => {
+  const wakes = []
+  await runScheduled(schedulerEnv(), async (input, init) => {
+    const request = asRequest(input, init)
+    const url = new URL(request.url)
+    if (url.pathname === '/internal/tenant-scheduler') return Response.json({ data: { items: [{ ...tenantRecord('assets-unified'), appCodes: ['assets'] }], nextCursor: null } })
+    if (url.pathname === '/internal/resolve') {
+      const record = resolvedTenantRecord('assets-unified')
+      record.apps.assets = { ...(record.apps.assets || {}), enterpriseScheduler: { storage: 'unified', generation: '9' } }
+      return Response.json({ data: record })
+    }
+    if (url.pathname === '/internal/runtime-bootstrap-token') return Response.json({ data: { token: 'bootstrap', expiresAt: new Date(Date.now() + 90000).toISOString() } })
+    wakes.push(request)
+    return Response.json({ code: 0 })
+  }, { now: () => 100 })
+  assert.equal(wakes.length, 1)
+  const h = wakes[0].headers
+  assert.equal(new URL(wakes[0].url).pathname.endsWith('/api/internal/integration-operations/drain'), true)
+  assert.equal(h.get('x-hzy-app-code'), 'assets')
+  assert.equal(h.get('x-hzy-scheduler-storage'), 'unified')
+  assert.equal(h.get('x-hzy-scheduler-generation'), '9')
+  assert.equal(h.get('x-hzy-scheduler-signature')?.length, 64)
 })

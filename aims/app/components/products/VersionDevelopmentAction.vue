@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import { useAimsModule } from '../../../layer/useAimsModule'
+
+const { moduleUrl } = useAimsModule()
 const props = defineProps<{
   productCode: string
   version: { id: number, product_code: string, version_code: string, status: string, revision: number, workspace_revision: number, current_release_record_id: number | null }
@@ -34,7 +37,7 @@ async function save() {
   let completed = false
   try {
     if (!await confirm({ title: '版本进入开发', message: `版本：${selected.name}\n原因：${body.reason}\n版本将从规划中进入开发中，后续仍需完成范围交付、整体验收和发布。`, confirmLabel: '进入开发' })) return
-    const response = await $fetch<{ code: number, data: { value: { version_id: number, product_code: string, status: string } } }>(`/api/v1/products/${encodeURIComponent(props.productCode)}/versions/${props.version.id}/transition`, { method: 'POST', body, headers: { 'Idempotency-Key': retry.key } })
+    const response = await $fetch<{ code: number, data: { value: { version_id: number, product_code: string, status: string } } }>(moduleUrl(`/api/v1/products/${encodeURIComponent(props.productCode)}/versions/${props.version.id}/transition`), { method: 'POST', body, headers: { 'Idempotency-Key': retry.key } })
     const result = response.data?.value
     if (response.code !== 0 || result?.version_id !== props.version.id || result.product_code !== props.productCode || result.status !== 'developing') throw new Error('状态结果不完整，请使用原请求重试')
     completed = true

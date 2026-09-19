@@ -1,9 +1,14 @@
 <script setup lang="ts">
+import { useAimsModule } from '../../../../layer/useAimsModule'
+import ProductsStructureModuleManager from '../../../components/products/StructureModuleManager.vue'
+import ProductsStructureModuleTree from '../../../components/products/StructureModuleTree.vue'
+
+const { moduleUrl, hosted, cacheKey } = useAimsModule()
 definePageMeta({ layoutHeader: true, layoutHeaderTitle: '产品结构', layoutHeaderProjectSwitcher: false })
 const route = useRoute()
 const code = computed(() => String(route.params.productCode || ''))
-const productPath = computed(() => `/products/${encodeURIComponent(code.value)}`)
-const base = computed(() => `/api/v1/products/${encodeURIComponent(code.value)}`)
+const productPath = computed(() => moduleUrl(`/products/${encodeURIComponent(code.value)}`))
+const base = computed(() => moduleUrl(`/api/v1/products/${encodeURIComponent(code.value)}`))
 const states = { candidate: '候选', active: '已生效', deprecated: '已弃用' }
 interface Feature { component_id: number | null, biz_id: string, product_code: string, title: string, description: string | null, lifecycle: keyof typeof states, revision: number }
 const { search, debounced, flush } = useDebouncedSearch()
@@ -15,7 +20,7 @@ const selectedId = computed(() => /^[1-9]\d*$/.test(moduleFilter.value) && Numbe
 const invalidModule = computed(() => !['all', 'ungrouped'].includes(moduleFilter.value) && selectedId.value === null)
 const moduleLabel = computed(() => moduleFilter.value === 'all' ? '全部功能' : moduleFilter.value === 'ungrouped' ? '未分类功能' : selectedModule.value?.id === selectedId.value ? selectedModule.value.name : '当前模块')
 const query = computed(() => ({ page: page.value, pageSize, keyword: debounced.value || undefined, lifecycle: lifecycle.value === 'all' ? undefined : lifecycle.value, componentId: selectedId.value ?? undefined, ungrouped: moduleFilter.value === 'ungrouped' ? 'true' : undefined }))
-const { data, status, error, refresh } = await useFetch(() => `${base.value}/features`, {
+const { data, status, error, refresh } = await useFetch(() => `${base.value}/features`, { ...(hosted ? { key: computed(() => cacheKey('structure:1' + ':' + String(code.value))) } : {}),
   server: false,
   query,
   transform: (response: { code: number, data: { items: Feature[], total: number } }) => {
@@ -24,9 +29,9 @@ const { data, status, error, refresh } = await useFetch(() => `${base.value}/fea
   }
 })
 const alert = useApiErrorAlert(error, { fallbackTitle: '功能列表加载失败' })
-const { data: requestPermission } = await useFetch<{ code: number, data: { product_code: string, status: string, create: boolean } }>(() => `${base.value}/requests/permissions`, { server: false })
+const { data: requestPermission } = await useFetch<{ code: number, data: { product_code: string, status: string, create: boolean } }>(() => `${base.value}/requests/permissions`, { ...(hosted ? { key: computed(() => cacheKey('structure:2' + ':' + String(code.value))) } : {}), server: false })
 const canCreateRequest = computed(() => requestPermission.value?.code === 0 && requestPermission.value.data?.product_code === code.value && requestPermission.value.data.status === 'active' && requestPermission.value.data.create === true)
-const { data: permissions } = await useFetch<{ code: number, data: { product_code: string, status: string, edit: boolean, delete: boolean } }>(() => `${base.value}/components/permissions`, { server: false })
+const { data: permissions } = await useFetch<{ code: number, data: { product_code: string, status: string, edit: boolean, delete: boolean } }>(() => `${base.value}/components/permissions`, { ...(hosted ? { key: computed(() => cacheKey('structure:3' + ':' + String(code.value))) } : {}), server: false })
 const canManage = computed(() => permissions.value?.code === 0 && permissions.value.data?.product_code === code.value && permissions.value.data.status === 'active' && (permissions.value.data.edit === true || permissions.value.data.delete === true))
 const managing = ref(false), managingBusy = ref(false), mobileTree = ref(false), treeRevision = ref(0)
 const requestModuleContext = computed(() => selectedId.value ? { moduleId: String(selectedId.value), ...(selectedModule.value?.id === selectedId.value ? { moduleNameId: String(selectedId.value), moduleName: selectedModule.value.name } : {}) } : {})

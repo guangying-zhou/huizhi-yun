@@ -1,6 +1,11 @@
 <script setup lang="ts">
-import type { AimsProject, ProjectRole } from '~/types/aims'
+import { useAimsModule } from '../../layer/useAimsModule'
+import type { AimsProject, ProjectRole } from '../types/aims'
+import { useProjectStore } from '../stores/project'
 
+
+// 同一份代码供独立应用与企业宿主使用：非宿主模式下 moduleUrl 原样返回路径。
+const { moduleUrl } = useAimsModule()
 definePageMeta({
   layoutHeader: true,
   layoutHeaderTitle: '项目日历',
@@ -499,7 +504,7 @@ async function loadEntries() {
     params.set('endDate', queryEndKey.value)
     params.set('pageSize', '500')
     const res = await $fetch<{ code: number, data: RawTimeEntry[] | ListPayload<RawTimeEntry> }>(
-      `/api/v1/users/${encodeURIComponent(authUser.value)}/time-entries?${params.toString()}`
+      moduleUrl(`/api/v1/users/${encodeURIComponent(authUser.value)}/time-entries?${params.toString()}`)
     )
     entries.value = res.code === 0
       ? listPayload(res.data).map(normalizeEntry).filter(entry => entry.projectId > 0)
@@ -688,7 +693,7 @@ function postProjectTimeEntry(row: ProjectTimeRow & { submitHours: number }) {
 }
 
 function createProjectTimeEntry(projectId: number, hours: number, description: string | null) {
-  const url = `/api/v1/projects/${projectId}/time-entries` as string
+  const url = moduleUrl(`/api/v1/projects/${projectId}/time-entries`) as string
   return $fetch(url, {
     method: 'POST',
     body: {
@@ -719,7 +724,7 @@ async function submitSelectedWeek() {
     const response = await $fetch<{
       code: number
       data: { submittedCount: number, managerRouteCount: number, summaryRouteCount: number }
-    }>(`/api/v1/timesheet/weeks/${selectedPeriodKey.value}:submit`, {
+    }>(moduleUrl(`/api/v1/timesheet/weeks/${selectedPeriodKey.value}:submit`), {
       method: 'POST'
     })
     weekSubmitModalOpen.value = false
@@ -783,7 +788,7 @@ function saveDetailTimeEntry(row: TimeEntryEditRow) {
 
 function patchProjectTimeEntry(row: TimeEntryEditRow) {
   if (row.id === null) return postDetailTimeEntry(row)
-  const url = `/api/v1/projects/${row.projectId}/time-entries/${row.id}` as string
+  const url = moduleUrl(`/api/v1/projects/${row.projectId}/time-entries/${row.id}`) as string
   return $fetch(url, {
     method: 'PATCH',
     body: {
@@ -795,7 +800,7 @@ function patchProjectTimeEntry(row: TimeEntryEditRow) {
 
 function deleteProjectTimeEntry(row: TimeEntryEditRow) {
   if (row.id === null) return Promise.resolve()
-  const url = `/api/v1/projects/${row.projectId}/time-entries/${row.id}` as string
+  const url = moduleUrl(`/api/v1/projects/${row.projectId}/time-entries/${row.id}`) as string
   return $fetch(url, { method: 'DELETE' })
 }
 

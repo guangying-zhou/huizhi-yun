@@ -37,6 +37,10 @@ func TestSignOIDCTokenKeepsPrivateKeyInRuntimeAndPinsTenant(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer database.Close()
+	// Issuance is authorized from the live session before any key is touched.
+	mock.ExpectQuery(`(?s)SELECT ls.uid.*FROM local_sessions ls`).
+		WithArgs("sha256_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa").
+		WillReturnRows(sqlmock.NewRows([]string{"uid"}).AddRow("u1001"))
 	mock.ExpectQuery(`(?s)SELECT id,kid,alg,use_type,public_jwk_json,private_key_ref.*FROM auth_signing_keys`).
 		WillReturnRows(sqlmock.NewRows([]string{
 			"id", "kid", "alg", "use_type", "public_jwk_json", "private_key_ref",

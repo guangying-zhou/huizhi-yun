@@ -76,6 +76,267 @@
       "sortOrder": 30
     },
     {
+      "code": "project-members",
+      "name": "项目成员只读服务",
+      "description": "企业 Host 使用的项目成员列表读取能力，不授予普通用户角色",
+      "actions": [
+        "view"
+      ],
+      "sortOrder": 29
+    },
+    {
+      "code": "project-documents",
+      "name": "项目文档代理",
+      "description": "企业 Host 经 Aims 正式身份读取项目文档元数据、Codocs 内容与文件柜预览，并登记/删除项目文档索引；download 为导出性质、write 为写入性质的独立敏感动作，均不由 read 蕴含",
+      "actions": [
+        "read",
+        "download",
+        "write"
+      ],
+      "sortOrder": 28
+    },
+    {
+      "code": "project-document-sources",
+      "name": "项目文档候选来源只读代理",
+      "description": "企业 Host 经 Aims 正式身份读取可附加为项目文档的候选来源：部门 Codocs 文档、项目集 Codocs 文档、已绑定仓库的 Markdown 目录与正文；每条都按操作者本人的部门／项目／仓库访问权重新判定",
+      "actions": [
+        "read"
+      ],
+      "sortOrder": 28
+    },
+    {
+      "code": "project-document-access",
+      "name": "项目文档访问策略代理",
+      "description": "企业 Host 经 Aims 正式身份读取或修改项目文档访问策略、权限判定与访问审计；改策略的门槛是项目经理而非文档编辑者，因此 manage 与 read 分列，read 不蕴含 manage",
+      "actions": [
+        "read",
+        "manage"
+      ],
+      "sortOrder": 28
+    },
+    {
+      "code": "project-plan",
+      "name": "项目计划只读服务",
+      "description": "企业 Host 读取项目里程碑、阶段与计划条目的精确服务能力",
+      "actions": [
+        "view"
+      ],
+      "sortOrder": 27
+    },
+    {
+      "code": "project-board",
+      "name": "项目看板只读服务",
+      "description": "企业 Host 按原状态列读取项目看板的精确服务能力",
+      "actions": [
+        "view"
+      ],
+      "sortOrder": 26
+    },
+    {
+      "code": "timesheet-overview",
+      "name": "跨项目工时总览只读服务",
+      "description": "企业 Host 按当前用户及可见项目范围读取工时总览",
+      "actions": [
+        "view"
+      ],
+      "sortOrder": 25
+    },
+    {
+      "code": "weekly-report-overview",
+      "name": "跨项目周报总览只读服务",
+      "description": "企业 Host 按项目可见范围读取周报汇总",
+      "actions": [
+        "view"
+      ],
+      "sortOrder": 24
+    },
+    {
+      "code": "project-create",
+      "name": "项目创建服务",
+      "description": "企业 Host 创建项目的精确幂等服务能力",
+      "actions": [
+        "execute"
+      ],
+      "sortOrder": 23
+    },
+    {
+      "code": "project-edit",
+      "name": "项目基本信息编辑服务",
+      "description": "企业 Host 幂等编辑项目基本资料的精确服务能力",
+      "actions": [
+        "execute"
+      ],
+      "sortOrder": 22
+    },
+    {
+      "code": "project-member-add",
+      "name": "添加项目成员服务",
+      "actions": [
+        "execute"
+      ],
+      "sortOrder": 21
+    },
+    {
+      "code": "project-member-role",
+      "name": "调整项目成员角色服务",
+      "actions": [
+        "execute"
+      ],
+      "sortOrder": 20
+    },
+    {
+      "code": "project-member-remove",
+      "name": "移除项目成员服务",
+      "actions": [
+        "execute"
+      ],
+      "sortOrder": 19
+    },
+    {
+      "code": "work-item-create",
+      "name": "创建工作项服务",
+      "actions": [
+        "execute"
+      ],
+      "sortOrder": 18
+    },
+    {
+      "code": "work-item-edit",
+      "name": "工作项基本信息编辑服务",
+      "actions": [
+        "execute"
+      ],
+      "sortOrder": 17
+    },
+    {
+      "code": "work-item-delete",
+      "name": "工作项删除服务",
+      "description": "精确范围和冻结删除证据合同；不授予普通用户角色",
+      "actions": [
+        "execute"
+      ],
+      "sortOrder": 18
+    },
+    {
+      "code": "work-item-associate",
+      "name": "工作项版本关联服务",
+      "actions": [
+        "execute"
+      ],
+      "sortOrder": 18
+    },
+    {
+      "code": "work-item-complete",
+      "name": "工作项完成审批请求服务",
+      "actions": [
+        "execute"
+      ],
+      "sortOrder": 19
+    },
+    {
+      "code": "work-item-completion-callback",
+      "name": "工作项完成审批回执服务",
+      "actions": [
+        "execute"
+      ],
+      "sortOrder": 20
+    },
+    {
+      "code": "work-item-completion-replay",
+      "name": "工作项完成审批恢复服务",
+      "actions": [
+        "execute"
+      ],
+      "sortOrder": 21
+    },
+    {
+      "code": "work-item-start",
+      "name": "工作项开始执行服务",
+      "actions": [
+        "execute"
+      ],
+      "sortOrder": 22
+    },
+    {
+      "code": "work-item-reset",
+      "name": "工作项退回任务分解服务",
+      "actions": [
+        "execute"
+      ],
+      "sortOrder": 23
+    },
+    {
+      "code": "work-item-reopen",
+      "name": "工作项重新打开服务",
+      "actions": [
+        "execute"
+      ],
+      "sortOrder": 24
+    },
+    {
+      "code": "work-item-distribute-confirm",
+      "name": "工作项确认任务分配服务",
+      "description": "统一写路径确认目标下全部规划态任务进入待办的精确服务能力，不授予普通用户角色",
+      "actions": [
+        "execute"
+      ],
+      "sortOrder": 32
+    },
+    {
+      "code": "work-item-distribute-revoke",
+      "name": "工作项撤回任务分配服务",
+      "description": "统一写路径把目标下全部待办任务撤回规划态的精确服务能力，不授予普通用户角色",
+      "actions": [
+        "execute"
+      ],
+      "sortOrder": 33
+    },
+    {
+      "code": "work-item-append-confirm",
+      "name": "工作项确认追加任务服务",
+      "description": "统一写路径确认目标执行中追加的规划态任务进入待办的精确服务能力，不授予普通用户角色",
+      "actions": [
+        "execute"
+      ],
+      "sortOrder": 34
+    },
+    {
+      "code": "work-item-append-reject",
+      "name": "工作项拒绝追加任务服务",
+      "description": "统一写路径移除目标执行中追加的规划态任务的精确服务能力，不授予普通用户角色",
+      "actions": [
+        "execute"
+      ],
+      "sortOrder": 35
+    },
+    {
+      "code": "work-item-append-tasks",
+      "name": "工作项追加任务服务",
+      "description": "统一写路径在执行中目标下替换并创建待确认追加任务及其成果的精确服务能力，不授予普通用户角色",
+      "actions": [
+        "execute"
+      ],
+      "sortOrder": 36
+    },
+    {
+      "code": "work-item-breakdown",
+      "name": "工作项任务分解保存服务",
+      "description": "统一写路径在分配确认前保存目标任务分解及成果承接的精确服务能力，不授予普通用户角色",
+      "actions": [
+        "execute"
+      ],
+      "sortOrder": 37
+    },
+    {
+      "code": "work-items",
+      "name": "工作项只读服务",
+      "description": "企业 Host 使用的工作项列表与详情读取能力，不授予普通用户角色",
+      "actions": [
+        "view"
+      ],
+      "sortOrder": 31
+    },
+    {
       "code": "board",
       "name": "看板",
       "description": "迭代看板与状态流转",
@@ -96,6 +357,15 @@
         "admin"
       ],
       "sortOrder": 50
+    },
+    {
+      "code": "time-entries",
+      "name": "工时记录只读服务",
+      "description": "企业 Host 使用的项目工时列表与详情读取能力，不授予普通用户角色",
+      "actions": [
+        "view"
+      ],
+      "sortOrder": 51
     },
     {
       "code": "reports",
@@ -122,6 +392,15 @@
         "configure"
       ],
       "sortOrder": 61
+    },
+    {
+      "code": "weekly-reports",
+      "name": "项目周报只读服务",
+      "description": "企业 Host 使用的项目周报列表与详情读取能力，不授予普通用户角色",
+      "actions": [
+        "view"
+      ],
+      "sortOrder": 62
     },
     {
       "code": "quality_reviews",
@@ -163,6 +442,24 @@
         "execute"
       ],
       "sortOrder": 84
+    },
+    {
+      "code": "milestone-rollover",
+      "name": "周期里程碑滚动服务",
+      "description": "统一调度路径按 generation 滚动到期周期里程碑的精确服务能力，不授予普通用户角色",
+      "actions": [
+        "execute"
+      ],
+      "sortOrder": 86
+    },
+    {
+      "code": "notifications-due",
+      "name": "到期通知检查点服务",
+      "description": "统一调度路径按 generation 扫描到期条件并保存通知检查点的精确服务能力，不授予普通用户角色",
+      "actions": [
+        "execute"
+      ],
+      "sortOrder": 87
     },
     {
       "code": "integration_operations",
@@ -473,6 +770,290 @@
         "edit"
       ],
       "sortOrder": 109
+    },
+    {
+      "code": "work-item-comments",
+      "name": "工作项评论服务",
+      "description": "工作项评论的读取与新增",
+      "actions": [
+        "view",
+        "edit"
+      ],
+      "sortOrder": 122
+    },
+    {
+      "code": "work-item-commits",
+      "name": "工作项提交关联服务",
+      "description": "工作项关联 GitLab 提交的读取、关联与解绑",
+      "actions": [
+        "view",
+        "edit"
+      ],
+      "sortOrder": 123
+    },
+    {
+      "code": "work-item-documents",
+      "name": "工作项文档服务",
+      "description": "工作项文档的读取、挂接与解绑",
+      "actions": [
+        "view",
+        "edit"
+      ],
+      "sortOrder": 124
+    },
+    {
+      "code": "work-item-time-entries",
+      "name": "工作项工时服务",
+      "description": "工作项工时的读取与增改删",
+      "actions": [
+        "view",
+        "edit"
+      ],
+      "sortOrder": 125
+    },
+    {
+      "code": "work-item-execution",
+      "name": "工作项执行上下文服务",
+      "description": "状态流转、执行上下文、源章节、分解上下文与子项读取",
+      "actions": [
+        "view"
+      ],
+      "sortOrder": 126
+    },
+    {
+      "code": "work-item-decomposition",
+      "name": "工作项分解服务",
+      "description": "提交分解结果与从模板克隆变更实例",
+      "actions": [
+        "edit"
+      ],
+      "sortOrder": 127
+    },
+    {
+      "code": "work-item-deliverables",
+      "name": "工作项交付物服务",
+      "description": "工作项交付物关联的更新",
+      "actions": [
+        "edit"
+      ],
+      "sortOrder": 128
+    },
+    {
+      "code": "work-item-batch",
+      "name": "工作项批量服务",
+      "description": "工作项批量更新",
+      "actions": [
+        "edit"
+      ],
+      "sortOrder": 129
+    },
+    {
+      "code": "project-favorites",
+      "name": "项目收藏服务",
+      "description": "当前用户自己的项目收藏读取与增删",
+      "actions": [
+        "view",
+        "edit"
+      ],
+      "sortOrder": 130
+    },
+    {
+      "code": "project-repos",
+      "name": "项目仓库服务",
+      "description": "项目关联代码仓库的读取、关联与解绑",
+      "actions": [
+        "view",
+        "edit"
+      ],
+      "sortOrder": 131
+    },
+    {
+      "code": "project-work-items",
+      "name": "项目工作项列表服务",
+      "description": "按项目读取工作项列表，供项目导航与看板使用",
+      "actions": [
+        "view"
+      ],
+      "sortOrder": 132
+    },
+    {
+      "code": "project-deliverables",
+      "name": "项目交付物服务",
+      "description": "交付物的按范围读取、更新、删除与批量创建",
+      "actions": [
+        "view",
+        "edit"
+      ],
+      "sortOrder": 133
+    },
+    {
+      "code": "project-releases",
+      "name": "项目版本服务",
+      "description": "按项目读取版本列表，供工作项版本关联使用",
+      "actions": [
+        "view"
+      ],
+      "sortOrder": 134
+    },
+    {
+      "code": "project-milestones",
+      "name": "项目里程碑服务",
+      "description": "按项目读取里程碑，以及里程碑的创建、更新与删除",
+      "actions": [
+        "view",
+        "edit"
+      ],
+      "sortOrder": 135
+    },
+    {
+      "code": "project-routine-review",
+      "name": "例行项目季度评审服务",
+      "description": "按项目读取例行项目的季度评审视图",
+      "actions": [
+        "view"
+      ],
+      "sortOrder": 136
+    },
+    {
+      "code": "project-portfolios",
+      "name": "项目集服务",
+      "description": "项目集的读取与维护，写操作需 portfolios:admin",
+      "actions": [
+        "view",
+        "edit"
+      ],
+      "sortOrder": 137
+    },
+    {
+      "code": "project-deletion",
+      "name": "项目彻底删除服务",
+      "description": "彻底删除项目，仅系统管理员可用",
+      "actions": [
+        "execute"
+      ],
+      "sortOrder": 138
+    },
+    {
+      "code": "my-work-items",
+      "name": "我的工作项服务",
+      "description": "当前用户的工作项汇总读取",
+      "actions": [
+        "view"
+      ],
+      "sortOrder": 139
+    },
+    {
+      "code": "time-entry-reviews",
+      "name": "工时评审服务",
+      "description": "项目工时评审的读取与提交",
+      "actions": [
+        "view",
+        "edit"
+      ],
+      "sortOrder": 140
+    },
+    {
+      "code": "user-time-entries",
+      "name": "用户工时读取服务",
+      "description": "按用户读取工时记录，可见性仍由 Aims 判定",
+      "actions": [
+        "view"
+      ],
+      "sortOrder": 141
+    },
+    {
+      "code": "project-time-entries",
+      "name": "项目工时写入服务",
+      "description": "项目工时的新增、修改与删除",
+      "actions": [
+        "edit"
+      ],
+      "sortOrder": 142
+    },
+    {
+      "code": "timesheet-weeks",
+      "name": "周工时提交服务",
+      "description": "按周期键提交个人周工时",
+      "actions": [
+        "edit"
+      ],
+      "sortOrder": 143
+    },
+    {
+      "code": "company-weekly-summaries",
+      "name": "公司周报汇总服务",
+      "description": "公司周报的读取、草稿、生成、发布与纠错",
+      "actions": [
+        "view",
+        "edit"
+      ],
+      "sortOrder": 144
+    },
+    {
+      "code": "weekly-reporting-periods",
+      "name": "周报周期治理服务",
+      "description": "周期总监工作台读取与周期生成",
+      "actions": [
+        "view",
+        "edit"
+      ],
+      "sortOrder": 145
+    },
+    {
+      "code": "weekly-report-review",
+      "name": "周报审阅服务",
+      "description": "周报审阅与开启纠错",
+      "actions": [
+        "edit"
+      ],
+      "sortOrder": 146
+    },
+    {
+      "code": "project-template-versions",
+      "name": "项目模板版本服务",
+      "description": "项目模板版本的读取",
+      "actions": [
+        "view"
+      ],
+      "sortOrder": 147
+    },
+    {
+      "code": "requirement-targets",
+      "name": "需求目标服务",
+      "description": "项目需求目标的读取与创建",
+      "actions": [
+        "edit"
+      ],
+      "sortOrder": 148
+    },
+    {
+      "code": "project-gitlab",
+      "name": "项目 GitLab 集成服务",
+      "description": "提交列表读取、同步上下文与提交入库",
+      "actions": [
+        "view",
+        "edit"
+      ],
+      "sortOrder": 149
+    },
+    {
+      "code": "work-item-commit-diff",
+      "name": "工作项提交差异服务",
+      "description": "提交元数据读取与文件变更数写回；diff 内容由宿主直连 GitLab 获取",
+      "actions": [
+        "view",
+        "edit"
+      ],
+      "sortOrder": 150
+    },
+    {
+      "code": "project-weekly-report-period",
+      "name": "项目周报周期服务",
+      "description": "按周期保存周报草稿与提交",
+      "actions": [
+        "edit"
+      ],
+      "sortOrder": 151
     }
   ],
   "recommendedRoles": [

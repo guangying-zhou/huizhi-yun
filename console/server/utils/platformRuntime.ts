@@ -1,3 +1,4 @@
+import { evaluateEnterpriseEntitlement } from './enterpriseEntitlement'
 import { createHash, createPublicKey, timingSafeEqual, verify as nodeVerify } from 'node:crypto'
 import { isAbsolute, resolve } from 'node:path'
 import { getHeader, type H3Event } from 'h3'
@@ -754,8 +755,16 @@ export const platformRuntimeFetch: PlatformRuntimeFetch = async (url, options) =
 }
 const POLICY_BUNDLE_FETCH_TIMEOUT_MS = 30_000
 
-export async function fetchAndVerifyPolicyBundle(config: PlatformRuntimeConfig): Promise<CachedPolicyBundle> {
+function policyBundleFetchTimeoutMs(event?: H3Event) {
+  const runtimeEvent = (event as (H3Event & CloudflareRuntimeEvent) | undefined) || getRuntimeEvent()
+  const requested = Number(runtimeEnvValueForEvent(runtimeEvent, 'HZY_PLATFORM_POLICY_BUNDLE_FETCH_TIMEOUT_MS'))
+  if (!Number.isSafeInteger(requested) || requested < 1_000 || requested > 90_000) return POLICY_BUNDLE_FETCH_TIMEOUT_MS
+  return requested
+}
+
+export async function fetchAndVerifyPolicyBundle(config: PlatformRuntimeConfig, event?: H3Event): Promise<CachedPolicyBundle> {
   const syncStartedAt = new Date().toISOString()
+  const timeout = policyBundleFetchTimeoutMs(event)
   if (!config.tenantCode) {
     throw new Error('tenant context is required to fetch policy bundle')
   }
@@ -779,7 +788,7 @@ export async function fetchAndVerifyPolicyBundle(config: PlatformRuntimeConfig):
             'Authorization': `Bearer ${config.platformServiceToken}`,
             'x-hzy-internal-principal': 'console-managed-cloud-worker'
           },
-          timeout: POLICY_BUNDLE_FETCH_TIMEOUT_MS
+          timeout
         }
       )
     : await platformRuntimeFetch<PlatformBundleEnvelope>(
@@ -791,7 +800,7 @@ export async function fetchAndVerifyPolicyBundle(config: PlatformRuntimeConfig):
           headers: {
             Authorization: `Bearer ${config.runtimeToken}`
           },
-          timeout: POLICY_BUNDLE_FETCH_TIMEOUT_MS
+          timeout
         }
       )
   const data = response.data
@@ -840,6 +849,9 @@ export async function fetchAndVerifyPolicyBundle(config: PlatformRuntimeConfig):
   if (!verified) {
     throw new Error('bundle signature verification failed')
   }
+
+  const enterprise = evaluateEnterpriseEntitlement(data.bundle, config.tenantCode)
+  if (enterprise.reason === 'enterprise_entitlement_invalid') throw new Error(enterprise.reason)
 
   return {
     tenantCode: data.tenantCode,
@@ -929,7 +941,7 @@ export async function fetchPlatformTenantProfile(config: PlatformRuntimeConfig):
 }
 
 export async function refreshPlatformBundle(reason: string, event?: H3Event): Promise<RefreshBundleResult> {
-  if (persistentPolicyStoreEnabled() && (reason.endsWith('cache-miss') || reason === 'status-auto-refresh')) {
+  if (persistentPolicyStoreEnabled(event) && (reason.endsWith('cache-miss') || reason === 'status-auto-refresh')) {
     throw new Error('policy bundle sync required; request-path refresh disabled')
   }
   const runtimeMode = loadConsoleRuntimeMode(event)
@@ -957,7 +969,7 @@ export async function refreshPlatformBundle(reason: string, event?: H3Event): Pr
       deploymentCode: null,
       lastCheckedAt: new Date().toISOString(),
       lastError: 'tenant context is required; access Console through Tenant Gateway'
-    }, cacheScope)
+    }, cacheScope, event)
     return {
       ok: false,
       status,
@@ -971,13 +983,13 @@ export async function refreshPlatformBundle(reason: string, event?: H3Event): Pr
     if (config.activationMode !== 'managed-cloud-multitenant') {
       await readAndVerifyLicense(config)
     }
-    const bundle = await fetchAndVerifyPolicyBundle(config)
+    const bundle = await fetchAndVerifyPolicyBundle(config, event)
     const effectiveCacheScope = resolvePlatformRuntimeCacheScope({
       ...config,
       tenantCode: bundle.tenantCode,
       environment: config.environment
     }, event)
-    await writeCachedBundle(config.bundleCacheDir, bundle, effectiveCacheScope)
+    await writeCachedBundle(config.bundleCacheDir, bundle, effectiveCacheScope, event)
     const materialized = reason !== 'independent-sync' && config.authClientMaterializeEnabled
       ? await materializeAuthClientsFromBundle(bundle)
       : null
@@ -994,14 +1006,14 @@ export async function refreshPlatformBundle(reason: string, event?: H3Event): Pr
       lastCheckedAt: new Date().toISOString(),
       lastActivatedAt: new Date().toISOString(),
       lastError: null
-    }, effectiveCacheScope)
+    }, effectiveCacheScope, event)
 
     if (config.activationMode !== 'managed-cloud-multitenant' && config.heartbeatEnabled) {
       await postPlatformHeartbeat(config, bundle)
         .then(async () => {
           await patchActivationStatus(config.bundleCacheDir, {
             lastHeartbeatAt: new Date().toISOString()
-          }, effectiveCacheScope)
+          }, effectiveCacheScope, event)
         })
         .catch((error) => {
           const message = error instanceof Error ? error.message : String(error)
@@ -1028,7 +1040,7 @@ export async function refreshPlatformBundle(reason: string, event?: H3Event): Pr
       deploymentCode: config.deploymentCode,
       lastCheckedAt: new Date().toISOString(),
       lastError: message
-    }, cacheScope)
+    }, cacheScope, event)
 
     return {
       ok: false,
@@ -1061,7 +1073,7 @@ export async function loadActivationStatus(event?: H3Event) {
 
   const cacheScope = resolvePlatformRuntimeCacheScope(config, event)
   if (config.activationMode === 'managed-cloud-multitenant' && !config.tenantCode) {
-    const status = await readActivationStatus(config.bundleCacheDir, cacheScope)
+    const status = await readActivationStatus(config.bundleCacheDir, cacheScope, event)
     return {
       ...status,
       mode: 'pending' as const,
@@ -1077,8 +1089,8 @@ export async function loadActivationStatus(event?: H3Event) {
   }
 
   const [status, bundle] = await Promise.all([
-    readActivationStatus(config.bundleCacheDir, cacheScope),
-    readCachedBundle(config.bundleCacheDir, cacheScope)
+    readActivationStatus(config.bundleCacheDir, cacheScope, event),
+    readCachedBundle(config.bundleCacheDir, cacheScope, event)
   ])
 
   if (bundle && status.activated) {

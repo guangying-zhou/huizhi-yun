@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { useCodocsModule } from '../../../layer/useCodocsModule'
+
 definePageMeta({
   layout: 'default'
 })
@@ -6,6 +8,7 @@ definePageMeta({
 usePageTitle('协同文档中心')
 
 const { user } = useAuth()
+const { moduleUrl, cacheKey } = useCodocsModule()
 const router = useRouter()
 const accountStore = useAccountStore()
 const { hasPermission, loadPermissions } = usePermissions()
@@ -123,7 +126,7 @@ const currentQueryKey = computed(() => JSON.stringify({
 }))
 
 const fetchCollabDocs = async () => {
-  const res = await $fetch<CollabDocsResponse>('/api/collab-docs', {
+  const res = await $fetch<CollabDocsResponse>(moduleUrl('/api/collab-docs'), {
     params: {
       category: category.value,
       scope: scope.value,
@@ -141,7 +144,7 @@ const fetchCollabDocs = async () => {
 }
 
 const { data, pending, refresh } = await useAsyncData(
-  'collab-docs',
+  cacheKey('collab-docs'),
   fetchCollabDocs,
   {
     watch: [category, scope, searchKeyword, selectedDeptCode, selectedOwnerUid],
@@ -284,7 +287,7 @@ const loadPreview = async (uuid: string) => {
   previewReadonly.value = true
 
   try {
-    const response = await $fetch<DocumentPreviewResponse>(`/api/documents/${uuid}`)
+    const response = await $fetch<DocumentPreviewResponse>(moduleUrl(`/api/documents/${uuid}`))
     if (response.success) {
       previewContent.value = response.data?.content || ''
       previewAbstract.value = response.data?.ai_abstract || ''

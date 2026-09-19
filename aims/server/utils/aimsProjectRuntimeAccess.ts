@@ -3,8 +3,8 @@ import {
   checkAimsScopedPermission,
   resolveAimsProjectAuthorizationObject,
   resolveAimsProjectListAdminScopeQuery
-} from '~~/server/utils/aimsScopedAuthorization'
-import { fetchUserDepartments } from '~~/server/utils/userDepartments'
+} from './aimsScopedAuthorization'
+import { fetchUserDepartments } from './userDepartments'
 
 interface DeptNode {
   deptCode?: string

@@ -79,7 +79,22 @@ func (a *Adapter) executeContractActivation(ctx context.Context, identifier stri
 		return nil, err
 	}
 	defer tx.Rollback()
+	result, err := a.ExecuteContractActivationInTransaction(ctx, tx, identifier, body)
+	if err != nil {
+		return nil, err
+	}
+	if err = tx.Commit(); err != nil {
+		return nil, err
+	}
+	return result, nil
+}
 
+// ExecuteContractActivationInTransaction creates or replays the original orchestration job.
+// It performs no remote delivery; the caller owns commit and rollback.
+func (a *Adapter) ExecuteContractActivationInTransaction(ctx context.Context, tx *sql.Tx, identifier string, body map[string]any) (map[string]any, error) {
+	if tx == nil {
+		return nil, httperror.New(503, "contract_activation_transaction_required", "Caller transaction required")
+	}
 	contract, err := a.contractForActivationTx(ctx, tx, identifier)
 	if err != nil {
 		return nil, err
@@ -102,9 +117,6 @@ func (a *Adapter) executeContractActivation(ctx context.Context, identifier stri
 		return nil, err
 	}
 	if existing != nil {
-		if err := tx.Commit(); err != nil {
-			return nil, err
-		}
 		existing["idempotent"] = true
 		return existing, nil
 	}
@@ -134,6 +146,10 @@ func (a *Adapter) executeContractActivation(ctx context.Context, identifier stri
 	}
 	steps := contractActivationStepsFromPlan(plan)
 	for _, step := range steps {
+		dependencies, err := json.Marshal(step.DependsOn)
+		if err != nil {
+			return nil, err
+		}
 		status := "planned"
 		lastError := ""
 		if step.BlockingDependency {
@@ -146,7 +162,7 @@ func (a *Adapter) executeContractActivation(ctx context.Context, identifier stri
 			"step_key":             step.Key,
 			"step_name":            step.Name,
 			"sort_no":              step.SortNo,
-			"depends_on_step_keys": step.DependsOn,
+			"depends_on_step_keys": string(dependencies),
 			"idempotency_key":      contractActivationStepIdempotencyKey(contract, step),
 			"target_app":           step.TargetApp,
 			"target_action":        step.TargetAction,
@@ -199,9 +215,6 @@ func (a *Adapter) executeContractActivation(ctx context.Context, identifier stri
 	}
 	detail, err := a.contractActivationJobDetailTx(ctx, tx, contract["id"], jobID)
 	if err != nil {
-		return nil, err
-	}
-	if err := tx.Commit(); err != nil {
 		return nil, err
 	}
 	detail["idempotent"] = false
@@ -295,6 +308,21 @@ func (a *Adapter) recordContractActivationStepResult(ctx context.Context, contra
 	}
 	defer tx.Rollback()
 
+	result, err := a.RecordContractActivationStepResultInTransaction(ctx, tx, contractIdentifier, jobIdentifier, stepKey, body)
+	if err != nil {
+		return nil, err
+	}
+	if err = tx.Commit(); err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
+// RecordContractActivationStepResultInTransaction reuses the owning checkpoint and relation updates.
+func (a *Adapter) RecordContractActivationStepResultInTransaction(ctx context.Context, tx *sql.Tx, contractIdentifier, jobIdentifier, stepKey string, body map[string]any) (map[string]any, error) {
+	if tx == nil {
+		return nil, httperror.New(503, "contract_activation_transaction_required", "Caller transaction required")
+	}
 	contract, job, err := a.lockContractActivationJobTx(ctx, tx, contractIdentifier, jobIdentifier)
 	if err != nil {
 		return nil, err
@@ -375,9 +403,6 @@ func (a *Adapter) recordContractActivationStepResult(ctx context.Context, contra
 	}
 	detail, err := a.contractActivationJobDetailTx(ctx, tx, contract["id"], job["id"])
 	if err != nil {
-		return nil, err
-	}
-	if err := tx.Commit(); err != nil {
 		return nil, err
 	}
 	return detail, nil

@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { useCodocsModule } from '../../../layer/useCodocsModule'
+
 definePageMeta({
   layout: 'default'
 })
@@ -22,7 +24,7 @@ interface CabinetFile {
 
 interface CabinetListResponse {
   success: boolean
-  data: { items: CabinetFile[] }
+  data: { items: CabinetFile[], total: number, page: number, pageSize: number }
 }
 
 interface UploadResult {
@@ -66,6 +68,7 @@ interface ConvertedInfoResponse {
 
 const toast = useToast()
 const { user } = useAuth()
+const { moduleUrl, cacheKey } = useCodocsModule()
 const { setPayload: setDocumentPreviewBootstrap } = useDocumentPreviewBootstrap()
 const uid = computed(() => user.value || 'user1')
 
@@ -85,6 +88,7 @@ const selectedFileUuid = ref<string | null>(null)
 const previewFile = ref<CabinetFile | null>(null)
 const previewData = ref<PreviewResponse['data'] | null>(null)
 const previewLoading = ref(false)
+let previewRequestId = 0
 const showingPreview = ref(false) // 是否正在展示预览内容
 const convertedInfo = ref<ConvertedInfoResponse['data']>(null) // 转存信息
 
@@ -100,23 +104,41 @@ const deleteTarget = ref<CabinetFile | null>(null)
 const isDeleting = ref(false)
 
 // Fetch files
+const page = ref(1)
+const pageSize = 20
+
 const fetchFiles = async () => {
-  if (!user.value) return []
-  const response = await $fetch<CabinetListResponse>('/api/cabinet', {
-    query: { owner_uid: uid.value }
+  if (!user.value) return { success: true, data: { items: [], total: 0, page: 1, pageSize } }
+  const response = await $fetch<CabinetListResponse>(moduleUrl('/api/cabinet'), {
+    query: { owner_uid: uid.value, page: page.value, pageSize }
   })
-  return response?.data?.items || []
+  if (response?.success !== true || !Array.isArray(response.data?.items) || !Number.isSafeInteger(response.data.total) || response.data.total < 0) {
+    throw new Error('文件列表响应无效')
+  }
+  return response
 }
 
-const { data: files, pending, refresh } = await useAsyncData(
-  'my-cabinet-files',
+const { data: cabinetResponse, pending, error, refresh } = await useAsyncData(
+  cacheKey('my-cabinet-files'),
   fetchFiles,
   {
-    watch: [user],
+    watch: [uid, page],
     immediate: true,
     getCachedData: () => undefined
   }
 )
+const files = computed(() => cabinetResponse.value?.data?.items || [])
+const total = computed(() => cabinetResponse.value?.data?.total ?? 0)
+
+watch(uid, () => {
+  page.value = 1
+  deselectFile()
+})
+
+watch(total, (nextTotal) => {
+  const lastPage = Math.max(1, Math.ceil(nextTotal / pageSize))
+  if (page.value > lastPage) page.value = lastPage
+})
 
 // File icon mapping
 const getFileIcon = (ext: string): string => {
@@ -189,6 +211,7 @@ const isImageExt = (ext: string): boolean => {
 // Select file — 只加载文件信息，不立即预览
 const selectFile = async (file: CabinetFile) => {
   if (selectedFileUuid.value === file.uuid && previewFile.value) return
+  const requestId = ++previewRequestId
 
   selectedFileUuid.value = file.uuid
   previewFile.value = file
@@ -200,25 +223,28 @@ const selectFile = async (file: CabinetFile) => {
   showMobileSidebar.value = false
 
   try {
-    const response = await $fetch<PreviewResponse>(`/api/cabinet/${file.uuid}/preview`)
+    const response = await $fetch<PreviewResponse>(moduleUrl(`/api/cabinet/${file.uuid}/preview`))
+    if (requestId !== previewRequestId) return
     if (response.success) {
       previewData.value = response.data
     }
   } catch {
+    if (requestId !== previewRequestId) return
     toast.add({ title: '获取文件信息失败', color: 'error' })
   } finally {
-    previewLoading.value = false
+    if (requestId === previewRequestId) previewLoading.value = false
   }
 
   // 如果已转存，加载转存信息
   if (file.converted_doc_uuid) {
     try {
-      const info = await $fetch<ConvertedInfoResponse>(`/api/cabinet/${file.uuid}/converted-info`)
+      const info = await $fetch<ConvertedInfoResponse>(moduleUrl(`/api/cabinet/${file.uuid}/converted-info`))
+      if (requestId !== previewRequestId) return
       if (info.success && info.data) {
         convertedInfo.value = info.data
       }
     } catch {
-      // 忽略
+      if (requestId === previewRequestId) toast.add({ title: '转存文档信息暂不可用', color: 'error' })
     }
   }
 }
@@ -252,7 +278,7 @@ const openConvertedDoc = async () => {
   viewingDocContent.value = ''
 
   try {
-    const response = await $fetch<{ success: boolean, data: { content?: string } }>(`/api/documents/${convertedInfo.value.doc_uuid}`)
+    const response = await $fetch<{ success: boolean, data: { content?: string } }>(moduleUrl(`/api/documents/${convertedInfo.value.doc_uuid}`))
     if (requestId !== viewingDocRequestId) return
 
     if (response.success && response.data) {
@@ -284,6 +310,8 @@ const navigateToConvertedDoc = () => {
 
 // Deselect (back to empty state)
 const deselectFile = () => {
+  previewRequestId += 1
+  previewLoading.value = false
   selectedFileUuid.value = null
   previewFile.value = null
   previewData.value = null
@@ -335,7 +363,7 @@ const handleFileUpload = async (event: Event) => {
   validFiles.forEach(file => formData.append('files', file))
 
   try {
-    const result = await $fetch<UploadResult>('/api/cabinet/upload', {
+    const result = await $fetch<UploadResult>(moduleUrl('/api/cabinet/upload'), {
       method: 'POST',
       body: formData
     })
@@ -372,7 +400,7 @@ const handleFileUpload = async (event: Event) => {
 // Download
 const downloadFile = (uuid: string) => {
   const link = document.createElement('a')
-  link.href = `/api/cabinet/${uuid}/download`
+  link.href = moduleUrl(`/api/cabinet/${uuid}/download`)
   link.download = ''
   document.body.appendChild(link)
   link.click()
@@ -390,7 +418,7 @@ const executeDelete = async () => {
   isDeleting.value = true
 
   try {
-    await $fetch(`/api/cabinet/${deleteTarget.value.uuid}`, { method: 'DELETE' })
+    await $fetch(moduleUrl(`/api/cabinet/${deleteTarget.value.uuid}`), { method: 'DELETE' })
     toast.add({ title: '文件已删除', color: 'success' })
 
     if (previewFile.value?.uuid === deleteTarget.value.uuid) {
@@ -426,10 +454,10 @@ interface FolderRecord {
 // 获取用户的文件夹列表（用于转存时选择目录）
 const apiFetch = useRequestFetch()
 const { data: userFolders, refresh: refreshFolders } = await useAsyncData(
-  'cabinet-user-folders',
+  cacheKey('cabinet-user-folders'),
   async () => {
     if (!user.value) return []
-    const response = await apiFetch<{ data: { items: FolderRecord[] } }>('/api/folders', {
+    const response = await apiFetch<{ data: { items: FolderRecord[] } }>(moduleUrl('/api/folders'), {
       query: { folder_type: 'private', owner_uid: uid.value }
     })
     return response?.data?.items || []
@@ -451,7 +479,7 @@ const executeConvert = async () => {
 
   isConverting.value = true
   try {
-    const result = await $fetch<ToDocumentResponse>(`/api/cabinet/${convertTargetFile.value.uuid}/to-document`, {
+    const result = await $fetch<ToDocumentResponse>(moduleUrl(`/api/cabinet/${convertTargetFile.value.uuid}/to-document`), {
       method: 'POST',
       body: {
         title: convertDocName.value.trim(),
@@ -471,7 +499,7 @@ const executeConvert = async () => {
       }
       // 加载转存信息
       try {
-        const info = await $fetch<ConvertedInfoResponse>(`/api/cabinet/${convertTargetFile.value!.uuid}/converted-info`)
+        const info = await $fetch<ConvertedInfoResponse>(moduleUrl(`/api/cabinet/${convertTargetFile.value!.uuid}/converted-info`))
         if (info.success && info.data) {
           convertedInfo.value = info.data
         }
@@ -621,6 +649,16 @@ const handleDrop = async (e: DragEvent) => {
             加载中...
           </div>
 
+          <!-- Load error -->
+          <div v-else-if="error" class="px-4 py-8 text-sm text-center">
+            <p class="text-error mb-3">
+              文件列表加载失败，请重试。
+            </p>
+            <UButton size="sm" variant="soft" @click="refresh()">
+              重试
+            </UButton>
+          </div>
+
           <!-- Upload progress -->
           <div v-else-if="isUploading" class="px-2 py-8 text-sm text-muted text-center">
             <UIcon name="i-lucide-loader-2" class="w-5 h-5 text-primary animate-spin mx-auto mb-2" />
@@ -646,7 +684,7 @@ const handleDrop = async (e: DragEvent) => {
           <!-- File list -->
           <div v-else class="p-1">
             <div class="px-2 py-1.5 text-xs text-muted">
-              共 {{ files.length }} 个文件
+              共 {{ total }} 个文件
             </div>
             <button
               v-for="file in files"
@@ -687,6 +725,13 @@ const handleDrop = async (e: DragEvent) => {
                 @click.stop="confirmDelete(file)"
               />
             </button>
+            <div v-if="total > pageSize" class="flex justify-center border-t border-default mt-1 pt-2 pb-1">
+              <UPagination
+                v-model:page="page"
+                :items-per-page="pageSize"
+                :total="total"
+              />
+            </div>
           </div>
         </div>
       </aside>

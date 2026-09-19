@@ -42,7 +42,7 @@ const launcherApps = computed(() => apps.value
       restoreLastRoute: override?.restoreLastRoute ?? true
     }
   })
-  .filter(app => app.homeUrl))
+  .filter(app => app.homeUrl || app.availabilityMessage))
 
 function directAppEntryUrl(app: { appCode: string, homeUrl: string | null, basePath?: string | null, restoreLastRoute?: boolean }) {
   if (!clientReady.value || !app.homeUrl) return app.homeUrl || ''
@@ -90,7 +90,7 @@ function prefetchApp(app: { appCode: string, homeUrl: string | null, basePath?: 
 
       <div v-else class="grid grid-cols-3 gap-1">
         <NuxtLink
-          v-for="app in launcherApps"
+          v-for="app in launcherApps.filter(item => item.homeUrl)"
           :key="app.appCode"
           :to="appEntryUrl(app)"
           :external="app.external"
@@ -115,6 +115,19 @@ function prefetchApp(app: { appCode: string, homeUrl: string | null, basePath?: 
             {{ getShortApplicationName(app.appName, app.appCode) }}
           </span>
         </NuxtLink>
+        <div
+          v-for="app in launcherApps.filter(item => !item.homeUrl)"
+          :key="app.appCode"
+          class="flex flex-col items-center gap-1.5 rounded-lg p-2 text-dimmed"
+          :title="app.availabilityMessage || '此应用暂不可用。'"
+          aria-disabled="true"
+        >
+          <UIcon v-if="isApplicationIconName(app.icon)" :name="app.icon!" class="size-8" />
+          <img v-else-if="app.icon" :src="app.icon" class="size-8 rounded object-contain opacity-60" :alt="app.appName">
+          <UIcon v-else name="i-lucide-box" class="size-8" />
+          <span class="line-clamp-2 text-center text-xs leading-tight">{{ getShortApplicationName(app.appName, app.appCode) }}</span>
+          <span class="text-center text-[10px] leading-tight">{{ app.availabilityReason || '暂不可用' }}</span>
+        </div>
       </div>
     </template>
   </UPopover>

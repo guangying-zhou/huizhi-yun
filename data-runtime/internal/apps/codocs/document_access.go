@@ -159,7 +159,7 @@ func policyReadonly(policy documentAccessPolicy) bool {
 	return policy.Readonly || policy.LifecycleStage == "archived"
 }
 
-func (a *Adapter) ensurePolicyDefault(ctx context.Context, documentRefType string, documentUUID string, sourceApp string, sourceProjectCode string, actorUID string) (documentAccessPolicy, error) {
+func (a *Adapter) ensurePolicyDefault(ctx context.Context, documentRefType string, documentUUID string, sourceApp string, sourceProjectCode string, actorUID string, persist ...bool) (documentAccessPolicy, error) {
 	var policy documentAccessPolicy
 	err := a.db.QueryRowContext(ctx, `
 		SELECT id, document_ref_type, document_uuid, source_app, source_project_code,
@@ -193,6 +193,13 @@ func (a *Adapter) ensurePolicyDefault(ctx context.Context, documentRefType strin
 	}
 	if err != sql.ErrNoRows {
 		return policy, err
+	}
+	// Reading an absent policy exposes the restrictive default without creating
+	// business state. Only an explicit policy write may materialize it.
+	if len(persist) > 0 && !persist[0] {
+		return documentAccessPolicy{DocumentRefType: documentRefType, DocumentUUID: documentUUID,
+			SourceApp: sourceApp, SourceProjectCode: sourceProjectCode, LifecycleStage: "draft",
+			Confidentiality: "L2", DefaultPermission: "none"}, nil
 	}
 
 	creator := strings.TrimSpace(actorUID)
@@ -274,7 +281,8 @@ func trustedAimsDocumentAccessScopeFacts(query url.Values) ([]string, []string) 
 		return nil, nil
 	}
 	sourceApp := strings.TrimSuffix(strings.ToLower(strings.TrimSpace(query.Get("hzy_runtime_source_app"))), ".runtime")
-	if sourceApp != "aims" {
+	trustedCodocsProxy := sourceApp == "codocs" && query.Get("hzy_runtime_actor_purpose") == "service-command" && query.Get("codocs_trusted_aims_document_access") == "1"
+	if sourceApp != "aims" && !trustedCodocsProxy {
 		return nil, nil
 	}
 	return parseStringSlice(query.Get(aimsTrustedDocumentAccessProjectCodesQuery)),
@@ -332,7 +340,9 @@ func (a *Adapter) documentAccessCheck(ctx context.Context, query url.Values, bod
 		action = "view"
 	}
 
-	policy, err := a.ensurePolicyDefault(ctx, documentRefType, documentUUID, sourceApp, sourceProjectCode, actorUID)
+	// Checks also serve read-only document listings; retain audit logging, but
+	// never create or repair authorization policy as a side effect of a read.
+	policy, err := a.ensurePolicyDefault(ctx, documentRefType, documentUUID, sourceApp, sourceProjectCode, actorUID, false)
 	if err != nil {
 		return nil, err
 	}
@@ -475,7 +485,7 @@ func (a *Adapter) getDocumentAccessPolicy(ctx context.Context, documentUUID stri
 	if documentRefType == "" {
 		documentRefType = "codocs_document"
 	}
-	policy, err := a.ensurePolicyDefault(ctx, documentRefType, strings.TrimSpace(documentUUID), "aims", strings.TrimSpace(query.Get("sourceProjectCode")), actorUID)
+	policy, err := a.ensurePolicyDefault(ctx, documentRefType, strings.TrimSpace(documentUUID), "aims", strings.TrimSpace(query.Get("sourceProjectCode")), actorUID, false)
 	if err != nil {
 		return nil, err
 	}

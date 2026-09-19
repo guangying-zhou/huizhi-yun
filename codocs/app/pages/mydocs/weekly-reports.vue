@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { useCodocsModule } from '../../../layer/useCodocsModule'
+
 /**
  * 个人工作周报页面
  * 左侧日历（按周选择），右侧查看/编辑周报
@@ -8,6 +10,7 @@
 definePageMeta({ layout: 'default' })
 
 usePageTitle('工作周报')
+const { moduleUrl } = useCodocsModule()
 
 interface WeeklyReportItem {
   uuid: string
@@ -84,7 +87,7 @@ const submitReport = async () => {
   if (!selectedReport.value) return
   isSubmitting.value = true
   try {
-    await $fetch(`/api/documents/${selectedReport.value.uuid}`, {
+    await $fetch(moduleUrl(`/api/documents/${selectedReport.value.uuid}`), {
       method: 'PATCH',
       body: {
         readonly_flag: true,
@@ -247,7 +250,7 @@ const fetchReports = async () => {
 
   for (const yr of yearsToFetch) {
     try {
-      const res = await $fetch<WeeklyReportListResponse>('/api/personal-weekly-reports/list', {
+      const res = await $fetch<WeeklyReportListResponse>(moduleUrl('/api/personal-weekly-reports/list'), {
         query: { owner: uid.value, year: yr }
       })
       if (res.success && res.data?.items) {
@@ -317,7 +320,7 @@ const checkSelectedWeek = async () => {
 const loadReport = async (report: WeeklyReportItem) => {
   previewLoading.value = true
   try {
-    const docRes = await $fetch<DocumentContentResponse>(`/api/documents/${report.uuid}`, {
+    const docRes = await $fetch<DocumentContentResponse>(moduleUrl(`/api/documents/${report.uuid}`), {
       params: { uid: uid.value }
     })
     if (docRes.success && docRes.data) {
@@ -338,7 +341,7 @@ const createReport = async () => {
 
   isCreating.value = true
   try {
-    const res = await $fetch<CreateWeeklyReportResponse>('/api/personal-weekly-reports/create', {
+    const res = await $fetch<CreateWeeklyReportResponse>(moduleUrl('/api/personal-weekly-reports/create'), {
       method: 'POST',
       body: {
         owner_uid: uid.value,

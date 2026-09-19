@@ -1,5 +1,9 @@
 <script setup lang="ts">
-import type { VersionAcceptanceDetail } from '~/types/productVersionAcceptance'
+import { useAimsModule } from '../../../../../../../layer/useAimsModule'
+import ProductsVersionPublisher from '../../../../../../components/products/VersionPublisher.vue'
+import type { VersionAcceptanceDetail } from '../../../../../../types/productVersionAcceptance'
+
+const { moduleUrl, cacheKey } = useAimsModule()
 
 definePageMeta({ layoutHeader: true, layoutHeaderTitle: '验收记录详情', layoutHeaderProjectSwitcher: false })
 const route = useRoute()
@@ -8,8 +12,8 @@ const publishing = ref(false)
 const base = computed(() => `/products/${encodeURIComponent(String(route.params.productCode || ''))}/versions/${encodeURIComponent(String(route.params.versionId || ''))}`)
 const id = computed(() => String(route.params.acceptanceId || ''))
 const labels: Record<string, string> = { 'execution-review': '执行目标评审', 'blocking-defects-review': '阻塞缺陷评审', 'release-readiness': '发布就绪评审' }
-const { data, status, error, refresh } = await useFetch(() => `/api/v1${base.value}/acceptances/${encodeURIComponent(id.value)}`, {
-  server: false,
+const { data, status, error, refresh } = await useFetch(() => moduleUrl(`/api/v1${base.value}/acceptances/${encodeURIComponent(id.value)}`), {
+  server: false, key: computed(() => cacheKey('history-acceptances-[acceptanceId]:' + route.path)),
   transform: (response: { code: number, data: VersionAcceptanceDetail }) => {
     const result = response.data
     if (response.code !== 0 || String(result?.id) !== id.value || String(result.version_id) !== String(route.params.versionId) || !Array.isArray(result.checks) || !Array.isArray(result.exceptions)) throw new Error('验收记录详情响应不完整')
@@ -22,7 +26,7 @@ const alert = useApiErrorAlert(error, { fallbackTitle: '验收记录加载失败
 <template>
   <div class="mx-auto min-w-0 max-w-5xl space-y-4 p-4 sm:p-6">
     <div class="flex flex-wrap gap-2">
-      <UButton :to="{ path: `${base}/acceptances`, query: versionPerspectiveQuery }" color="neutral" variant="ghost">
+      <UButton :to="{ path: moduleUrl(`${base}/acceptances`), query: versionPerspectiveQuery }" color="neutral" variant="ghost">
         返回验收记录
       </UButton>
       <UButton

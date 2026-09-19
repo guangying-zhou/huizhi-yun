@@ -1,11 +1,14 @@
 <script setup lang="ts">
-import type { ProductPlanningCycle } from '~/types/productPlanningCycle'
+import { useAimsModule } from '../../../../../../layer/useAimsModule'
+import type { ProductPlanningCycle } from '../../../../../types/productPlanningCycle'
+
+const { moduleUrl, cacheKey, hosted } = useAimsModule()
 
 definePageMeta({ layoutHeader: true, layoutHeaderTitle: '功能路线', layoutHeaderProjectSwitcher: false })
 const route = useRoute()
 const code = computed(() => String(route.params.productCode || ''))
 const id = computed(() => String(route.params.featureId || ''))
-const base = computed(() => `/api/v1/products/${encodeURIComponent(code.value)}`)
+const base = computed(() => moduleUrl(`/api/v1/products/${encodeURIComponent(code.value)}`))
 const buckets = { now: '当前', next: '下一步', later: '以后' }
 const states = { draft: '草案', open: '开放中', closed: '已关闭' }
 const lifecycleLabels: Record<string, string> = { proposed: '待规划', in_delivery: '交付中', delivered: '已交付', cancelled: '已取消', merged: '已合并' }
@@ -17,12 +20,12 @@ const roadmapPage = ref(1)
 const unscheduledPage = ref(1)
 interface RoadmapItem { biz_id: string, title: string, scope_summary: string, lifecycle: string, selection_status: string, roadmap_bucket: keyof typeof buckets, decision_rank: number, revision: number }
 interface Roadmap { feature_biz_id: string, cycle_biz_id: string, cycle_status: keyof typeof states, workspace_revision: number, cycle_revision: number, queue_revision: number, items: RoadmapItem[], total: number, by_bucket: Record<keyof typeof buckets, number> }
-const { data: cycles, status: cycleStatus, error: cycleError, refresh: refreshCycles } = await useFetch(() => `${base.value}/planning-cycles`, { server: false, query: computed(() => ({ page: page.value, pageSize, keyword: debounced.value || undefined })), transform: (response: { code: number, data: { items: ProductPlanningCycle[], total: number } }) => {
+const { data: cycles, status: cycleStatus, error: cycleError, refresh: refreshCycles } = await useFetch(() => `${base.value}/planning-cycles`, { server: false, key: computed(() => cacheKey('feature-roadmap-1:' + code.value + ':' + String(route.params.featureId))), query: computed(() => ({ page: page.value, pageSize, keyword: debounced.value || undefined })), transform: (response: { code: number, data: { items: ProductPlanningCycle[], total: number } }) => {
   if (response.code !== 0 || !Array.isArray(response.data?.items) || !Number.isSafeInteger(response.data.total) || response.data.total < 0 || response.data.items.some(c => c.product_code !== code.value || !c.biz_id || !Object.hasOwn(states, c.status))) throw new Error('规划周期响应不完整')
   return response.data
 } })
-const { data: feature, error: featureError } = await useFetch<{ code: number, data: { product_code: string, biz_id: string, title: string } }>(() => `${base.value}/features/${encodeURIComponent(id.value)}`, { server: false })
-const { data, status, error, refresh } = await useAsyncData(() => `feature-roadmap:${code.value}:${id.value}`, async () => {
+const { data: feature, error: featureError } = await useFetch<{ code: number, data: { product_code: string, biz_id: string, title: string } }>(() => `${base.value}/features/${encodeURIComponent(id.value)}`, { server: false, key: computed(() => cacheKey('feature-roadmap-11:' + code.value + ':' + String(route.params.featureId))) })
+const { data, status, error, refresh } = await useAsyncData(() => cacheKey(`feature-roadmap:${code.value}:${id.value}`), async () => {
   if (!selected.value) return null
   const cycleId = selected.value.biz_id
   const response = await $fetch<{ code: number, data: Roadmap }>(`${base.value}/features/${encodeURIComponent(id.value)}/roadmap`, { query: { cycleId, page: roadmapPage.value, pageSize: 20 } })
@@ -33,8 +36,7 @@ const { data, status, error, refresh } = await useAsyncData(() => `feature-roadm
   return value
 }, { server: false, watch: [selected, roadmapPage] })
 interface UnscheduledItem { biz_id: string, product_code: string, title: string, scope_summary: string, lifecycle: string }
-const { data: unscheduled, status: unscheduledStatus, error: unscheduledError, refresh: refreshUnscheduled } = await useFetch(() => `${base.value}/features/${encodeURIComponent(id.value)}/unscheduled`, {
-  server: false,
+const { data: unscheduled, status: unscheduledStatus, error: unscheduledError, refresh: refreshUnscheduled } = await useFetch(() => `${base.value}/features/${encodeURIComponent(id.value)}/unscheduled`, { server: false, key: computed(() => cacheKey('feature-roadmap-3:' + code.value + ':' + String(route.params.featureId))),
   query: computed(() => ({ page: unscheduledPage.value, pageSize: 20 })),
   transform: (response: { code: number, data: { items: UnscheduledItem[], total: number, workspace_revision: number } }) => {
     const value = response.data
@@ -59,7 +61,7 @@ watch([code, id], () => {
 
 <template>
   <div class="mx-auto min-w-0 max-w-6xl space-y-4 p-4 sm:p-6">
-    <UButton :to="`/products/${encodeURIComponent(code)}/features/${id}`" color="neutral" variant="ghost">
+    <UButton :to="moduleUrl(`/products/${encodeURIComponent(code)}/features/${id}`)" color="neutral" variant="ghost">
       返回功能详情
     </UButton>
     <UAlert v-if="featureAlert" v-bind="featureAlert" />
@@ -147,7 +149,8 @@ watch([code, id], () => {
           本页暂无关联事项；尚未进入该周期的事项不在此处统计。
         </p>
         <article v-for="item in data.items" :key="item.biz_id" class="space-y-2 rounded-lg border border-default p-4">
-          <NuxtLink :to="`/products/${encodeURIComponent(code)}/planning-items/${item.biz_id}/feature`" class="break-words font-medium text-primary hover:underline">{{ item.title }}</NuxtLink>
+          <span v-if="hosted" class="break-words font-medium">{{ item.title }}</span>
+          <NuxtLink v-else :to="moduleUrl(`/products/${encodeURIComponent(code)}/planning-items/${item.biz_id}/feature`)" class="break-words font-medium text-primary hover:underline">{{ item.title }}</NuxtLink>
           <p class="text-sm">
             {{ buckets[item.roadmap_bucket] }} · {{ selectionLabels[item.selection_status] }} · {{ lifecycleLabels[item.lifecycle] }}
           </p>
@@ -196,7 +199,8 @@ watch([code, id], () => {
           description="可在规划事项中关联此功能，并通过规划周期安排路线。"
         />
         <article v-for="item in unscheduled.items" :key="item.biz_id" class="space-y-2 rounded-lg border border-default p-4">
-          <NuxtLink :to="`/products/${encodeURIComponent(code)}/planning-items/${item.biz_id}/feature`" class="break-words font-medium text-primary hover:underline">{{ item.title }}</NuxtLink>
+          <span v-if="hosted" class="break-words font-medium">{{ item.title }}</span>
+          <NuxtLink v-else :to="moduleUrl(`/products/${encodeURIComponent(code)}/planning-items/${item.biz_id}/feature`)" class="break-words font-medium text-primary hover:underline">{{ item.title }}</NuxtLink>
           <p class="text-sm">
             {{ lifecycleLabels[item.lifecycle] }}
           </p>

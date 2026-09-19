@@ -1,0 +1,10 @@
+{
+  "appliedAt": "2026-09-14T04:54:35.196Z",
+  "schema": "hzy_people_test_local_20260910",
+  "instanceId": "37d8994e-4c12-11ee-afad-8cb2da2e572b",
+  "migration": "people/docs/migrations/20260914_service_command_receipt.sql",
+  "sha256": "b306ff17284c790e9d35cb90d1f1abeb5d6f47971f652531f4839fb99c4077e9",
+  "ddlSha256": "485803ed1f3a7b8586d7b2a4a2470ce76aa824bba4eeccfecc3d22a9be996662",
+  "rows": 0,
+  "businessRowsWritten": false
+}

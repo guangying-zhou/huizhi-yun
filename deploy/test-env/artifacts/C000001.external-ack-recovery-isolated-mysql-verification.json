@@ -1,0 +1,20 @@
+{
+  "schemaVersion": "isolated-mysql-verification.v1",
+  "verifiedAt": "2026-09-15T03:15:35Z",
+  "baseCommit": "7a0cde51da075e3ee8ad827a89c5fe109dd4f8be",
+  "command": "node data-runtime/scripts/test-enterprise-external-ack-recovery-mysql.mjs",
+  "exitCode": 0,
+  "goPackageSeconds": 1.614,
+  "implementationSourceSha256": "b7a4943def53f7856ce6c3be43570932779db82df3555db21c8cd73fdc79b6ac",
+  "unitTestSourceSha256": "df5b757076827788330f1cd9028e2763180feea5ca556e5f6c56ff1666a29a97",
+  "mysqlTestSourceSha256": "7f21e03cd70fb3ca26db4435842ec19bd291094cb30e2488f5c35d0ef4509187",
+  "runnerSourceSha256": "a6388447e2f12c2a2d461c313972ad9b823f61d02618141d6104a4f82614b8bc",
+  "scope": "Fresh random /tmp MySQL 8.0.34 instance and in-process fake provider; provider commit followed by lost response, restarted worker target-receipt lookup, no duplicate provider mutation, then source operation success ACK",
+  "providerMutationCount": 1,
+  "sourceOperationFinalStatus": "succeeded",
+  "temporaryInstanceStopped": true,
+  "temporaryDirectoryRemoved": true,
+  "businessDatabaseAccessed": false,
+  "realExternalProviderCalled": false,
+  "productionEnvironmentVerified": false
+}

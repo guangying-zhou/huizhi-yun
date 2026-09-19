@@ -1,3 +1,4 @@
+import { useAimsModule } from '../../layer/useAimsModule'
 import { defineStore } from 'pinia'
 import type {
   ProjectPortfolio,
@@ -5,9 +6,11 @@ import type {
   CreatePortfolioRequest,
   UpdatePortfolioRequest,
   PaginatedList
-} from '~/types/aims'
+} from '../types/aims'
 
 export const usePortfolioStore = defineStore('portfolio', () => {
+  // 同一份代码供独立应用与企业宿主使用：非宿主模式下 moduleUrl 原样返回路径。
+  const { moduleUrl } = useAimsModule()
   type RawProjectPortfolio = Partial<ProjectPortfolio> & {
     domain_code?: string | null
     owner_uid?: string | null
@@ -79,7 +82,7 @@ export const usePortfolioStore = defineStore('portfolio', () => {
       params.set('pageSize', '100')
 
       const res = await $fetch<{ code: number, data: PaginatedList<RawProjectPortfolio> }>(
-        `/api/v1/portfolios?${params.toString()}`
+        moduleUrl(`/api/v1/portfolios?${params.toString()}`)
       )
       if (res.code === 0) {
         portfolios.value = res.data.items.map(normalizePortfolio).sort(comparePortfolio)
@@ -94,7 +97,7 @@ export const usePortfolioStore = defineStore('portfolio', () => {
   }
 
   async function createPortfolio(data: CreatePortfolioRequest) {
-    const res = await $fetch<{ code: number, data: { id: number } }>('/api/v1/portfolios', {
+    const res = await $fetch<{ code: number, data: { id: number } }>(moduleUrl('/api/v1/portfolios'), {
       method: 'POST',
       body: data
     })
@@ -105,7 +108,7 @@ export const usePortfolioStore = defineStore('portfolio', () => {
   }
 
   async function updatePortfolio(id: number, data: UpdatePortfolioRequest) {
-    const res = await $fetch<{ code: number, data: null }>(`/api/v1/portfolios/${id}`, {
+    const res = await $fetch<{ code: number, data: null }>(moduleUrl(`/api/v1/portfolios/${id}`), {
       method: 'PUT',
       body: data
     })
@@ -115,7 +118,7 @@ export const usePortfolioStore = defineStore('portfolio', () => {
   }
 
   async function deletePortfolio(id: number) {
-    await $fetch(`/api/v1/portfolios/${id}`, { method: 'DELETE' })
+    await $fetch(moduleUrl(`/api/v1/portfolios/${id}`), { method: 'DELETE' })
     await fetchPortfolios()
   }
 

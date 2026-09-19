@@ -20,13 +20,16 @@ func persistWorkflowCallbacks(ctx context.Context, tx *sql.Tx, instanceID any, e
 		if callback.URL == "" || callback.Payload == nil {
 			return httperror.New(http.StatusInternalServerError, "invalid_callback_effect", "workflow callback effect is invalid")
 		}
+		event := cleanAnyString(callback.Payload["event"])
+		status := cleanAnyString(callback.Payload["status"])
+		idempotencyKey := "workflow:callback:" + cleanAnyString(instanceID) + ":" + event + ":" + status
+		if callback.URL == aimsCompletionWorkflowCallback {
+			callback.Payload["idempotencyKey"] = idempotencyKey
+		}
 		payload, err := json.Marshal(callback.Payload)
 		if err != nil {
 			return err
 		}
-		event := cleanAnyString(callback.Payload["event"])
-		status := cleanAnyString(callback.Payload["status"])
-		idempotencyKey := "workflow:callback:" + cleanAnyString(instanceID) + ":" + event + ":" + status
 		result, err := tx.ExecContext(ctx, `
 			INSERT INTO flow_callback_logs (
 			  instance_id, callback_url, event, status, attempts, last_error,

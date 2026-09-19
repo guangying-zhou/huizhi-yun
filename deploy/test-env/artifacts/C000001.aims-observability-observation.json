@@ -1,0 +1,13 @@
+{
+  "observedAt": "2026-09-14T14:23:37.438Z",
+  "worker": "hzy-test-aims",
+  "versions": [
+    {
+      "version_id": "b4b4763b-57ac-4ad8-b4a8-67e042c31ad0",
+      "percentage": 100
+    }
+  ],
+  "observability": null,
+  "logpush": false,
+  "tailConsumers": []
+}

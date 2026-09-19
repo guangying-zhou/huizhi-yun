@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/huizhi-yun/data-runtime/internal/httperror"
+	"github.com/huizhi-yun/data-runtime/internal/integrationoperation"
 )
 
 const milestoneCompletionRequestPrefix = "MCR"
@@ -28,6 +29,97 @@ type milestoneCompletionRequest struct {
 	Status             string
 	SnapshotSHA256     string
 	WorkflowInstanceID sql.NullString
+}
+
+// VerifiedMilestoneCompletionCallback is created only after the Aims service
+// boundary has authenticated Workflow's callback token. Its fields remain
+// private so downstream local services consume the normalized callback, not a
+// browser-shaped payload.
+type VerifiedMilestoneCompletionCallback struct {
+	source                    integrationoperation.TrustedContext
+	requestID                 int64
+	instanceID, bizID, status string
+	formData, body            map[string]any
+}
+
+// VerifiedMilestoneCompletionCallbackFromTrustedRuntime accepts the marker
+// injected exclusively by the Aims BFF after it verifies Workflow's service
+// token (`aud=aims`, `workflow:callback`, source `workflow`).
+func VerifiedMilestoneCompletionCallbackFromTrustedRuntime(query url.Values, body map[string]any) (VerifiedMilestoneCompletionCallback, error) {
+	if !truthyQuery(query, "workflow_callback_verified") {
+		return VerifiedMilestoneCompletionCallback{}, httperror.New(http.StatusForbidden, "workflow_callback_verification_required", "trusted workflow callback is required")
+	}
+	status := strings.TrimSpace(firstBodyText(body, "status"))
+	instanceID := strings.TrimSpace(firstBodyText(body, "instance_id", "instanceId"))
+	bizID := strings.TrimSpace(firstBodyText(body, "biz_id", "bizId"))
+	formData, _ := body["form_data"].(map[string]any)
+	requestID, err := bodyPositiveInt64(formData, "completionRequestId", "completion_request_id")
+	if err != nil {
+		return VerifiedMilestoneCompletionCallback{}, httperror.New(http.StatusBadRequest, "milestone_completion_callback_binding_required", "callback request and workflow instance binding are required")
+	}
+	if err := validateMilestoneCompletionWorkflowCallbackInput(requestID, instanceID, bizID, formData, status, body); err != nil {
+		return VerifiedMilestoneCompletionCallback{}, err
+	}
+	normalizedFormData := map[string]any{
+		"completionRequestId":     requestID,
+		"requestNo":               strings.TrimSpace(firstBodyText(formData, "requestNo", "request_no")),
+		"snapshotSha256":          strings.TrimSpace(firstBodyText(formData, "snapshotSha256", "snapshot_sha256")),
+		"projectDirectorUid":      strings.TrimSpace(firstBodyText(formData, "projectDirectorUid", "project_director_uid")),
+		"projectDirectorRevision": milestoneCallbackNumber(formData, "projectDirectorRevision", "project_director_revision"),
+		"projectDirectorRoleCode": strings.TrimSpace(firstBodyText(formData, "projectDirectorRoleCode", "project_director_role_code")),
+	}
+	normalizedBody := map[string]any{
+		"event": "flow_completed", "instance_id": instanceID, "app_code": "aims",
+		"resource_code": "milestones", "action_code": "milestone_completion",
+		"biz_id": bizID, "status": status,
+		"initiator_uid": strings.TrimSpace(firstBodyText(body, "initiator_uid", "initiatorUid")),
+		"form_data":     normalizedFormData,
+	}
+	// Legacy unlinked callbacks may lack integration context; cross-domain services
+	// require the authenticated source binding through MatchesSource.
+	source, _ := integrationoperation.TrustedContextFromMap(body, "aims")
+	return VerifiedMilestoneCompletionCallback{source: source, requestID: requestID, instanceID: instanceID, bizID: bizID, status: status, formData: cloneMilestoneCompletionCallbackMap(normalizedFormData), body: normalizedBody}, nil
+}
+
+func milestoneCallbackNumber(body map[string]any, keys ...string) any {
+	value, err := bodyPositiveInt64(body, keys...)
+	if err != nil {
+		return nil
+	}
+	return value
+}
+
+// MatchesSource binds a cross-domain callback to the authenticated legacy Aims
+// deployment, independently of the unified database registry owner deployment.
+func (c VerifiedMilestoneCompletionCallback) MatchesSource(tenant, deployment string) bool {
+	return tenant != "" && deployment != "" && c.source.TenantCode == tenant &&
+		c.source.DeploymentCode == deployment && c.source.SourceApp == "aims" &&
+		c.source.ServiceClientID == "aims.runtime"
+}
+
+func (c VerifiedMilestoneCompletionCallback) RequestID() int64   { return c.requestID }
+func (c VerifiedMilestoneCompletionCallback) InstanceID() string { return c.instanceID }
+func (c VerifiedMilestoneCompletionCallback) BizID() string      { return c.bizID }
+func (c VerifiedMilestoneCompletionCallback) Status() string     { return c.status }
+func (c VerifiedMilestoneCompletionCallback) FormData() map[string]any {
+	return cloneMilestoneCompletionCallbackMap(c.formData)
+}
+func (c VerifiedMilestoneCompletionCallback) Body() map[string]any {
+	return cloneMilestoneCompletionCallbackMap(c.body)
+}
+
+func cloneMilestoneCompletionCallbackMap(in map[string]any) map[string]any {
+	out := make(map[string]any, len(in))
+	for k, v := range in {
+		if k == "form_data" {
+			if nested, ok := v.(map[string]any); ok {
+				out[k] = cloneMilestoneCompletionCallbackMap(nested)
+				continue
+			}
+		}
+		out[k] = v
+	}
+	return out
 }
 
 func (a *Adapter) handleMilestoneCompletionGovernanceRuntime(
@@ -367,25 +459,9 @@ func (a *Adapter) applyMilestoneCompletionWorkflowCallback(
 	query url.Values,
 	body map[string]any,
 ) (map[string]any, error) {
-	if !truthyQuery(query, "workflow_callback_verified") {
-		return nil, httperror.New(http.StatusForbidden, "workflow_callback_verification_required", "trusted workflow callback is required")
-	}
-	if strings.TrimSpace(firstBodyText(body, "event")) != "flow_completed" ||
-		strings.TrimSpace(firstBodyText(body, "app_code", "appCode")) != "aims" ||
-		strings.TrimSpace(firstBodyText(body, "resource_code", "resourceCode")) != "milestones" ||
-		strings.TrimSpace(firstBodyText(body, "action_code", "actionCode")) != "milestone_completion" {
-		return nil, httperror.New(http.StatusBadRequest, "invalid_milestone_completion_callback", "callback identity does not match milestone completion")
-	}
-	status := strings.TrimSpace(firstBodyText(body, "status"))
-	if status != "approved" && status != "rejected" {
-		return nil, httperror.New(http.StatusBadRequest, "invalid_milestone_completion_callback_status", "callback status must be approved or rejected")
-	}
-	instanceID := strings.TrimSpace(firstBodyText(body, "instance_id", "instanceId"))
-	bizID := strings.TrimSpace(firstBodyText(body, "biz_id", "bizId"))
-	formData, _ := body["form_data"].(map[string]any)
-	requestID, err := bodyPositiveInt64(formData, "completionRequestId", "completion_request_id")
-	if err != nil || requestID <= 0 || instanceID == "" {
-		return nil, httperror.New(http.StatusBadRequest, "milestone_completion_callback_binding_required", "callback request and workflow instance binding are required")
+	verified, err := VerifiedMilestoneCompletionCallbackFromTrustedRuntime(query, body)
+	if err != nil {
+		return nil, err
 	}
 
 	tx, err := a.DB().BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelSerializable})
@@ -393,6 +469,39 @@ func (a *Adapter) applyMilestoneCompletionWorkflowCallback(
 		return nil, err
 	}
 	defer tx.Rollback()
+	runtimeBody := verified.Body()
+	integrationoperation.CopyTrustedRuntimeCommandContext(runtimeBody, body)
+	result, err := a.ApplyMilestoneCompletionWorkflowCallbackInTransaction(
+		ctx, tx, verified.RequestID(), verified.InstanceID(), verified.BizID(), verified.FormData(), verified.Status(), runtimeBody,
+	)
+	if err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
+// ApplyMilestoneCompletionWorkflowCallbackInTransaction applies a verified callback
+// in a caller-owned transaction. The caller is responsible for committing or
+// rolling back tx so this Aims mutation can share the existing Altoc receipt path.
+func (a *Adapter) ApplyMilestoneCompletionWorkflowCallbackInTransaction(
+	ctx context.Context,
+	tx *sql.Tx,
+	requestID int64,
+	instanceID string,
+	bizID string,
+	formData map[string]any,
+	status string,
+	body map[string]any,
+) (map[string]any, error) {
+	if tx == nil {
+		return nil, httperror.New(http.StatusServiceUnavailable, "milestone_completion_transaction_required", "milestone completion requires a caller-owned transaction")
+	}
+	if err := validateMilestoneCompletionWorkflowCallbackInput(requestID, instanceID, bizID, formData, status, body); err != nil {
+		return nil, err
+	}
 	request, err := loadMilestoneCompletionRequestTx(ctx, tx, requestID)
 	if err != nil {
 		return nil, err
@@ -415,8 +524,8 @@ func (a *Adapter) applyMilestoneCompletionWorkflowCallback(
 		}
 		return map[string]any{
 			"requestId": request.ID, "requestNo": request.RequestNo, "milestoneId": request.MilestoneID,
-			"status": request.Status, "alreadyApplied": true,
-		}, tx.Commit()
+			"projectCode": request.ProjectCode, "status": request.Status, "alreadyApplied": true,
+		}, nil
 	}
 
 	var milestoneStatus string
@@ -458,9 +567,6 @@ func (a *Adapter) applyMilestoneCompletionWorkflowCallback(
 			UPDATE milestones SET completion_lock_request_id = NULL
 			WHERE id = ? AND completion_lock_request_id = ?
 		`, request.MilestoneID, request.ID); err != nil {
-			return nil, err
-		}
-		if err := tx.Commit(); err != nil {
 			return nil, err
 		}
 		return map[string]any{
@@ -511,17 +617,41 @@ func (a *Adapter) applyMilestoneCompletionWorkflowCallback(
 	if err != nil {
 		return nil, err
 	}
-	if err := tx.Commit(); err != nil {
-		return nil, err
-	}
 	var next any
 	if nextMilestoneID.Valid {
 		next = nextMilestoneID.Int64
 	}
 	return map[string]any{
 		"requestId": request.ID, "requestNo": request.RequestNo, "milestoneId": request.MilestoneID,
-		"status": "approved", "nextMilestoneId": next, "receivableBillable": operation,
+		"projectCode": request.ProjectCode, "status": "approved", "nextMilestoneId": next, "receivableBillable": operation,
 	}, nil
+}
+
+// validateMilestoneCompletionWorkflowCallbackInput makes the caller-owned entry
+// safe to reuse only for the immutable Aims workflow callback shape. It does
+// not attest workflow trust: only the existing verified callback boundary may
+// invoke it until a signed approval-evidence contract is registered.
+func validateMilestoneCompletionWorkflowCallbackInput(requestID int64, instanceID, bizID string, formData map[string]any, status string, body map[string]any) error {
+	if requestID <= 0 || strings.TrimSpace(instanceID) == "" || strings.TrimSpace(bizID) == "" {
+		return httperror.New(http.StatusBadRequest, "milestone_completion_callback_binding_required", "callback request and workflow instance binding are required")
+	}
+	if status != "approved" && status != "rejected" {
+		return httperror.New(http.StatusBadRequest, "invalid_milestone_completion_callback_status", "callback status must be approved or rejected")
+	}
+	if strings.TrimSpace(firstBodyText(body, "event")) != "flow_completed" ||
+		strings.TrimSpace(firstBodyText(body, "app_code", "appCode")) != "aims" ||
+		strings.TrimSpace(firstBodyText(body, "resource_code", "resourceCode")) != "milestones" ||
+		strings.TrimSpace(firstBodyText(body, "action_code", "actionCode")) != "milestone_completion" ||
+		strings.TrimSpace(firstBodyText(body, "instance_id", "instanceId")) != strings.TrimSpace(instanceID) ||
+		strings.TrimSpace(firstBodyText(body, "biz_id", "bizId")) != strings.TrimSpace(bizID) ||
+		strings.TrimSpace(firstBodyText(body, "status")) != status {
+		return httperror.New(http.StatusBadRequest, "invalid_milestone_completion_callback", "callback identity does not match milestone completion")
+	}
+	bodyRequestID, err := bodyPositiveInt64(formData, "completionRequestId", "completion_request_id")
+	if err != nil || bodyRequestID != requestID {
+		return httperror.New(http.StatusBadRequest, "milestone_completion_callback_binding_required", "callback request and workflow instance binding are required")
+	}
+	return nil
 }
 
 func loadMilestoneCompletionRequestTx(ctx context.Context, tx *sql.Tx, requestID int64) (milestoneCompletionRequest, error) {

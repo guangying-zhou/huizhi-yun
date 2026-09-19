@@ -1,4 +1,8 @@
 <script setup lang="ts">
+import { useAimsModule } from '../../../layer/useAimsModule'
+import ProductsComponentMoveForm from './ComponentMoveForm.vue'
+
+const { moduleUrl, hosted, cacheKey } = useAimsModule()
 const emit = defineEmits<{ changed: [], busy: [value: boolean], select: [value: { id: number, name: string }] }>()
 interface ComponentRow { sort_order: number, id: number, biz_id: string, product_code: string, parent_id: number | null, name: string, description: string, revision: number, child_count: number }
 interface ComponentPage { items: ComponentRow[], total: number, page: number, pageSize: number, parent_id: number | null, workspace_revision: number }
@@ -7,16 +11,16 @@ const code = computed(() => String(route.params.productCode || ''))
 const trail = ref<{ id: number, name: string }[]>([])
 const parentID = computed(() => trail.value.at(-1)?.id ?? null)
 const page = ref(1), pageSize = 20
-const base = computed(() => `/api/v1/products/${encodeURIComponent(code.value)}/components`)
+const base = computed(() => moduleUrl(`/api/v1/products/${encodeURIComponent(code.value)}/components`))
 const query = computed(() => ({ parentId: parentID.value ?? undefined, page: page.value, pageSize }))
 const positive = (n: unknown) => Number.isSafeInteger(n) && Number(n) > 0
-const { data, status, error, refresh } = await useFetch(base, { server: false, query, transform: (response: { code: number, data: ComponentPage }) => {
+const { data, status, error, refresh } = await useFetch(base, { ...(hosted ? { key: computed(() => cacheKey('StructureModuleManager:1' + ':' + String(code.value))) } : {}), server: false, query, transform: (response: { code: number, data: ComponentPage }) => {
   const result = response.data
   if (response.code !== 0 || !result || !Array.isArray(result.items) || !Number.isSafeInteger(result.total) || result.total < 0 || result.page !== page.value || result.pageSize !== pageSize || result.parent_id !== parentID.value || !positive(result.workspace_revision) || result.items.length > pageSize || result.items.length > result.total || result.items.some(item => !item || !positive(item.id) || typeof item.biz_id !== 'string' || item.product_code !== code.value || item.parent_id !== parentID.value || typeof item.name !== 'string' || !item.name.trim() || typeof item.description !== 'string' || !Number.isInteger(item.sort_order) || item.sort_order < -2147483648 || item.sort_order > 2147483647 || !positive(item.revision) || !Number.isSafeInteger(item.child_count) || item.child_count < 0) || new Set(result.items.map(item => item.id)).size !== result.items.length) throw new Error('模块列表响应不完整，请刷新重试')
   return result
 } })
 const alert = useApiErrorAlert(error, { fallbackTitle: '模块列表加载失败' })
-const { data: permission, status: permissionStatus, error: permissionError, refresh: refreshPermission } = await useFetch<{ code: number, data: { product_code: string, status: string, revision: number, edit: boolean, delete: boolean } }>(() => `${base.value}/permissions`, { server: false })
+const { data: permission, status: permissionStatus, error: permissionError, refresh: refreshPermission } = await useFetch<{ code: number, data: { product_code: string, status: string, revision: number, edit: boolean, delete: boolean } }>(() => `${base.value}/permissions`, { ...(hosted ? { key: computed(() => cacheKey('StructureModuleManager:2' + ':' + String(code.value))) } : {}), server: false })
 const permissionAlert = useApiErrorAlert(permissionError, { fallbackTitle: '模块权限加载失败' })
 const canCreate = computed(() => status.value === 'success' && permissionStatus.value === 'success' && permission.value?.code === 0 && permission.value.data.product_code === code.value && permission.value.data.status === 'active' && permission.value.data.edit === true && positive(permission.value.data.revision) && data.value?.workspace_revision === permission.value.data.revision)
 const canDelete = computed(() => status.value === 'success' && permissionStatus.value === 'success' && permission.value?.code === 0 && permission.value.data.product_code === code.value && permission.value.data.status === 'active' && permission.value.data.delete === true && positive(permission.value.data.revision) && data.value?.workspace_revision === permission.value.data.revision)
@@ -249,7 +253,7 @@ watch(code, () => {
             查看功能
           </UButton>
           <UButton
-            :to="{ path: `/products/${encodeURIComponent(code)}/requests`, query: { moduleId: String(item.id), includeDescendants: 'true' } }"
+            :to="{ path: moduleUrl(`/products/${encodeURIComponent(code)}/requests`), query: { moduleId: String(item.id), includeDescendants: 'true' } }"
             size="sm"
             color="neutral"
             variant="outline"
@@ -259,7 +263,7 @@ watch(code, () => {
           </UButton>
           <UButton
             v-if="canCreate"
-            :to="{ path: `/products/${encodeURIComponent(code)}/requests`, query: { moduleId: String(item.id), create: 'true' } }"
+            :to="{ path: moduleUrl(`/products/${encodeURIComponent(code)}/requests`), query: { moduleId: String(item.id), create: 'true' } }"
             size="sm"
             :disabled="saving"
           >

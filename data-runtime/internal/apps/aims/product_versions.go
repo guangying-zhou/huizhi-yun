@@ -468,6 +468,22 @@ func (a *Adapter) createProductVersion(ctx context.Context, projectIDText string
 }
 
 func (a *Adapter) createProjectWithProductBinding(ctx context.Context, query url.Values, body map[string]any) (map[string]any, error) {
+	tx, err := a.DB().BeginTx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+	result, err := a.createProjectWithProductBindingTx(ctx, tx, query, body)
+	if err != nil {
+		return nil, err
+	}
+	if err = tx.Commit(); err != nil {
+		return nil, err
+	}
+	return a.projectDetail(ctx, fmt.Sprint(result["id"]), query)
+}
+
+func (a *Adapter) createProjectWithProductBindingTx(ctx context.Context, tx *sql.Tx, query url.Values, body map[string]any) (map[string]any, error) {
 	uid := currentUserFrom(query, body)
 	if uid == "" {
 		return nil, httperror.New(http.StatusUnauthorized, "missing_current_user", "current_user is required")
@@ -532,12 +548,6 @@ func (a *Adapter) createProjectWithProductBinding(ctx context.Context, query url
 		return nil, err
 	}
 	lifecycleStatus := projectInitialLifecycleStatus(category)
-
-	tx, err := a.DB().BeginTx(ctx, nil)
-	if err != nil {
-		return nil, err
-	}
-	defer tx.Rollback()
 
 	templateVersion, err := resolveProjectTemplateVersionTx(ctx, tx, category, requestedTemplateVersionID)
 	if err != nil {
@@ -667,10 +677,7 @@ func (a *Adapter) createProjectWithProductBinding(ctx context.Context, query url
 		}
 	}
 
-	if err := tx.Commit(); err != nil {
-		return nil, err
-	}
-	return a.projectDetail(ctx, strconv.FormatInt(projectID, 10), query)
+	return map[string]any{"id": projectID, "projectCode": projectCode, "name": name, "shortName": shortName, "category": category, "lifecycleStatus": lifecycleStatus, "leaderUid": leaderUID}, nil
 }
 
 // projectPortfolioDefaultCategory 返回项目集声明的默认项目分类，空串表示不预设。

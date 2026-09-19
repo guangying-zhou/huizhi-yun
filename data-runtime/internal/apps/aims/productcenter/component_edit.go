@@ -20,6 +20,21 @@ type ProductComponentEdit struct {
 }
 
 func EditProductComponent(ctx context.Context, db *sql.DB, identity CommandIdentity, permit AuthorizationPermit, input ProductComponentEdit) (CommandResult, error) {
+	return editProductComponent(ctx, identity, permit, input, func(authorize AuthorizeCommand, apply ApplyCommand) (CommandResult, error) {
+		return ExecuteCommand(ctx, db, identity, input, authorize, apply)
+	})
+}
+func EditProductComponentInTransaction(ctx context.Context, tx *sql.Tx, identity CommandIdentity, permit AuthorizationPermit, input ProductComponentEdit) (CommandResult, error) {
+	result, err := editProductComponent(ctx, identity, permit, input, func(authorize AuthorizeCommand, apply ApplyCommand) (CommandResult, error) {
+		return ExecuteCommandInTransaction(ctx, tx, identity, input, authorize, apply)
+	})
+	if err != nil && tx != nil {
+		_ = tx.Rollback()
+	}
+	return result, err
+}
+func editProductComponent(ctx context.Context, identity CommandIdentity, permit AuthorizationPermit, input ProductComponentEdit, execute func(AuthorizeCommand, ApplyCommand) (CommandResult, error)) (CommandResult, error) {
+
 	if identity.Action != "product_components:edit" {
 		return CommandResult{}, invalid("product_command_identity_invalid", "模块编辑命令不匹配")
 	}
@@ -34,7 +49,7 @@ func EditProductComponent(ctx context.Context, db *sql.DB, identity CommandIdent
 			return CommandResult{}, invalid("product_component_edit_invalid", "模块字段无效")
 		}
 	}
-	return ExecuteCommand(ctx, db, identity, input, func(ctx context.Context, tx *sql.Tx) error {
+	return execute(func(ctx context.Context, tx *sql.Tx) error {
 		return AuthorizeWorkspaceTransaction(ctx, tx, identity.ProductCode, identity.ActorUID, "product_components", "edit", permit)
 	}, func(ctx context.Context, tx *sql.Tx) (any, error) {
 		root, err := loadWorkspace(ctx, tx, identity.ProductCode)

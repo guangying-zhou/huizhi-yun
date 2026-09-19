@@ -2,6 +2,7 @@ package aims
 
 import (
 	"context"
+	"errors"
 	"net/url"
 	"testing"
 
@@ -103,5 +104,87 @@ func TestMilestoneCompletionLockRejectsAcceptanceFactMutation(t *testing.T) {
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Fatalf("expectations: %v", err)
+	}
+}
+
+func TestMilestoneCompletionSharedTransactionRollsBackLateFailure(t *testing.T) {
+	adapter, mock, closeDB := newAimsSQLMockAdapter(t)
+	defer closeDB()
+
+	mock.ExpectBegin()
+	mock.ExpectQuery(`(?s)SELECT id, request_no, request_version, milestone_owner_id, project_id.*FROM approval_records.*FOR UPDATE`).
+		WithArgs(int64(51), "MCR-%").
+		WillReturnRows(sqlmock.NewRows([]string{
+			"id", "request_no", "request_version", "milestone_owner_id", "project_id", "project_code",
+			"requested_by", "reviewer_uid", "status", "snapshot_sha256", "workflow_instance_id",
+		}).AddRow(int64(51), "MCR-17-V1", int64(1), int64(17), int64(5), "PRJ-1",
+			"pm-1", "director-old", "pending", "hash-1", nil))
+	mock.ExpectQuery(`(?s)SELECT m\.status, m\.completion_lock_request_id, m\.sort_order, m\.payment_term_id.*FROM milestones m.*FOR UPDATE`).
+		WithArgs(int64(17)).
+		WillReturnRows(sqlmock.NewRows([]string{
+			"status", "completion_lock_request_id", "sort_order", "payment_term_id", "project_code", "contract_code",
+		}).AddRow("active", int64(51), int64(3), nil, "PRJ-1", nil))
+	mock.ExpectExec(`(?s)UPDATE approval_records.*reviewer_role_code = 'project_director'.*WHERE id = \? AND status = 'pending'`).
+		WithArgs("7001", "approved", "director-new", int64(12), "Workflow approved", int64(51)).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectExec(`UPDATE milestones SET status = 'completed', completion_lock_request_id = NULL`).
+		WithArgs(int64(17), int64(51)).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectQuery(`(?s)SELECT id.*FROM milestones.*project_id = \?.*ORDER BY sort_order, id.*LIMIT 1`).
+		WithArgs(int64(5), int64(3), int64(3), int64(17)).
+		WillReturnError(errors.New("late next milestone lookup failure"))
+	mock.ExpectRollback()
+
+	tx, err := adapter.DB().BeginTx(context.Background(), nil)
+	if err != nil {
+		t.Fatalf("begin shared transaction: %v", err)
+	}
+	_, err = adapter.ApplyMilestoneCompletionWorkflowCallbackInTransaction(
+		context.Background(), tx, 51, "7001", "17",
+		map[string]any{
+			"completionRequestId":     float64(51),
+			"requestNo":               "MCR-17-V1",
+			"snapshotSha256":          "hash-1",
+			"projectDirectorUid":      "director-new",
+			"projectDirectorRevision": float64(12),
+			"projectDirectorRoleCode": "project_director",
+		},
+		"approved",
+		map[string]any{
+			"event": "flow_completed", "instance_id": "7001", "app_code": "aims",
+			"resource_code": "milestones", "action_code": "milestone_completion",
+			"biz_id": "17", "status": "approved", "initiator_uid": "pm-1",
+		},
+	)
+	if err == nil {
+		t.Fatal("expected late failure from shared transaction body")
+	}
+	if err := tx.Rollback(); err != nil {
+		t.Fatalf("rollback shared transaction: %v", err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("shared transaction did not roll back late writes: %v", err)
+	}
+}
+
+func TestVerifiedMilestoneCompletionCallbackCopiesBFFWhitelist(t *testing.T) {
+	body := map[string]any{
+		"event": "flow_completed", "instance_id": "7001", "app_code": "aims", "resource_code": "milestones", "action_code": "milestone_completion", "biz_id": "17", "status": "approved", "initiator_uid": "pm-1",
+		"ignored":   "must-not-cross-boundary",
+		"form_data": map[string]any{"completionRequestId": float64(51), "requestNo": "MCR-17-V1", "snapshotSha256": "hash-1", "projectDirectorUid": "director", "projectDirectorRevision": float64(12), "projectDirectorRoleCode": "project_director"},
+	}
+	callback, err := VerifiedMilestoneCompletionCallbackFromTrustedRuntime(url.Values{"workflow_callback_verified": {"1"}}, body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body["initiator_uid"] = "attacker"
+	body["form_data"].(map[string]any)["snapshotSha256"] = "attacker"
+	got := callback.Body()
+	if got["initiator_uid"] != "pm-1" || got["ignored"] != nil || got["form_data"].(map[string]any)["snapshotSha256"] != "hash-1" {
+		t.Fatalf("verified callback retained caller mutation: %#v", got)
+	}
+	got["form_data"].(map[string]any)["snapshotSha256"] = "attacker-2"
+	if callback.FormData()["snapshotSha256"] != "hash-1" {
+		t.Fatal("callback getter leaked mutable form data")
 	}
 }

@@ -1,5 +1,7 @@
 <script setup lang="ts">
-import type { ProjectDocsTreeItem } from '~/types'
+import type { ProjectDocsTreeItem } from '../../types'
+import { useCodocsModule } from '../../../layer/useCodocsModule'
+import { createCreationAttempt, fingerprintUploadFiles } from '../../../layer/creationAttempt.mjs'
 
 definePageMeta({
   layout: 'default'
@@ -65,6 +67,10 @@ interface CreateDocResponse {
 
 const toast = useToast()
 const apiFetch = useRequestFetch()
+const { moduleUrl, cacheKey } = useCodocsModule()
+const documentCreationAttempt = createCreationAttempt()
+const documentRecycleAttempt = createCreationAttempt()
+const uploadAttempt = createCreationAttempt()
 const { user, userRealname } = useAuth()
 const { setPayload: setDocumentPreviewBootstrap } = useDocumentPreviewBootstrap()
 const { setHeaderActions, clearHeaderActions } = useLayoutHeaderActions()
@@ -104,7 +110,7 @@ const editingName = ref('')
 // Fetch all folders
 const fetchAllFolders = async () => {
   if (!user.value) return []
-  const response = await apiFetch<{ data: { items: FolderRecord[] } }>('/api/folders', {
+  const response = await apiFetch<{ data: { items: FolderRecord[] } }>(moduleUrl('/api/folders'), {
     query: {
       folder_type: 'private',
       owner_uid: uid.value
@@ -116,7 +122,7 @@ const fetchAllFolders = async () => {
 // Fetch all documents
 const fetchAllDocuments = async () => {
   if (!user.value) return []
-  const response = await apiFetch<{ data: { items: DocRecord[] } }>('/api/documents', {
+  const response = await apiFetch<{ data: { items: DocRecord[] } }>(moduleUrl('/api/documents'), {
     query: {
       type: 'private',
       owner: uid.value,
@@ -127,7 +133,7 @@ const fetchAllDocuments = async () => {
 }
 
 const { data: allFolders, pending: foldersPending, refresh: refreshFolders } = await useAsyncData(
-  'my-private-folders',
+  cacheKey('my-private-folders'),
   fetchAllFolders,
   {
     watch: [user],
@@ -137,7 +143,7 @@ const { data: allFolders, pending: foldersPending, refresh: refreshFolders } = a
 )
 
 const { data: allDocuments, pending: docsPending, refresh: refreshDocs } = await useAsyncData(
-  'my-all-private-docs',
+  cacheKey('my-all-private-docs'),
   fetchAllDocuments,
   {
     watch: [user],
@@ -241,7 +247,7 @@ const loadDocumentPreview = async (doc: DocRecord) => {
   previewContent.value = ''
 
   try {
-    const response = await $fetch<DocDetailResponse>(`/api/documents/${doc.uuid}`)
+    const response = await $fetch<DocDetailResponse>(moduleUrl(`/api/documents/${doc.uuid}`))
     if (response.success && response.data) {
       previewContent.value = response.data.content || ''
       previewAbstract.value = response.data.ai_abstract || ''
@@ -273,7 +279,7 @@ const saveEdit = async () => {
   try {
     if (editingId.value.startsWith('folder-')) {
       const folderId = parseInt(editingId.value.replace('folder-', ''))
-      await $fetch(`/api/folders/${folderId}`, {
+      await $fetch(moduleUrl(`/api/folders/${folderId}`), {
         method: 'PATCH',
         body: { name: editingName.value.trim() }
       })
@@ -281,7 +287,7 @@ const saveEdit = async () => {
       await refreshFolders()
     } else if (editingId.value.startsWith('doc-')) {
       const docUuid = editingId.value.replace('doc-', '')
-      await $fetch(`/api/documents/${docUuid}`, {
+      await $fetch(moduleUrl(`/api/documents/${docUuid}`), {
         method: 'PATCH',
         body: { title: editingName.value.trim() }
       })
@@ -364,26 +370,26 @@ const createDocument = async () => {
 
   isCreating.value = true
   try {
-    const { data, error } = await useFetch('/api/documents', {
-      method: 'POST',
-      body: {
-        title: newDocName.value.trim(),
-        doc_type: 'private',
-        owner_uid: uid.value,
-        folder_id: currentFolderId.value
-      }
-    })
-
-    if (error.value) {
-      throw new Error(error.value.message || '创建文档失败')
+    const body = {
+      title: newDocName.value.trim(),
+      doc_type: 'private',
+      owner_uid: uid.value,
+      folder_id: currentFolderId.value
     }
+    const key = documentCreationAttempt.keyFor(cacheKey('document-create'), body)
+    const data = await apiFetch<CreateDocResponse>(moduleUrl('/api/documents'), {
+      method: 'POST',
+      headers: { 'Idempotency-Key': key },
+      body
+    })
+    documentCreationAttempt.complete(key)
 
     toast.add({ title: '文档创建成功', color: 'success' })
     showNewDocModal.value = false
     newDocName.value = ''
     await refreshDocs()
 
-    const docUUId = (data.value as CreateDocResponse)?.data?.uuid
+    const docUUId = data?.data?.uuid
     if (docUUId) {
       await navigateToEdit(docUUId)
     }
@@ -404,8 +410,9 @@ const createFolder = async () => {
 
   isCreating.value = true
   try {
-    const { error } = await useFetch('/api/folders', {
+    const { error } = await useFetch(moduleUrl('/api/folders'), {
       method: 'POST',
+      headers: { 'Idempotency-Key': crypto.randomUUID() },
       body: {
         name: newFolderName.value.trim(),
         folder_type: 'private',
@@ -455,6 +462,13 @@ const handleFileUpload = async (event: Event) => {
     return
   }
 
+  if (validFiles.length > 30 || validFiles.some(file => file.size > 10 * 1024 * 1024)
+    || validFiles.reduce((total, file) => total + file.size, 0) > 30 * 1024 * 1024) {
+    toast.add({ title: '每批最多 30 个文件，单个 10 MiB、总计 30 MiB', color: 'warning' })
+    input.value = ''
+    return
+  }
+
   isUploading.value = true
   const formData = new FormData()
   formData.append('doc_type', 'private')
@@ -468,10 +482,17 @@ const handleFileUpload = async (event: Event) => {
   })
 
   try {
-    const result = await $fetch<UploadResult>('/api/documents/upload', {
+    const key = uploadAttempt.keyFor(cacheKey('document-upload'), {
+      folder_id: currentFolderId.value,
+      owner_uid: uid.value,
+      files: await fingerprintUploadFiles(validFiles)
+    })
+    const result = await $fetch<UploadResult>(moduleUrl('/api/documents/upload'), {
       method: 'POST',
+      headers: { 'Idempotency-Key': key },
       body: formData
     })
+    if (result.failed === 0) uploadAttempt.complete(key)
 
     if (result.success > 0) {
       toast.add({ title: `成功上传 ${result.success} 个文档`, color: 'success' })
@@ -479,7 +500,7 @@ const handleFileUpload = async (event: Event) => {
     }
 
     if (result.failed > 0) {
-      toast.add({ title: `${result.failed} 个文档上传失败`, color: 'error' })
+      toast.add({ title: `${result.failed} 个文档上传失败，请重新选择同一批文件重试`, color: 'error' })
     }
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : '上传失败'
@@ -515,11 +536,13 @@ const executeDelete = async () => {
   isDeleting.value = true
   try {
     if (target.type === 'folder') {
-      await $fetch(`/api/folders/${target.id}`, { method: 'DELETE' })
+      await $fetch(moduleUrl(`/api/folders/${target.id}`), { method: 'DELETE' })
       toast.add({ title: '文件夹已删除', color: 'success' })
       await refreshFolders()
     } else {
-      await $fetch(`/api/documents/${target.id}`, { method: 'DELETE' })
+      const key = documentRecycleAttempt.keyFor(cacheKey('document-recycle'), { uuid: targetId })
+      await $fetch(moduleUrl(`/api/documents/${target.id}`), { method: 'DELETE', headers: { 'Idempotency-Key': key } })
+      documentRecycleAttempt.complete(key)
       toast.add({ title: '文档已删除', color: 'success' })
       await refreshDocs()
     }
@@ -551,7 +574,7 @@ const toggleHome = async (doc: DocRecord) => {
   // Optimistic update
   doc.star_flag = newStatus ? 1 : 0
   try {
-    await $fetch(`/api/documents/${doc.uuid}`, {
+    await $fetch(moduleUrl(`/api/documents/${doc.uuid}`), {
       method: 'PATCH',
       body: { star_flag: newStatus }
     })
@@ -570,7 +593,7 @@ const toggleReadonly = async (doc: DocRecord) => {
   // Optimistic update
   doc.readonly_flag = newStatus ? 1 : 0
   try {
-    await $fetch(`/api/documents/${doc.uuid}`, {
+    await $fetch(moduleUrl(`/api/documents/${doc.uuid}`), {
       method: 'PATCH',
       body: { readonly_flag: newStatus }
     })
@@ -628,7 +651,7 @@ const openMoveModal = (doc: DocRecord) => {
 const moveDocument = async (targetFolderId: number | null) => {
   if (!moveDoc.value) return
   try {
-    await $fetch(`/api/documents/${moveDoc.value.uuid}`, {
+    await $fetch(moduleUrl(`/api/documents/${moveDoc.value.uuid}`), {
       method: 'PATCH',
       body: { folder_id: targetFolderId }
     })
@@ -669,7 +692,7 @@ const quickLog = async () => {
   try {
     const today = new Date()
     const dateKey = `${today.getFullYear()}${String(today.getMonth() + 1).padStart(2, '0')}${String(today.getDate()).padStart(2, '0')}`
-    const res = await $fetch<WorklogResponse>('/api/worklogs/create', {
+    const res = await $fetch<WorklogResponse>(moduleUrl('/api/worklogs/create'), {
       method: 'POST',
       body: {
         owner_uid: uid.value,

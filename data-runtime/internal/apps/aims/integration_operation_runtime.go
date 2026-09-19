@@ -87,23 +87,11 @@ func (a *Adapter) listPendingDeadLetterActionables(ctx context.Context, body map
 	if err != nil {
 		return nil, err
 	}
-	limit := aimsIntBodyValue(body, "limit")
-	if limit == 0 {
-		limit = 20
-	}
 	repository, err := integrationoperation.NewRepository(a.DB())
 	if err != nil {
 		return nil, err
 	}
-	items, err := repository.ListPendingDeadLetterActionables(ctx, trusted.TenantCode, trusted.DeploymentCode, "aims", limit, time.Now().UTC())
-	if err != nil {
-		return nil, err
-	}
-	result := make([]map[string]any, 0, len(items))
-	for _, item := range items {
-		result = append(result, aimsDeadLetterActionableResponse(item, trusted))
-	}
-	return map[string]any{"items": result}, nil
+	return executeListPendingDeadLetterActionables(ctx, repository, trusted, body, time.Now().UTC())
 }
 
 func aimsDeadLetterActionableResponse(item integrationoperation.DeadLetterActionableCandidate, trusted integrationoperation.TrustedContext) map[string]any {
@@ -127,28 +115,11 @@ func (a *Adapter) markDeadLetterActionablePublished(ctx context.Context, operati
 	if err != nil {
 		return nil, err
 	}
-	generation, generationErr := aimsUint64BodyValue(body, "generation")
-	operationVersion, versionErr := aimsUint64BodyValue(body, "operationVersion", "operation_version")
-	if generationErr != nil || versionErr != nil {
-		return nil, httperror.New(http.StatusBadRequest, "integration_operation_dead_letter_ack_invalid", "generation and operationVersion are required")
-	}
 	repository, err := integrationoperation.NewRepository(a.DB())
 	if err != nil {
 		return nil, err
 	}
-	marked, err := repository.MarkDeadLetterActionablePublished(ctx, integrationoperation.MarkDeadLetterActionablePublishedInput{
-		TenantCode: trusted.TenantCode, DeploymentCode: trusted.DeploymentCode, SourceApp: "aims", OperationID: strings.TrimSpace(operationID),
-		Generation: generation, OperationVersion: operationVersion, ActionableKey: firstBodyText(body, "actionableKey", "actionable_key"),
-		ObjectVersion: firstBodyText(body, "objectVersion", "object_version"), NotificationID: firstBodyText(body, "notificationId", "notification_id"),
-		RecipientUIDs: serviceStringSlice(body["recipientUids"], body["recipient_uids"]), Now: time.Now().UTC(),
-	})
-	if errors.Is(err, integrationoperation.ErrOperationNotFound) || errors.Is(err, integrationoperation.ErrPersistenceRace) {
-		return nil, httperror.New(http.StatusConflict, "integration_operation_dead_letter_ack_conflict", "dead-letter actionable acknowledgement is stale or conflicts with existing evidence")
-	}
-	if err != nil {
-		return nil, err
-	}
-	return map[string]any{"operationId": strings.TrimSpace(operationID), "generation": generation, "published": marked, "tenantCode": trusted.TenantCode, "deploymentCode": trusted.DeploymentCode, "sourceApp": "aims"}, nil
+	return executeMarkDeadLetterActionablePublished(ctx, repository, trusted, operationID, body, time.Now().UTC())
 }
 
 func (a *Adapter) listPendingDeadLetterClosures(ctx context.Context, body map[string]any) (map[string]any, error) {
@@ -159,23 +130,11 @@ func (a *Adapter) listPendingDeadLetterClosures(ctx context.Context, body map[st
 	if err != nil {
 		return nil, err
 	}
-	limit := aimsIntBodyValue(body, "limit")
-	if limit == 0 {
-		limit = 20
-	}
 	repository, err := integrationoperation.NewRepository(a.DB())
 	if err != nil {
 		return nil, err
 	}
-	items, err := repository.ListPendingDeadLetterClosures(ctx, trusted.TenantCode, trusted.DeploymentCode, "aims", limit)
-	if err != nil {
-		return nil, err
-	}
-	result := make([]map[string]any, 0, len(items))
-	for _, item := range items {
-		result = append(result, map[string]any{"tenantCode": trusted.TenantCode, "deploymentCode": trusted.DeploymentCode, "sourceApp": "aims", "operationId": item.OperationID, "generation": item.Generation, "actionableKey": item.ActionableKey, "expectedVersion": item.ExpectedVersion, "nextVersion": item.NextVersion, "state": item.State, "recipientUids": item.RecipientUIDs})
-	}
-	return map[string]any{"items": result}, nil
+	return executeListPendingDeadLetterClosures(ctx, repository, trusted, body, time.Now().UTC())
 }
 
 func (a *Adapter) markDeadLetterClosureAcknowledged(ctx context.Context, operationID string, body map[string]any) (map[string]any, error) {
@@ -186,22 +145,11 @@ func (a *Adapter) markDeadLetterClosureAcknowledged(ctx context.Context, operati
 	if err != nil {
 		return nil, err
 	}
-	generation, generationErr := aimsUint64BodyValue(body, "generation")
-	if generationErr != nil {
-		return nil, httperror.New(http.StatusBadRequest, "integration_operation_dead_letter_closure_ack_invalid", "generation is required")
-	}
 	repository, err := integrationoperation.NewRepository(a.DB())
 	if err != nil {
 		return nil, err
 	}
-	marked, err := repository.MarkDeadLetterClosureAcknowledged(ctx, integrationoperation.MarkDeadLetterClosureAcknowledgedInput{TenantCode: trusted.TenantCode, DeploymentCode: trusted.DeploymentCode, SourceApp: "aims", OperationID: strings.TrimSpace(operationID), Generation: generation, ActionableKey: firstBodyText(body, "actionableKey", "actionable_key"), ExpectedVersion: firstBodyText(body, "expectedVersion", "expected_version"), NextVersion: firstBodyText(body, "nextVersion", "next_version"), State: firstBodyText(body, "state"), Now: time.Now().UTC()})
-	if errors.Is(err, integrationoperation.ErrOperationNotFound) || errors.Is(err, integrationoperation.ErrPersistenceRace) {
-		return nil, httperror.New(http.StatusConflict, "integration_operation_dead_letter_closure_ack_conflict", "dead-letter closure acknowledgement is stale or conflicts with existing evidence")
-	}
-	if err != nil {
-		return nil, err
-	}
-	return map[string]any{"operationId": strings.TrimSpace(operationID), "generation": generation, "closureAcknowledged": marked, "tenantCode": trusted.TenantCode, "deploymentCode": trusted.DeploymentCode, "sourceApp": "aims"}, nil
+	return executeMarkDeadLetterClosureAcknowledged(ctx, repository, trusted, operationID, body, time.Now().UTC())
 }
 
 func (a *Adapter) listIntegrationOperationAttempts(ctx context.Context, operationID string, query url.Values) (map[string]any, error) {
@@ -241,23 +189,11 @@ func (a *Adapter) listPendingIntegrationOperationFailureNotifications(ctx contex
 	if err != nil {
 		return nil, err
 	}
-	limit := aimsIntBodyValue(body, "limit")
-	if limit == 0 {
-		limit = 20
-	}
 	repository, err := integrationoperation.NewRepository(a.DB())
 	if err != nil {
 		return nil, err
 	}
-	items, err := repository.ListPendingFailureNotifications(ctx, trusted.TenantCode, trusted.DeploymentCode, "aims", limit)
-	if err != nil {
-		return nil, err
-	}
-	result := make([]map[string]any, 0, len(items))
-	for _, item := range items {
-		result = append(result, aimsFailureNotificationResponse(item, trusted))
-	}
-	return map[string]any{"items": result}, nil
+	return executeListPendingIntegrationOperationFailureNotifications(ctx, repository, trusted, body, time.Now().UTC())
 }
 
 func (a *Adapter) markIntegrationOperationFailureNotified(ctx context.Context, operationID string, body map[string]any) (map[string]any, error) {
@@ -268,26 +204,11 @@ func (a *Adapter) markIntegrationOperationFailureNotified(ctx context.Context, o
 	if err != nil {
 		return nil, err
 	}
-	notificationID := strings.TrimSpace(firstBodyText(body, "notificationId", "notification_id"))
 	repository, err := integrationoperation.NewRepository(a.DB())
 	if err != nil {
 		return nil, err
 	}
-	marked, err := repository.MarkFailureNotified(ctx, integrationoperation.MarkFailureNotifiedInput{
-		TenantCode: trusted.TenantCode, DeploymentCode: trusted.DeploymentCode, SourceApp: "aims",
-		OperationID: strings.TrimSpace(operationID), NotificationID: notificationID, Now: time.Now().UTC(),
-	})
-	if errors.Is(err, integrationoperation.ErrOperationNotFound) || errors.Is(err, integrationoperation.ErrPersistenceRace) {
-		return nil, httperror.New(http.StatusConflict, "integration_operation_failure_notification_conflict", "dead-letter notification acknowledgement is stale or conflicts with existing evidence")
-	}
-	if err != nil {
-		return nil, err
-	}
-	return map[string]any{
-		"operationId": strings.TrimSpace(operationID), "notificationId": notificationID,
-		"tenantCode": trusted.TenantCode, "deploymentCode": trusted.DeploymentCode,
-		"sourceApp": "aims", "failureNotified": marked,
-	}, nil
+	return executeMarkIntegrationOperationFailureNotified(ctx, repository, trusted, operationID, body, time.Now().UTC())
 }
 
 func aimsFailureNotificationResponse(item integrationoperation.FailureNotificationCandidate, trusted integrationoperation.TrustedContext) map[string]any {
@@ -465,13 +386,17 @@ func (a *Adapter) failIntegrationOperation(ctx context.Context, operationKey str
 	if err != nil {
 		return nil, err
 	}
+	return failAimsIntegrationOperation(ctx, a.DB(), nil, trusted, worker, operationKey, body, time.Now().UTC())
+}
+
+func failAimsIntegrationOperation(ctx context.Context, db *sql.DB, tx *sql.Tx, trusted integrationoperation.TrustedContext, worker, operationKey string, body map[string]any, now time.Time) (map[string]any, error) {
 	operationKey = strings.TrimSpace(operationKey)
 	operationID := strings.TrimSpace(firstBodyText(body, "operationId", "operation_id"))
 	fencingToken, fenceErr := aimsUint64BodyValue(body, "fencingToken", "fencing_token")
 	if !integrationoperation.IsValidOperationID(operationID) || operationKey == "" || fenceErr != nil || fencingToken == 0 {
 		return nil, httperror.New(http.StatusBadRequest, "integration_operation_lease_invalid", "operationId, operation key and fencing token are required")
 	}
-	targetApp, operationCode, command, err := a.loadLeasedIntegrationOperation(ctx, trusted, worker, operationID, operationKey, fencingToken)
+	targetApp, operationCode, command, err := loadLeasedAimsIntegrationOperation(ctx, db, tx, trusted, worker, operationID, operationKey, fencingToken)
 	if err != nil {
 		return nil, err
 	}
@@ -492,18 +417,24 @@ func (a *Adapter) failIntegrationOperation(ctx context.Context, operationKey str
 	case "payload_mismatch", "binding_conflict", "permanent":
 		failure.ConflictDisposition = integrationoperation.ConflictPermanent
 	}
-	repository, err := integrationoperation.NewRepository(a.DB())
+	repository, err := aimsCompletionRepository(db, trusted)
 	if err != nil {
 		return nil, err
 	}
-	result, err := repository.RecordFailure(ctx, integrationoperation.RecordFailureInput{
+	failureInput := integrationoperation.RecordFailureInput{
 		Lease:             integrationoperation.CompletionLease{OperationID: operationID, Worker: worker, FencingToken: fencingToken},
-		Now:               time.Now().UTC(),
+		Now:               now,
 		Failure:           failure,
 		ErrorCode:         strings.TrimSpace(firstBodyText(body, "errorCode", "error_code")),
 		ErrorSummary:      strings.TrimSpace(firstBodyText(body, "errorSummary", "error_summary")),
 		DeliveryUncertain: aimsBoolBodyValue(body, "deliveryUncertain", "delivery_uncertain"),
-	})
+	}
+	var result integrationoperation.RecordResult
+	if tx != nil {
+		result, err = repository.RecordFailureInTransaction(ctx, tx, failureInput)
+	} else {
+		result, err = repository.RecordFailure(ctx, failureInput)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -513,7 +444,7 @@ func (a *Adapter) failIntegrationOperation(ctx context.Context, operationKey str
 		if versionErr != nil || versionID <= 0 {
 			return nil, httperror.New(http.StatusConflict, "company_weekly_summary_operation_invalid", "summary version identity is invalid")
 		}
-		if _, err := a.DB().ExecContext(ctx, `
+		if _, err := aimsCompletionDB(db, tx).ExecContext(ctx, `
 			UPDATE company_weekly_summary_versions
 			SET publish_status = 'failed'
 			WHERE id = ? AND publish_status = 'pending'
@@ -532,13 +463,17 @@ func (a *Adapter) succeedIntegrationOperation(ctx context.Context, operationKey 
 	if err != nil {
 		return nil, err
 	}
+	return succeedAimsIntegrationOperation(ctx, a.DB(), nil, trusted, worker, operationKey, body, time.Now().UTC())
+}
+
+func succeedAimsIntegrationOperation(ctx context.Context, db *sql.DB, tx *sql.Tx, trusted integrationoperation.TrustedContext, worker, operationKey string, body map[string]any, now time.Time) (map[string]any, error) {
 	operationKey = strings.TrimSpace(operationKey)
 	operationID := strings.TrimSpace(firstBodyText(body, "operationId", "operation_id"))
 	fencingToken, fenceErr := aimsUint64BodyValue(body, "fencingToken", "fencing_token")
 	if !integrationoperation.IsValidOperationID(operationID) || operationKey == "" || fenceErr != nil || fencingToken == 0 {
 		return nil, httperror.New(http.StatusBadRequest, "integration_operation_lease_invalid", "operationId, operation key and fencing token are required")
 	}
-	targetApp, operationCode, command, err := a.loadLeasedIntegrationOperation(ctx, trusted, worker, operationID, operationKey, fencingToken)
+	targetApp, operationCode, command, err := loadLeasedAimsIntegrationOperation(ctx, db, tx, trusted, worker, operationID, operationKey, fencingToken)
 	if err != nil {
 		return nil, err
 	}
@@ -572,13 +507,13 @@ func (a *Adapter) succeedIntegrationOperation(ctx context.Context, operationKey 
 	); err != nil {
 		return nil, httperror.New(http.StatusConflict, "service_command_receipt_mismatch", "target receipt does not match the leased integration operation")
 	}
-	repository, err := integrationoperation.NewRepository(a.DB())
+	repository, err := aimsCompletionRepository(db, trusted)
 	if err != nil {
 		return nil, err
 	}
 	successInput := integrationoperation.RecordSuccessInput{
 		Lease:                 integrationoperation.CompletionLease{OperationID: operationID, Worker: worker, FencingToken: fencingToken},
-		Now:                   time.Now().UTC(),
+		Now:                   now,
 		HTTPStatus:            aimsIntBodyValue(body, "httpStatus", "http_status"),
 		TargetReceiptID:       targetReceiptID,
 		TargetBizType:         targetBizType,
@@ -586,10 +521,21 @@ func (a *Adapter) succeedIntegrationOperation(ctx context.Context, operationKey 
 		ResponseSummarySHA256: responseSummarySHA256,
 	}
 	var result integrationoperation.RecordResult
+	var mutation func(context.Context, *sql.Tx) error
 	if operationCode == companyWeeklySummaryOperationCode {
-		result, err = repository.RecordSuccessWithMutation(ctx, successInput, func(ctx context.Context, tx *sql.Tx) error {
+		mutation = func(ctx context.Context, tx *sql.Tx) error {
 			return completeCompanyWeeklySummaryPublishTx(ctx, tx, command, body)
-		})
+		}
+	}
+	if operationCode == workItemCompletionWorkflowOperation {
+		mutation = func(ctx context.Context, tx *sql.Tx) error {
+			return completeWorkItemCompletionWorkflowTx(ctx, tx, command, body)
+		}
+	}
+	if tx != nil {
+		result, err = repository.RecordSuccessWithMutationInTransaction(ctx, tx, successInput, mutation)
+	} else if mutation != nil {
+		result, err = repository.RecordSuccessWithMutation(ctx, successInput, mutation)
 	} else {
 		result, err = repository.RecordSuccess(ctx, successInput)
 	}
@@ -599,8 +545,10 @@ func (a *Adapter) succeedIntegrationOperation(ctx context.Context, operationKey 
 	return aimsIntegrationOperationResultResponse(operationID, operationKey, trusted, targetApp, operationCode, result), nil
 }
 
-func (a *Adapter) loadLeasedIntegrationOperation(
+func loadLeasedAimsIntegrationOperation(
 	ctx context.Context,
+	db *sql.DB,
+	tx *sql.Tx,
 	trusted integrationoperation.TrustedContext,
 	worker string,
 	operationID string,
@@ -610,9 +558,21 @@ func (a *Adapter) loadLeasedIntegrationOperation(
 	var targetApp string
 	var operationCode string
 	var commandJSON []byte
-	err := a.DB().QueryRowContext(ctx, `
+	table := "integration_operation"
+	if trusted.OutboxTables != nil {
+		var err error
+		table, err = trusted.OperationTable()
+		if err != nil {
+			return "", "", nil, err
+		}
+	}
+	lock := ""
+	if tx != nil {
+		lock = " FOR UPDATE"
+	}
+	err := aimsCompletionDB(db, tx).QueryRowContext(ctx, `
 		SELECT target_app, operation_code, command_json
-		FROM integration_operation
+		FROM `+table+`
 		WHERE operation_id = ?
 		  AND operation_key = ?
 		  AND tenant_code = ?
@@ -622,7 +582,7 @@ func (a *Adapter) loadLeasedIntegrationOperation(
 		  AND locked_by = ?
 		  AND fencing_token = ?
 		LIMIT 1
-	`, operationID, operationKey, trusted.TenantCode, trusted.DeploymentCode, worker, fencingToken).Scan(&targetApp, &operationCode, &commandJSON)
+	`+lock, operationID, operationKey, trusted.TenantCode, trusted.DeploymentCode, worker, fencingToken).Scan(&targetApp, &operationCode, &commandJSON)
 	if err != nil {
 		return "", "", nil, httperror.New(http.StatusConflict, "integration_operation_lease_stale", "integration operation lease is missing or stale")
 	}
@@ -636,6 +596,8 @@ func (a *Adapter) loadLeasedIntegrationOperation(
 func validateServiceTicketDeliveryOperation(targetApp string, operationCode string, command map[string]any) error {
 	valid := false
 	switch operationCode {
+	case workItemCompletionWorkflowOperation:
+		valid = targetApp == "workflow" && validWorkItemCompletionWorkflowCommand(command)
 	case productCostRulesOperationCode:
 		valid = targetApp == "finance" && validProductCostRulesOperation(command)
 	case productFeedbackProgressOperationCode:
@@ -664,6 +626,8 @@ func validateServiceTicketDeliveryOperation(targetApp string, operationCode stri
 
 func aimsIntegrationOperationExpectedTarget(operationCode string, command map[string]any) (string, string) {
 	switch operationCode {
+	case workItemCompletionWorkflowOperation:
+		return "work_item_completion_workflow", "completion-request:" + fmt.Sprint(command["completionRequestId"])
 	case productCostRulesOperationCode:
 		return productCostRulesTarget(command)
 	case productFeedbackStatusOperationCode, productFeedbackProgressOperationCode:
@@ -794,4 +758,10 @@ func aimsBoolBodyValue(body map[string]any, keys ...string) bool {
 		}
 	}
 	return false
+}
+
+// EnterpriseClaimedOperationResponse preserves the established delivery worker
+// wire contract when its task store moves to the registered unified database.
+func EnterpriseClaimedOperationResponse(claimed *integrationoperation.ClaimedOperation) (map[string]any, error) {
+	return claimedAimsIntegrationOperationResponse(claimed)
 }

@@ -1,5 +1,9 @@
 <script setup lang="ts">
-import { getProductPerspectives, productNavTo, type ProductPerspectiveKey } from '~/config/productNavigation'
+import { useAimsModule } from '../../../../layer/useAimsModule'
+import { useProductWorkspace } from '../../../composables/useProductWorkspace'
+import { getProductPerspectives, productNavTo, type ProductPerspectiveKey } from '../../../../layer/productNavigation'
+
+const { moduleUrl, cacheKey } = useAimsModule()
 
 definePageMeta({ layoutHeader: true, layoutHeaderTitle: '产品概览', layoutHeaderProjectSwitcher: false })
 const route = useRoute()
@@ -13,10 +17,10 @@ const canEdit = computed(() => permissionStatus.value === 'success' && permissio
  * 概览指标只做计数：每个入口取列表接口的第一页 total。
  * 单个入口无权限或读取失败时按「—」呈现，不阻塞整页，也不用 0 冒充未知。
  */
-const { data: metrics, status: metricsStatus, refresh: refreshMetrics } = await useAsyncData(() => `product-overview-metrics:${code.value}`, async () => {
+const { data: metrics, status: metricsStatus, refresh: refreshMetrics } = await useAsyncData(() => cacheKey(`product-overview-metrics:${code.value}`), async () => {
   const productCode = code.value
   if (!productCode) return null
-  const base = `/api/v1/products/${encodeURIComponent(productCode)}`
+  const base = moduleUrl(`/api/v1/products/${encodeURIComponent(productCode)}`)
   async function readCount(path: string, query: Record<string, unknown>, pick: (data: Record<string, unknown>) => unknown) {
     try {
       const response = await $fetch<{ code: number, data: Record<string, unknown> }>(`${base}${path}`, { query, timeout: 15000 })
@@ -200,7 +204,7 @@ onBeforeUnmount(clearRefresh)
           </h2>
           <UButton
             v-if="canEdit"
-            :to="`/products/${encodeURIComponent(code)}/settings`"
+            :to="moduleUrl(`/products/${encodeURIComponent(code)}/settings`)"
             icon="i-lucide-pencil"
             color="neutral"
             variant="outline"

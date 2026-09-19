@@ -1,7 +1,7 @@
 import { ok, normalizeNullableString, requireString } from '~~/server/utils/api'
 import { findDeploymentByCode } from '~~/server/utils/platform'
 import {
-  findPolicyBundleForDeployment,
+  findOrGeneratePolicyBundleForDeployment,
   formatPolicyBundleSignature,
   maybeReturnPolicyBundleNotModified
 } from '~~/server/utils/policyBundle'
@@ -11,8 +11,9 @@ export default defineEventHandler(async (event) => {
   const query = getQuery(event)
   const tenantCode = normalizeNullableString(query.tenantCode)
   const deployment = await findDeploymentByCode(deploymentCode, tenantCode)
-  const bundle = await findPolicyBundleForDeployment({
+  const bundle = await findOrGeneratePolicyBundleForDeployment({
     deploymentId: deployment.id,
+    tenantCode: deployment.tenant_code,
     version: normalizeNullableString(query.version || query.bundleVersion)
   })
 

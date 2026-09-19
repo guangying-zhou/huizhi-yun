@@ -1,0 +1,62 @@
+{
+ "tenant": "C000001",
+ "environment": "isolated-local",
+ "purpose": "INT-108 isolated MySQL query/transaction/concurrency/authorization regression",
+ "recordedAt": "2026-09-15T14:52:27.759000+00:00",
+ "harness": {
+  "instances": [
+   "dedicated mysqld 8.0.34, loopback port, per-suite schemas (product-center families)",
+   "second dedicated mysqld for the per-suite socket families"
+  ],
+  "note": "Suites refuse non-isolated sockets; each family reads its own HZY_*_SOCKET variable. The registry fixture builds its binding address from @@port, so a --skip-networking instance reports port 0 and Register fails with invalid binding."
+ },
+ "result": {
+  "pass": 189,
+  "skip": 3,
+  "fail": 2
+ },
+ "raceRun": {
+  "packages": [
+   "internal/enterprise",
+   "internal/server",
+   "internal/apps/aims/...",
+   "internal/apps/assets/..."
+  ],
+  "result": "pass with -race"
+ },
+ "knownHarnessExceptions": [
+  {
+   "test": "TestAssetCategoryCommandsMySQL",
+   "reason": "creates a fixed MySQL user, so it needs its own instance; passes alone on a clean instance",
+   "productDefect": false
+  },
+  {
+   "test": "TestApprovedExternalEvidenceMySQL",
+   "reason": "requires HZY_EXTERNAL_EVIDENCE_FILE; fails instead of skipping when only the socket is provided",
+   "productDefect": false
+  }
+ ],
+ "driftFixedThisRound": [
+  {
+   "test": "TestInitialServiceCredentialMySQL",
+   "finding": "capability review guard still froze 32 while the committed readiness template had grown to 64; the four new work-item state/delete capabilities were also missing from the template",
+   "fix": "template extended to 68 capabilities and the guard re-frozen at 68 after review"
+  },
+  {
+   "test": "TestEnterpriseAssetsProductsHTTPMySQL",
+   "finding": "fixture never applied 20260917_assets_owned_ip_asset_product_link_receipts.sql, so IP product linking failed with assets_ip_asset_link_receipt_schema_unavailable",
+   "fix": "migration applied in release order at the post-upgrade stage, keeping the earlier old-schema rejection stage intact"
+  },
+  {
+   "test": "TestEnterprisePlanningHTTPMySQL",
+   "finding": "fixture view list lagged PlanningViewNames() by product_feedback_bindings, product_request_features and product_features",
+   "fix": "fixture view list aligned with the service contract"
+  },
+  {
+   "test": "TestEnterpriseContractActivationHTTPMySQL / TestEnterpriseSchedulerHTTPMySQL",
+   "finding": "enterprise host subject claim still used the unprefixed enterprise.runtime form rejected by the current identity contract",
+   "fix": "enterprise subject uses client:<client_id>; the milestone-receivable leg keeps the unprefixed aims.runtime form its route still requires"
+  }
+ ],
+ "openInconsistency": "Two service-subject conventions coexist: the enterprise context and scheduler routes require sub=client:<client_id>, while enterprise_milestone_receivable.go still requires the unprefixed aims.runtime. Unifying them changes a security check and needs an explicit contract decision (tracked for INT-107/INT-108 follow-up)."
+}

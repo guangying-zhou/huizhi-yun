@@ -143,3 +143,66 @@ func TestProjectDocumentServiceContentRequiresCodocsACL(t *testing.T) {
 		}
 	})
 }
+
+// ADR-018 §3.2 要求的「错来源应用」验收：统一企业宿主是与 Aims 并列的来源，
+// 两条来源各自与自己的 source client 绑定。交叉组合（aims + enterprise.runtime、
+// enterprise + aims.runtime）以及任何第三方来源都必须在触达存储前被拒。
+func TestProjectDocumentServiceContentBindsEachSourceAppToItsOwnClient(t *testing.T) {
+	for _, source := range []string{"aims", "enterprise"} {
+		other := "enterprise"
+		if source == "enterprise" {
+			other = "aims"
+		}
+		t.Run(source, func(t *testing.T) {
+			db, mock, err := sqlmock.New()
+			if err != nil {
+				t.Fatalf("sqlmock.New: %v", err)
+			}
+			defer db.Close()
+			adapter := &Adapter{db: db}
+
+			// 交叉来源/客户端：不得访问存储。
+			for _, client := range []string{other + ".runtime", source, "other.runtime"} {
+				body := projectDocumentServiceBody("doc-1", "PRJ-1")
+				body[integrationoperation.TrustedServiceCommandSourceAppKey] = source
+				body[integrationoperation.TrustedServiceCommandSourceClientKey] = client
+				_, _, err := adapter.HandleRuntime(context.Background(), http.MethodPost, "/v1/codocs/service/project-documents/doc-1/content", projectDocumentServiceQuery(), body)
+				httpErr, ok := err.(httperror.Error)
+				if !ok || httpErr.Status != http.StatusForbidden || httpErr.Code != "project_document_service_command_invalid" {
+					t.Fatalf("source %s client %s: error = %#v", source, client, err)
+				}
+			}
+			// 未登记的第三方来源即便自洽也必须被拒。
+			for _, stranger := range []string{"assets", "altoc", "console", ""} {
+				body := projectDocumentServiceBody("doc-1", "PRJ-1")
+				body[integrationoperation.TrustedServiceCommandSourceAppKey] = stranger
+				body[integrationoperation.TrustedServiceCommandSourceClientKey] = stranger + ".runtime"
+				_, _, err := adapter.HandleRuntime(context.Background(), http.MethodPost, "/v1/codocs/service/project-documents/doc-1/content", projectDocumentServiceQuery(), body)
+				httpErr, ok := err.(httperror.Error)
+				if !ok || httpErr.Status != http.StatusForbidden || httpErr.Code != "project_document_service_command_invalid" {
+					t.Fatalf("stranger %q: error = %#v", stranger, err)
+				}
+			}
+			if err := mock.ExpectationsWereMet(); err != nil {
+				t.Fatalf("rejected identity must not access storage: %v", err)
+			}
+
+			// 自洽来源仍要通过 Codocs 自己的文档 ACL，宿主不获得额外授权。
+			mock.ExpectQuery(regexp.QuoteMeta("SELECT * FROM documents WHERE uuid = ? AND status <> 0 LIMIT 1")).WithArgs("doc-1").WillReturnRows(projectDocumentServiceReadRows("doc-1", "PRJ-1"))
+			body := projectDocumentServiceBody("doc-1", "PRJ-1")
+			body[integrationoperation.TrustedServiceCommandSourceAppKey] = source
+			body[integrationoperation.TrustedServiceCommandSourceClientKey] = source + ".runtime"
+			result, _, err := adapter.HandleRuntime(context.Background(), http.MethodPost, "/v1/codocs/service/project-documents/doc-1/content", projectDocumentServiceQuery(), body)
+			if err != nil {
+				t.Fatalf("source %s: HandleRuntime: %v", source, err)
+			}
+			data := result.(map[string]any)["data"].(map[string]any)
+			if data["uuid"] != "doc-1" || data["ossPath"] != "codocs/projects/PRJ-1/doc.md" {
+				t.Fatalf("source %s: metadata = %#v", source, data)
+			}
+			if err := mock.ExpectationsWereMet(); err != nil {
+				t.Fatal(err)
+			}
+		})
+	}
+}

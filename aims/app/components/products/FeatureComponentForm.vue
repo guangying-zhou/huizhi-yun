@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import { useAimsModule } from '../../../layer/useAimsModule'
+
+const { moduleUrl, cacheKey } = useAimsModule()
 const props = defineProps<{ productCode: string, featureBizId: string, name: string, parentId: number | null, featureRevision: number, workspaceRevision: number }>()
 const emit = defineEmits<{ saved: [], cancel: [], busy: [boolean] }>()
 interface Target { id: number, name: string, product_code: string, parent_id: number | null }
@@ -6,9 +9,9 @@ const trail = ref<{ id: number, name: string }[]>([])
 const parent = computed(() => trail.value.at(-1)?.id ?? null)
 const page = ref(1), pageSize = 10, saving = ref(false), reason = ref('')
 const selection = ref<{ id: number | null, name: string } | null>(null)
-const base = computed(() => `/api/v1/products/${encodeURIComponent(props.productCode)}/components`)
+const base = computed(() => moduleUrl(`/api/v1/products/${encodeURIComponent(props.productCode)}/components`))
 const query = computed(() => ({ parentId: parent.value ?? undefined, page: page.value, pageSize }))
-const { data, status, error, refresh } = await useFetch(base, { server: false, query, transform: (r: { code: number, data: { items: Target[], total: number, parent_id: number | null, page: number, pageSize: number, workspace_revision: number } }) => {
+const { data, status, error, refresh } = await useFetch(base, { server: false, key: computed(() => cacheKey('feature-FeatureComponentForm-1:' + props.productCode + ':' + props.featureBizId)), query, transform: (r: { code: number, data: { items: Target[], total: number, parent_id: number | null, page: number, pageSize: number, workspace_revision: number } }) => {
   const v = r.data
   if (r.code !== 0 || !v || !Array.isArray(v.items) || v.parent_id !== parent.value || v.page !== page.value || v.pageSize !== pageSize || !Number.isSafeInteger(v.total) || v.total < 0 || v.items.length > pageSize || v.items.length > v.total || v.workspace_revision !== props.workspaceRevision || v.items.some(item => !item || !Number.isSafeInteger(item.id) || item.id < 1 || item.product_code !== props.productCode || item.parent_id !== parent.value || typeof item.name !== 'string' || !item.name.trim())) throw new Error('目标列表已变化或响应不完整，请关闭表单并刷新模块列表')
   return v
@@ -44,7 +47,7 @@ async function save() {
   let done = false
   try {
     if (!await confirm({ title: '调整功能模块归属', message: `功能：${props.name}\n目标：${selected.name}\n原因：${body.reason}\n功能身份及历史规划、版本范围保持不变。`, confirmLabel: '确认归类', tone: 'warning' })) return
-    const r = await $fetch<{ code: number, data: { value: { biz_id: string, product_code: string, component_id: number | null, revision: number } } }>(`/api/v1/products/${encodeURIComponent(props.productCode)}/features/${encodeURIComponent(props.featureBizId)}/component`, { method: 'POST', body, headers: { 'Idempotency-Key': retry.key } })
+    const r = await $fetch<{ code: number, data: { value: { biz_id: string, product_code: string, component_id: number | null, revision: number } } }>(moduleUrl(`/api/v1/products/${encodeURIComponent(props.productCode)}/features/${encodeURIComponent(props.featureBizId)}/component`), { method: 'POST', body, headers: { 'Idempotency-Key': retry.key } })
     const v = r.data?.value
     if (r.code !== 0 || v?.biz_id !== props.featureBizId || v.product_code !== props.productCode || v.component_id !== selected.id || v.revision !== props.featureRevision + 1) throw new Error('归类结果不完整，请使用原请求重试')
     done = true

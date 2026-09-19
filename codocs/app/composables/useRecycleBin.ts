@@ -3,10 +3,14 @@
  * 提供文件名冲突检测、智能重命名、恢复操作等
  */
 
-import type { ProjectDocument } from '~/types/index'
+import type { ProjectDocument } from '../types/index'
+import { useCodocsModule } from '../../layer/useCodocsModule'
+import { createCreationAttempt } from '../../layer/creationAttempt.mjs'
 
 export const useRecycleBin = () => {
   const toast = useToast()
+  const { moduleUrl, hosted, cacheKey } = useCodocsModule()
+  const restoreAttempt = createCreationAttempt()
 
   /**
    * 格式化文档位置信息
@@ -84,11 +88,13 @@ export const useRecycleBin = () => {
       if (params.project_code) query.project_code = params.project_code
       if (params.exclude_uuid) query.exclude_uuid = params.exclude_uuid
 
-      const result = await $fetch<{ success: boolean, data: { exists: boolean } }>('/api/documents/check-name', {
+      const result = await $fetch<{ success: boolean, data: { exists: boolean } }>(moduleUrl('/api/documents/check-name'), {
         query
       })
+      if (hosted && (result?.success !== true || typeof result.data?.exists !== 'boolean')) throw new Error('名称检查响应无效')
       return result?.data?.exists || false
-    } catch {
+    } catch (error) {
+      if (hosted) throw error
       return false
     }
   }
@@ -103,11 +109,13 @@ export const useRecycleBin = () => {
     project_code?: string
   }) => {
     try {
-      const result = await $fetch<{ success: boolean, data: { items: ProjectDocument[] } }>('/api/documents/trash', {
+      const result = await $fetch<{ success: boolean, data: { items: ProjectDocument[] } }>(moduleUrl('/api/documents/trash'), {
         query: params
       })
+      if (hosted && (result?.success !== true || !Array.isArray(result.data?.items))) throw new Error('回收站响应无效')
       return result?.data?.items || []
-    } catch {
+    } catch (error) {
+      if (hosted) throw error
       return []
     }
   }
@@ -120,10 +128,13 @@ export const useRecycleBin = () => {
       const body: Record<string, string> = {}
       if (newTitle) body.new_title = newTitle
 
-      await $fetch(`/api/documents/${uuid}/restore`, {
+      const key = restoreAttempt.keyFor(cacheKey('document-restore'), { uuid, ...body })
+      await $fetch(moduleUrl(`/api/documents/${uuid}/restore`), {
         method: 'POST',
+        headers: { 'Idempotency-Key': key },
         body
       })
+      restoreAttempt.complete(key)
       toast.add({ title: '文档已恢复', color: 'success' })
       return true
     } catch (err: unknown) {

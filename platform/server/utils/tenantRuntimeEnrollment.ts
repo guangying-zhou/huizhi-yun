@@ -19,6 +19,9 @@ export const TENANT_RUNTIME_APPS = [
 // naming convention below.
 export const TENANT_RUNTIME_BINDING_APP_CODES = [
   'console',
+  // Enterprise is the unified Host identity. It has no local adapter flag,
+  // but it must be returned to the Runtime for exact service-token binding.
+  'enterprise',
   ...TENANT_RUNTIME_APPS.map(item => item.appCode)
 ] as const
 

@@ -1,5 +1,5 @@
 import type { WorkflowByBizResult } from '@hzy/foundation/app/types/workflow'
-import type { LifecycleStatus } from '~/types/aims'
+import type { LifecycleStatus } from '../types/aims'
 
 export type ProjectWorkflowActionCode = 'initiation' | 'pause' | 'resume' | 'finish'
 

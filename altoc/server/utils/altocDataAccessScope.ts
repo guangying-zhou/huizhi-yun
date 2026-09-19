@@ -11,6 +11,15 @@ type RuntimeQuery = Record<string, unknown>
 type AltocDataAccess = 'all' | 'dept' | 'self' | 'self_dept' | 'none'
 type AltocDepartmentTreeCodeIndex = Record<string, string[]>
 
+// This stays in the pure compiler so other authenticated hosts can preserve
+// Altoc's administrator semantics without importing its event/cache wrapper.
+export const ALTOC_GLOBAL_ADMIN_ROLE_CODES = [
+  'system_admin',
+  'super_admin',
+  'platform:admin',
+  'platform:super_admin'
+] as const
+
 interface AltocScopeResult {
   access: AltocDataAccess
   deptCodes: string[]
@@ -59,6 +68,26 @@ export function buildAltocDepartmentTreeCodeIndex(nodes: AltocDepartmentScopeTre
 
   for (const node of nodes) collect(node)
   return index
+}
+
+export function hasAltocGlobalAdminRole(roles: Iterable<string>) {
+  const adminRoleCodes = new Set<string>(ALTOC_GLOBAL_ADMIN_ROLE_CODES)
+  for (const role of roles) {
+    if (adminRoleCodes.has(stringValue(role))) return true
+  }
+  return false
+}
+
+export function scopedGrantsNeedAltocDepartmentTree(grants: FoundationScopedAuthorizationGrant[]) {
+  return grants.some(grant => [
+    ...(grant.defaultScopes || []),
+    ...(grant.assignmentScopes || []),
+    ...(grant.scopes || [])
+  ].some(scope => (
+    stringValue(scope.dimension) === 'department'
+      && stringValue(scope.predicate) === 'tree'
+      && Boolean(stringValue(scope.value))
+  )))
 }
 
 function actionMatches(granted: string, required: string, policy?: ResourceActionPolicy) {

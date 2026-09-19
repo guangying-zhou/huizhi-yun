@@ -3,6 +3,7 @@ package config
 import (
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -356,4 +357,60 @@ func withEnv(t *testing.T, values map[string]string, fn func()) {
 	}()
 
 	fn()
+}
+
+// A one-time bootstrap must not double as a standing facility for replacing the
+// authentication trust root. Re-running it with the same values confirms the
+// existing state; anything different is refused and leaves disk untouched.
+func TestPersistJWTTrustOverlayIsWriteOnceAndIdempotent(t *testing.T) {
+	configDir := t.TempDir()
+	trust := JWTConfig{
+		Issuer:   "https://wiztek.huizhi.yun",
+		Audience: "data-runtime",
+		JWKSURL:  "https://wiztek.huizhi.yun/.well-known/jwks.json",
+	}
+	if err := PersistJWTTrustOverlay(configDir, trust); err != nil {
+		t.Fatal(err)
+	}
+	overlayPath := filepath.Join(configDir, "auth-jwt-trust.json")
+	original, err := os.ReadFile(overlayPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Identical bootstrap: idempotent confirmation, not a second write.
+	if err := PersistJWTTrustOverlay(configDir, trust); err != nil {
+		t.Fatalf("identical re-bootstrap must be idempotent: %v", err)
+	}
+
+	for name, changed := range map[string]JWTConfig{
+		"different issuer": {
+			Issuer:   "https://attacker.huizhi.yun",
+			Audience: trust.Audience,
+			JWKSURL:  trust.JWKSURL,
+		},
+		"different jwks": {
+			Issuer:   trust.Issuer,
+			Audience: trust.Audience,
+			JWKSURL:  "https://attacker.huizhi.yun/.well-known/jwks.json",
+		},
+		"different audience": {
+			Issuer:   trust.Issuer,
+			Audience: "other-runtime",
+			JWKSURL:  trust.JWKSURL,
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			if err := PersistJWTTrustOverlay(configDir, changed); !errors.Is(err, ErrJWTTrustAlreadyInitialized) {
+				t.Fatalf("err = %v, want ErrJWTTrustAlreadyInitialized", err)
+			}
+			current, err := os.ReadFile(overlayPath)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if string(current) != string(original) {
+				t.Fatal("refused bootstrap still rewrote the trust root on disk")
+			}
+		})
+	}
 }

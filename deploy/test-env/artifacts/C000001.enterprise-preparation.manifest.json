@@ -1,0 +1,82 @@
+{
+  "schemaVersion": "enterprise-preparation-artifacts.v1",
+  "tenantCode": "C000001",
+  "businessMigrationApplied": false,
+  "files": [
+    {
+      "path": "deploy/test-env/artifacts/C000001.enterprise-compatibility-views.candidate.sql",
+      "sha256": "0a90258f1d8c569f18c9047f00b5ce371031d0ff174d5f452302f55017860136",
+      "bytes": 21755
+    },
+    {
+      "path": "deploy/test-env/artifacts/C000001.enterprise-compatibility-views.sources.json",
+      "sha256": "4bfc43deab9140c0dea81ceb1326f6dd3e6bfed38a25706c3d8c6e8282b15e2f",
+      "bytes": 5645
+    },
+    {
+      "path": "deploy/test-env/artifacts/C000001.enterprise-migration-plan.json",
+      "sha256": "5aca7c7ff2b60eae1b8b72c442e951dace7de6245d5f07b87660522222e2e84b",
+      "bytes": 483954
+    },
+    {
+      "path": "deploy/test-env/artifacts/C000001.enterprise-principal.candidate.sql",
+      "sha256": "46cd57f330f141069b51cf17d0090812c87a2f00f80a98779f7fc87ec67266ed",
+      "bytes": 7631
+    },
+    {
+      "path": "deploy/test-env/artifacts/C000001.enterprise-principal.verify.sql",
+      "sha256": "07bb37de5a8c19b48a94255aa58df7729d1506679d016a56841bf11615c1fab3",
+      "bytes": 1604
+    },
+    {
+      "path": "deploy/test-env/artifacts/C000001.enterprise-principal-provisioning.json",
+      "sha256": "2e46aea4070e808b19bf5551b7e64dcd1bada0d8b12632bed00fc08b21d3936c",
+      "bytes": 1258
+    },
+    {
+      "path": "deploy/test-env/artifacts/C000001.enterprise-registry.verify.sql",
+      "sha256": "2785271ef39ce1a727840f399a69ca701cef518778758b0c378d499b89219602",
+      "bytes": 332
+    },
+    {
+      "path": "deploy/test-env/artifacts/C000001.enterprise-runtime.candidate.json",
+      "sha256": "e90a81f3170f2022ed2d5992151493eb5a6673f679854688a1cc84cf8d24af83",
+      "bytes": 12117
+    },
+    {
+      "path": "deploy/test-env/artifacts/C000001.enterprise-source-readiness.json",
+      "sha256": "1f8509e4eb02ea50b21e02a33acc8eb0854ee884f8b6e1dd62bb447e29df4c34",
+      "bytes": 12474
+    },
+    {
+      "path": "deploy/test-env/artifacts/C000001.enterprise-composition.candidate.json",
+      "sha256": "c7f1465b71f07a6cf8a3455a7d4d2dceae89761d62076e8d4b019594b8152ae4",
+      "bytes": 36542
+    },
+    {
+      "path": "deploy/test-env/artifacts/C000001.assets-owned-receipt-migration.json",
+      "sha256": "9b2af3835407bdba685b03020651ca077bb39b1f4b3aa74b8e0511cfa8795079",
+      "bytes": 705
+    },
+    {
+      "path": "deploy/test-env/artifacts/C000001.assets-owned-product-link-receipt-migration.json",
+      "sha256": "df8164ab9d3dea18c08794bb4770481c4876e5247b8c6a40c3c54e3c8efb2c9a",
+      "bytes": 710
+    },
+    {
+      "path": "deploy/test-env/artifacts/C000001.assets-outbox-schema-application.json",
+      "sha256": "a556922e1516948765fe3e1c135c21837ab16a5611ffa1dfddd0737a86468934",
+      "bytes": 1196
+    },
+    {
+      "path": "deploy/test-env/artifacts/C000001.people-receipt-schema-application.json",
+      "sha256": "01330d5bfcadf5c1d3ce461d489eaff6d756b335c3f8337a84ce9913d5c904f4",
+      "bytes": 434
+    },
+    {
+      "path": "deploy/test-env/artifacts/C000001.platform-enterprise-schema-application.json",
+      "sha256": "1806e8f290108fd1da58ff7567c713ee87848a7d17a05895c58d6d620d0f086e",
+      "bytes": 3792
+    }
+  ]
+}

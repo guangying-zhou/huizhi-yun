@@ -1,14 +1,21 @@
 <script setup lang="ts">
 import type { ApiResponse, DigitalAssetItem } from '~/types'
+import { useAssetsModule } from '../../../layer/useAssetsModule'
 
 const route = useRoute()
 const assetId = computed(() => String(route.params.id))
 const editOpen = ref(false)
 const linkProductOpen = ref(false)
 const documentOpen = ref(false)
+const { hosted, moduleUrl, cacheKey } = useAssetsModule()
+const { loadPermissions, hasPermission, loaded: permissionsLoaded } = usePermissions()
+await loadPermissions()
+const canEditDigitalAsset = computed(() => permissionsLoaded.value && hasPermission('digital_assets', 'edit'))
 const { loadDictionaries, getLabel } = useAssetLabels()
 await loadDictionaries()
-const { data: response, refresh, error } = await useFetch<ApiResponse<DigitalAssetItem>>(() => `/api/v1/digital-assets/${assetId.value}`)
+const { data: response, refresh, error } = await useFetch<ApiResponse<DigitalAssetItem>>(() => moduleUrl(`/api/v1/digital-assets/${assetId.value}`), {
+  key: computed(() => cacheKey(`digital-asset:${assetId.value}`))
+})
 
 if (error.value?.statusCode === 404) {
   throw createError({ statusCode: 404, message: '数字资产不存在' })
@@ -74,11 +81,12 @@ const handleUpdated = async () => {
                   icon="i-lucide-arrow-left"
                   color="neutral"
                   variant="ghost"
-                  to="/digital-assets"
+                  :to="moduleUrl('/digital-assets')"
                 >
                   返回
                 </UButton>
                 <UButton
+                  v-if="!hosted || canEditDigitalAsset"
                   icon="i-lucide-pencil"
                   color="primary"
                   variant="soft"
@@ -87,6 +95,7 @@ const handleUpdated = async () => {
                   编辑
                 </UButton>
                 <UButton
+                  v-if="!hosted"
                   icon="i-lucide-link-2"
                   color="primary"
                   variant="soft"
@@ -95,6 +104,7 @@ const handleUpdated = async () => {
                   关联产品
                 </UButton>
                 <UButton
+                  v-if="!hosted"
                   icon="i-lucide-file-text"
                   color="primary"
                   variant="soft"
@@ -139,18 +149,21 @@ const handleUpdated = async () => {
   </UDashboardPanel>
 
   <AssetsDigitalAssetEditModal
+    v-if="!hosted || canEditDigitalAsset"
     :open="editOpen"
     :asset="asset || null"
     @update:open="editOpen = $event"
     @updated="handleUpdated"
   />
   <AssetsDigitalAssetProductLinkModal
+    v-if="!hosted"
     :open="linkProductOpen"
     :asset="asset || null"
     @update:open="linkProductOpen = $event"
     @created="handleUpdated"
   />
   <AssetsDigitalAssetDocumentLinkModal
+    v-if="!hosted"
     :open="documentOpen"
     :asset="asset || null"
     @update:open="documentOpen = $event"

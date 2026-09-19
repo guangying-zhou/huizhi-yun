@@ -33,6 +33,24 @@ func ReadProductCenterVersion(ctx context.Context, db *sql.DB, code, uid string,
 		return out, err
 	}
 	defer tx.Rollback()
+	out, err = ReadProductCenterVersionInTransaction(ctx, tx, code, uid, permit, id)
+	if err != nil {
+		return out, err
+	}
+	return out, tx.Commit()
+}
+
+// ReadProductCenterVersionInTransaction keeps authorization and reads inside the caller's
+// generation-fenced transaction. The caller owns commit and rollback.
+func ReadProductCenterVersionInTransaction(ctx context.Context, tx *sql.Tx, code, uid string, permit AuthorizationPermit, id int64) (ProductVersionDetail, error) {
+	var out ProductVersionDetail
+	if id <= 0 {
+		return out, invalid("product_version_id_invalid", "版本标识无效")
+	}
+	if tx == nil {
+		return out, invalid("product_command_configuration", "缺少产品读取事务")
+	}
+	var err error
 	if err = AuthorizeWorkspaceTransaction(ctx, tx, code, uid, "product_versions", "view", permit); err != nil {
 		return out, err
 	}
@@ -41,7 +59,7 @@ func ReadProductCenterVersion(ctx context.Context, db *sql.DB, code, uid string,
 		return out, err
 	}
 	out.WorkspaceRevision = permit.Facts.Revision
-	return out, tx.Commit()
+	return out, nil
 }
 
 type ProductVersionEdit struct {
@@ -65,13 +83,28 @@ func ValidateProductVersionEdit(v ProductVersionEdit) error {
 }
 
 func EditProductCenterVersion(ctx context.Context, db *sql.DB, identity CommandIdentity, permit AuthorizationPermit, input ProductVersionEdit, sourceContext ...integrationoperation.TrustedContext) (CommandResult, error) {
+	return editProductCenterVersion(ctx, identity, permit, input, sourceContext, func(authorize AuthorizeCommand, apply ApplyCommand) (CommandResult, error) {
+		return ExecuteCommand(ctx, db, identity, input, authorize, apply)
+	})
+}
+func EditProductCenterVersionInTransaction(ctx context.Context, tx *sql.Tx, identity CommandIdentity, permit AuthorizationPermit, input ProductVersionEdit, sourceContext ...integrationoperation.TrustedContext) (CommandResult, error) {
+	result, err := editProductCenterVersion(ctx, identity, permit, input, sourceContext, func(authorize AuthorizeCommand, apply ApplyCommand) (CommandResult, error) {
+		return ExecuteCommandInTransaction(ctx, tx, identity, input, authorize, apply)
+	})
+	if err != nil && tx != nil {
+		_ = tx.Rollback()
+	}
+	return result, err
+}
+func editProductCenterVersion(ctx context.Context, identity CommandIdentity, permit AuthorizationPermit, input ProductVersionEdit, sourceContext []integrationoperation.TrustedContext, execute func(AuthorizeCommand, ApplyCommand) (CommandResult, error)) (CommandResult, error) {
+
 	if identity.Action != "product_versions:edit" {
 		return CommandResult{}, invalid("product_command_identity_invalid", "版本编辑命令不匹配")
 	}
 	if err := ValidateProductVersionEdit(input); err != nil {
 		return CommandResult{}, err
 	}
-	return ExecuteCommand(ctx, db, identity, input, func(ctx context.Context, tx *sql.Tx) error {
+	return execute(func(ctx context.Context, tx *sql.Tx) error {
 		return AuthorizeWorkspaceTransaction(ctx, tx, identity.ProductCode, identity.ActorUID, "product_versions", "edit", permit)
 	}, func(ctx context.Context, tx *sql.Tx) (any, error) {
 		root, err := loadWorkspace(ctx, tx, identity.ProductCode)

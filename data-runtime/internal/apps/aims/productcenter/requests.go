@@ -46,13 +46,31 @@ func ValidateRequestDraft(input RequestDraft) error {
 	return nil
 }
 func CreateProductRequest(ctx context.Context, db *sql.DB, identity CommandIdentity, permit AuthorizationPermit, input RequestDraft) (CommandResult, error) {
+	return createProductRequest(ctx, identity, permit, input, func(authorize AuthorizeCommand, apply ApplyCommand) (CommandResult, error) {
+		return ExecuteCommand(ctx, db, identity, input, authorize, apply)
+	})
+}
+
+// CreateProductRequestInTransaction is the same owning-domain operation for a
+// coordinated Runtime transaction. The caller owns the final commit.
+func CreateProductRequestInTransaction(ctx context.Context, tx *sql.Tx, identity CommandIdentity, permit AuthorizationPermit, input RequestDraft) (CommandResult, error) {
+	result, err := createProductRequest(ctx, identity, permit, input, func(authorize AuthorizeCommand, apply ApplyCommand) (CommandResult, error) {
+		return ExecuteCommandInTransaction(ctx, tx, identity, input, authorize, apply)
+	})
+	if err != nil && tx != nil {
+		_ = tx.Rollback()
+	}
+	return result, err
+}
+
+func createProductRequest(ctx context.Context, identity CommandIdentity, permit AuthorizationPermit, input RequestDraft, execute func(AuthorizeCommand, ApplyCommand) (CommandResult, error)) (CommandResult, error) {
 	if identity.Action != "product_requests:create" {
 		return CommandResult{}, invalid("product_command_identity_invalid", "需求创建命令不匹配")
 	}
 	if err := ValidateRequestDraft(input); err != nil {
 		return CommandResult{}, err
 	}
-	return ExecuteCommand(ctx, db, identity, input, func(ctx context.Context, tx *sql.Tx) error {
+	return execute(func(ctx context.Context, tx *sql.Tx) error {
 		return AuthorizeWorkspaceTransaction(ctx, tx, identity.ProductCode, identity.ActorUID, "product_requests", "create", permit)
 	}, func(ctx context.Context, tx *sql.Tx) (any, error) {
 		root, err := loadWorkspace(ctx, tx, identity.ProductCode)

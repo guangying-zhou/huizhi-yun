@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { useCodocsModule } from '../../../layer/useCodocsModule'
+
 /**
  * 工作日志页面
  * 左侧日历选择日期，右侧查看/编辑日志
@@ -7,6 +9,7 @@
 definePageMeta({ layout: 'default' })
 
 usePageTitle('工作日志')
+const { moduleUrl } = useCodocsModule()
 
 interface WorklogListItem {
   uuid: string
@@ -169,7 +172,7 @@ const submitLog = async () => {
   if (!selectedLog.value) return
   isSubmitting.value = true
   try {
-    await $fetch(`/api/documents/${selectedLog.value.uuid}`, {
+    await $fetch(moduleUrl(`/api/documents/${selectedLog.value.uuid}`), {
       method: 'PATCH',
       body: {
         readonly_flag: true,
@@ -191,7 +194,7 @@ const fetchMonthLogs = async () => {
   if (!uid.value) return
   monthLogsLoading.value = true
   try {
-    const res = await $fetch<WorklogListResponse>('/api/worklogs/list', {
+    const res = await $fetch<WorklogListResponse>(moduleUrl('/api/worklogs/list'), {
       query: { owner: uid.value, year: calendarYear.value, month: calendarMonth.value }
     })
     applyMonthLogs(res.success ? (res.data?.items || []) : [])
@@ -391,14 +394,14 @@ const loadLog = async () => {
   previewLoading.value = true
   try {
     // 重新查询列表（确保获取最新状态，避免已删除文档残留）
-    const res = await $fetch<WorklogListResponse>('/api/worklogs/list', {
+    const res = await $fetch<WorklogListResponse>(moduleUrl('/api/worklogs/list'), {
       query: { owner: uid.value, year: calendarYear.value, month: calendarMonth.value }
     })
     applyMonthLogs(res.success ? (res.data?.items || []) : [])
     const item = res.data?.items?.find(i => i.date === selectedDate.value)
     if (item) {
       // 加载内容
-      const docRes = await $fetch<DocumentContentResponse>(`/api/documents/${item.uuid}`, {
+      const docRes = await $fetch<DocumentContentResponse>(moduleUrl(`/api/documents/${item.uuid}`), {
         params: { uid: uid.value }
       })
       if (docRes.success && docRes.data) {
@@ -425,7 +428,7 @@ const createLog = async () => {
   isCreating.value = true
   try {
     const dateKey = toDateKey(selectedDate.value)
-    const res = await $fetch<CreateWorklogResponse>('/api/worklogs/create', {
+    const res = await $fetch<CreateWorklogResponse>(moduleUrl('/api/worklogs/create'), {
       method: 'POST',
       body: { owner_uid: uid.value, owner_realname: userRealname.value || '', date: dateKey }
     })

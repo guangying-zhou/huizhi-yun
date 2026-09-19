@@ -102,6 +102,9 @@ export default defineNuxtConfig({
       notifications: {
         dueEnabled: process.env.HZY_AIMS_DUE_NOTIFICATIONS_ENABLED === 'true'
       },
+      enterprise: {
+        enableMilestoneReceivable: process.env.HZY_AIMS_ENTERPRISE_ENABLE_MILESTONE_RECEIVABLE === 'true'
+      },
       serviceClient: {
         clientId: process.env.HZY_AIMS_SERVICE_CLIENT_ID || process.env.HZY_SERVICE_CLIENT_ID || '',
         clientSecret: process.env.HZY_AIMS_SERVICE_CLIENT_SECRET || process.env.HZY_SERVICE_CLIENT_SECRET || '',

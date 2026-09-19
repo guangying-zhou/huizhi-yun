@@ -374,6 +374,14 @@ onMounted(() => {
                 >
                   新建诊断对象
                 </UButton>
+                <UButton
+                  to="/admin/deployment-reviews"
+                  color="warning"
+                  variant="soft"
+                  icon="i-lucide-shield-check"
+                >
+                  部署审阅
+                </UButton>
               </div>
             </div>
           </template>

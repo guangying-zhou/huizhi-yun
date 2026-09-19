@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { ApiResponse, DigitalAssetItem, ListPayload, SummaryMetric } from '~/types'
+import { useAssetsModule } from '../../../layer/useAssetsModule'
 
 usePageTitle('数字资产')
 
@@ -15,6 +16,10 @@ const { search, debounced: debouncedSearch } = useDebouncedSearch({
   }
 })
 const selectedStatus = ref<'all' | 'active' | 'archived' | 'deprecated'>('all')
+const { hosted, moduleUrl, cacheKey } = useAssetsModule()
+const { loadPermissions, hasPermission, loaded: permissionsLoaded } = usePermissions()
+await loadPermissions()
+const canEditDigitalAsset = computed(() => permissionsLoaded.value && hasPermission('digital_assets', 'edit'))
 
 watch(selectedStatus, () => {
   page.value = 1
@@ -27,7 +32,10 @@ const query = computed(() => ({
   status: selectedStatus.value === 'all' ? undefined : selectedStatus.value
 }))
 
-const { data: response, refresh, status } = await useFetch<ApiResponse<ListPayload<DigitalAssetItem>>>('/api/v1/digital-assets', { query })
+const { data: response, refresh, status } = await useFetch<ApiResponse<ListPayload<DigitalAssetItem>>>(moduleUrl('/api/v1/digital-assets'), {
+  key: cacheKey('digital-assets'),
+  query
+})
 const { setRefresh, clearRefresh } = usePageActions()
 onMounted(() => setRefresh(refresh))
 onBeforeUnmount(clearRefresh)
@@ -52,12 +60,12 @@ const columns = [
 ]
 
 const handleRowSelect = (_event: Event, row: { original: DigitalAssetItem }) => {
-  navigateTo(`/digital-assets/${row.original.id}`)
+  navigateTo(moduleUrl(`/digital-assets/${row.original.id}`))
 }
 
 const handleCreated = async (id: number) => {
   await refresh()
-  navigateTo(`/digital-assets/${id}`)
+  navigateTo(moduleUrl(`/digital-assets/${id}`))
 }
 </script>
 
@@ -72,6 +80,7 @@ const handleCreated = async (id: number) => {
             <div class="flex items-center justify-between gap-3">
               <span class="font-semibold">台账列表</span>
               <UButton
+                v-if="!hosted || canEditDigitalAsset"
                 icon="i-lucide-plus"
                 color="primary"
                 class="shrink-0"
@@ -152,5 +161,5 @@ const handleCreated = async (id: number) => {
     </template>
   </UDashboardPanel>
 
-  <AssetsDigitalAssetCreateModal :open="createOpen" @update:open="createOpen = $event" @created="handleCreated" />
+  <AssetsDigitalAssetCreateModal v-if="!hosted || canEditDigitalAsset" :open="createOpen" @update:open="createOpen = $event" @created="handleCreated" />
 </template>

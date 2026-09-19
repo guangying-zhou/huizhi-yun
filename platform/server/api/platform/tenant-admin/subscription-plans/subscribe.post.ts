@@ -33,6 +33,7 @@ export default defineEventHandler(async (event) => {
   const accountId = Number(event.context.platformAccountId || 0) || null
   const planCode = requireString(body.planCode, 'planCode')
   const paymentMethod = normalizeNullableString(body.paymentMethod) || ''
+  if (planCode === 'enterprise-full') throw createError({ statusCode: 409, message: 'Enterprise full qualification requires an approved order with an explicit service period' })
 
   if (!tenantCode) {
     throw createError({

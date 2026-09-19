@@ -77,6 +77,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("[hzy-data-runtime] create server failed: %v", err)
 	}
+	defer runtime.Close()
 	runtimeContext, cancelRuntime := context.WithCancel(context.Background())
 	defer cancelRuntime()
 	restartCh := make(chan struct{}, 1)

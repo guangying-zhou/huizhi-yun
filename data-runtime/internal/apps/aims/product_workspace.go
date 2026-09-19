@@ -108,3 +108,17 @@ func productRuntimeError(err error) error {
 	}
 	return err
 }
+
+// EnterpriseProductCommandError preserves the existing owning-domain HTTP
+// contract for unified Runtime callers without exposing unclassified SQL errors.
+func EnterpriseProductCommandError(err error) error {
+	mapped := productRuntimeError(err)
+	if mapped == nil {
+		return nil
+	}
+	var public httperror.Error
+	if errors.As(mapped, &public) {
+		return public
+	}
+	return httperror.New(503, "enterprise_product_command_unavailable", "产品需求服务暂不可用")
+}

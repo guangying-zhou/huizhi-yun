@@ -515,6 +515,10 @@ func (a *Adapter) HandleRuntime(ctx context.Context, method string, path string,
 		result, err := a.createFolder(ctx, query, body)
 		return map[string]any{"success": true, "data": result}, "codocs.folders.create", err
 	}
+	if strings.HasPrefix(suffix, "folders/") && len(pathSegments(suffix)) == 2 && (method == http.MethodGet || method == http.MethodPatch || method == http.MethodDelete) {
+		result, err := a.scopedFolderOperation(ctx, method, strings.TrimPrefix(suffix, "folders/"), query, body)
+		return map[string]any{"success": err == nil, "data": result}, "codocs.folders.scoped", err
+	}
 	if method == http.MethodGet && suffix == "collaboration/context" {
 		result, err := a.collaborationContext(ctx, query)
 		return map[string]any{"success": true, "data": result}, "codocs.collaboration.context", err

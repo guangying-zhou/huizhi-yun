@@ -14,16 +14,26 @@ type PlanningItemDetail struct {
 }
 
 func ReadPlanningItem(ctx context.Context, db *sql.DB, code, uid, bizID string, permit AuthorizationPermit) (PlanningItemDetail, error) {
+	tx, err := db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
+	if err != nil {
+		return PlanningItemDetail{}, err
+	}
+	defer tx.Rollback()
+	out, err := ReadPlanningItemInTransaction(ctx, tx, code, uid, bizID, permit)
+	if err != nil {
+		return out, err
+	}
+	return out, tx.Commit()
+}
+func ReadPlanningItemInTransaction(ctx context.Context, tx *sql.Tx, code, uid, bizID string, permit AuthorizationPermit) (PlanningItemDetail, error) {
 	var out PlanningItemDetail
 	parsed, err := uuid.Parse(bizID)
 	if err != nil || parsed.String() != bizID {
 		return out, invalid("product_planning_id_invalid", "规划事项标识无效")
 	}
-	tx, err := db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
-	if err != nil {
-		return out, err
+	if tx == nil {
+		return out, invalid("product_transaction_required", "Handoff detail requires transaction")
 	}
-	defer tx.Rollback()
 	if err := AuthorizeWorkspaceTransaction(ctx, tx, code, uid, "product_priorities", "view", permit); err != nil {
 		return out, err
 	}
@@ -32,7 +42,7 @@ func ReadPlanningItem(ctx context.Context, db *sql.DB, code, uid, bizID string, 
 		return out, err
 	}
 	out.WorkspaceRevision = permit.Facts.Revision
-	return out, tx.Commit()
+	return out, nil
 }
 
 // The caller must hold the product root lock and authorize its own action.

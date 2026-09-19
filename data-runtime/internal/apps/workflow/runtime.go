@@ -26,6 +26,9 @@ func (a *Adapter) HandleRuntime(ctx context.Context, method string, path string,
 	}
 	body := workflowRuntimeBodyFromRequest(query, rawBody)
 	switch {
+	case method == http.MethodPost && path == "/v1/workflow/service/aims-work-item-completion-approval":
+		response, err := a.executeAimsCompletionApproval(ctx, body)
+		return response, "workflow.service.aims_work_item_completion_approval", err
 	case method == http.MethodPost && path == "/v1/workflow/service/codocs-publish-approval":
 		response, err := a.executeCodocsPublishApproval(ctx, body)
 		return response, "workflow.service.codocs_publish_approval", err
@@ -475,6 +478,9 @@ func (a *Adapter) rejectTask(ctx context.Context, taskID string, rawBody map[str
 			map[string]any{"instanceId": task["instance_id"], "actionId": actionID, "taskId": parseInt64Fallback(taskID), "rejectStrategy": rejectStrategy},
 		))
 		if callback := callbackEffect(instance, "rejected"); callback.URL != "" {
+			if err := bindCompletionApprovalEvidence(ctx, tx, &callback, instance, actionID); err != nil {
+				return InstanceAPIResponse{}, "", err
+			}
 			effects.Callbacks = append(effects.Callbacks, callback)
 		}
 	}
@@ -1002,6 +1008,9 @@ func advanceFlowRuntime(ctx context.Context, tx *sql.Tx, instanceID int64, trigg
 			))
 		}
 		if callback := callbackEffect(instance, "approved"); callback.URL != "" {
+			if err := bindCompletionApprovalEvidence(ctx, tx, &callback, instance, triggeringActionID); err != nil {
+				return nil, err
+			}
 			effects.Callbacks = append(effects.Callbacks, callback)
 		}
 		return effects, nil
@@ -1153,7 +1162,10 @@ func trustedWorkflowCallbackPath(appCode, raw string) string {
 		return ""
 	}
 	parsed, err := url.Parse(strings.TrimSpace(raw))
-	if err != nil || parsed.User != nil || parsed.RawQuery != "" || parsed.Fragment != "" || parsed.Path != expected {
+	if appCode == "aims" && err == nil && parsed.Path == aimsCompletionWorkflowCallback {
+		expected = aimsCompletionWorkflowCallback
+	}
+	if err != nil || parsed.User != nil || parsed.ForceQuery || parsed.RawQuery != "" || parsed.Fragment != "" || strings.Contains(raw, "#") || parsed.Path != expected {
 		return ""
 	}
 	return expected

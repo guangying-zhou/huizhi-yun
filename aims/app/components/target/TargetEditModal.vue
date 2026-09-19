@@ -1,17 +1,19 @@
 <script setup lang="ts">
+import { useAimsModule } from '../../../layer/useAimsModule'
+import { hasDuplicateDeliverableName } from '../../utils/deliverableName'
 /**
  * 目标编辑弹窗 — 用于看板「目标规划」列卡片编辑
  *
  * 编辑内容：标题/描述/里程碑/控制工时/评审级别/起止日期 + 成果要求列表
  * 支持：目标信息完备后，一键任务分配（目标 planning -> todo）并跳转 breakdown 页面
  */
-import type { WorkItem } from '~/types/aims'
+import type { WorkItem } from '../../types/aims'
 import {
   reviewLevelOptions,
   deliverableTypeOptions,
   deliverableTypeLabel,
   deliverableTypeIcon
-} from '~/config/work-item'
+} from '../../config/work-item'
 
 interface DeliverableItem {
   id: number
@@ -28,6 +30,9 @@ interface Milestone {
   id: number
   name: string
 }
+
+// 同一份代码供独立应用与企业宿主使用：非宿主模式下 moduleUrl 原样返回路径。
+const { moduleUrl } = useAimsModule()
 
 const props = defineProps<{
   open: boolean
@@ -78,7 +83,7 @@ const editDeliverableForm = reactive({
 async function loadDeliverables(workItemId: number) {
   try {
     const res = await $fetch<{ code: number, data: DeliverableItem[] }>(
-      '/api/v1/deliverables',
+      moduleUrl('/api/v1/deliverables'),
       { params: { entity_type: 'work_item', entity_id: workItemId } }
     )
     if (res.code === 0) {
@@ -145,7 +150,7 @@ async function saveEditDeliverable(id: number) {
     return
   }
   try {
-    await $fetch(`/api/v1/deliverables/${id}`, {
+    await $fetch(moduleUrl(`/api/v1/deliverables/${id}`), {
       method: 'PUT',
       body: {
         name: editDeliverableForm.name.trim(),
@@ -171,7 +176,7 @@ async function addDeliverable() {
   }
   addingDeliverable.value = true
   try {
-    await $fetch('/api/v1/deliverables/batch', {
+    await $fetch(moduleUrl('/api/v1/deliverables/batch'), {
       method: 'POST',
       body: {
         items: [{
@@ -207,7 +212,7 @@ async function removeDeliverable(d: DeliverableItem) {
     tone: 'danger'
   }))) return
   try {
-    await $fetch(`/api/v1/deliverables/${d.id}`, { method: 'DELETE' })
+    await $fetch(moduleUrl(`/api/v1/deliverables/${d.id}`), { method: 'DELETE' })
     if (props.workItem) await loadDeliverables(props.workItem.id)
   } catch (err: unknown) {
     const msg = (err as { data?: { message?: string } })?.data?.message || '删除失败'
@@ -269,7 +274,7 @@ async function handleSave() {
   if (!props.workItem) return
   saving.value = true
   try {
-    await $fetch(`/api/v1/work-items/${props.workItem.id}`, {
+    await $fetch(moduleUrl(`/api/v1/work-items/${props.workItem.id}`), {
       method: 'PUT',
       body: buildUpdatePayload()
     })
@@ -297,7 +302,7 @@ async function handleAssign() {
 
   assigning.value = true
   try {
-    await $fetch(`/api/v1/work-items/${props.workItem.id}`, {
+    await $fetch(moduleUrl(`/api/v1/work-items/${props.workItem.id}`), {
       method: 'PUT',
       body: {
         ...buildUpdatePayload(),
@@ -307,7 +312,7 @@ async function handleAssign() {
     toast.add({ title: '任务分配已开始', color: 'success', icon: 'i-lucide-list-checks' })
     emit('saved')
     emit('update:open', false)
-    await navigateTo(`/projects/${props.workItem.projectId}/work-items/${props.workItem.id}/breakdown`)
+    await navigateTo(moduleUrl(`/projects/${props.workItem.projectId}/work-items/${props.workItem.id}/breakdown`))
   } catch (err: unknown) {
     const msg = (err as { data?: { message?: string } })?.data?.message || '任务分配失败'
     toast.add({ title: msg, color: 'error' })

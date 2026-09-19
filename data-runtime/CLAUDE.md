@@ -62,9 +62,14 @@ Does not own:
 - Console's own service-token issuer uses its authenticated Console deployment
   in both source-binding modes; it must not invent `<tenant>-console` when the
   authenticated binding has a custom site/environment code.
-- Keep app adapters scoped to their app schemas. Cross-module writes belong in
-  the caller app BFF plus target app service API contract, not direct database
-  joins here.
+- Existing unmigrated adapters keep their app-schema and service API contracts.
+  The accepted [ADR-018](../docs/ADR-018-Unified-Enterprise-Application-and-Data.md)
+  target permits scoped cross-domain queries, owning-domain service calls and
+  shared transactions inside Runtime for explicitly migrated business paths.
+  Follow the [implementation plan](../docs/Unified-Enterprise-Implementation-Plan.md)
+  and update the actual API/identity/transaction contracts before switching paths;
+  no current path is migrated by adding this documentation. Nuxt/BFF DB access,
+  arbitrary cross-domain writes and tenant/actor authorization bypass remain disallowed.
 - Migration commands must default to dry-run and require an explicit `--apply`
   or equivalent for writes.
 
@@ -110,3 +115,5 @@ Package:
   contract is intentionally changed.
 - When adding or changing app API behavior, update the app module docs and the
   relevant cross-module contract if other modules consume it.
+
+AA-04 milestone callback coordination is opt-in via `enterprise.enableMilestoneReceivable` (default false). Only the authenticated Aims milestone-completion subtype is coordinated; the disabled setting preserves the legacy adapter. See the Runtime API contract and `docs/Unified-Enterprise-Altoc-Aims-Expansion.md` for strict service identity, exact capability and shared transaction requirements.

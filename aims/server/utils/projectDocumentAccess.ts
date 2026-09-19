@@ -3,8 +3,8 @@ import type { H3Event } from 'h3'
 import {
   buildAimsProjectListRuntimeAccessQuery,
   buildAimsProjectRuntimeAccessQuery
-} from '~~/server/utils/aimsProjectRuntimeAccess'
-import { fetchUserDepartments } from '~~/server/utils/userDepartments'
+} from './aimsProjectRuntimeAccess'
+import { fetchUserDepartments } from './userDepartments'
 
 type DocumentRefType = 'codocs_document' | 'cabinet_file'
 

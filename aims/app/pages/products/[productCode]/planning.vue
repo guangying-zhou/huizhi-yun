@@ -1,5 +1,12 @@
 <script setup lang="ts">
+import { useAimsModule } from '../../../../layer/useAimsModule'
+import ProductsPlanningItemForm from '../../../components/products/PlanningItemForm.vue'
+import ProductsVersionTools from '../../../components/products/VersionTools.vue'
+import ProductsPlanningItemEditor from '../../../components/products/PlanningItemEditor.vue'
+import ProductsPlanningItemDetail from '../../../components/products/PlanningItemDetail.vue'
 import type { TableColumn } from '@nuxt/ui'
+
+const { moduleUrl, hosted, cacheKey } = useAimsModule()
 
 definePageMeta({ layoutHeader: true, layoutHeaderTitle: '高级规划 · 建设事项', layoutHeaderProjectSwitcher: false })
 const route = useRoute()
@@ -12,14 +19,14 @@ const lifecycle = ref('all'), category = ref('all')
 const { page, pageSize, resetFilters } = useListPage({ pageSize: 20, filters: { keyword: search, lifecycle, investmentCategory: category }, defaults: { keyword: '', lifecycle: 'all', investmentCategory: 'all' } })
 flush()
 const query = computed(() => ({ page: page.value, pageSize, keyword: debounced.value || undefined, lifecycle: lifecycle.value === 'all' ? undefined : lifecycle.value, investmentCategory: category.value === 'all' ? undefined : category.value }))
-const { data, status, error, refresh } = await useFetch(() => `/api/v1/products/${encodeURIComponent(code.value)}/planning-items`, {
+const { data, status, error, refresh } = await useFetch(() => moduleUrl(`/api/v1/products/${encodeURIComponent(code.value)}/planning-items`), { ...(hosted ? { key: computed(() => cacheKey('aims/app/pages/products/[productCode]/planning.vue:0' + ':' + String(toValue(() => moduleUrl(`/api/v1/products/${encodeURIComponent(code.value)}/planning-items`))))) } : {}),
   server: false, query,
   transform: (response: { code: number, data: { items: Item[], total: number, workspace_revision: number } }) => {
     if (response.code !== 0 || !Array.isArray(response.data?.items) || !Number.isSafeInteger(response.data.total) || response.data.total < 0) throw new Error('规划事项响应不完整')
     return response.data
   }
 })
-const { data: permissions, status: permissionStatus, error: permissionError, refresh: refreshPermissions } = await useFetch(() => `/api/v1/products/${encodeURIComponent(code.value)}/planning-items/permissions`, {
+const { data: permissions, status: permissionStatus, error: permissionError, refresh: refreshPermissions } = await useFetch(() => moduleUrl(`/api/v1/products/${encodeURIComponent(code.value)}/planning-items/permissions`), { ...(hosted ? { key: computed(() => cacheKey('aims/app/pages/products/[productCode]/planning.vue:1' + ':' + String(toValue(() => moduleUrl(`/api/v1/products/${encodeURIComponent(code.value)}/planning-items/permissions`))))) } : {}),
   server: false, transform: (response: { code: number, data: { product_code: string, status: string, edit: boolean } }) => {
     if (response.code !== 0 || response.data?.product_code !== code.value) throw new Error('规划权限响应不完整')
     return response.data
@@ -73,7 +80,7 @@ onBeforeUnmount(clearRefresh)
       将一条或多条需求整理为本次建设范围，也可补充工程治理事项。范围明确后，进入优先级安排，评估价值与投入并选入周期。
     </p>
     <UButton
-      :to="`/products/${encodeURIComponent(code)}/cycles`"
+      :to="moduleUrl(`/products/${encodeURIComponent(code)}/cycles`)"
       color="neutral"
       variant="outline"
       trailing-icon="i-lucide-arrow-right"
@@ -208,7 +215,7 @@ onBeforeUnmount(clearRefresh)
         </UButton>
         <UButton
           v-if="canCreate && selected && ['proposed', 'in_delivery'].includes(selected.lifecycle)"
-          :to="`/products/${encodeURIComponent(code)}/planning-items/${selected.biz_id}/dependencies`"
+          :to="moduleUrl(`/products/${encodeURIComponent(code)}/planning-items/${selected.biz_id}/dependencies`)"
           color="neutral"
           variant="outline"
           icon="i-lucide-git-branch"
@@ -217,7 +224,7 @@ onBeforeUnmount(clearRefresh)
         </UButton>
         <UButton
           v-if="selected"
-          :to="`/products/${encodeURIComponent(code)}/planning-items/${selected.biz_id}/feature`"
+          :to="moduleUrl(`/products/${encodeURIComponent(code)}/planning-items/${selected.biz_id}/feature`)"
           color="neutral"
           variant="outline"
           icon="i-lucide-box"
@@ -226,7 +233,7 @@ onBeforeUnmount(clearRefresh)
         </UButton>
         <UButton
           v-if="selected"
-          :to="`/products/${encodeURIComponent(code)}/planning-items/${selected.biz_id}/handoff`"
+          :to="moduleUrl(`/products/${encodeURIComponent(code)}/planning-items/${selected.biz_id}/handoff`)"
           color="neutral"
           variant="outline"
           icon="i-lucide-send"
@@ -235,7 +242,7 @@ onBeforeUnmount(clearRefresh)
         </UButton>
         <UButton
           v-if="selected"
-          :to="`/products/${encodeURIComponent(code)}/planning-items/${selected.biz_id}/version`"
+          :to="moduleUrl(`/products/${encodeURIComponent(code)}/planning-items/${selected.biz_id}/version`)"
           color="neutral"
           variant="outline"
         >

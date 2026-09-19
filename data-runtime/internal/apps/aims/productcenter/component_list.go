@@ -38,6 +38,24 @@ func ListProductComponents(ctx context.Context, db *sql.DB, code, uid string, pe
 		return out, err
 	}
 	defer tx.Rollback()
+	out, err = ListProductComponentsInTransaction(ctx, tx, code, uid, permit, parentID, page, pageSize)
+	if err != nil {
+		return out, err
+	}
+	return out, tx.Commit()
+}
+
+// ListProductComponentsInTransaction retains parent ownership and paging checks
+// inside the caller-owned transaction. It never commits or writes domain data.
+func ListProductComponentsInTransaction(ctx context.Context, tx *sql.Tx, code, uid string, permit AuthorizationPermit, parentID *int64, page, pageSize int) (ProductComponentPage, error) {
+	out := ProductComponentPage{Items: []ProductComponentRecord{}, ParentID: parentID, Page: page, PageSize: pageSize}
+	if (parentID != nil && *parentID < 1) || page < 1 || page > 1000000 || pageSize < 1 || pageSize > 100 {
+		return out, invalid("product_component_list_invalid", "模块父节点或分页无效")
+	}
+	if tx == nil {
+		return out, invalid("product_command_configuration", "缺少产品读取事务")
+	}
+	var err error
 	if err = AuthorizeWorkspaceTransaction(ctx, tx, code, uid, "product_components", "view", permit); err != nil {
 		return out, err
 	}
@@ -73,5 +91,5 @@ func ListProductComponents(ctx context.Context, db *sql.DB, code, uid string, pe
 	if err != nil {
 		return out, err
 	}
-	return out, tx.Commit()
+	return out, nil
 }

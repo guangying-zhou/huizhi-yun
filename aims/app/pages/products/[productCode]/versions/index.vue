@@ -1,8 +1,12 @@
 <script setup lang="ts">
+import { useAimsModule } from '../../../../../layer/useAimsModule'
+import ProductsVersionTools from '../../../../components/products/VersionTools.vue'
+
+const { moduleUrl, hosted, cacheKey } = useAimsModule()
 definePageMeta({ layoutHeader: true, layoutHeaderTitle: '版本计划', layoutHeaderProjectSwitcher: false })
 const route = useRoute()
 const code = computed(() => String(route.params.productCode || ''))
-const base = computed(() => `/api/v1/products/${encodeURIComponent(code.value)}/versions`)
+const base = computed(() => moduleUrl(`/api/v1/products/${encodeURIComponent(code.value)}/versions`))
 const displayMode = ref('list')
 const versionQuery = computed(() => route.query.view === 'gtm' ? { view: 'gtm' } : {})
 const states = { planning: '规划中', developing: '开发中', released: '已发布', archived: '已归档' }
@@ -15,11 +19,11 @@ watch(filter, () => {
   page.value = 1
 })
 const query = computed(() => ({ page: page.value, pageSize, keyword: debounced.value || undefined, status: filter.value === 'all' ? undefined : filter.value }))
-const { data, status, error, refresh } = await useFetch(base, { server: false, query, transform: (response: { code: number, data: { items: Version[], total: number } }) => {
+const { data, status, error, refresh } = await useFetch(base, { ...(hosted ? { key: computed(() => cacheKey('aims/app/pages/products/[productCode]/versions/index.vue:0' + ':' + String(toValue(base)))) } : {}), server: false, query, transform: (response: { code: number, data: { items: Version[], total: number } }) => {
   if (response.code !== 0 || !Array.isArray(response.data?.items) || !Number.isSafeInteger(response.data.total) || response.data.total < 0 || response.data.items.some(item => item.product_code !== code.value || !Number.isSafeInteger(item.id) || item.id < 1 || !Object.hasOwn(states, item.status))) throw new Error('版本列表响应不完整')
   return response.data
 } })
-const { data: permission, status: permissionStatus, error: permissionError, refresh: refreshPermission } = await useFetch<{ code: number, data: { product_code: string, status: string, edit: boolean, revision: number } }>(() => `${base.value}/permissions`, { server: false })
+const { data: permission, status: permissionStatus, error: permissionError, refresh: refreshPermission } = await useFetch<{ code: number, data: { product_code: string, status: string, edit: boolean, revision: number } }>(() => `${base.value}/permissions`, { ...(hosted ? { key: computed(() => cacheKey('aims/app/pages/products/[productCode]/versions/index.vue:1' + ':' + String(toValue(() => `${base.value}/permissions`)))) } : {}), server: false })
 const canCreate = computed(() => permissionStatus.value === 'success' && permission.value?.code === 0 && permission.value.data.product_code === code.value && permission.value.data.status === 'active' && permission.value.data.edit === true && Number.isSafeInteger(permission.value.data.revision) && permission.value.data.revision > 0)
 const alert = useApiErrorAlert(error, { fallbackTitle: '版本列表加载失败' })
 const permissionAlert = useApiErrorAlert(permissionError, { fallbackTitle: '版本权限加载失败' })
@@ -63,7 +67,7 @@ async function save() {
     toast.add({ title: '产品版本已创建', color: 'success' })
     await Promise.all([refresh(), refreshPermission()])
     navigatingToPlan.value = true
-    await navigateTo({ path: `/products/${encodeURIComponent(code.value)}/versions/${createdVersionId}/plan`, query: versionQuery.value })
+    await navigateTo({ path: moduleUrl(`/products/${encodeURIComponent(code.value)}/versions/${createdVersionId}/plan`), query: versionQuery.value })
   } catch (cause) {
     saveError.value = cause instanceof Error ? cause : new Error('创建失败，请重试')
   } finally {
@@ -158,7 +162,7 @@ onBeforeRouteUpdate(() => !saving.value || navigatingToPlan.value)
           {{ item.planned_release_date || '尚未排期' }}
         </p>
         <div class="flex flex-wrap items-center gap-2">
-          <NuxtLink :to="{ path: `/products/${encodeURIComponent(code)}/versions/${item.id}/${item.planning_mode === 'simple' ? 'plan' : 'features'}`, query: versionQuery }" class="min-w-0 break-words font-medium text-primary hover:underline">
+          <NuxtLink :to="{ path: moduleUrl(`/products/${encodeURIComponent(code)}/versions/${item.id}/${item.planning_mode === 'simple' ? 'plan' : 'features'}`), query: versionQuery }" class="min-w-0 break-words font-medium text-primary hover:underline">
             {{ item.version_code }}{{ item.name ? ` · ${item.name}` : '' }}
           </NuxtLink>
           <UBadge color="neutral" variant="subtle">

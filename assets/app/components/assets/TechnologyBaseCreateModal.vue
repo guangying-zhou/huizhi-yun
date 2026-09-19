@@ -1,5 +1,8 @@
 <script setup lang="ts">
-import type { ApiResponse } from '~/types'
+import { useAssetDictionaries } from '../../composables/useAssetDictionaries'
+import { useAssetsModule } from '../../../layer/useAssetsModule'
+const { moduleUrl } = useAssetsModule()
+import type { ApiResponse } from '../../types'
 
 const props = defineProps<{
   open: boolean
@@ -59,7 +62,7 @@ async function handleSubmit() {
   submitting.value = true
 
   try {
-    const response = await $fetch<ApiResponse<{ id: number }>>('/api/v1/technology-bases', {
+    const response = await $fetch<ApiResponse<{ id: number }>>(moduleUrl('/api/v1/technology-bases'), {
       method: 'POST',
       body: {
         base_code: state.base_code.trim() || null,

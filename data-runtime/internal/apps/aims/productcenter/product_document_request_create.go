@@ -64,7 +64,7 @@ func CreateProductDocumentRequest(ctx context.Context, db *sql.DB, identity Comm
 		if err = operationIdentity.Validate(); err != nil {
 			return nil, err
 		}
-		_, err = tx.ExecContext(ctx, `INSERT INTO integration_operation(operation_id,operation_key,correlation_key,tenant_code,deployment_code,source_app,target_app,operation_code,required_capability,source_biz_type,source_biz_code,idempotency_key,command_schema_version,command_json,command_sha256,status,next_attempt_at,original_actor_uid) VALUES(?,?,?,?,?,'aims','codocs','aims.codocs.product-document.create.v1','codocs:product-document:create','product_document_request',?,?,'product-document-create.v1',?,?,'pending',UTC_TIMESTAMP(3),?)`, operationID, key, key, trusted.TenantCode, trusted.DeploymentCode, requestID, key, string(payload), hash, identity.ActorUID)
+		_, err = tx.ExecContext(ctx, trusted.SQL(`INSERT INTO integration_operation(operation_id,operation_key,correlation_key,tenant_code,deployment_code,source_app,target_app,operation_code,required_capability,source_biz_type,source_biz_code,idempotency_key,command_schema_version,command_json,command_sha256,status,next_attempt_at,original_actor_uid) VALUES(?,?,?,?,?,'aims','codocs','aims.codocs.product-document.create.v1','codocs:product-document:create','product_document_request',?,?,'product-document-create.v1',?,?,'pending',UTC_TIMESTAMP(3),?)`), operationID, key, key, trusted.TenantCode, trusted.DeploymentCode, requestID, key, string(payload), hash, identity.ActorUID)
 		if err != nil {
 			return nil, err
 		}

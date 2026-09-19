@@ -1,0 +1,6 @@
+@import "tailwindcss";
+@import "@nuxt/ui";
+/* Explicitly composed source files live outside the Host app directory. */
+@source "../../../../aims/app/pages/products";
+@source "../../../../aims/app/components/products";
+@source "../../../../aims/app/pages/products.vue";

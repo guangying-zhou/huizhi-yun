@@ -1,0 +1,10 @@
+{
+  "status": "candidate-not-applied",
+  "domain": "aims",
+  "logicalTable": "work_item_completion_requests",
+  "physicalTable": "aims_work_item_completion_requests",
+  "canonicalMigration": "aims/docs/migration_v5.39_work_item_completion_requests.sql",
+  "compatibilityView": {"logical": "work_item_completion_requests", "physical": "aims_work_item_completion_requests", "security": "INVOKER", "algorithm": "MERGE"},
+  "baselineRequirement": "Prior migration receipts do not include this table. Regenerate the reviewed mapping, inventory and plan before enabling completion writes.",
+  "unifiedMigrationRequirement": "Rewrite CREATE and foreign-key targets through reviewed Aims table mapping, including work_items project_id/id binding. Do not apply automatically."
+}

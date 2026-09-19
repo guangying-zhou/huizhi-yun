@@ -4,9 +4,14 @@
  *   - codocs：通过项目范围签名命令读取 Markdown，在 Aims 内只读渲染
  *   - repo：按 commit_id/ref 拉取 md 文本，用 MarkdownContent 渲染
  */
-import { fetchRepoDocContent } from '~/composables/useAimsDocumentPicker'
-import type { DocumentSource } from '~/composables/useAimsDocumentPicker'
+import { useAimsModule } from '../../layer/useAimsModule'
+import { fetchRepoDocContent } from '../composables/useAimsDocumentPicker'
+import type { DocumentSource } from '../composables/useAimsDocumentPicker'
+import MarkdownContent from './MarkdownContent.vue'
 
+
+// 同一份代码供独立应用与企业宿主使用：非宿主模式下 moduleUrl 原样返回路径。
+const { moduleUrl } = useAimsModule()
 const props = defineProps<{
   source: DocumentSource
   codocsUuid?: string | null
@@ -54,7 +59,7 @@ async function loadCodocsContent() {
   codocsLoading.value = true
   try {
     const response = await $fetch<{ code: number, data: CodocsContent }>(
-      `/api/v1/codocs/documents/${encodeURIComponent(props.codocsUuid)}/content`,
+      moduleUrl(`/api/v1/codocs/documents/${encodeURIComponent(props.codocsUuid)}/content`),
       {
         query: {
           projectId: props.projectId
@@ -81,7 +86,7 @@ async function loadRepo() {
     const data = await fetchRepoDocContent(props.repoProjectCode, props.repoFilePath, {
       commitId: props.repoCommitId || undefined,
       aimsProjectId: props.projectId
-    })
+    }, moduleUrl)
     if (data) {
       repoContent.value = {
         content: data.content,

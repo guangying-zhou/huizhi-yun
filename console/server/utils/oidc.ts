@@ -364,7 +364,7 @@ export async function consumeRefreshToken(event: H3Event, token: string, clientI
 export async function loadOidcPolicyDigest(event: H3Event) {
   try {
     const config = loadPlatformRuntimeConfig(event)
-    const bundle = await readCachedBundle(config.bundleCacheDir, resolvePlatformRuntimeCacheScope(config, event))
+    const bundle = await readCachedBundle(config.bundleCacheDir, resolvePlatformRuntimeCacheScope(config, event), event)
     return {
       tenantCode: bundle?.tenantCode || config.tenantCode,
       deploymentCode: bundle?.deploymentCode || config.deploymentCode,

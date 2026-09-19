@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { productBasePath, productPathMatches } from '~/config/productNavigation'
+import ProductsNavbar from '../../components/products/Navbar.vue'
+import { productBasePath, productPathMatches } from '../../../layer/productNavigation'
 
 // 产品工作台外壳：固定产品身份与工作视角导航，内容区独立滚动。
 const route = useRoute()

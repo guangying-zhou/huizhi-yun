@@ -1,8 +1,18 @@
 <script setup lang="ts">
-import { PROJECT_ROLE_COLORS, PROJECT_ROLE_LABELS } from '~/utils/projectRoles'
-import { projectModuleEnabled } from '~/utils/projectModuleConfig'
-import { getProjectCategoryLabel } from '~/config/project'
+import { useAimsModule } from '../../../../layer/useAimsModule'
+import { PROJECT_ROLE_COLORS, PROJECT_ROLE_LABELS } from '../../../utils/projectRoles'
+import { projectModuleEnabled } from '../../../utils/projectModuleConfig'
+import { getProjectCategoryLabel } from '../../../config/project'
+import { useMilestoneProgress } from '../../../composables/useMilestoneProgress'
+import { useMilestoneStore } from '../../../stores/milestone'
+import { useProjectStore } from '../../../stores/project'
+import AimsDocumentPreview from '../../../components/AimsDocumentPreview.vue'
+import ProjectEnvironmentPanel from '../../../components/project/ProjectEnvironmentPanel.vue'
+import ProjectNavbar from '../../../components/project/ProjectNavbar.vue'
 
+
+// 同一份代码供独立应用与企业宿主使用：非宿主模式下 moduleUrl 原样返回路径。
+const { moduleUrl } = useAimsModule()
 definePageMeta({
   layoutHeader: true,
   layoutHeaderTitle: '概览',
@@ -161,7 +171,7 @@ const showProposalPreviewModal = ref(false)
 async function fetchProposal() {
   try {
     const res = await $fetch<{ code: number, data: { proposal: ProposalInfo | null } }>(
-      `/api/v1/projects/${projectId.value}/documents`
+      moduleUrl(`/api/v1/projects/${projectId.value}/documents`)
     )
     if (res.code === 0) {
       proposal.value = res.data.proposal

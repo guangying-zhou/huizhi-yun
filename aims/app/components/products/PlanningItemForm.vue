@@ -1,6 +1,10 @@
 <script setup lang="ts">
-import type { ProductRequestRecord } from '~/types/productRequest'
-import type { ProductPlanningDetail } from '~/types/productPlanning'
+import { useAimsModule } from '../../../layer/useAimsModule'
+import ProductsPlanningRequestPicker from './PlanningRequestPicker.vue'
+import type { ProductRequestRecord } from '../../types/productRequest'
+import type { ProductPlanningDetail } from '../../types/productPlanning'
+
+const { moduleUrl } = useAimsModule()
 
 const props = defineProps<{ productCode: string, workspaceRevision: number, item?: ProductPlanningDetail, initialSources?: ProductRequestRecord[] }>()
 const sources = ref<ProductRequestRecord[]>(props.initialSources?.map(item => ({ ...item })) || [])
@@ -29,7 +33,7 @@ async function save() {
   busy.value = true
   try {
     if (props.item && !(await confirm({ title: '确认修改规划事项', message: `${props.item.title}\n修改原因：${reason.value}\n影响说明：${impact.value || '未补充'}\n范围或来源变化将使原评估需要复评，已有交付安排需另行协调。`, tone: 'warning', confirmLabel: '确认修改' }))) return
-    const result = await $fetch<{ code: number }>(`/api/v1/products/${encodeURIComponent(props.productCode)}/planning-items${props.item ? `/${props.item.biz_id}` : ''}`, { method: props.item ? 'PATCH' : 'POST', body, headers: { 'Idempotency-Key': retry.key } })
+    const result = await $fetch<{ code: number }>(moduleUrl(`/api/v1/products/${encodeURIComponent(props.productCode)}/planning-items${props.item ? `/${props.item.biz_id}` : ''}`), { method: props.item ? 'PATCH' : 'POST', body, headers: { 'Idempotency-Key': retry.key } })
     if (result.code !== 0) throw new Error('保存结果不完整，请重试')
     emit('saved')
   } catch (cause) {

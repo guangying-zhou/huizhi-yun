@@ -1,6 +1,10 @@
 <script setup lang="ts">
-import type { ProductPlanningDetail } from '~/types/productPlanning'
-import type { ProductRequestRecord } from '~/types/productRequest'
+import { useAimsModule } from '../../../layer/useAimsModule'
+import ProductsPlanningItemForm from './PlanningItemForm.vue'
+import type { ProductPlanningDetail } from '../../types/productPlanning'
+import type { ProductRequestRecord } from '../../types/productRequest'
+
+const { moduleUrl } = useAimsModule()
 
 const props = defineProps<{ productCode: string, itemId: string }>()
 const emit = defineEmits<{ saved: [], cancel: [] }>()
@@ -15,13 +19,13 @@ async function load() {
   error.value = null
   item.value = null
   try {
-    const result = await $fetch<{ code: number, data: ProductPlanningDetail }>(`/api/v1/products/${encodeURIComponent(props.productCode)}/planning-items/${props.itemId}`, { signal: controller.signal, timeout: 15000 })
+    const result = await $fetch<{ code: number, data: ProductPlanningDetail }>(moduleUrl(`/api/v1/products/${encodeURIComponent(props.productCode)}/planning-items/${props.itemId}`), { signal: controller.signal, timeout: 15000 })
     const detail = result.data
     if (result.code !== 0 || detail?.biz_id !== props.itemId || detail.product_code !== props.productCode || typeof detail.requires_impact_note !== 'boolean' || !Array.isArray(detail.requests) || detail.requests.length > 100 || !['proposed', 'in_delivery'].includes(detail.lifecycle)) throw new Error('事项不可编辑或详情不完整')
     const loaded: ProductRequestRecord[] = []
     for (let start = 0; start < detail.requests.length; start += 4) {
       const group = await Promise.all(detail.requests.slice(start, start + 4).map(async (source) => {
-        const response = await $fetch<{ code: number, data: ProductRequestRecord }>(`/api/v1/products/${encodeURIComponent(props.productCode)}/requests/${source.biz_id}`, { signal: controller.signal, timeout: 15000 })
+        const response = await $fetch<{ code: number, data: ProductRequestRecord }>(moduleUrl(`/api/v1/products/${encodeURIComponent(props.productCode)}/requests/${source.biz_id}`), { signal: controller.signal, timeout: 15000 })
         if (response.code !== 0 || response.data?.biz_id !== source.biz_id || response.data.product_code !== props.productCode || response.data.revision !== source.revision) throw new Error('来源需求已变化或无法查看，请刷新后重新核对')
         return response.data
       }))

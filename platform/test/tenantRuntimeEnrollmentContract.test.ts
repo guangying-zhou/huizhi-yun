@@ -101,6 +101,7 @@ describe('tenant runtime enrollment contract', () => {
     assert.match(verifier, /runtime_token_hash=\?/)
     assert.doesNotMatch(verifier, /control_token_hash=\?/)
     assert.match(enrollment, /TENANT_RUNTIME_BINDING_APP_CODES\s*=\s*\[\s*'console'/)
+    assert.match(enrollment, /'enterprise'/)
     assert.match(enrollment, /const appCodes = \[\.\.\.TENANT_RUNTIME_BINDING_APP_CODES\]/)
     assert.match(enrollment, /isControlPlaneBinding \? 'schema_ready' : 'pending'/)
     assert.match(enrollment, /isControlPlaneBinding \? 'not_applicable' : 'unknown'/)
@@ -111,8 +112,9 @@ describe('tenant runtime enrollment contract', () => {
   test('runtime heartbeat preserves the Console control-plane binding readiness', () => {
     const heartbeat = source('server/api/v1/runtime/agent-heartbeat.post.ts')
 
-    assert.match(heartbeat, /app_code <> 'console'/)
-    assert.match(heartbeat, /if \(appCode === 'console'\) continue/)
+    assert.match(heartbeat, /app_code NOT IN \('console', 'enterprise'\)/)
+    assert.match(heartbeat, /if \(appCode === 'console' \|\| appCode === 'enterprise'\) continue/)
+    assert.match(heartbeat, /WHEN VALUES\(app_code\) IN \('console', 'enterprise'\) THEN NULL/)
     assert.match(heartbeat, /deploymentBindings:\s*Object\.fromEntries/)
     assert.match(heartbeat, /platformSigningKey:\s*\{/)
     assert.match(heartbeat, /publicKey:\s*platformSigningKey\.publicKey/)

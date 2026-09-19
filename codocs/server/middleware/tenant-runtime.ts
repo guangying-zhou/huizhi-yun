@@ -2,6 +2,7 @@ import assetsProductDocumentMetadataService from '~~/server/utils/assetsProductD
 import productDocumentCreateService from '../utils/productDocumentCreateService'
 import productDocumentContentService from '../utils/productDocumentContentService'
 import productDocumentSearchService from '../utils/productDocumentSearchService'
+import { projectDocumentAccessService } from '../utils/projectDocumentAccessService'
 import { createError, getQuery, getRequestURL, readBody, type H3Event } from 'h3'
 import { requireConsoleAuthContext } from '@hzy/foundation/server/utils/consoleOidc'
 import { resolveConsoleAuthWithSessionBridge } from '@hzy/foundation/server/utils/consoleSessionBridge'
@@ -56,6 +57,7 @@ export default defineEventHandler(async (event) => {
 
   const method = normalizeMethod(event.node.req.method)
   await ensureConsoleAuthContext(event)
+  if (apiPath === '/api/v1/service/project-document-access/execute') return await projectDocumentAccessService(event)
   const assetsDocumentMatch = /^\/api\/v1\/service\/assets-product-documents\/([^/]+)\/metadata$/.exec(apiPath)
   if (assetsDocumentMatch) {
     if (method !== 'POST') throw createError({ statusCode: 405, message: 'POST required' })

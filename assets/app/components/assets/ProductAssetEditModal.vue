@@ -1,5 +1,7 @@
 <script setup lang="ts">
-import type { ApiResponse, ProductAssetItem } from '~/types'
+import { useAssetDictionaries } from '../../composables/useAssetDictionaries'
+import { useAssetsModule } from '../../../layer/useAssetsModule'
+import type { ApiResponse, ProductAssetItem } from '../../types'
 import {
   arrayToMultiline,
   buildStageOptions as buildStageFallbackOptions,
@@ -22,7 +24,9 @@ import {
   productLineFallbackOptions,
   productizationValueLevelOptions as productizationValueLevelFallbackOptions,
   supportedTerminalOptions as supportedTerminalFallbackOptions
-} from '~/utils/productAssets'
+} from '../../utils/productAssets'
+
+const { moduleUrl } = useAssetsModule()
 
 const props = defineProps<{
   open: boolean
@@ -44,6 +48,7 @@ await loadDictionaries()
 
 const toast = useToast()
 const submitting = ref(false)
+const submissionKey = ref('')
 const productLineOptions = computed(() => preferDictionaryOptions(getOptions('product_line'), productLineFallbackOptions))
 const customerDomainOptions = computed(() => preferModernOptions(getOptions('customer_domain'), customerDomainFallbackOptions))
 const businessDomainOptions = computed(() => preferModernOptions(getOptions('business_domain'), businessDomainFallbackOptions))
@@ -72,6 +77,10 @@ const state = reactive({
   summary: '',
   notes: ''
 })
+
+watch(state, () => {
+  submissionKey.value = ''
+}, { deep: true, flush: 'sync' })
 
 function hydrate() {
   state.product_code = props.product?.product_code || ''
@@ -122,8 +131,9 @@ async function handleSubmit() {
   submitting.value = true
 
   try {
-    await $fetch<ApiResponse<{ id: number }>>(`/api/v1/products/${props.product.id}`, {
+    await $fetch<ApiResponse<{ id: number }>>(moduleUrl(`/api/v1/products/${props.product.id}`), {
       method: 'PATCH',
+      headers: { 'Idempotency-Key': submissionKey.value ||= crypto.randomUUID() },
       body: {
         product_code: state.product_code.trim() || null,
         product_name: state.product_name.trim(),

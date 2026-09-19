@@ -27,6 +27,13 @@
       "sortOrder": 0
     },
     {
+      "code": "directory-users",
+      "name": "目录用户服务读取",
+      "description": "服务能力 console:directory-users:read：供已授权调用方读取目录投影与显式UID活跃状态，不授予人员管理权限",
+      "actions": ["read"],
+      "sortOrder": 0
+    },
+    {
       "code": "console_overview",
       "name": "概览",
       "description": "企业控制台健康概览",

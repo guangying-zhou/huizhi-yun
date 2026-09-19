@@ -1,0 +1,22 @@
+{
+  "environment": "test",
+  "worker": "hzy-test-gateway",
+  "changedAt": "2026-09-15T00:43:43.149281+00:00",
+  "previous": [
+    {
+      "cron": "*/2 * * * *",
+      "created_on": "2026-09-09T14:23:05.390348Z",
+      "modified_on": "2026-09-13T19:43:12.786644Z"
+    }
+  ],
+  "current": [
+    {
+      "cron": "0 16 * * *",
+      "created_on": "2026-09-15T00:43:42.403013Z",
+      "modified_on": "2026-09-15T00:43:42.403013Z"
+    }
+  ],
+  "localSchedule": "00:00 Asia/Shanghai daily",
+  "method": "Cloudflare schedules API only; Worker code and bindings unchanged",
+  "propagationNote": "Cron changes may take up to 15 minutes; next midnight execution not yet observed"
+}

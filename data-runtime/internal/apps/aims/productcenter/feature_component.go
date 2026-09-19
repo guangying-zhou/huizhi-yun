@@ -19,6 +19,20 @@ type FeatureComponentAssignment struct {
 
 // Classification changes neither feature identity nor frozen planning/version scope.
 func AssignProductFeatureComponent(ctx context.Context, db *sql.DB, identity CommandIdentity, permit AuthorizationPermit, input FeatureComponentAssignment) (CommandResult, error) {
+	return assignProductFeatureComponent(ctx, identity, permit, input, func(authorize AuthorizeCommand, apply ApplyCommand) (CommandResult, error) {
+		return ExecuteCommand(ctx, db, identity, input, authorize, apply)
+	})
+}
+func AssignProductFeatureComponentInTransaction(ctx context.Context, tx *sql.Tx, identity CommandIdentity, permit AuthorizationPermit, input FeatureComponentAssignment) (CommandResult, error) {
+	result, err := assignProductFeatureComponent(ctx, identity, permit, input, func(authorize AuthorizeCommand, apply ApplyCommand) (CommandResult, error) {
+		return ExecuteCommandInTransaction(ctx, tx, identity, input, authorize, apply)
+	})
+	if err != nil && tx != nil {
+		_ = tx.Rollback()
+	}
+	return result, err
+}
+func assignProductFeatureComponent(ctx context.Context, identity CommandIdentity, permit AuthorizationPermit, input FeatureComponentAssignment, execute func(AuthorizeCommand, ApplyCommand) (CommandResult, error)) (CommandResult, error) {
 	if identity.Action != "product_features:component-assign" {
 		return CommandResult{}, invalid("product_command_identity_invalid", "功能归类命令不匹配")
 	}
@@ -26,7 +40,7 @@ func AssignProductFeatureComponent(ctx context.Context, db *sql.DB, identity Com
 	if err != nil || id.String() != input.BizID || input.ExpectedRevision < 1 || input.ExpectedFeatureRevision < 1 || (input.ComponentID != nil && *input.ComponentID < 1) || !utf8.ValidString(input.Reason) || strings.TrimSpace(input.Reason) == "" || utf8.RuneCountInString(input.Reason) > 2000 || strings.ContainsRune(input.Reason, '\x00') {
 		return CommandResult{}, invalid("product_feature_component_invalid", "功能归类参数或原因无效")
 	}
-	return ExecuteCommand(ctx, db, identity, input, func(ctx context.Context, tx *sql.Tx) error {
+	return execute(func(ctx context.Context, tx *sql.Tx) error {
 		return AuthorizeWorkspaceTransaction(ctx, tx, identity.ProductCode, identity.ActorUID, "product_features", "edit", permit)
 	}, func(ctx context.Context, tx *sql.Tx) (any, error) {
 		root, err := loadWorkspace(ctx, tx, identity.ProductCode)

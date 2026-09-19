@@ -29,6 +29,16 @@ type Identity struct {
 }
 
 func (identity Identity) Validate() error {
+	if err := identity.validateFields(); err != nil {
+		return err
+	}
+	if identity.SourceApp == identity.TargetApp {
+		return fmt.Errorf("%w: source_app and target_app must differ", ErrInvalidIdentity)
+	}
+	return nil
+}
+
+func (identity Identity) validateFields() error {
 	fields := []struct {
 		name  string
 		value string
@@ -46,9 +56,6 @@ func (identity Identity) Validate() error {
 		if !identityValuePattern.MatchString(field.value) {
 			return fmt.Errorf("%w: %s", ErrInvalidIdentity, field.name)
 		}
-	}
-	if identity.SourceApp == identity.TargetApp {
-		return fmt.Errorf("%w: source_app and target_app must differ", ErrInvalidIdentity)
 	}
 	if !sha256Pattern.MatchString(identity.CommandSHA256) {
 		return fmt.Errorf("%w: command_sha256", ErrInvalidIdentity)

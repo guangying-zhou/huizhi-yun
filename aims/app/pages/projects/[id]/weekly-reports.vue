@@ -1,7 +1,15 @@
 <script setup lang="ts">
-import { PROJECT_ROLE_COLORS, PROJECT_ROLE_LABELS } from '~/utils/projectRoles'
-import type { ProjectMember, ProjectRole } from '~/types/aims'
+import { useAimsModule } from '../../../../layer/useAimsModule'
+import { PROJECT_ROLE_COLORS, PROJECT_ROLE_LABELS } from '../../../utils/projectRoles'
+import type { ProjectMember, ProjectRole } from '../../../types/aims'
+import { getDefaultWeeklyReportWeek } from '../../../composables/useWeeklyReportDefaultWeek'
+import { useMilestoneStore } from '../../../stores/milestone'
+import { useProjectStore } from '../../../stores/project'
+import ProjectNavbar from '../../../components/project/ProjectNavbar.vue'
 
+
+// 同一份代码供独立应用与企业宿主使用：非宿主模式下 moduleUrl 原样返回路径。
+const { moduleUrl } = useAimsModule()
 definePageMeta({
   layoutHeader: true,
   layoutHeaderTitle: '项目周报',
@@ -559,7 +567,7 @@ async function fetchReportCalendar() {
 
     for (const year of years) {
       const res = await $fetch<{ code: number, data: ListPayload<RawProjectWeeklyReport> }>(
-        `/api/v1/projects/${projectId.value}/weekly-reports`,
+        moduleUrl(`/api/v1/projects/${projectId.value}/weekly-reports`),
         { query: { year } }
       )
       if (res.code === 0) {
@@ -590,7 +598,7 @@ async function fetchWorkCalendarDays() {
 
     for (const yearMonth of missingMonths) {
       const res = await $fetch<{ code: number, data: ListPayload<Record<string, unknown>> }>(
-        '/api/work-calendars/CN/days',
+        moduleUrl('/api/work-calendars/CN/days'),
         { query: { yearMonth } }
       )
       if (res.code === 0) {
@@ -620,7 +628,7 @@ async function loadSelectedReport() {
   try {
     await fetchActualHours()
     const res = await $fetch<{ code: number, data: WeeklyReportPeriodPayload }>(
-      `/api/v1/projects/${projectId.value}/weekly-reports/${selectedPeriodKey.value}`
+      moduleUrl(`/api/v1/projects/${projectId.value}/weekly-reports/${selectedPeriodKey.value}`)
     )
     editableByCurrentUser.value = Boolean(res.data.editableByCurrentUser)
     const report = res.code === 0 && res.data.report
@@ -647,7 +655,7 @@ async function fetchActualHours() {
   actualHoursByUid.value = new Map()
   const { start, end } = getWeekRange(selectedWeekYear.value, selectedWeek.value)
   const res = await $fetch<{ code: number, data: ListPayload<RawTimeEntry> }>(
-    `/api/v1/projects/${projectId.value}/time-entries`,
+    moduleUrl(`/api/v1/projects/${projectId.value}/time-entries`),
     {
       query: {
         startDate: formatDate(start),
@@ -725,7 +733,7 @@ async function saveReport() {
   saving.value = true
   try {
     const res = await $fetch<{ code: number, data: RawProjectWeeklyReport }>(
-      `/api/v1/projects/${projectId.value}/weekly-reports/${selectedPeriodKey.value}/draft`,
+      moduleUrl(`/api/v1/projects/${projectId.value}/weekly-reports/${selectedPeriodKey.value}/draft`),
       {
         method: 'PUT',
         body: {
@@ -777,7 +785,7 @@ async function submitReport() {
   submitting.value = true
   try {
     const res = await $fetch<{ code: number }>(
-      `/api/v1/projects/${projectId.value}/weekly-reports/${selectedPeriodKey.value}:submit`,
+      moduleUrl(`/api/v1/projects/${projectId.value}/weekly-reports/${selectedPeriodKey.value}:submit`),
       { method: 'POST', body: {} }
     )
     if (res.code === 0) {

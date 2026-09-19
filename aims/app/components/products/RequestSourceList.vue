@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import { useAimsModule } from '../../../layer/useAimsModule'
+
+const { moduleUrl, hosted, cacheKey } = useAimsModule()
 const props = defineProps<{ productCode: string, requestId: string, canDelete?: boolean }>()
 interface Source {
   id: number
@@ -41,7 +44,7 @@ async function removeSource() {
     return
   }
   const body = { expectedRevision: target.workspaceRevision, expectedRequestRevision: target.requestRevision, expectedSourceRevision: target.source.revision, reason: reason.value }
-  const endpoint = `/api/v1/products/${encodeURIComponent(props.productCode)}/requests/${props.requestId}/sources/${target.source.id}`
+  const endpoint = moduleUrl(`/api/v1/products/${encodeURIComponent(props.productCode)}/requests/${props.requestId}/sources/${target.source.id}`)
   busy.value = true
   deleteError.value = null
   try {
@@ -62,7 +65,7 @@ const page = ref(1)
 watch(() => props.requestId, () => {
   page.value = 1
 })
-const { data, status, error, refresh } = await useFetch(() => `/api/v1/products/${encodeURIComponent(props.productCode)}/requests/${props.requestId}/sources`, {
+const { data, status, error, refresh } = await useFetch(() => moduleUrl(`/api/v1/products/${encodeURIComponent(props.productCode)}/requests/${props.requestId}/sources`), { ...(hosted ? { key: computed(() => cacheKey('aims/app/components/products/RequestSourceList.vue:0' + ':' + String(toValue(() => moduleUrl(`/api/v1/products/${encodeURIComponent(props.productCode)}/requests/${props.requestId}/sources`))))) } : {}),
   server: false, query: computed(() => ({ page: page.value, pageSize: 10 })),
   transform: (response: { code: number, data: { items: Source[], total: number, request_revision: number, workspace_revision: number } }) => {
     if (response.code !== 0 || !Array.isArray(response.data?.items) || !Number.isSafeInteger(response.data.total) || response.data.total < 0) throw new Error('来源证据响应不完整')

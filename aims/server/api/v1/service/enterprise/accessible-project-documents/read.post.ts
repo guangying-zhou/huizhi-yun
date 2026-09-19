@@ -1,0 +1,3 @@
+import { handleEnterpriseAccessibleProjectDocumentsService } from '~~/server/utils/enterpriseAccessibleProjectDocumentsService'
+
+export default defineEventHandler(handleEnterpriseAccessibleProjectDocumentsService)

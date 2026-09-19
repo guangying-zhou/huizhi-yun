@@ -812,6 +812,10 @@ func (a *Adapter) updateWithTxHook(
 	body map[string]any,
 	hook RuntimeUpdateTxHook,
 ) (map[string]any, error) {
+	return a.updateWithExternalTxHook(ctx, match, query, identifier, body, hook, nil)
+}
+
+func (a *Adapter) updateWithExternalTxHook(ctx context.Context, match resourceMatch, query url.Values, identifier string, body map[string]any, hook RuntimeUpdateTxHook, externalTx *sql.Tx) (map[string]any, error) {
 	if match.spec.ReadOnly {
 		return nil, httperror.New(http.StatusMethodNotAllowed, "resource_read_only", "Resource is read-only")
 	}
@@ -851,11 +855,14 @@ func (a *Adapter) updateWithTxHook(
 		return nil, err
 	}
 
-	tx, err := a.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
-	if err != nil {
-		return nil, err
+	tx := externalTx
+	if tx == nil {
+		tx, err = a.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
+		if err != nil {
+			return nil, err
+		}
+		defer tx.Rollback()
 	}
-	defer tx.Rollback()
 	if len(fields) > 0 {
 		names := make([]string, 0, len(fields))
 		for name := range fields {
@@ -901,6 +908,13 @@ func (a *Adapter) updateWithTxHook(
 			return nil, fmt.Errorf("transactional update hook metadata conflicts with resource field %q", key)
 		}
 	}
+	if externalTx != nil {
+		result := map[string]any{"id": identifier}
+		for key, value := range metadata {
+			result[key] = value
+		}
+		return result, nil
+	}
 	if err := tx.Commit(); err != nil {
 		return nil, err
 	}
@@ -912,6 +926,24 @@ func (a *Adapter) updateWithTxHook(
 		result[key] = value
 	}
 	return result, nil
+}
+
+// HandleRuntimeUpdateInTransactionWithTxHook never commits a caller transaction.
+// Its result contains identity and hook metadata; the caller freezes its own
+// transaction-consistent business snapshot before committing a receipt.
+func (a *Adapter) HandleRuntimeUpdateInTransactionWithTxHook(ctx context.Context, tx *sql.Tx, path string, query url.Values, body map[string]any, hook RuntimeUpdateTxHook) (map[string]any, error) {
+	if tx == nil || hook == nil {
+		return nil, httperror.New(500, "runtime_transaction_required", "Caller transaction and hook are required")
+	}
+	suffix, ok := a.runtimeSuffix(path)
+	if !ok {
+		return nil, httperror.New(404, "not_found", "Route not found")
+	}
+	match, ok := a.matchResource(suffix)
+	if !ok || len(match.rest) != 1 {
+		return nil, httperror.New(404, "not_found", "Route not found")
+	}
+	return a.updateWithExternalTxHook(ctx, match, query, match.rest[0], body, hook, tx)
 }
 
 func (a *Adapter) delete(ctx context.Context, match resourceMatch, query url.Values, identifier string) (map[string]any, error) {

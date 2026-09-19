@@ -1,5 +1,9 @@
 <script setup lang="ts">
-import type { ApiResponse, ListPayload, ProductAssetItem, TechnologyBaseItem } from '~/types'
+import { useAssetsModule } from '../../../layer/useAssetsModule'
+import type { ApiResponse, ListPayload, ProductAssetItem, TechnologyBaseItem } from '../../types'
+
+const { moduleUrl, hosted } = useAssetsModule()
+const commandKey = ref(crypto.randomUUID())
 
 const props = defineProps<{
   open: boolean
@@ -28,7 +32,7 @@ async function loadBases() {
   loadingBases.value = true
 
   try {
-    const response = await $fetch<ApiResponse<ListPayload<TechnologyBaseItem>>>('/api/v1/technology-bases')
+    const response = await $fetch<ApiResponse<ListPayload<TechnologyBaseItem>>>(moduleUrl(hosted ? '/api/v1/products/link-candidates/bases' : '/api/v1/technology-bases'))
     const linkedIds = new Set((props.product?.linked_bases || []).map(item => item.id))
     baseOptions.value = (response.data.items || [])
       .filter(item => !linkedIds.has(item.id))
@@ -41,8 +45,13 @@ async function loadBases() {
   }
 }
 
+watch(state, () => {
+  commandKey.value = crypto.randomUUID()
+}, { deep: true, flush: 'sync' })
+
 watch(() => props.open, async (open) => {
   if (open) {
+    commandKey.value = crypto.randomUUID()
     state.technology_base_id = undefined
     await loadBases()
   }
@@ -61,8 +70,9 @@ async function handleSubmit() {
   submitting.value = true
 
   try {
-    await $fetch<ApiResponse<{ id: number }>>(`/api/v1/products/${props.product.id}/bases`, {
+    await $fetch<ApiResponse<{ id: number }>>(moduleUrl(`/api/v1/products/${props.product.id}/bases`), {
       method: 'POST',
+      headers: { 'Idempotency-Key': commandKey.value },
       body: {
         technology_base_id: state.technology_base_id
       }

@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import type { ProjectDocument } from '~/types'
+import type { ProjectDocument } from '../../types'
+import { useCodocsModule } from '../../../layer/useCodocsModule'
 
 definePageMeta({
   layout: 'default'
@@ -21,6 +22,7 @@ interface DocumentPreviewData {
 
 const toast = useToast()
 const { user } = useAuth()
+const { moduleUrl } = useCodocsModule()
 const uid = computed(() => user.value || 'user1')
 
 usePageTitle('回收站')
@@ -48,6 +50,8 @@ const loadTrashDocuments = async () => {
       type: 'private',
       owner: uid.value
     })
+  } catch {
+    toast.add({ title: '回收站加载失败，请重试', color: 'error' })
   } finally {
     trashLoading.value = false
   }
@@ -60,7 +64,7 @@ const loadDocumentPreview = async (doc: ProjectDocument) => {
   previewContent.value = ''
 
   try {
-    const response = await $fetch<{ success: boolean, data: DocumentPreviewData }>(`/api/documents/${doc.uuid}?include_deleted=1`)
+    const response = await $fetch<{ success: boolean, data: DocumentPreviewData }>(moduleUrl(`/api/documents/${doc.uuid}?include_deleted=1`))
     if (response.success && response.data) {
       previewContent.value = response.data.content || ''
     }

@@ -1,3 +1,4 @@
+import { resolveEnterprisePilotPath, validateEnterprisePilotBinding } from '../../../test-env/enterprise-topology.mjs'
 const DEFAULT_CONSOLE_ORIGIN = 'https://console.huizhi.yun'
 const DEFAULT_FINANCE_ORIGIN = 'https://finance.isme.dev'
 const DEFAULT_ALTOC_ORIGIN = 'https://altoc.isme.dev'
@@ -14,11 +15,13 @@ const PLATFORM_REGISTRY_CACHE_TTL_MS = 5 * 60 * 1000
 const PLATFORM_REGISTRY_STALE_TTL_MS = 24 * 60 * 60 * 1000
 const PLATFORM_REGISTRY_CACHE_MARKER = '__hzy_tenant_gateway_registry_cache_v2'
 const SCHEDULER_INTERVAL_MS = 5 * 60 * 1000
-const SCHEDULER_APPS = new Set(['aims', 'altoc', 'console', 'finance', 'people', 'workflow'])
+// Assets is woken only with a persisted unified/recovered selection (see wakeTenantApp).
+const SCHEDULER_APPS = new Set(['aims', 'altoc', 'assets', 'console', 'finance', 'people', 'workflow'])
 const APP_SERVICE_BINDINGS = Object.freeze({
   aims: 'HZY_AIMS_SERVICE',
   assets: 'HZY_ASSETS_SERVICE',
   altoc: 'HZY_ALTOC_SERVICE',
+  codocs: 'HZY_CODOCS_SERVICE',
   console: 'HZY_CONSOLE_SERVICE',
   finance: 'HZY_FINANCE_SERVICE',
   people: 'HZY_PEOPLE_SERVICE',
@@ -194,6 +197,12 @@ export default {
 
     if (isDirectoryConnectorRequest(requestUrl.pathname)) {
       return proxyToDirectoryConnector(request, env, tenant)
+    }
+
+    if ((env.HZY_ENTERPRISE_PILOT === 'true' || env.HZY_ENTERPRISE_AUTH_PILOT === 'true') && requestUrl.hostname === 'hzy-test.huizhi.yun') {
+      const pilotRoute = resolveEnterprisePilotPath(requestUrl.pathname)
+      const authOnlyRoute = pilotRoute && requestUrl.pathname.startsWith('/enterprise/') && ['page', 'auth', 'asset', 'unavailable'].includes(pilotRoute.kind)
+      if (pilotRoute && (env.HZY_ENTERPRISE_PILOT === 'true' || authOnlyRoute)) return proxyToEnterprisePilot(request, env, tenant, pilotRoute)
     }
 
     for (const route of APP_ROUTES) {
@@ -569,6 +578,28 @@ function allowedTenantSet(env) {
   )
 }
 
+async function proxyToEnterprisePilot(request, env, tenant, route) {
+  if (route.kind === 'unavailable' || !validateEnterprisePilotBinding(tenant, env.HZY_ENTERPRISE_SERVICE)) {
+    return new Response('Enterprise test binding unavailable', { status: 503 })
+  }
+  const url = new URL(request.url)
+  url.pathname = route.path
+  if (route.kind === 'redirect') return Response.redirect(url.toString(), 308)
+  // Physical identity and root prefix must change together. Logical URL stays intact.
+  const headers = buildForwardHeaders(request, env, tenant, '/', 'enterprise')
+  if (route.kind === 'auth' || route.kind === 'api') {
+    const token = await resolveRuntimeBootstrapToken(env, tenant)
+    if (token) headers.set('x-hzy-data-runtime-token', token)
+  }
+  if (route.kind === 'page' || route.kind === 'asset') { headers.delete('cookie'); headers.delete('authorization') }
+  const response = await env.HZY_ENTERPRISE_SERVICE.fetch(url.toString(), {
+    method: request.method, headers, body: requestBody(request), redirect: 'manual'
+  })
+  const resultHeaders = new Headers(response.headers)
+  resultHeaders.set('cache-control', 'no-store')
+  return new Response(response.body, { status: response.status, statusText: response.statusText, headers: resultHeaders })
+}
+
 async function proxyToApp(request, env, tenant, route) {
   const origin = normalizeOrigin(env[route.originEnv] || route.defaultOrigin)
   const requestUrl = new URL(request.url)
@@ -740,6 +771,16 @@ function schedulerBootstrapMetadata(token) {
 
 async function schedulerRequestHeaders(env, tenant, tenantHost, appCode, requestId, issuedAt, runtimeBootstrapToken, path = SCHEDULER_WAKE_PATH) {
   const appConfig = recordValue(tenant.apps?.[appCode]) || {}
+  const scheduler = recordValue(appConfig.enterpriseScheduler) || {}
+  const schedulerStorage = stringValue(scheduler.storage)
+  const schedulerGeneration = stringValue(scheduler.generation)
+  if (appConfig.enterpriseScheduler !== undefined
+    && (!['aims', 'assets'].includes(appCode) || !['unified', 'recovered', 'disabled'].includes(schedulerStorage)
+      || scheduler.storage !== schedulerStorage || typeof scheduler.generation !== 'string' || scheduler.generation !== schedulerGeneration
+      || !/^[1-9][0-9]{0,19}$/.test(schedulerGeneration)
+      || BigInt(schedulerGeneration) > 18446744073709551615n)) {
+    throw new Error('Invalid tenant scheduler storage binding.')
+  }
   const consoleConfig = recordValue(tenant.apps?.console) || {}
   const dataRuntime = dataRuntimeFor(tenant, appConfig)
   const deploymentCode = firstString(appConfig, ['deploymentCode', 'deployment']) || tenant.deploymentCode
@@ -778,6 +819,10 @@ async function schedulerRequestHeaders(env, tenant, tenantHost, appCode, request
   if (dataRuntime.audience) headers.set('x-hzy-data-runtime-audience', dataRuntime.audience)
   if (runtimeBootstrapToken) headers.set('x-hzy-data-runtime-token', runtimeBootstrapToken)
   headers.set('x-hzy-scheduler-issued-at', issuedAt)
+  if (schedulerStorage) {
+    headers.set('x-hzy-scheduler-storage', schedulerStorage)
+    headers.set('x-hzy-scheduler-generation', schedulerGeneration)
+  }
   const canonical = [
     'POST',
     path,
@@ -790,6 +835,7 @@ async function schedulerRequestHeaders(env, tenant, tenantHost, appCode, request
     tenantHost
   ]
   if (appCode === 'people') canonical.push(consoleTargetDeployment)
+  if (schedulerStorage) canonical.push('enterprise-scheduler-v1', schedulerStorage, schedulerGeneration)
   canonical.push(issuedAt)
   headers.set('x-hzy-scheduler-signature', await schedulerHmacHex(gatewayToken, canonical.join('\n')))
   return headers
@@ -801,7 +847,8 @@ export async function runScheduledPolicyBundleSync(env, fetchImpl = fetch) {
   const hosts = [...new Set(stringValue(env.HZY_POLICY_SYNC_HOSTS).split(',').map(normalizeHostname).filter(Boolean))]
   if (hosts.length > 100) throw new Error('policy sync host limit exceeded')
   const results = []
-  const deadline = Date.now() + 45_000
+  const consoleTimeoutMs = boundedInteger(env.HZY_POLICY_SYNC_CONSOLE_TIMEOUT_MS, 35_000, 1_000, 120_000)
+  const deadline = Date.now() + Math.max(45_000, consoleTimeoutMs + 10_000)
   await mapWithConcurrency(hosts, 4, async host => {
     if (Date.now() >= deadline) {
       results.push({ ok: false, status: 503, stage: 'budget' })
@@ -821,7 +868,7 @@ export async function runScheduledPolicyBundleSync(env, fetchImpl = fetch) {
       stage = 'console'
       const response = await serviceBindingFetch(env, APP_SERVICE_BINDINGS.console, fetchImpl,
         new URL(path, normalizeOrigin(env.HZY_CONSOLE_ORIGIN || DEFAULT_CONSOLE_ORIGIN)),
-        { method: 'POST', headers, signal: AbortSignal.timeout(35_000) })
+        { method: 'POST', headers, signal: AbortSignal.timeout(consoleTimeoutMs) })
       await response.arrayBuffer()
       results.push({ ok: response.ok, status: response.status, stage })
     } catch {
@@ -833,6 +880,15 @@ export async function runScheduledPolicyBundleSync(env, fetchImpl = fetch) {
 }
 
 async function wakeTenantApp(env, tenant, tenantHost, appCode, requestId, issuedAt, runtimeBootstrapToken, options, fetchImpl) {
+  // A persisted disabled selection must never be interpreted as legacy storage.
+  if (appCode === 'aims' && recordValue(tenant.apps?.aims?.enterpriseScheduler)?.storage === 'disabled') {
+    return { ok: true, busy: false }
+  }
+  // Assets has no legacy wake handler: only a persisted unified/recovered
+  // selection makes its Worker a scheduler target.
+  if (appCode === 'assets' && !['unified', 'recovered'].includes(recordValue(tenant.apps?.assets?.enterpriseScheduler)?.storage)) {
+    return { ok: true, busy: false }
+  }
   const route = appCode === 'console'
     ? { prefix: '/', originEnv: 'HZY_CONSOLE_ORIGIN', defaultOrigin: DEFAULT_CONSOLE_ORIGIN }
     : APP_ROUTES.find(item => item.appCode === appCode)
@@ -1377,6 +1433,8 @@ function stripInternalHeaders(headers) {
     'x-hzy-scheduler',
     'x-hzy-scheduler-issued-at',
     'x-hzy-scheduler-signature',
+    'x-hzy-scheduler-storage',
+    'x-hzy-scheduler-generation',
     'x-hzy-console-target-deployment',
     'x-hzy-data-runtime-url',
     'x-hzy-data-runtime-code',

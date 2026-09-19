@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import ProductsVersionWorkflowNav from '../../../../components/products/VersionWorkflowNav.vue'
+
 const route = useRoute()
 const code = computed(() => String(route.params.productCode || ''))
 const versionId = computed(() => String(route.params.versionId || ''))

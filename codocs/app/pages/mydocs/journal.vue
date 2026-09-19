@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { useCodocsModule } from '../../../layer/useCodocsModule'
+
 /**
  * 日志周报页面
  * 左侧日历（日志模式按天选择，周报模式按周选择），右侧查看/编辑
@@ -8,6 +10,7 @@
 definePageMeta({ layout: 'default' })
 
 usePageTitle('日志周报')
+const { moduleUrl } = useCodocsModule()
 
 // ==================== 类型定义 ====================
 
@@ -305,7 +308,7 @@ const fetchMonthLogs = async () => {
   if (!uid.value) return
   monthLogsLoading.value = true
   try {
-    const res = await $fetch<WorklogListResponse>('/api/worklogs/list', {
+    const res = await $fetch<WorklogListResponse>(moduleUrl('/api/worklogs/list'), {
       query: { owner: uid.value, year: calendarYear.value, month: calendarMonth.value }
     })
     applyMonthLogs(res.success ? (res.data?.items || []) : [])
@@ -344,13 +347,13 @@ const checkSelectedDate = async () => {
 const loadLog = async () => {
   previewLoading.value = true
   try {
-    const res = await $fetch<WorklogListResponse>('/api/worklogs/list', {
+    const res = await $fetch<WorklogListResponse>(moduleUrl('/api/worklogs/list'), {
       query: { owner: uid.value, year: calendarYear.value, month: calendarMonth.value }
     })
     applyMonthLogs(res.success ? (res.data?.items || []) : [])
     const item = res.data?.items?.find(i => i.date === selectedDate.value)
     if (item) {
-      const docRes = await $fetch<DocumentContentResponse>(`/api/documents/${item.uuid}`, { params: { uid: uid.value } })
+      const docRes = await $fetch<DocumentContentResponse>(moduleUrl(`/api/documents/${item.uuid}`), { params: { uid: uid.value } })
       if (docRes.success && docRes.data) {
         previewContent.value = docRes.data.content || ''
         selectedLog.value = { uuid: item.uuid, title: item.title, readonly_flag: (docRes.data as Record<string, unknown>).readonly_flag as number | undefined }
@@ -372,7 +375,7 @@ const createLog = async () => {
   isCreating.value = true
   try {
     const dateKey = toDateKey(selectedDate.value)
-    const res = await $fetch<CreateWorklogResponse>('/api/worklogs/create', {
+    const res = await $fetch<CreateWorklogResponse>(moduleUrl('/api/worklogs/create'), {
       method: 'POST',
       body: { owner_uid: uid.value, owner_realname: userRealname.value || '', date: dateKey }
     })
@@ -416,7 +419,7 @@ const fetchReports = async () => {
 
   for (const yr of yearsToFetch) {
     try {
-      const res = await $fetch<WeeklyReportListResponse>('/api/personal-weekly-reports/list', {
+      const res = await $fetch<WeeklyReportListResponse>(moduleUrl('/api/personal-weekly-reports/list'), {
         query: { owner: uid.value, year: yr }
       })
       if (res.success && res.data?.items) {
@@ -475,7 +478,7 @@ const checkSelectedWeek = async () => {
 const loadReport = async (report: WeeklyReportItem) => {
   previewLoading.value = true
   try {
-    const docRes = await $fetch<DocumentContentResponse>(`/api/documents/${report.uuid}`, { params: { uid: uid.value } })
+    const docRes = await $fetch<DocumentContentResponse>(moduleUrl(`/api/documents/${report.uuid}`), { params: { uid: uid.value } })
     if (docRes.success && docRes.data) {
       previewContent.value = docRes.data.content || ''
       selectedReport.value = { uuid: report.uuid, title: report.title, readonly_flag: (docRes.data as Record<string, unknown>).readonly_flag as number | undefined }
@@ -493,7 +496,7 @@ const createReport = async () => {
   if (selectedWeek.value === null || !uid.value) return
   isCreating.value = true
   try {
-    const res = await $fetch<CreateWeeklyReportResponse>('/api/personal-weekly-reports/create', {
+    const res = await $fetch<CreateWeeklyReportResponse>(moduleUrl('/api/personal-weekly-reports/create'), {
       method: 'POST',
       body: { owner_uid: uid.value, owner_realname: userRealname.value || '', year: selectedWeekYear.value, week: selectedWeek.value }
     })
@@ -526,7 +529,7 @@ const submitCurrent = async () => {
   if (!target) return
   isSubmitting.value = true
   try {
-    await $fetch(`/api/documents/${target.uuid}`, { method: 'PATCH', body: { readonly_flag: true } })
+    await $fetch(moduleUrl(`/api/documents/${target.uuid}`), { method: 'PATCH', body: { readonly_flag: true } })
     target.readonly_flag = 1
     showSubmitConfirm.value = false
     toast.add({ title: `上报成功，${mode.value === 'worklog' ? '日志' : '周报'}已设为只读`, color: 'success' })

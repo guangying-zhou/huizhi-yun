@@ -117,7 +117,7 @@ func ReadPlanningCycle(ctx context.Context, db *sql.DB, code, uid, bizID string,
 		return out, err
 	}
 	defer tx.Rollback()
-	if err = AuthorizeWorkspaceTransaction(ctx, tx, code, uid, "product_priorities", "view", permit); err != nil {
+	if err := AuthorizeWorkspaceTransaction(ctx, tx, code, uid, "product_priorities", "view", permit); err != nil {
 		return out, err
 	}
 	record, err := loadPlanningCycle(ctx, tx, code, bizID)
@@ -130,30 +130,40 @@ func ReadPlanningCycle(ctx context.Context, db *sql.DB, code, uid, bizID string,
 }
 
 func ListPlanningCycles(ctx context.Context, db *sql.DB, code, uid string, permit AuthorizationPermit, q PlanningCyclePageQuery) (PlanningCyclePage, error) {
+	tx, err := db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
+	if err != nil {
+		return PlanningCyclePage{}, err
+	}
+	defer tx.Rollback()
+	out, err := ListPlanningCyclesInTransaction(ctx, tx, code, uid, permit, q)
+	if err != nil {
+		return out, err
+	}
+	return out, tx.Commit()
+}
+func ListPlanningCyclesInTransaction(ctx context.Context, tx *sql.Tx, code, uid string, permit AuthorizationPermit, q PlanningCyclePageQuery) (PlanningCyclePage, error) {
 	var out PlanningCyclePage
 	if err := ValidatePlanningCyclePageQuery(q); err != nil {
 		return out, err
 	}
-	tx, err := db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
-	if err != nil {
-		return out, err
+	if tx == nil {
+		return out, invalid("product_transaction_required", "事务不可用")
 	}
-	defer tx.Rollback()
-	if err = AuthorizeWorkspaceTransaction(ctx, tx, code, uid, "product_priorities", "view", permit); err != nil {
+	if err := AuthorizeWorkspaceTransaction(ctx, tx, code, uid, "product_priorities", "view", permit); err != nil {
 		return out, err
 	}
 	where := ` FROM product_planning_cycles WHERE product_code=? AND (?='' OR status=?) AND (?='' OR LOCATE(?,title)>0 OR LOCATE(?,goal_summary)>0)`
 	args := []any{code, q.Status, q.Status, q.Keyword, q.Keyword, q.Keyword}
 	if q.ReviewDue {
 		var cutoff string
-		if err = tx.QueryRowContext(ctx, `SELECT DATE_FORMAT(UTC_TIMESTAMP(3),'%Y-%m-%d %H:%i:%s.%f')`).Scan(&cutoff); err != nil {
+		if err := tx.QueryRowContext(ctx, `SELECT DATE_FORMAT(UTC_TIMESTAMP(3),'%Y-%m-%d %H:%i:%s.%f')`).Scan(&cutoff); err != nil {
 			return out, err
 		}
 		where += " AND status='open' AND next_review_at IS NOT NULL AND next_review_at<=?"
 		args = append(args, cutoff)
 	}
 
-	if err = tx.QueryRowContext(ctx, `SELECT COUNT(*)`+where, args...).Scan(&out.Total); err != nil {
+	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*)`+where, args...).Scan(&out.Total); err != nil {
 		return out, err
 	}
 	rows, err := tx.QueryContext(ctx, `SELECT `+planningCycleColumns+where+` ORDER BY id DESC LIMIT ? OFFSET ?`, append(args, q.PageSize, (q.Page-1)*q.PageSize)...)
@@ -177,5 +187,5 @@ func ListPlanningCycles(ctx context.Context, db *sql.DB, code, uid string, permi
 	out.Page = q.Page
 	out.PageSize = q.PageSize
 	out.WorkspaceRevision = permit.Facts.Revision
-	return out, tx.Commit()
+	return out, nil
 }

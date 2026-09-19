@@ -1,12 +1,15 @@
 <script setup lang="ts">
-import { projectSecurityLevelConfig, projectStatusConfig, getProjectCategoryLabel, projectCategoryOptions, selectableProjectCategoryOptions } from '~/config/project'
+import { projectSecurityLevelConfig, projectStatusConfig, getProjectCategoryLabel, projectCategoryOptions, selectableProjectCategoryOptions } from '../../config/project'
 import type {
   AimsProject,
   ProjectPortfolio,
   ProjectCategory,
   LifecycleStatus,
   UpdatePortfolioRequest
-} from '~/types/aims'
+} from '../../types/aims'
+import { useProjectContext } from '../../composables/useProjectContext'
+import { usePortfolioStore } from '../../stores/portfolio'
+import { useProjectStore } from '../../stores/project'
 
 definePageMeta({
   layoutHeader: true,

@@ -166,6 +166,8 @@ export function useConsoleOidcAuth() {
   const config = useRuntimeConfig()
   const pub = (config.public || {}) as Record<string, unknown>
   const { resolveCurrentAppUrl } = useAppUrls()
+  const authPrefix = pub.authApiPrefix === '/enterprise' && pub.appCode === 'enterprise' ? '/enterprise' : ''
+  const resolveAuthUrl = (path: string) => authPrefix ? `${authPrefix}${path}` : resolveCurrentAppUrl(path)
   const authMode = String(pub.authMode || '').trim()
   const legacyAuthBridge = pub.legacyAuthBridge === true || String(pub.legacyAuthBridge || '').toLowerCase() === 'true'
   const consoleUrl = String(pub.consoleUrl || '').trim()
@@ -240,11 +242,11 @@ export function useConsoleOidcAuth() {
   async function login(redirect?: string) {
     const target = redirect || (import.meta.client ? window.location.href : '/')
     const query = new URLSearchParams({ redirect: target })
-    return navigateTo(resolveCurrentAppUrl(`/api/auth/oidc-login?${query.toString()}`), { external: true })
+    return navigateTo(resolveAuthUrl(`/api/auth/oidc-login?${query.toString()}`), { external: true })
   }
 
   async function logout() {
-    return navigateTo(resolveCurrentAppUrl('/api/auth/logout?state=logged_out'), { external: true })
+    return navigateTo(resolveAuthUrl('/api/auth/logout?state=logged_out'), { external: true })
   }
 
   async function refresh() {
@@ -255,7 +257,7 @@ export function useConsoleOidcAuth() {
       hasActiveToken: () => isTokenActive(claims.value),
       syncCookies: syncOidcCookiesFromBrowser,
       performRefresh: async () => {
-        await $fetch(resolveCurrentAppUrl('/api/auth/refresh'), { method: 'POST' })
+        await $fetch(resolveAuthUrl('/api/auth/refresh'), { method: 'POST' })
       },
       withCrossTabLock: lockManager
         ? (name, task) => lockManager.request(name, task)
@@ -268,7 +270,7 @@ export function useConsoleOidcAuth() {
   async function getServerSession() {
     try {
       return await $fetch<ConsoleServerSession>(
-        resolveCurrentAppUrl('/api/auth/me'),
+        resolveAuthUrl('/api/auth/me'),
         { credentials: 'include' }
       )
     } catch {

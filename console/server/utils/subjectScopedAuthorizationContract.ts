@@ -7,6 +7,17 @@ import {
 // Separate from notification eligibility: these purposes return scoped grants
 // for a target application's own command handler, never an arbitrary resource.
 const targets = new Map([
+  ['aims|enterprise_project_document_read', { resourceCode: 'projects', action: 'view' }],
+  ['aims|enterprise_project_document_sources_read', { resourceCode: 'projects', action: 'view' }],
+  ['aims|enterprise_project_document_write', { resourceCode: 'projects', action: 'view' }],
+  ['aims|enterprise_project_document_preview', { resourceCode: 'projects', action: 'view' }],
+  ['aims|enterprise_project_document_download', { resourceCode: 'projects', action: 'view' }],
+  ['aims|enterprise_project_document_access_policy_read', { resourceCode: 'projects', action: 'view' }],
+  ['aims|enterprise_project_document_access_check', { resourceCode: 'projects', action: 'view' }],
+  ['aims|enterprise_project_document_access_audit', { resourceCode: 'projects', action: 'view' }],
+  ['aims|enterprise_project_document_access_policy_update', { resourceCode: 'projects', action: 'view' }],
+  ['aims|enterprise_accessible_project_documents_list', { resourceCode: 'projects', action: 'view' }],
+  ['aims|enterprise_project_admin', { resourceCode: 'projects', action: 'admin' }],
   ['aims|product_feedback_create', { resourceCode: 'product_requests', action: 'create' }],
   ['assets|product_adoption_deliveries', { resourceCode: 'deliveries', action: 'view' }],
   ['assets|product_adoption_environments', { resourceCode: 'environments', action: 'view' }],

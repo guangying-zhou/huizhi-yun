@@ -45,13 +45,31 @@ func ValidateRequestMerge(input RequestMerge) error {
 }
 
 func MergeProductRequest(ctx context.Context, db *sql.DB, identity CommandIdentity, permit AuthorizationPermit, input RequestMerge, sourceContext ...integrationoperation.TrustedContext) (CommandResult, error) {
+	return mergeProductRequest(ctx, identity, permit, input, sourceContext, func(authorize AuthorizeCommand, apply ApplyCommand) (CommandResult, error) {
+		return ExecuteCommand(ctx, db, identity, input, authorize, apply)
+	})
+}
+
+// MergeProductRequestInTransaction preserves the original merge, feedback and
+// receipt semantics. Any error also aborts preceding changes in the shared tx.
+func MergeProductRequestInTransaction(ctx context.Context, tx *sql.Tx, identity CommandIdentity, permit AuthorizationPermit, input RequestMerge, sourceContext ...integrationoperation.TrustedContext) (CommandResult, error) {
+	result, err := mergeProductRequest(ctx, identity, permit, input, sourceContext, func(authorize AuthorizeCommand, apply ApplyCommand) (CommandResult, error) {
+		return ExecuteCommandInTransaction(ctx, tx, identity, input, authorize, apply)
+	})
+	if err != nil && tx != nil {
+		_ = tx.Rollback()
+	}
+	return result, err
+}
+
+func mergeProductRequest(ctx context.Context, identity CommandIdentity, permit AuthorizationPermit, input RequestMerge, sourceContext []integrationoperation.TrustedContext, execute func(AuthorizeCommand, ApplyCommand) (CommandResult, error)) (CommandResult, error) {
 	if identity.Action != "product_requests:merge" {
 		return CommandResult{}, invalid("product_command_identity_invalid", "需求决策命令不匹配")
 	}
 	if err := ValidateRequestMerge(input); err != nil {
 		return CommandResult{}, err
 	}
-	return ExecuteCommand(ctx, db, identity, input, func(ctx context.Context, tx *sql.Tx) error {
+	return execute(func(ctx context.Context, tx *sql.Tx) error {
 		return AuthorizeWorkspaceTransaction(ctx, tx, identity.ProductCode, identity.ActorUID, "product_requests", "decide", permit)
 	}, func(ctx context.Context, tx *sql.Tx) (any, error) {
 		root, err := loadWorkspace(ctx, tx, identity.ProductCode)

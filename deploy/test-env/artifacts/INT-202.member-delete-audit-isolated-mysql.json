@@ -1,0 +1,17 @@
+{
+  "schema": "hzy.enterprise.member-delete-audit-verification.v1",
+  "command": "node data-runtime/scripts/test-enterprise-migration-conflicts-mysql.mjs",
+  "result": "PASS",
+  "scope": "random temporary MySQL; synthetic candidate project_activity_logs fixture only",
+  "checks": [
+    "succeeded member removal accepts absent member only with matching project/member/action/actor/idempotency audit and consistent changes JSON",
+    "missing audit, wrong project and wrong actor each block receipt target acceptance",
+    "audit project reference, changes projectId/uid/action and request_id-to-succeeded-receipt identity are verified",
+    "conflicts remain redacted and apply blocks before target creation"
+  ],
+  "candidateTableAppliedToBusinessDatabase": false,
+  "activatedEvidenceTableCount": 150,
+  "candidateCodeClosureTableCount": 151,
+  "deployment": false,
+  "temporaryInstanceCleaned": true
+}

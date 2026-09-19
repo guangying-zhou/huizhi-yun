@@ -1,0 +1,20 @@
+{
+  "schema": "hzy.enterprise.migration-delivery-integrity-verification.v1",
+  "executedAt": "2026-09-15T03:44:34Z",
+  "command": "node data-runtime/scripts/test-enterprise-migration-conflicts-mysql.mjs",
+  "result": "PASS",
+  "scope": "fresh random temporary MySQL; synthetic conflict fixtures only",
+  "checks": [
+    "historical plan confirmation revisions cannot exceed current version revisions",
+    "consumed delivery source_revision cannot exceed current planning item revision",
+    "same complete receipt identity with different command hashes is blocking",
+    "succeeded receipt with inconsistent target pair or missing response hash is blocking",
+    "missing/self/out-of-scope outbox dependency is blocking",
+    "orphan attempt or attempt/fence ahead of parent is blocking",
+    "orphan dead-letter or source version/attempt count ahead of parent is blocking",
+    "all conflicts use redacted SHA-256 identity and apply fails before target creation"
+  ],
+  "businessDataAccess": false,
+  "deployment": false,
+  "temporaryInstanceCleaned": true
+}

@@ -1,0 +1,384 @@
+{
+  "schemaVersion": "enterprise-source-readiness.v1",
+  "observedAt": "2026-09-14T04:56:40.325Z",
+  "mode": "read-only",
+  "tenantCode": "C000001",
+  "runtimeDeployment": "c000001-test-tenant-runtime",
+  "instanceId": "37d8994e-4c12-11ee-afad-8cb2da2e572b",
+  "mysqlVersion": "8.0.34",
+  "sourcePlan": {
+    "reviewHash": "5404dd29e3374a66cb7180670a2850ade0e61414ae250464775e58c16c5eda97",
+    "tables": 150,
+    "rows": 478,
+    "ddlHash": "fc28966e77bbe7894211de5466e42f311f701e24f34fdf10054e7a6bee9ab922"
+  },
+  "sources": {
+    "aims": "hzy_aims_test_local_20260910",
+    "assets": "hzy_assets_test_local_20260910"
+  },
+  "target": {
+    "proposedDatabase": "hzy_enterprise_shadow_review_20260913",
+    "exists": false,
+    "visibleDmlPrincipals": [],
+    "privilegeInventoryScope": "source connection visibility",
+    "proposedPrincipal": {
+      "user": "hzy_enterprise_test_runtime",
+      "host": "localhost",
+      "exists": true,
+      "globalPrivileges": [
+        {
+          "privilege": "USAGE",
+          "grantable": "NO"
+        }
+      ],
+      "schemaPrivileges": [
+        {
+          "schemaName": "hzy_enterprise_shadow_review_20260913",
+          "privilege": "DELETE",
+          "grantable": "NO"
+        },
+        {
+          "schemaName": "hzy_enterprise_shadow_review_20260913",
+          "privilege": "INSERT",
+          "grantable": "NO"
+        },
+        {
+          "schemaName": "hzy_enterprise_shadow_review_20260913",
+          "privilege": "SELECT",
+          "grantable": "NO"
+        },
+        {
+          "schemaName": "hzy_enterprise_shadow_review_20260913",
+          "privilege": "UPDATE",
+          "grantable": "NO"
+        }
+      ],
+      "targetSchemaPrivileges": [],
+      "unexpectedTargetSchemaPrivileges": [],
+      "targetDmlVerified": false,
+      "verificationScope": "account/grant metadata read; target schema does not exist",
+      "verificationLimit": "target schema does not exist; configured grants are not counted as effective target DML"
+    },
+    "sourceRuntimePrincipalHasGlobalDml": false,
+    "status": "principal-provisioned-target-unverified"
+  },
+  "runtime": {
+    "enterpriseEnabled": false,
+    "localBindings": {
+      "aims": "C000001-test-aims",
+      "assets": "C000001-test-assets",
+      "enterprise": "C000001-test-enterprise"
+    },
+    "binaryAcceptanceRequired": true,
+    "actualLocalBinary": {
+      "observedAt": "2026-09-14T04:56:40.327Z",
+      "available": true,
+      "binarySha256": "c0d8a54fd9114b46b7cbe7110ad0f24c0c05f1115ba4a97decb3c2b9d35a71fd",
+      "binaryBytes": 30043650,
+      "binaryModifiedAt": "2026-09-14T04:22:51.211Z",
+      "routeLiteralMarkers": {
+        "/v1/enterprise/aims/integration-operations:claim": true,
+        "/v1/enterprise/products": false,
+        "x-hzy-scheduler-generation": false
+      },
+      "health": {
+        "observedAt": "2026-09-14T04:56:40.379Z",
+        "httpStatus": 200,
+        "fields": {
+          "deployment": "c000001-test-tenant-runtime",
+          "status": "ok",
+          "tenant": "C000001",
+          "version": "0.3.219-test.adr018-candidate.4"
+        }
+      }
+    }
+  },
+  "sourceFences": [],
+  "triggers": [
+    {
+      "source": "hzy_aims_test_local_20260910",
+      "tableName": "product_activity_logs",
+      "name": "pc_activity_logs_no_delete"
+    },
+    {
+      "source": "hzy_aims_test_local_20260910",
+      "tableName": "product_activity_logs",
+      "name": "pc_activity_logs_no_update"
+    },
+    {
+      "source": "hzy_aims_test_local_20260910",
+      "tableName": "product_objective_observations",
+      "name": "pc_objective_observation_no_delete"
+    },
+    {
+      "source": "hzy_aims_test_local_20260910",
+      "tableName": "product_objective_observations",
+      "name": "pc_objective_observation_no_update"
+    },
+    {
+      "source": "hzy_aims_test_local_20260910",
+      "tableName": "product_outcome_observations",
+      "name": "pc_outcome_observations_no_delete"
+    },
+    {
+      "source": "hzy_aims_test_local_20260910",
+      "tableName": "product_outcome_observations",
+      "name": "pc_outcome_observations_no_update"
+    },
+    {
+      "source": "hzy_aims_test_local_20260910",
+      "tableName": "product_priority_assessments",
+      "name": "pc_priority_assessments_no_delete"
+    },
+    {
+      "source": "hzy_aims_test_local_20260910",
+      "tableName": "product_priority_assessments",
+      "name": "pc_priority_assessments_no_update"
+    },
+    {
+      "source": "hzy_aims_test_local_20260910",
+      "tableName": "product_release_events",
+      "name": "pc_release_events_no_delete"
+    },
+    {
+      "source": "hzy_aims_test_local_20260910",
+      "tableName": "product_release_events",
+      "name": "pc_release_events_no_update"
+    },
+    {
+      "source": "hzy_aims_test_local_20260910",
+      "tableName": "product_release_records",
+      "name": "pc_release_records_no_delete"
+    },
+    {
+      "source": "hzy_aims_test_local_20260910",
+      "tableName": "product_release_records",
+      "name": "pc_release_records_no_update"
+    },
+    {
+      "source": "hzy_aims_test_local_20260910",
+      "tableName": "product_version_acceptances",
+      "name": "pc_version_acceptances_no_delete"
+    },
+    {
+      "source": "hzy_aims_test_local_20260910",
+      "tableName": "product_version_acceptances",
+      "name": "pc_version_acceptances_no_update"
+    },
+    {
+      "source": "hzy_aims_test_local_20260910",
+      "tableName": "deliverables",
+      "name": "trg_deliverable_completion_lock_delete"
+    },
+    {
+      "source": "hzy_aims_test_local_20260910",
+      "tableName": "deliverables",
+      "name": "trg_deliverable_completion_lock_insert"
+    },
+    {
+      "source": "hzy_aims_test_local_20260910",
+      "tableName": "deliverables",
+      "name": "trg_deliverable_completion_lock_update"
+    },
+    {
+      "source": "hzy_aims_test_local_20260910",
+      "tableName": "milestones",
+      "name": "trg_milestone_completion_lock_delete"
+    },
+    {
+      "source": "hzy_aims_test_local_20260910",
+      "tableName": "milestones",
+      "name": "trg_milestone_completion_lock_update"
+    },
+    {
+      "source": "hzy_aims_test_local_20260910",
+      "tableName": "product_objective_cycles",
+      "name": "trg_pc_objective_cycle_no_delete"
+    },
+    {
+      "source": "hzy_aims_test_local_20260910",
+      "tableName": "product_objective_cycles",
+      "name": "trg_pc_objective_cycle_no_rewrite"
+    },
+    {
+      "source": "hzy_aims_test_local_20260910",
+      "tableName": "product_priority_model_versions",
+      "name": "trg_pc_priority_model_no_delete"
+    },
+    {
+      "source": "hzy_aims_test_local_20260910",
+      "tableName": "product_priority_model_versions",
+      "name": "trg_pc_priority_model_no_update"
+    },
+    {
+      "source": "hzy_aims_test_local_20260910",
+      "tableName": "product_rice_reach_observations",
+      "name": "trg_pc_rice_observation_no_delete"
+    },
+    {
+      "source": "hzy_aims_test_local_20260910",
+      "tableName": "product_rice_reach_observations",
+      "name": "trg_pc_rice_observation_no_update"
+    },
+    {
+      "source": "hzy_aims_test_local_20260910",
+      "tableName": "product_roadmap_commitments",
+      "name": "trg_pc_roadmap_commitment_no_delete"
+    },
+    {
+      "source": "hzy_aims_test_local_20260910",
+      "tableName": "product_roadmap_commitments",
+      "name": "trg_pc_roadmap_commitment_no_update"
+    },
+    {
+      "source": "hzy_aims_test_local_20260910",
+      "tableName": "product_roadmap_cross_dependency_snapshots",
+      "name": "trg_pc_roadmap_cross_snapshot_no_delete"
+    },
+    {
+      "source": "hzy_aims_test_local_20260910",
+      "tableName": "product_roadmap_cross_dependency_snapshots",
+      "name": "trg_pc_roadmap_cross_snapshot_no_update"
+    },
+    {
+      "source": "hzy_aims_test_local_20260910",
+      "tableName": "work_items",
+      "name": "trg_work_item_completion_lock_delete"
+    },
+    {
+      "source": "hzy_aims_test_local_20260910",
+      "tableName": "work_items",
+      "name": "trg_work_item_completion_lock_insert"
+    },
+    {
+      "source": "hzy_aims_test_local_20260910",
+      "tableName": "work_items",
+      "name": "trg_work_item_completion_lock_update"
+    },
+    {
+      "source": "hzy_assets_test_local_20260910",
+      "tableName": "asset_category_groups",
+      "name": "assets_pc_line_ad"
+    },
+    {
+      "source": "hzy_assets_test_local_20260910",
+      "tableName": "asset_category_groups",
+      "name": "assets_pc_line_ai"
+    },
+    {
+      "source": "hzy_assets_test_local_20260910",
+      "tableName": "asset_category_groups",
+      "name": "assets_pc_line_au"
+    },
+    {
+      "source": "hzy_assets_test_local_20260910",
+      "tableName": "product_assets",
+      "name": "assets_pc_product_ad"
+    },
+    {
+      "source": "hzy_assets_test_local_20260910",
+      "tableName": "product_assets",
+      "name": "assets_pc_product_ai"
+    },
+    {
+      "source": "hzy_assets_test_local_20260910",
+      "tableName": "product_assets",
+      "name": "assets_pc_product_au"
+    }
+  ],
+  "operations": [
+    {
+      "domain": "aims",
+      "table": "integration_operation",
+      "statuses": [],
+      "undrained": 0
+    },
+    {
+      "domain": "assets",
+      "table": "integration_operation",
+      "statuses": [],
+      "undrained": 0
+    }
+  ],
+  "asynchronousTableCounts": [
+    {
+      "domain": "aims",
+      "table": "integration_operation",
+      "rows": 0
+    },
+    {
+      "domain": "aims",
+      "table": "integration_operation_attempt",
+      "rows": 0
+    },
+    {
+      "domain": "aims",
+      "table": "integration_operation_dead_letter_actionable",
+      "rows": 0
+    },
+    {
+      "domain": "aims",
+      "table": "product_document_creation_requests",
+      "rows": 0
+    },
+    {
+      "domain": "aims",
+      "table": "service_command_receipt",
+      "rows": 0
+    },
+    {
+      "domain": "assets",
+      "table": "integration_operation",
+      "rows": 0
+    },
+    {
+      "domain": "assets",
+      "table": "integration_operation_attempt",
+      "rows": 0
+    },
+    {
+      "domain": "assets",
+      "table": "integration_operation_dead_letter_actionable",
+      "rows": 0
+    },
+    {
+      "domain": "assets",
+      "table": "service_command_receipt",
+      "rows": 0
+    }
+  ],
+  "ownedReceiptSchema": {
+    "observedConstraints": [
+      {
+        "name": "chk_scr_cross_app",
+        "enforced": "YES",
+        "clause": "((`source_app` <> `target_app`) or ((`source_app` = _utf8mb4\\'assets\\') and (`target_app` = _utf8mb4\\'assets\\') and (`source_deployment_code` = `deployment_code`) and (`original_actor_uid` is not null) and (char_length(trim(`original_actor_uid`)) > 0) and (`command_schema_version` = _utf8mb4\\'assets-owned-command.v1\\') and (((`operation_code` in (_utf8mb4\\'assets.products.create.v1\\',_utf8mb4\\'assets.products.edit.v1\\',_utf8mb4\\'assets.products.link-base.v1\\',_utf8mb4\\'assets.products.link-asset.v1\\',_utf8mb4\\'assets.products.link-document.v1\\')) and (`required_capability` = _utf8mb4\\'assets:product:edit\\')) or ((`operation_code` = _utf8mb4\\'assets.product-categories.save.v1\\') and (`required_capability` = _utf8mb4\\'assets:admin:admin\\')))))"
+      },
+      {
+        "name": "chk_scr_status",
+        "enforced": "YES",
+        "clause": "(`status` in (_utf8mb4\\'processing\\',_utf8mb4\\'succeeded\\',_utf8mb4\\'rejected\\'))"
+      }
+    ],
+    "migrationMarkerPresentAndEnforced": true,
+    "linkCommandsPresentAndEnforced": true,
+    "validationScope": "metadata observation only; Runtime schema checks and command regression remain required",
+    "requiredMigration": "assets/docs/migrations/20260913_assets_owned_product_receipts.sql",
+    "requiredMigrations": [
+      "assets/docs/migrations/20260913_assets_owned_product_receipts.sql",
+      "assets/docs/migrations/20260914_assets_owned_product_link_receipts.sql"
+    ],
+    "pendingMigrations": []
+  },
+  "canActivate": false,
+  "noMutationsPerformed": true,
+  "requiredBeforeActivation": [
+    "Assets master and product-link receipt source migrations and regenerated source plan",
+    "dedicated target schema and minimal principal provisioning",
+    "actual Runtime binary/config release acceptance",
+    "source guard installation and exact external drain evidence",
+    "fenced final-copy plan and reviewed activation receipt",
+    "controlled compatibility views and registry generation",
+    "scheduler ownership and Gateway route read-back"
+  ]
+}

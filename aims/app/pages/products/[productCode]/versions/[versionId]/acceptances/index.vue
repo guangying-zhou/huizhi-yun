@@ -1,5 +1,8 @@
 <script setup lang="ts">
-import type { VersionAcceptancePage } from '~/types/productVersionAcceptance'
+import { useAimsModule } from '../../../../../../../layer/useAimsModule'
+import type { VersionAcceptancePage } from '../../../../../../types/productVersionAcceptance'
+
+const { moduleUrl, cacheKey } = useAimsModule()
 
 definePageMeta({ layoutHeader: true, layoutHeaderTitle: '版本验收记录', layoutHeaderProjectSwitcher: false })
 const route = useRoute()
@@ -11,8 +14,8 @@ const page = ref(1), pageSize = 20
 watch([code, id], () => {
   page.value = 1
 })
-const { data, status, error, refresh } = await useFetch(() => `/api/v1${base.value}/acceptances`, {
-  server: false, query: { page, pageSize },
+const { data, status, error, refresh } = await useFetch(() => moduleUrl(`/api/v1${base.value}/acceptances`), {
+  server: false, key: computed(() => cacheKey('history-acceptances-index:' + route.path)), query: { page, pageSize },
   transform: (response: { code: number, data: VersionAcceptancePage }) => {
     const result = response.data
     if (response.code !== 0 || !Array.isArray(result?.items) || !Number.isSafeInteger(result.total) || result.total < 0 || result.items.some(item => String(item.version_id) !== id.value || !Number.isSafeInteger(item.id) || item.id < 1)) throw new Error('验收记录响应不完整')
@@ -25,7 +28,7 @@ const alert = useApiErrorAlert(error, { fallbackTitle: '验收记录加载失败
 <template>
   <div class="mx-auto min-w-0 max-w-5xl space-y-4 p-4 sm:p-6">
     <div class="flex flex-wrap gap-2">
-      <UButton :to="{ path: base, query: versionPerspectiveQuery }" color="neutral" variant="ghost">
+      <UButton :to="{ path: moduleUrl(base), query: versionPerspectiveQuery }" color="neutral" variant="ghost">
         返回版本详情
       </UButton>
       <UButton
@@ -66,7 +69,7 @@ const alert = useApiErrorAlert(error, { fallbackTitle: '验收记录加载失败
         <p class="break-words text-sm">
           {{ formatDateTime(item.accepted_at) }} · 验收人标识：{{ item.accepted_by }}
         </p>
-        <UButton :to="{ path: `${base}/acceptances/${item.id}`, query: versionPerspectiveQuery }" color="neutral" variant="outline">
+        <UButton :to="{ path: moduleUrl(`${base}/acceptances/${item.id}`), query: versionPerspectiveQuery }" color="neutral" variant="outline">
           查看核验依据与例外
         </UButton>
       </article>

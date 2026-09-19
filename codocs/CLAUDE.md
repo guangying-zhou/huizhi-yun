@@ -1,5 +1,7 @@
 # Codocs 模块
 
+2026-09-19：项目文档链当前未完成浏览器全链验收，现阶段暂停后续迁移。Codocs 整合方向为整个 `mydocs` 页面树及其可达现有操作整体先接入 Enterprise（含文件柜、最近使用、共享/移交/发文、收藏、回收站、演示文稿）；工作日志/个人周报主入口迁至工作台→我的工作→工作汇报，`mydocs` 仅保留指向同一页面的兼容入口，不做两套实现。编辑器与 Collab 继续复用现有实现；团队汇报后续部门批次，项目周报后续项目管理，旧 Codocs 项目文档页面后置暂不迁移且数据保留。数据库与 OSS 暂留现有实现；本条仅记录计划，尚未注册实现。此前固定 Aims 来源的签名 `project-document-access/execute`、目标 manifest 的 read/manage/create 及文件柜来源/目标 deployment 分开校验等既有实现保持不变；见根 MODULE_CONTRACTS 与测试部署记录。
+
 > 业务模块 — 协作文档与知识管理 | 端口 3001 | 状态：已上线 | 数据库：hzy_codocs（阶段 3 起逐步迁入 tenant-runtime）
 >
 > 📖 涉及认证、目录、审批、共享组件或 Server API 复用时，按需查 [`docs/FOUNDATION_CAPABILITIES.md`](../docs/FOUNDATION_CAPABILITIES.md)；简单局部改动不需要预读。
@@ -76,6 +78,8 @@ Schema 定义：`docs/codocs_schema.sql`
 
 ## 开发注意
 
+- Enterprise 整合候选已新增个人文件柜固定 read/export 合同（物理 enterprise、逻辑 codocs，继续使用原 DB），Host 的元数据/文本/Office/PPTX/下载路径使用当前请求 OSS 配置及规范 owner/key 绑定。源码列表现在真实分页，standalone cabinet BFF 必须保留 total/page/pageSize。写链、页面注册与环境授权仍未全部完成，状态见根 MODULE_CONTRACTS 和 INT-606。
+
 - 组织资产「快速发布」要求 `admin:admin` + `company:publish`，保留源部门文档，独立生成只读副本；仅通过 runtime prepare/complete 持久化，不走审批、不发送企业微信通知。公司资产发布记录也须服务端校验管理员。
 - 组织资产查看记录写入 runtime，读取需 `admin:admin` + `company:admin`，CSV 导出另需显式 `company:export`。查看记录写入失败时预览返回 503；部署须先迁移两张表并更新 runtime，见 [上线说明](docs/Company-Asset-Admin-Publishing.md)。
 
@@ -91,3 +95,27 @@ Schema 定义：`docs/codocs_schema.sql`
 - Workflow 回调等跨模块服务端写操作必须校验 Console service token：`token_use=service`、目标 `aud=codocs`、所需 `scope`（如 `workflow:callback`）和来源应用 `workflow`；不要新增共享回调密钥。
 
 Assets 产品文档元数据新增独立 POST `/api/v1/service/assets-product-documents/{uuid}/metadata`：仅接受 assets.runtime、精确 codocs:product-document:read 和签名 assets.codocs.product-document.read.v1；校验 tenant、双 deployment、actor 委托后调用 Codocs 自身同名 Runtime 路径。文档 ACL 仍由 Codocs 重验，返回仅 uuid/title/doc_type/updated_at。调用方传输／grant 尚在接线，未启用真实环境。
+
+
+### ADR-018 Enterprise → Codocs 产品文档元数据
+
+`POST /api/v1/service/assets-product-documents/{uuid}/metadata` 额外接受物理 `enterprise` / `enterprise.runtime`，仅限原 `assets.codocs.product-document.read.v1`、精确 `codocs:product-document:read`、`metadata:read` 命令。Assets 原身份继续可用，两组 app/client 必须各自匹配，不允许交叉组合。JWT 的 Codocs audience、当前授权、源部署与目标部署分别验证；HMAC 绑定 method/path/request ID、actor、productCode、UUID 及完整命令 hash。产品上下文不授予文档 ACL，Codocs Runtime 仍按当前 owner/share/relation 判断，仅返回 uuid/title/doc_type/updated_at。本条只覆盖 Assets 产品文档元数据；项目文档正文读取见下一节的独立条目，两者 capability 与 operationCode 互不蕴含。
+
+此为代码合同，目标环境 Enterprise→Codocs grant/部署与真实跨服务验收尚未完成；该 Codocs audience 能力独立于 Enterprise→Runtime 的 data-runtime 能力集合。
+
+### ADR-018 Enterprise → Codocs 项目文档正文
+
+`POST /api/v1/service/project-documents/{uuid}/content` 额外接受物理 `enterprise` / `enterprise.runtime`，作为与 Aims **并列**的第二条来源：scope（精确 `codocs:project-document:content:read`）、`operationCode` 和命令 schema 与 Aims 条目完全相同，只有 `allowedApps` / `allowedClientCodes` 不同，不通过放宽 Aims 那条兼容。Aims 原身份继续可用；两组 app/client 必须各自匹配，交叉组合与第三方来源在 BFF 与 Runtime 两层都拒绝。Runtime 仍按文档当前 owner/share/relation 重施 ACL，命令中的 `projectCode` 只做绑定不授予读取，响应不含 `ossPath`。宿主侧的项目文档访问权限在其本域先行判定。
+
+来源部署与目标部署必须分别绑定（与公司周报、产品文档元数据同款）：经受信网关或 Foundation route helper 到达时 `x-hzy-deployment` 携带的是**目标**（Codocs）部署，来源部署只能取自已验签令牌，不得假设两者相同。调用方同样要从网关下发的 `x-hzy-service-routes` 受信目录解析目标部署后再签名；有网关上下文却解析不出目标路由时失败关闭。
+
+C000001 已完成该 scope 的 grant 与令牌签发探测，Codocs 应用与 Worker 已于 2026-09-17 上线测试环境；浏览器端到端验收仍未完成（消费该端点的项目文档页尚未迁入宿主），不能视为已全链路验收。
+
+### 服务路由的来源/目标部署绑定现状（2026-09-17 盘点）
+
+已按跨应用形状绑定（`requireCodocsCrossAppServiceTenantDeploymentBinding`，经网关调用可用）：
+`project-documents/{uuid}/content`、`product-documents/{uuid}/metadata`、`productDocumentContentService`、`productDocumentSearchService`、`productDocumentCreateService`、`companyWeeklySummaryService`、`assetsProductDocumentMetadataService`。
+
+仍是同部署形状（`requireCodocsServiceTenantDeploymentBinding`，只在调用方直连 Codocs 独立子域名、网关不改写上下文时成立）：
+`altoc-entity-documents/{uuid}/content`、`altoc-entity-documents/{uuid}/attach`、`reviews/workflow-callback`、`projectDocumentQualityService`。
+前三条的来源应用 Altoc / Workflow 在 C000001 测试环境尚未部署，无法验证；`projectDocumentQualityService` 是 Aims→Codocs，经网关调用会与项目文档正文同样失配。这些属于已识别但未处理项，改动前需各自补齐调用方签名与回归验证，不要仅替换绑定函数。

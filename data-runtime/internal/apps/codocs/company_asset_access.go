@@ -3,6 +3,7 @@ package codocs
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/hex"
 	"net/http"
 	"net/url"
 	"strings"
@@ -27,20 +28,27 @@ func companyAssetAccessContext(query url.Values, action string) (string, string,
 		return "", "", httperror.New(http.StatusForbidden, "trusted_company_asset_access_required", "Trusted Codocs asset access authorization is required")
 	}
 	path := query.Get("path")
+	if err := validateCompanyAssetAccessPath(path); err != nil {
+		return "", "", err
+	}
+	return actor, path, nil
+}
+
+func validateCompanyAssetAccessPath(path string) error {
 	if utf8.RuneCountInString(path) > 800 || !strings.HasPrefix(path, "codocs/company/") || strings.ContainsAny(path, "\\\x00\r\n\t") {
-		return "", "", httperror.New(http.StatusBadRequest, "invalid_asset_path", "Invalid company asset path")
+		return httperror.New(http.StatusBadRequest, "invalid_asset_path", "Invalid company asset path")
 	}
 	for _, segment := range strings.Split(path, "/") {
 		if segment == "" || segment == "." || segment == ".." {
-			return "", "", httperror.New(http.StatusBadRequest, "invalid_asset_path", "Invalid company asset path")
+			return httperror.New(http.StatusBadRequest, "invalid_asset_path", "Invalid company asset path")
 		}
 	}
 	for _, character := range path {
 		if character < 32 || character == 127 {
-			return "", "", httperror.New(http.StatusBadRequest, "invalid_asset_path", "Invalid company asset path")
+			return httperror.New(http.StatusBadRequest, "invalid_asset_path", "Invalid company asset path")
 		}
 	}
-	return actor, path, nil
+	return nil
 }
 
 func (a *Adapter) recordCompanyAssetAccess(ctx context.Context, query url.Values) (map[string]any, error) {
@@ -48,7 +56,30 @@ func (a *Adapter) recordCompanyAssetAccess(ctx context.Context, query url.Values
 	if err != nil {
 		return nil, err
 	}
-	eventID, err := uuid.Parse(query.Get("eventId"))
+	return a.writeCompanyAssetAccess(ctx, actor, path, query.Get("eventId"))
+}
+
+// The Enterprise route has already authenticated its physical identity and
+// exact capability. Resolve the object's current ACL and path again here;
+// neither a browser nor the Host supplies a storage path as authorization.
+func (a *Adapter) RecordEnterpriseDocumentAccess(ctx context.Context, documentUUID, actor, eventID, expectedPathHash string) (map[string]any, error) {
+	doc, err := a.documentAccess(ctx, documentUUID, url.Values{"current_user": {actor}})
+	if err != nil {
+		return nil, err
+	}
+	path := stringValue(doc["oss_path"])
+	if err := validateCompanyAssetAccessPath(path); err != nil {
+		return nil, err
+	}
+	pathHash := sha256.Sum256([]byte(path))
+	if expectedPathHash != hex.EncodeToString(pathHash[:]) {
+		return nil, httperror.New(http.StatusConflict, "document_storage_changed", "Document storage changed during access")
+	}
+	return a.writeCompanyAssetAccess(ctx, actor, path, eventID)
+}
+
+func (a *Adapter) writeCompanyAssetAccess(ctx context.Context, actor, path, rawEventID string) (map[string]any, error) {
+	eventID, err := uuid.Parse(rawEventID)
 	if err != nil {
 		return nil, httperror.New(http.StatusBadRequest, "invalid_access_event", "A valid access event ID is required")
 	}

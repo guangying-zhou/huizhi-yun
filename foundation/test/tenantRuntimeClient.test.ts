@@ -8,7 +8,7 @@ import {
   isPlatformRuntimeBootstrapToken,
   maybeCallTenantRuntime,
   tenantRuntimeTokenScope,
-  verifyServiceCommandRuntimeHeaders
+  verifyServiceCommandRuntimeHeaders, verifiedServiceCommandActor
 } from '../server/utils/tenantRuntimeClient.ts'
 import { setLocalServiceTokenIssuer } from '../server/utils/serviceOidc.ts'
 import { tenantRuntimeErrorData } from '../server/utils/tenantRuntimeErrors.ts'
@@ -16,7 +16,50 @@ import { classifyServiceOperationFailure } from '../server/utils/serviceOperatio
 
 type ServiceCommandHeaders = Record<string, string>
 
+test('verified command actors stay request-local, target-bound and authenticated', async () => {
+  const command = { actorUid: 'person-a', actorDeptCodes: ['DEPT-1'] }
+  const event = { context: { consoleAuth: { authenticated: true, subjectType: 'service', tokenUse: 'service',
+    appCode: 'enterprise', clientCode: 'enterprise.runtime', tenant: 'T', deployment: 'HOST',
+    scopes: ['aims:project-documents:write'] } } } as never
+  const envelope = { operationId: crypto.randomUUID(), targetApp: 'aims', operationCode: 'enterprise.aims.project-document-writes.create-markdown.v1',
+    requiredCapability: 'aims:project-documents:write', idempotencyKey: 'document-1', commandSchemaVersion: 'v1',
+    commandSha256: await hashServiceCommandPayload(command), command }
+  const input = { token: 'test-token', method: 'POST' as const, requestTarget: '/aims/api/service',
+    requestId: 'request-1', tenantCode: 'T', sourceDeploymentCode: 'HOST', targetDeploymentCode: 'AIMS',
+    sourceApp: 'enterprise', sourceClientId: 'enterprise.runtime', targetApp: 'aims', envelope }
+  const headers = await buildServiceCommandRuntimeHeaders(input)
+  assert.equal(verifiedServiceCommandActor(event, 'aims'), null)
+  await assert.rejects(() => verifyServiceCommandRuntimeHeaders({ ...input, event, token: 'wrong', readHeader: name => headers[name] }))
+  assert.equal(verifiedServiceCommandActor(event, 'aims'), null)
+  await verifyServiceCommandRuntimeHeaders({ ...input, event, readHeader: name => headers[name] })
+  assert.deepEqual(verifiedServiceCommandActor(event, 'aims'), { uid: 'person-a', deptCodes: ['DEPT-1'] })
+  assert.equal(verifiedServiceCommandActor(event, 'codocs'), null)
+  const independent = { context: { ...(event as { context: object }).context } } as never
+  assert.equal(verifiedServiceCommandActor(independent, 'aims'), null)
+  const auth = (event as { context: { consoleAuth: { scopes: string[] } } }).context.consoleAuth
+  auth.scopes = []
+  assert.equal(verifiedServiceCommandActor(event, 'aims'), null)
+})
+
 describe('tenant runtime token scope', () => {
+  test('registered enterprise paths preserve exact business capabilities for both audiences', () => {
+    for (const audience of ['data-runtime', 'tenant-runtime']) {
+      assert.equal(tenantRuntimeTokenScope(audience, 'assets:product:read', 'business'), 'assets:product:read')
+      for (const invalid of ['', '*', 'assets.read', 'assets:product:*', `${audience}:assets:read`]) {
+        assert.throws(() => tenantRuntimeTokenScope(audience, invalid, 'business'))
+      }
+    }
+  })
+  test('permits only AA-04’s fixed raw Aims and receivable combination', () => {
+    for (const audience of ['data-runtime', 'tenant-runtime']) {
+      assert.equal(
+        tenantRuntimeTokenScope(audience, 'aims.write altoc:receivable:mark-billable', 'aims-milestone-receivable'),
+        'aims.write altoc:receivable:mark-billable'
+      )
+    }
+    assert.throws(() => tenantRuntimeTokenScope('data-runtime', 'aims.write altoc:service-ticket:delivery-result:sync', 'aims-milestone-receivable'))
+    assert.throws(() => tenantRuntimeTokenScope('other-runtime', 'aims.write altoc:receivable:mark-billable', 'aims-milestone-receivable'))
+  })
   test('binds transport and business capabilities to the requested audience', () => {
     assert.equal(
       tenantRuntimeTokenScope('data-runtime', 'altoc.read altoc:dashboard:view'),
@@ -1125,6 +1168,44 @@ describe('Workflow proxy runtime actor delegation', () => {
       if (originalUseRuntimeConfig) globals.useRuntimeConfig = originalUseRuntimeConfig
       else delete globals.useRuntimeConfig
       await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()))
+    }
+  })
+})
+
+describe('unified scheduler route table', () => {
+  test('each unified route is bound to its own app, exact scope and POST before any network call', async () => {
+    const config = { hzy: { tenantRuntime: { endpoint: 'http://127.0.0.1:1', tenant: 'tenant-a', deployment: 'deployment-a', dataAccessMode: 'tenant-runtime' } } }
+    const globals = globalThis as typeof globalThis & { useRuntimeConfig?: () => unknown }
+    const originalUseRuntimeConfig = globals.useRuntimeConfig
+    globals.useRuntimeConfig = () => config
+    const event = { context: {}, node: { req: { headers: {}, url: '/api/internal/integration-operations/drain' } } } as never
+    const scheduler = { generation: '7' }
+    const statusOf = async (path: string, options: Parameters<typeof maybeCallTenantRuntime>[2]) => {
+      try {
+        await maybeCallTenantRuntime(event, path, options)
+      } catch (error) {
+        return (error as { statusCode?: number }).statusCode
+      }
+      return 200
+    }
+    try {
+      const contractViolations: Array<[string, Parameters<typeof maybeCallTenantRuntime>[2]]> = [
+        ['/v1/enterprise/assets/notifications:scan-due', { appCode: 'aims', scope: 'assets:notifications-due:execute', method: 'POST', body: {}, enterpriseScheduler: scheduler }],
+        ['/v1/enterprise/aims/milestones:rollover-due', { appCode: 'aims', scope: 'aims:integration_operation:execute', method: 'POST', body: {}, enterpriseScheduler: scheduler }],
+        ['/v1/enterprise/aims/notifications:scan-due', { appCode: 'aims', scope: 'aims:milestone-rollover:execute', method: 'POST', body: {}, enterpriseScheduler: scheduler }],
+        ['/v1/enterprise/aims/notifications:acknowledge', { appCode: 'aims', scope: 'aims:notifications-due:execute', method: 'POST', body: {} }],
+        ['/v1/aims/service/notifications:scan-due', { appCode: 'aims', scope: 'aims:notifications-due:execute', method: 'POST', body: {}, enterpriseScheduler: scheduler }],
+        ['/v1/enterprise/assets/notifications:acknowledge-closure', { appCode: 'assets', scope: 'assets:notifications-due:execute', method: 'GET', enterpriseScheduler: scheduler }]
+      ]
+      for (const [path, options] of contractViolations) {
+        assert.equal(await statusOf(path, options), 403, `${path} ${JSON.stringify(options)}`)
+      }
+      // A correct contract still requires the signed Gateway wake of the route's app.
+      assert.equal(await statusOf('/v1/enterprise/assets/notifications:scan-due', { appCode: 'assets', scope: 'assets:notifications-due:execute', method: 'POST', body: {}, enterpriseScheduler: scheduler }), 404)
+      assert.equal(await statusOf('/v1/enterprise/aims/milestones:rollover-due', { appCode: 'aims', scope: 'aims:milestone-rollover:execute', method: 'POST', body: {}, enterpriseScheduler: scheduler }), 404)
+    } finally {
+      if (originalUseRuntimeConfig) globals.useRuntimeConfig = originalUseRuntimeConfig
+      else delete globals.useRuntimeConfig
     }
   })
 })

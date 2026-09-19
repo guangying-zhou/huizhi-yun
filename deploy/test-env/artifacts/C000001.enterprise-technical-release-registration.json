@@ -1,0 +1,62 @@
+{
+  "schemaVersion": "enterprise-technical-release-registration.v1",
+  "environment": "test",
+  "tenantCode": "C000001",
+  "recordedAt": "2026-09-14T17:35:00Z",
+  "application": {
+    "id": 185,
+    "appCode": "enterprise",
+    "homeUrl": "https://hzy-test.huizhi.yun/",
+    "activeManifestId": 41,
+    "activeManifestHash": "sha256:8d5fd51ea1cd5d8fdd8436988f28f24d913489e6df2f66ff2736d740d7f9a627",
+    "compositionVerified": {
+      "modules": [
+        "aims",
+        "assets"
+      ],
+      "aims": {
+        "resources": 35,
+        "recommendedRoles": 14
+      },
+      "assets": {
+        "resources": 19,
+        "recommendedRoles": 10
+      },
+      "permissionCatalogHash": "cc5cb6243fd77dc9f2fdcab59e570ddbba838c554cec8813e2913c4ba3f02aae"
+    }
+  },
+  "release": {
+    "id": 34,
+    "version": "v0.3.219-test.adr018-candidate.7-g1",
+    "status": "released",
+    "sourceTag": "enterprise/v0.3.219-test.adr018-candidate.7-g1",
+    "builtSourceCommit": "bd55fe14da1a8320eeace33a79bbc7cf4dbe111e",
+    "repositoryCommit": "4095b7de9927665060bf2e8fcb294fb20d6ccc17",
+    "bundleUri": "test-worker://hzy-test-enterprise/d6a2d58c-b225-4558-92c7-f1f7cc2095ba",
+    "bundleHash": "5632f9df15e78aa8840bb3f1e206f8cd8ce8201d6051b69af328900e7367ed71",
+    "bundleSizeBytes": 7652265,
+    "technicalManifestSha256": "85bfe2cc0681ffdea506361a218a94fb49609dd90b913f1914983ac588ff43ae",
+    "sourceTagKind": "Release label; no Git tag was published. repositoryCommit is the pushed source reference.",
+    "bundleUriKind": "Reference to the deployed test Worker version, not a downloadable installation package."
+  },
+  "deployment": {
+    "id": 18,
+    "deploymentCode": "C000001-test-enterprise",
+    "basePath": "/",
+    "apiBase": "/api/v1/enterprise",
+    "runtimeEndpoint": "https://hzy-test-runtime.isme.dev",
+    "reportedAppVersion": "0.3.219-test.adr018-candidate.7",
+    "reportedManifestVersion": "v0.3.219-test.adr018-candidate.7-g1",
+    "reportedManifestHash": "sha256:8d5fd51ea1cd5d8fdd8436988f28f24d913489e6df2f66ff2736d740d7f9a627",
+    "versionStatus": "current"
+  },
+  "audit": {
+    "actorUid": "zhouguangying",
+    "actorAccountId": 91,
+    "releaseAction": "app.release.create_test",
+    "deploymentAction": "deployment.report_identity",
+    "temporaryPrefixRestored": "enterprise/",
+    "homeRouteAction": "app.home_url.test_root"
+  },
+  "registrationMethod": "Audited test-only administrator transaction reusing an identical existing active manifest; standard import transaction stalled and was rolled back."
+}

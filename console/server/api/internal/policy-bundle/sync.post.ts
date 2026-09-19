@@ -6,6 +6,13 @@ import { issueConsoleRuntimeServiceToken } from '@hzy/foundation/server/utils/co
 import { getOidcIssuer } from '~~/server/utils/oidc'
 import { verifyPolicyStorageIssuance } from '~~/server/utils/policyStoragePreflight'
 
+function syncFailureReason(error: unknown) {
+  return String(error || 'verified policy bundle missing')
+    .replace(/https?:\/\/[^\s]+/g, '[url]')
+    .replace(/\b(?:Bearer\s+)?[A-Za-z0-9._~-]{24,}\b/g, '[redacted]')
+    .slice(0, 240)
+}
+
 export default defineEventHandler(async (event) => {
   const context = await requireTenantGatewaySchedulerRequest(event, 'console', '/api/internal/policy-bundle/sync')
   setHeader(event, 'Cache-Control', 'no-store')
@@ -23,6 +30,9 @@ export default defineEventHandler(async (event) => {
     return { code: 0, data: { ready: false, preflightReady: true } }
   }
   const result = await refreshPlatformBundle('independent-sync', event)
-  if (!result.ok || !result.bundle) throw createError({ statusCode: 503, message: 'policy sync unavailable' })
+  if (!result.ok || !result.bundle) {
+    console.warn('Policy bundle sync unavailable', { reason: syncFailureReason(result.error) })
+    throw createError({ statusCode: 503, message: 'policy sync unavailable' })
+  }
   return { code: 0, data: { ready: true } }
 })

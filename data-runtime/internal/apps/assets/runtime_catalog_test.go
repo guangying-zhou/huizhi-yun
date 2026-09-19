@@ -12,11 +12,13 @@ func TestListProductsFiltersMultipleProductCodesInOneQuery(t *testing.T) {
 	adapter, mock, closeDB := newAssetsSQLMockAdapter(t)
 	defer closeDB()
 
+	mock.ExpectBegin()
 	mock.ExpectQuery(`(?s)FROM product_assets p.*AND p\.product_code IN \(\?,\?\).*GROUP BY p\.id`).
 		WillReturnRows(sqlmock.NewRows([]string{"id", "product_code", "product_name", "status", "asset_count", "base_count"}).
 			AddRow(int64(2), "PROD-2", "产品二", "mvp", int64(0), int64(0)).
 			AddRow(int64(1), "PROD-1", "产品一", "pmf", int64(0), int64(0)))
 
+	mock.ExpectCommit()
 	result, err := adapter.listProducts(context.Background(), url.Values{
 		"product_codes": {"PROD-1, PROD-2,PROD-1"},
 		"current_user":  {"u1"}, assetsObjectAccessQueryKey: {"all"},
@@ -59,7 +61,9 @@ func TestProductDetailRequiresScopeBeforeStorage(t *testing.T) {
 func TestProductDetailAppliesOwnerAndProjectBeforeRelatedReads(t *testing.T) {
 	adapter, mock, closeDB := newAssetsSQLMockAdapter(t)
 	defer closeDB()
+	mock.ExpectBegin()
 	mock.ExpectQuery(`(?s)WHERE p.id = \? AND .*business_owner_uid.*technical_owner_uid.* AND p.project_code IN \(\?\)`).WithArgs(int64(7), "u1", "P1").WillReturnRows(sqlmock.NewRows([]string{"id"}))
+	mock.ExpectRollback()
 	_, err := adapter.getProduct(context.Background(), 7, url.Values{"current_user": {"u1"}, assetsObjectAccessQueryKey: {"relation"}, assetsScopeUnitsQueryKey: {`[{"directRelation":true,"projectCodes":["P1"]}]`}})
 	if err == nil {
 		t.Fatal("out-of-scope record returned")
@@ -82,13 +86,17 @@ func TestProductListAndServiceRoutesKeepSeparateAuthorization(t *testing.T) {
 		}
 	}
 	q := url.Values{"current_user": {"u1"}, assetsObjectAccessQueryKey: {"relation"}, assetsScopeUnitsQueryKey: {`[{"directRelation":true,"projectCodes":["P1"]}]`}}
+	m.ExpectBegin()
 	m.ExpectQuery(`(?s)FROM product_assets p.*business_owner_uid.*technical_owner_uid.* AND p.project_code IN \(\?\).*GROUP BY p.id`).WillReturnRows(sqlmock.NewRows([]string{"id", "product_code", "status", "asset_count"}).AddRow(1, "PROD-1", "mvp", 0))
+	m.ExpectCommit()
 	result, err := a.listProducts(context.Background(), q)
 	if err != nil || result["total"] != 1 {
 		t.Fatalf("scoped list %v %v", result, err)
 	}
 	valid := url.Values{"hzy_runtime_source_app": {"assets"}, "hzy_runtime_tenant_code": {"tenant"}, "hzy_runtime_deployment_code": {"deployment"}, "hzy_runtime_service_client_id": {"assets.runtime"}, "current_user_scopes": {"assets.read assets:product:read"}}
+	m.ExpectBegin()
 	m.ExpectQuery(`(?s)FROM product_assets p.*AND 1=1.*GROUP BY p.id`).WillReturnRows(sqlmock.NewRows([]string{"id"}))
+	m.ExpectCommit()
 	if _, _, handled, err := a.handleProductCatalogRuntime(context.Background(), "GET", "/v1/assets/service/products", valid); !handled || err != nil {
 		t.Fatalf("service directory: %v", err)
 	}
@@ -175,12 +183,12 @@ func TestProductRelationsCheckParentInsideTransaction(t *testing.T) {
 			a, m, closeDB := newAssetsSQLMockAdapter(t)
 			defer closeDB()
 			q := url.Values{"current_user": {"u1"}, assetsObjectAccessQueryKey: {"relation"}, assetsPermissionActionQueryKey: {"edit"}, assetsScopeUnitsQueryKey: {`[{"directRelation":true}]`}}
+			m.ExpectBegin()
 			if kind == "document" {
 				for _, column := range []string{"artifact_type", "source_context"} {
 					m.ExpectQuery(`(?s)FROM information_schema.COLUMNS`).WithArgs("asset_documents", column).WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(1))
 				}
 			}
-			m.ExpectBegin()
 			m.ExpectQuery(`SELECT p.id FROM product_assets p WHERE p.id=\? AND .*FOR UPDATE`).WithArgs(int64(7), "u1").WillReturnRows(sqlmock.NewRows([]string{"id"}))
 			m.ExpectRollback()
 			var err error

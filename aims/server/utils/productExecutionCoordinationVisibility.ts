@@ -29,8 +29,15 @@ export async function filterExecutionCoordination(value: ExecutionCoordination, 
   const projects = value.projects.map(project => ({ ...totals(project), project_id: project.project_id }))
   if (projects.some((project, index) => !Number.isSafeInteger(project.project_id) || project.project_id < 1 || (index > 0 && project.project_id <= projects[index - 1]!.project_id))) throw new Error('协调汇总项目无效或重复')
   for (const key of counters) {
-    const sum = projects.reduce((n, project) => n + BigInt(project[key]), 0n)
-    if (sum !== BigInt(aggregate[key])) throw new Error('协调汇总与项目统计不一致')
+    let sum = 0
+    for (const project of projects) {
+      // All terms and the aggregate are non-negative safe integers. Comparing
+      // against the remaining aggregate before addition keeps the sum exact
+      // without requiring BigInt in the ES2019 Worker target.
+      if (project[key] > aggregate[key] - sum) throw new Error('协调汇总与项目统计不一致')
+      sum += project[key]
+    }
+    if (sum !== aggregate[key]) throw new Error('协调汇总与项目统计不一致')
   }
   const visible: ProjectExecutionTotals[] = []
   for (const project of projects) if (await canViewProject(project.project_id)) visible.push(project)

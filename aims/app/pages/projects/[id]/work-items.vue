@@ -1,8 +1,17 @@
 <script setup lang="ts">
+import { useAimsModule } from '../../../../layer/useAimsModule'
+import MarkdownContent from '../../../components/MarkdownContent.vue'
+import ProjectNavbar from '../../../components/project/ProjectNavbar.vue'
+import TargetEditModal from '../../../components/target/TargetEditModal.vue'
+import TargetInfoModal from '../../../components/target/TargetInfoModal.vue'
+import { useProjectStore } from '../../../stores/project'
+import { useMilestoneStore } from '../../../stores/milestone'
+import { useWorkItemStore } from '../../../stores/workItem'
+import { useAccessibleDepartments } from '../../../composables/useAccessibleDepartments'
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 import type { Department } from '@hzy/foundation/app/types/account'
-import type { WorkItem, WorkItemType, Priority, Severity, CreateWorkItemRequest, WorkItemListQuery } from '~/types/aims'
+import type { WorkItem, WorkItemType, Priority, Severity, CreateWorkItemRequest, WorkItemListQuery } from '../../../types/aims'
 import {
   typeConfig,
   priorityConfig,
@@ -10,13 +19,16 @@ import {
   getStatusLabel,
   getStatusColor,
   transitionLabels
-} from '~/config/work-item'
+} from '../../../config/work-item'
 
 definePageMeta({
   layoutHeader: true,
   layoutHeaderTitle: '目标',
   layoutHeaderProjectSwitcher: true
 })
+
+// 同一份代码供独立应用与企业宿主使用：非宿主模式下 moduleUrl 原样返回路径。
+const { moduleUrl } = useAimsModule()
 
 const route = useRoute()
 const projectId = computed(() => Number(route.params.id))
@@ -76,7 +88,7 @@ async function reconcileCompletionReviewStatuses(items: WorkItem[]): Promise<num
       const nextStatus = mapCompletionWorkflowStatusToWorkItemStatus(wfStatus)
       if (!nextStatus || nextStatus === item.status) return false
 
-      await $fetch(`/api/v1/work-items/${item.id}`, {
+      await $fetch(moduleUrl(`/api/v1/work-items/${item.id}`), {
         method: 'PUT',
         body: { status: nextStatus }
       })
@@ -305,7 +317,7 @@ function versionLabel(versionId: number | null | undefined) {
 
 async function loadVersions() {
   try {
-    const res = await $fetch<{ code: number, data: { items?: any[] } }>(`/api/v1/projects/${projectId.value}/releases`)
+    const res = await $fetch<{ code: number, data: { items?: any[] } }>(moduleUrl(`/api/v1/projects/${projectId.value}/releases`))
     versionOptions.value = (res.data.items || []).map(item => ({
       id: Number(item.id) || 0,
       productCode: String(item.product_code || item.productCode || ''),
@@ -612,7 +624,7 @@ async function prefetchDropValidation(item: WorkItem, fromColKey: string) {
   dragBlockedReasons.value = {}
   try {
     const res = await $fetch<{ code: number, data: { toStatus: string, transitionKey: string }[] }>(
-      `/api/v1/work-items/${item.id}/transitions`
+      moduleUrl(`/api/v1/work-items/${item.id}/transitions`)
     )
     if (token !== dragValidationToken || !dragState.value || dragState.value.item.id !== item.id) return
     const allowedTargets = res.code === 0 ? res.data.map(t => t.toStatus) : []
@@ -704,7 +716,7 @@ async function validatePlanningToTodo(item: WorkItem): Promise<{ ok: boolean, is
   // 成果要求必须至少 1 条
   try {
     const res = await $fetch<{ code: number, data: { id: number }[] }>(
-      '/api/v1/deliverables',
+      moduleUrl('/api/v1/deliverables'),
       { params: { entity_type: 'work_item', entity_id: item.id } }
     )
     if (res.code === 0 && res.data.length === 0) {
@@ -809,7 +821,7 @@ const timeEntryForm = ref({
 
 async function loadTimeEntries(itemId: number) {
   try {
-    const res = await $fetch<{ code: number, data: any[] }>(`/api/v1/work-items/${itemId}/time-entries`)
+    const res = await $fetch<{ code: number, data: any[] }>(moduleUrl(`/api/v1/work-items/${itemId}/time-entries`))
     if (res.code === 0) {
       timeEntries.value = res.data
     }
@@ -823,7 +835,7 @@ async function saveTimeEntry() {
   if (!targetId) return
   savingTimeEntry.value = true
   try {
-    await $fetch(`/api/v1/work-items/${targetId}/time-entries`, {
+    await $fetch(moduleUrl(`/api/v1/work-items/${targetId}/time-entries`), {
       method: 'POST',
       body: timeEntryForm.value
     })
@@ -848,7 +860,7 @@ const linkedDocs = ref<{ id: number, documentId: string }[]>([])
 
 async function loadLinkedDocs(itemId: number) {
   try {
-    const res = await $fetch<{ code: number, data: any[] }>(`/api/v1/work-items/${itemId}/documents`)
+    const res = await $fetch<{ code: number, data: any[] }>(moduleUrl(`/api/v1/work-items/${itemId}/documents`))
     if (res.code === 0) {
       linkedDocs.value = res.data
     }
@@ -860,7 +872,7 @@ async function loadLinkedDocs(itemId: number) {
 async function linkDocument() {
   const targetId = viewMode.value === 'board' ? selectedItem.value?.id : selectedItemId.value
   if (!targetId || !docIdToLink.value) return
-  await $fetch(`/api/v1/work-items/${targetId}/documents`, {
+  await $fetch(moduleUrl(`/api/v1/work-items/${targetId}/documents`), {
     method: 'POST',
     body: { documentId: docIdToLink.value }
   })
@@ -872,7 +884,7 @@ async function linkDocument() {
 async function unlinkDocument(documentId: string) {
   const targetId = viewMode.value === 'board' ? selectedItem.value?.id : selectedItemId.value
   if (!targetId) return
-  await $fetch(`/api/v1/work-items/${targetId}/documents/${documentId}`, {
+  await $fetch(moduleUrl(`/api/v1/work-items/${targetId}/documents/${documentId}`), {
     method: 'DELETE'
   })
   await loadLinkedDocs(targetId)
@@ -889,7 +901,7 @@ const viewingTarget = ref<WorkItem | null>(null)
 function openTargetByStatus(item: WorkItem) {
   // 需求工作项（基线 / 变更）→ 跳转需求页，按 workItemId 过滤
   if (item.type === 'requirement') {
-    navigateTo(`/projects/${projectId.value}/requirements?workItemId=${item.id}`)
+    navigateTo(moduleUrl(`/projects/${projectId.value}/requirements?workItemId=${item.id}`))
     return
   }
   if (item.status === 'planning') {
@@ -900,7 +912,7 @@ function openTargetByStatus(item: WorkItem) {
   if (item.status === 'todo') {
     const isDecomposeContainer = item.templateKey === 'requirement_breakdown' || item.templateKey === 'requirement_change'
     const subPath = isDecomposeContainer ? 'decompose' : 'breakdown'
-    navigateTo(`/projects/${projectId.value}/work-items/${item.id}/${subPath}`)
+    navigateTo(moduleUrl(`/projects/${projectId.value}/work-items/${item.id}/${subPath}`))
     return
   }
   // in_progress / in_review / completed → 只读信息弹窗
@@ -921,7 +933,7 @@ function openDetail(item: WorkItem) {
 async function openBoardDetail(item: WorkItem) {
   // 泳道卡片：执行中/确认中/已完成统一进入任务分解页
   if (['in_progress', 'in_review', 'completed'].includes(item.status)) {
-    navigateTo(`/projects/${projectId.value}/work-items/${item.id}/breakdown`)
+    navigateTo(moduleUrl(`/projects/${projectId.value}/work-items/${item.id}/breakdown`))
     return
   }
   openTargetByStatus(item)
@@ -1002,7 +1014,7 @@ async function handleCreate() {
     if (itemId && pendingDocIds.value.length > 0) {
       for (const docId of pendingDocIds.value) {
         try {
-          await $fetch(`/api/v1/work-items/${itemId}/documents`, {
+          await $fetch(moduleUrl(`/api/v1/work-items/${itemId}/documents`), {
             method: 'POST',
             body: { documentId: docId }
           })
@@ -1132,7 +1144,7 @@ onMounted(async () => {
   ])
 
   if (isRoutineProject.value) {
-    await navigateTo(`/projects/${projectId.value}/board`, { replace: true })
+    await navigateTo(moduleUrl(`/projects/${projectId.value}/board`), { replace: true })
     return
   }
 

@@ -1,0 +1,47 @@
+{
+  "candidateOnly": true,
+  "deployed": true,
+  "environment": "test",
+  "tenant": "C000001",
+  "worker": "hzy-test-enterprise",
+  "pilot": false,
+  "sourceCommit": "090ba513e82c8b41af6cffda1e366b62418d6ade",
+  "sourceTrees": {
+    "enterprise": "2384073ef71699b22fbdd704d49d40040c301ddb",
+    "aims": "4cb4b8999b3fea26d2d4cd703ae6d52ae4ae71c4",
+    "assets": "5e976261a955f6b6b453f84fbfecef7c98664b24",
+    "altoc": "49f5da85a575c36244a90f71d49c237885970e8a",
+    "foundation": "a9e0cf7f03aa0843a0b234080799c195a79bf13c",
+    "platform/packages": "621334b4d8bbc511f6fdba1792d2359c1415c7fe",
+    "data-runtime": "ab2202d04d428648486098f159f97b9e01789f9e"
+  },
+  "sourceWorktreeClean": true,
+  "environmentFilesCopied": false,
+  "buildNodeVersion": "v24.18.0",
+  "outputFiles": 374,
+  "outputBytes": 7646211,
+  "outputManifestSha256": "b2070b28ce1f33b0a7bce01ed096ceb4b5d7d12a01088e1c2835efa9c23bd009",
+  "manifestFormat": "sha256 + two spaces + relative POSIX path + newline; sorted path order",
+  "checks": [
+    "typecheck",
+    "full-cloudflare-build",
+    "wrangler-dry-run"
+  ],
+  "protectedArtifactDirectory": "/Users/gavinzhou/Library/Application Support/HuizhiYun/test-runtime/host-pinned-090ba513",
+  "createdAt": "2026-09-14T06:14:51.802180+00:00",
+  "remaining": [
+    "actual registry activation",
+    "scheduler ownership",
+    "full Gateway routing",
+    "authenticated business and recovery acceptance"
+  ],
+  "wranglerUploadObservation": "Total Upload: 6001.97 KiB / gzip: 2115.97 KiB",
+  "deployment": {
+    "versionId": "2d71bea8-d845-4885-9089-0b6d84e3ae5b",
+    "trafficPercent": 100,
+    "deployedAt": "2026-09-14T15:31:35.246Z",
+    "serverEntrySha256": "f537d87593150d93af9f0e713b567e27d84eee8f4ccbdcc897b42824e6ac4a97"
+  },
+  "supersededBy": "deploy/test-env/artifacts/C000001.host-test-prefix-090ba513-deployment.json",
+  "supersededReason": "Initial build used root assets/auth paths; rebuilt identical source with test /enterprise prefix after browser verification."
+}

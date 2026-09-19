@@ -1,0 +1,174 @@
+{
+  "reason": "Correct unpublished commit messages rejected by commitlint; all source trees are byte-for-byte unchanged. Original build commit IDs remain valid artifact provenance.",
+  "baseCommit": "d115bde7ddb1a049e3f719a0aa84e304c1978594",
+  "commits": [
+    {
+      "builtSourceCommit": "c0d22f7748ede2ffb0b8766ececf7d8a6165c996",
+      "repositoryCommit": "c0d22f7748ede2ffb0b8766ececf7d8a6165c996",
+      "tree": "1893e865a0c97f2f18ceb94c9890075f12a1ea91",
+      "messageChanged": false
+    },
+    {
+      "builtSourceCommit": "f87f76164c7e495cb80ed50c3c5c32946a2217e9",
+      "repositoryCommit": "f87f76164c7e495cb80ed50c3c5c32946a2217e9",
+      "tree": "c4eb28913d41fa2432e00eacbffad9f6ce8577a8",
+      "messageChanged": false
+    },
+    {
+      "builtSourceCommit": "96529f6505033aa6d7ce35ad3da6330831ad8b7e",
+      "repositoryCommit": "96529f6505033aa6d7ce35ad3da6330831ad8b7e",
+      "tree": "f1ea3cf5293f6310088377ae0ce91b2cb6678eaf",
+      "messageChanged": false
+    },
+    {
+      "builtSourceCommit": "5cb28dcc06b6dee20f35155b613e4890375f3a82",
+      "repositoryCommit": "5ea95d03afa7d66d1e690c7d23604d3c0deaf73e",
+      "tree": "d7e5e71a9bb48312e6f264897f31daaef918b46d",
+      "messageChanged": true
+    },
+    {
+      "builtSourceCommit": "9fd2d993796848d555737c3d3d80c7679c14af12",
+      "repositoryCommit": "c8874fbf24a20914261cecbf148845c6c03cbbf9",
+      "tree": "c9bc7193780681fa092f2b9512fa1e289c7e492e",
+      "messageChanged": true
+    },
+    {
+      "builtSourceCommit": "4c83f8a6d2774d99dbef86958c2009185f1d7806",
+      "repositoryCommit": "b2d7b937fe3834777da466ed14058a175e21d6d6",
+      "tree": "b5f0b20d074304823e827564d606dfbf75843ee6",
+      "messageChanged": false
+    },
+    {
+      "builtSourceCommit": "611740ac72b2699a8a69b743f58cee2e347a7140",
+      "repositoryCommit": "094d9b0640decb15bc1a31243738bf696db2d579",
+      "tree": "7d6293df0670532604772482c5eec90d0e227067",
+      "messageChanged": true
+    },
+    {
+      "builtSourceCommit": "5a3d5d0cc2bf7f5cfec121e935dd5f456a1e0d02",
+      "repositoryCommit": "fe850c53402d1b111720c889e09fe6fa755254ce",
+      "tree": "2b8e5e1fa1e7dc43a4c4aefb78181901ee044645",
+      "messageChanged": true
+    },
+    {
+      "builtSourceCommit": "eb268cf9e17dbe0db925a947faeaebc11134a551",
+      "repositoryCommit": "4c5dcb45df773e663d032432648053e4a9f7d639",
+      "tree": "0b18584c8c50384f19c35c4adb4e0a3021348dfc",
+      "messageChanged": false
+    },
+    {
+      "builtSourceCommit": "a643255d4172fb71b3cf1b969b36872c02ecc037",
+      "repositoryCommit": "848328a2ffb7d73d8d602315c5a4be931af26403",
+      "tree": "bda9f8119f289d38fba706344d5e3288bbcb8a4a",
+      "messageChanged": true
+    },
+    {
+      "builtSourceCommit": "448bafdcadd9e0b5479d79027f5f8b4d7d73c8ff",
+      "repositoryCommit": "953ddfdada6505cd98fffe22cc909b88cc1fbffe",
+      "tree": "372a02a2663982a62322a9ea00374153d8c2e205",
+      "messageChanged": false
+    },
+    {
+      "builtSourceCommit": "73cf74082eda9ba224da443af7418e5a8840293e",
+      "repositoryCommit": "2a444a77997b14053d376aab37d3279d2ad7f5c4",
+      "tree": "5f0bf6f6462751900253afc742a2a715c4c811a1",
+      "messageChanged": false
+    },
+    {
+      "builtSourceCommit": "12ddf1809b1f47e2ee54679e2a87d2692f600a29",
+      "repositoryCommit": "d5092d0b44b4c2cb267a37d3a62bc509b3c82d39",
+      "tree": "d0cb790c119537ec81b2c6c0afe4cfda2c48e190",
+      "messageChanged": true
+    },
+    {
+      "builtSourceCommit": "5d69d34948e753877a2a28f02db71facd5b0a66d",
+      "repositoryCommit": "2b2c504869576e08f7e55e594b05660160bb3164",
+      "tree": "cae381ccefb76b88a76c431806891d106e889416",
+      "messageChanged": false
+    },
+    {
+      "builtSourceCommit": "b6d2b37746a04dd00afb2a758457cc80e0f876bd",
+      "repositoryCommit": "9b0269715e9d6defed87125b62b1d615303e77a4",
+      "tree": "483b1da7583bacd590a37527fd9863da2cce2d0a",
+      "messageChanged": false
+    },
+    {
+      "builtSourceCommit": "5fe5f6d88534aaa71930cd6d2bf8d4e902bbf59f",
+      "repositoryCommit": "8608239687adc16653cc19cb5c9f24bdb7b10e82",
+      "tree": "b4a21df429bfb5d3477005504356b2535972a356",
+      "messageChanged": false
+    },
+    {
+      "builtSourceCommit": "e2291747c10065dfaf7f29a82331a0b838f860c6",
+      "repositoryCommit": "e3034df686d0e2edccd44af5698857df7d30cba5",
+      "tree": "f7c25c571b25767c0bcf6c8b50860908f18288b4",
+      "messageChanged": false
+    },
+    {
+      "builtSourceCommit": "7c1ebf3eb2d84f44670a82f9bd824ef7c4781759",
+      "repositoryCommit": "2bf432ed6902025c33984eb9228bbbc01fcecdf8",
+      "tree": "ad1fc7aeb672a072a503a4336eb71399bdd5e7e4",
+      "messageChanged": false
+    },
+    {
+      "builtSourceCommit": "4345d0e93e1e4aa9a531e232829274379492203e",
+      "repositoryCommit": "83a9650f14d45f9f77d2bd92e89f9dd2852eda2a",
+      "tree": "762ca5620a3156541a2ea9ab4b44dbcef9483247",
+      "messageChanged": false
+    },
+    {
+      "builtSourceCommit": "71ac6eca5eabf979602fccd834a31dbdc4d4975d",
+      "repositoryCommit": "f39519705ef6a9be956e4dfaabfd827b1a29a012",
+      "tree": "2822effe758a7ec408e24c85262cfe75b311a91d",
+      "messageChanged": false
+    },
+    {
+      "builtSourceCommit": "57dabc693f9bb16e5442f853545d008135435574",
+      "repositoryCommit": "8bbae6d2916e60f7ec970050fcf7c0986dfafb76",
+      "tree": "3d6b569ec4cd66029d271931365c5593fb0d2d69",
+      "messageChanged": false
+    },
+    {
+      "builtSourceCommit": "62c40387670a849d590146d4dba914e93e4f1b38",
+      "repositoryCommit": "0df3409390e7e23f0a50e60a4d301655d0e52e68",
+      "tree": "7e076237b9e06d87c72ae26c7833bc70b7dd399f",
+      "messageChanged": false
+    },
+    {
+      "builtSourceCommit": "6f1aaa562f5829bea59f14f7245182424f109e70",
+      "repositoryCommit": "0a65a42f0646bc9f0bbf5cfb20d255f8c3395545",
+      "tree": "39226ed69be72063340539ea907deab0682cbbb3",
+      "messageChanged": false
+    },
+    {
+      "builtSourceCommit": "7ff892a5326f4a5f3256503d1422def8638f3ff2",
+      "repositoryCommit": "2a25c924e7575b31a80fc04053a574ae1b910e4f",
+      "tree": "820f1e48721c3fc429f3cda14d5d9f6b22cb5e44",
+      "messageChanged": false
+    },
+    {
+      "builtSourceCommit": "b4b4f1e8de96ec328ac69c72ebe6b1fda955cfb4",
+      "repositoryCommit": "5ad7dd234ae05260e639a0ebe14496bfbfc1ed47",
+      "tree": "058e1a9bc79237b4ed3bf9b551e287fbe0c95554",
+      "messageChanged": false
+    },
+    {
+      "builtSourceCommit": "bd55fe14da1a8320eeace33a79bbc7cf4dbe111e",
+      "repositoryCommit": "4095b7de9927665060bf2e8fcb294fb20d6ccc17",
+      "tree": "692e79c31c305b495bf355819e4bfd184f9f358e",
+      "messageChanged": false
+    },
+    {
+      "builtSourceCommit": "eb07de382f6d6c27236b89ec53ab37c4e116c38a",
+      "repositoryCommit": "82b591563d151c265f121d74e8f4e1e94f80fe07",
+      "tree": "7b4af3b11bc86cea1c94ed3aca4c4c208bb50981",
+      "messageChanged": false
+    },
+    {
+      "builtSourceCommit": "b174a6a8a7dd13fa377aef37ab55af92bbe64e0b",
+      "repositoryCommit": "feb1496e1578446991408c80b88d453f84a05339",
+      "tree": "f87c5c7ab4e4dc120705b63ce1259da8fabd7665",
+      "messageChanged": false
+    }
+  ]
+}

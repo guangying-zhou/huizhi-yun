@@ -1,11 +1,16 @@
 import type { RowDataPacket } from 'mysql2/promise'
 import { ok } from '~~/server/utils/api'
 import { queryRow, queryRows } from '~~/server/utils/db'
+import { ENTERPRISE_MODULE_CATALOG_SQL, enterpriseCatalogMode, loadBundleEnterpriseEntitlement } from '~~/server/utils/enterpriseEntitlementBundle'
 
 interface CurrentPlanRow extends RowDataPacket {
   plan_code: string
   plan_name: string | null
   plan_tier: string | null
+}
+
+interface TenantRow extends RowDataPacket {
+  status: string
 }
 
 interface CatalogAppRow extends RowDataPacket {
@@ -26,6 +31,49 @@ export default defineEventHandler(async (event) => {
       statusCode: 400,
       statusMessage: 'Bad Request',
       message: 'tenant context is missing'
+    })
+  }
+
+  const tenant = await queryRow<TenantRow>(
+    `SELECT status
+       FROM tenants
+      WHERE tenant_code = ?
+      LIMIT 1`,
+    [tenantCode]
+  )
+  const entitlement = tenant
+    ? await loadBundleEnterpriseEntitlement(queryRow, tenantCode, tenant.status, new Date().toISOString())
+    : null
+  const catalogMode = enterpriseCatalogMode(entitlement)
+
+  if (catalogMode !== 'legacy-plan') {
+    const apps = await queryRows<CatalogAppRow[]>(
+      `SELECT a.app_code,
+              a.app_name,
+              a.description,
+              a.icon
+         FROM (${ENTERPRISE_MODULE_CATALOG_SQL}) catalog
+         INNER JOIN platform_applications a ON a.app_code = catalog.appCode
+        ORDER BY a.sort_order ASC, a.app_code ASC`
+    )
+
+    return ok({
+      catalogMode,
+      currentPlan: {
+        planCode: 'enterprise-full',
+        planName: '汇智云企业全量功能',
+        planTier: 'unified'
+      },
+      applications: apps.map(app => ({
+        appCode: app.app_code,
+        appName: app.app_name,
+        description: app.description,
+        icon: app.icon,
+        // Qualification controls whether the full technical catalog is usable;
+        // individual plan membership no longer controls it.
+        enabled: catalogMode === 'enterprise-full',
+        requiredPlan: null
+      }))
     })
   }
 
@@ -80,6 +128,7 @@ export default defineEventHandler(async (event) => {
   )
 
   return ok({
+    catalogMode,
     currentPlan: current
       ? {
           planCode: current.plan_code,

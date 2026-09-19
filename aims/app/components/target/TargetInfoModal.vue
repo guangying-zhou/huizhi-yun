@@ -1,10 +1,12 @@
 <script setup lang="ts">
+import { useAimsModule } from '../../../layer/useAimsModule'
+import MarkdownContent from '../MarkdownContent.vue'
 /**
  * 目标只读信息弹窗 — 用于 in_progress / in_review / completed 列卡片点击
  *
  * 只展示信息，不提供编辑入口。后续可扩展完成进度、工时统计等。
  */
-import type { WorkItem } from '~/types/aims'
+import type { WorkItem } from '../../types/aims'
 import {
   getStatusColor,
   getStatusLabel,
@@ -12,7 +14,7 @@ import {
   reviewLevelLabel,
   deliverableTypeLabel,
   deliverableTypeIcon
-} from '~/config/work-item'
+} from '../../config/work-item'
 
 interface DeliverableItem {
   id: number
@@ -35,6 +37,9 @@ interface ChildTask {
   startDate: string | null
   dueDate: string | null
 }
+
+// 同一份代码供独立应用与企业宿主使用：非宿主模式下 moduleUrl 原样返回路径。
+const { moduleUrl } = useAimsModule()
 
 const props = defineProps<{
   open: boolean
@@ -68,7 +73,7 @@ function getUserName(uid: string | null | undefined) {
 async function loadDeliverables(workItemId: number) {
   try {
     const res = await $fetch<{ code: number, data: DeliverableItem[] }>(
-      '/api/v1/deliverables',
+      moduleUrl('/api/v1/deliverables'),
       { params: { entity_type: 'work_item', entity_id: workItemId } }
     )
     if (res.code === 0) {
@@ -82,7 +87,7 @@ async function loadDeliverables(workItemId: number) {
 async function loadChildren(workItemId: number) {
   try {
     const res = await $fetch<{ code: number, data: ChildTask[] }>(
-      `/api/v1/work-items/${workItemId}/children`
+      moduleUrl(`/api/v1/work-items/${workItemId}/children`)
     )
     if (res.code === 0) {
       children.value = res.data
@@ -120,7 +125,7 @@ const canAppend = computed(() => {
 function gotoAppend() {
   if (!props.workItem) return
   const wi = props.workItem
-  navigateTo(`/projects/${wi.projectId}/work-items/${wi.id}/breakdown`)
+  navigateTo(moduleUrl(`/projects/${wi.projectId}/work-items/${wi.id}/breakdown`))
 }
 
 const reviewLevel = computed(() => {

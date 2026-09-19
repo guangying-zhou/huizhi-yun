@@ -1,13 +1,15 @@
 <script setup lang="ts">
-import { managedAssetCategoryDictionaryCodes } from '~~/shared/assetCategoryDefaults'
-import type { AssetDictionaryDefinition } from '~~/shared/assetsDictionaries'
+import { managedAssetCategoryDictionaryCodes } from '../../../shared/assetCategoryDefaults'
+import type { AssetDictionaryDefinition } from '../../../shared/assetsDictionaries'
+import { useAssetsModule } from '../../../layer/useAssetsModule'
 
 usePageTitle('字典管理')
 
 const editOpen = ref(false)
 const selectedDictionary = ref<AssetDictionaryDefinition | null>(null)
 
-const { dictionaries, loadDictionaries } = useAssetDictionaries()
+const { hosted } = useAssetsModule()
+const { dictionaries, loadDictionaries } = useAssetDictionaries('asset-items')
 await loadDictionaries()
 
 const items = computed<AssetDictionaryDefinition[]>(() => Object.values(dictionaries.value)
@@ -33,8 +35,10 @@ onMounted(() => setRefresh(handleRefresh))
 onBeforeUnmount(clearRefresh)
 
 const handleRowSelect = (_event: Event, row: { original: AssetDictionaryDefinition & { option_count: number } }) => {
-  selectedDictionary.value = row.original
-  editOpen.value = true
+  if (!hosted) {
+    selectedDictionary.value = row.original
+    editOpen.value = true
+  }
 }
 
 const handleUpdated = async () => {
@@ -63,6 +67,7 @@ const handleUpdated = async () => {
   </UDashboardPanel>
 
   <AssetsDictionaryEditModal
+    v-if="!hosted"
     :open="editOpen"
     :dictionary="selectedDictionary"
     @update:open="editOpen = $event"

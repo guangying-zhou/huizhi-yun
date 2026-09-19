@@ -61,8 +61,7 @@ const getResolvedOSSRuntimeConfig = (): CodocsOssRuntimeConfig => {
 }
 
 // 获取 OSS 配置
-const getOSSConfig = () => {
-  const oss = getResolvedOSSRuntimeConfig()
+const getOSSConfig = (oss = getResolvedOSSRuntimeConfig()) => {
   return {
     provider: stringValue(oss.provider),
     bucket: stringValue(oss.bucketName),
@@ -76,8 +75,7 @@ const getOSSConfig = () => {
 }
 
 // 获取项目文档专用 OSS 配置
-const getProjectsOSSConfig = () => {
-  const oss = getResolvedOSSRuntimeConfig()
+const getProjectsOSSConfig = (oss = getResolvedOSSRuntimeConfig()) => {
   return {
     provider: stringValue(oss.provider),
     bucket: stringValue(oss.projectsBucketName),
@@ -91,8 +89,7 @@ const getProjectsOSSConfig = () => {
 }
 
 // 获取图片专用 OSS 配置（公共读 bucket）
-const getImagesOSSConfig = () => {
-  const oss = getResolvedOSSRuntimeConfig()
+const getImagesOSSConfig = (oss = getResolvedOSSRuntimeConfig()) => {
   return {
     provider: stringValue(oss.provider),
     bucket: stringValue(oss.imagesBucketName),
@@ -106,8 +103,8 @@ const getImagesOSSConfig = () => {
 }
 
 // 创建 OSS 客户端
-export const createOSSClient = (options: OSSClientOptions = {}): AliOssCompatibleClient => {
-  const config = getOSSConfig()
+export const createOSSClient = (options: OSSClientOptions = {}, runtime?: CodocsOssRuntimeConfig): AliOssCompatibleClient => {
+  const config = getOSSConfig(runtime)
 
   if (!config.accessKeyId || !config.accessKeySecret) {
     throw new Error('OSS credentials not configured')
@@ -120,8 +117,8 @@ export const createOSSClient = (options: OSSClientOptions = {}): AliOssCompatibl
 }
 
 // 创建项目文档专用 OSS 客户端
-export const createProjectsOSSClient = (options: OSSClientOptions = {}): AliOssCompatibleClient => {
-  const config = getProjectsOSSConfig()
+export const createProjectsOSSClient = (options: OSSClientOptions = {}, runtime?: CodocsOssRuntimeConfig): AliOssCompatibleClient => {
+  const config = getProjectsOSSConfig(runtime)
 
   if (!config.accessKeyId || !config.accessKeySecret) {
     throw new Error('Projects OSS credentials not configured')
@@ -134,8 +131,8 @@ export const createProjectsOSSClient = (options: OSSClientOptions = {}): AliOssC
 }
 
 // 创建图片专用 OSS 客户端（公共读 bucket）
-export const createImagesOSSClient = (options: OSSClientOptions = {}): AliOssCompatibleClient => {
-  const config = getImagesOSSConfig()
+export const createImagesOSSClient = (options: OSSClientOptions = {}, runtime?: CodocsOssRuntimeConfig): AliOssCompatibleClient => {
+  const config = getImagesOSSConfig(runtime)
 
   if (!config.accessKeyId || !config.accessKeySecret) {
     throw new Error('Images OSS credentials not configured')
@@ -179,29 +176,32 @@ function runtimeClientOptions(options: RuntimeOSSClientOptions = {}) {
   return clientOptions
 }
 
-async function createEventRuntimeBackedClient(options: RuntimeOSSClientOptions, factory: (clientOptions: OSSClientOptions) => AliOssCompatibleClient) {
+async function createEventRuntimeBackedClient(options: RuntimeOSSClientOptions, factory: (clientOptions: OSSClientOptions, runtime: CodocsOssRuntimeConfig) => AliOssCompatibleClient) {
   const clientOptions = runtimeClientOptions(options)
-  await loadCodocsOssRuntimeConfigFromConsole(runtimeIntegrationCode(), options.event)
-  return factory(clientOptions)
+  const runtime = await loadCodocsOssRuntimeConfigFromConsole(runtimeIntegrationCode(), options.event)
+  return factory(clientOptions, runtime)
 }
 
 export function createRuntimeOSSClient(options: RuntimeOSSClientOptions = {}) {
-  return createEventRuntimeBackedClient(options, clientOptions => createOSSClient(clientOptions))
+  return createEventRuntimeBackedClient(options, (clientOptions, runtime) => createOSSClient(clientOptions, runtime))
 }
 
 export function createRuntimeProjectsOSSClient(options: RuntimeOSSClientOptions = {}) {
-  return createEventRuntimeBackedClient(options, clientOptions => createProjectsOSSClient(clientOptions))
+  return createEventRuntimeBackedClient(options, (clientOptions, runtime) => createProjectsOSSClient(clientOptions, runtime))
 }
 
 export function createRuntimeImagesOSSClient(options: RuntimeOSSClientOptions = {}) {
-  return createEventRuntimeBackedClient(options, clientOptions => createImagesOSSClient(clientOptions))
+  return createEventRuntimeBackedClient(options, (clientOptions, runtime) => createImagesOSSClient(clientOptions, runtime))
 }
 
-function createDocumentClient(docType?: string, options: OSSClientOptions = {}) {
+function createDocumentClient(docType?: string, options: RuntimeOSSClientOptions = {}) {
   const resolvedOptions = {
     timeout: DEFAULT_DOCUMENT_OSS_TIMEOUT_MS,
-    ...options
+    ...runtimeClientOptions(options)
   }
+  if (options.event) return useProjectsBucket(docType)
+    ? createRuntimeProjectsOSSClient({ ...resolvedOptions, event: options.event })
+    : createRuntimeOSSClient({ ...resolvedOptions, event: options.event })
   return createRuntimeBackedClient(() => useProjectsBucket(docType)
     ? createProjectsOSSClient(resolvedOptions)
     : createOSSClient(resolvedOptions))
@@ -383,9 +383,8 @@ export const uploadDocument = async (
  * @param path - OSS 文件路径
  * @param docType - 文档类型（可选）
  */
-export const downloadDocument = async (path: string, docType?: string): Promise<string | null> => {
-  const client = await createDocumentClient(docType)
-  console.log('downloadDocument', path, docType)
+export const downloadDocument = async (path: string, docType?: string, options: RuntimeOSSClientOptions = {}): Promise<string | null> => {
+  const client = await createDocumentClient(docType, options)
   try {
     const result = await client.get(path)
     // console.log("result", result)
@@ -398,8 +397,8 @@ export const downloadDocument = async (path: string, docType?: string): Promise<
   }
 }
 
-export const downloadDocumentBuffer = async (path: string, docType?: string): Promise<Buffer | null> => {
-  const client = await createDocumentClient(docType)
+export const downloadDocumentBuffer = async (path: string, docType?: string, options: RuntimeOSSClientOptions = {}): Promise<Buffer | null> => {
+  const client = await createDocumentClient(docType, options)
   try {
     const result = await client.get(path)
     return Buffer.isBuffer(result.content)

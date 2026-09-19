@@ -32,6 +32,23 @@ func PublishProductVersion(ctx context.Context, db *sql.DB, identity CommandIden
 
 // Runtime callers supply verified source context; it is not part of user input.
 func PublishProductVersionWithFeedback(ctx context.Context, db *sql.DB, identity CommandIdentity, permit AuthorizationPermit, input ProductVersionPublishInput, trusted integrationoperation.TrustedContext, executionReviewHash ...string) (CommandResult, error) {
+	return publishProductVersion(ctx, identity, permit, input, trusted, executionReviewHash, func(authorize AuthorizeCommand, apply ApplyCommand) (CommandResult, error) {
+		return ExecuteCommand(ctx, db, identity, input, authorize, apply)
+	})
+}
+
+// PublishProductVersionInTransaction leaves successful commit to the caller.
+func PublishProductVersionInTransaction(ctx context.Context, tx *sql.Tx, identity CommandIdentity, permit AuthorizationPermit, input ProductVersionPublishInput, trusted integrationoperation.TrustedContext, executionReviewHash ...string) (CommandResult, error) {
+	result, err := publishProductVersion(ctx, identity, permit, input, trusted, executionReviewHash, func(authorize AuthorizeCommand, apply ApplyCommand) (CommandResult, error) {
+		return ExecuteCommandInTransaction(ctx, tx, identity, input, authorize, apply)
+	})
+	if err != nil && tx != nil {
+		_ = tx.Rollback()
+	}
+	return result, err
+}
+
+func publishProductVersion(ctx context.Context, identity CommandIdentity, permit AuthorizationPermit, input ProductVersionPublishInput, trusted integrationoperation.TrustedContext, executionReviewHash []string, execute func(AuthorizeCommand, ApplyCommand) (CommandResult, error)) (CommandResult, error) {
 
 	if identity.Action != "product_versions:publish" {
 		return CommandResult{}, invalid("product_command_identity_invalid", "版本发布命令不匹配")
@@ -39,7 +56,7 @@ func PublishProductVersionWithFeedback(ctx context.Context, db *sql.DB, identity
 	if input.VersionID <= 0 || input.AcceptanceID <= 0 || input.ExpectedRevision == 0 || input.ExpectedVersionRevision == 0 || input.ExpectedScopeRevision == 0 || !utf8.ValidString(input.Reason) || strings.TrimSpace(input.Reason) == "" || utf8.RuneCountInString(input.Reason) > 2000 || strings.ContainsRune(input.Reason, '\x00') {
 		return CommandResult{}, invalid("product_version_publish_invalid", "版本发布参数无效")
 	}
-	return ExecuteCommand(ctx, db, identity, input, func(ctx context.Context, tx *sql.Tx) error {
+	return execute(func(ctx context.Context, tx *sql.Tx) error {
 		return AuthorizeWorkspaceTransaction(ctx, tx, identity.ProductCode, identity.ActorUID, "product_versions", "publish", permit)
 	}, func(ctx context.Context, tx *sql.Tx) (any, error) {
 		root, err := loadWorkspace(ctx, tx, identity.ProductCode)

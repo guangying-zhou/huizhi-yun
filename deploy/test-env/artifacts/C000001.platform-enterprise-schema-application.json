@@ -1,0 +1,113 @@
+{
+  "schema": "enterprise-platform-schema-application.v1",
+  "appliedAt": "2026-09-14T04:44:38.313Z",
+  "identity": {
+    "name": "hzy_platform_dev",
+    "uuid": "8a10b222-5108-11ef-8bb6-5600050b12e8"
+  },
+  "migrations": [
+    {
+      "file": "20260913-enterprise-entitlements.sql",
+      "sha256": "bdcda147fb27cb91f67650722b3a1e56953f7b9d58ab6343ca107693045bc918"
+    },
+    {
+      "file": "20260913-enterprise-entitlement-state.sql",
+      "sha256": "0a9ae6a55782bcc82c37e2dec65277b51a1ff027f2a75e0f3c181a8ddcd8ba09"
+    },
+    {
+      "file": "20260913-enterprise-order-fulfillments.sql",
+      "sha256": "54fe2098df56ba4cbb2d639aaccd0a9a1720c286a3112dfb7453652b44387798"
+    },
+    {
+      "file": "20260913-enterprise-order-approvals.sql",
+      "sha256": "47b6fb4f5ce395447f573535423270ccf7eddf0c2391d2a0b3b9531f856e22c9"
+    },
+    {
+      "file": "20260913-tenant-scheduler-ownership.sql",
+      "sha256": "1a7b20874e1098be47121c66f80897c1f36e4243ad317a6e6a828e183dd9f5df"
+    },
+    {
+      "file": "20260913-enterprise-recovery-route.sql",
+      "sha256": "06c0e606b89713e38a753ec7019a54535bd8cbfcbb0e0e7622da875168746822"
+    },
+    {
+      "file": "20260913-enterprise-external-drain-approval.sql",
+      "sha256": "36bf0291cd92f43c228a687c62328f46096a8dcdac4a3cfa75e07a343fbbd037"
+    },
+    {
+      "file": "20260914-enterprise-drain-activity-approval.sql",
+      "sha256": "7a76d2919a0cd81d4d2ff10dfa0be38baa0ece14c0e6261b944585e1628ae4bd"
+    }
+  ],
+  "tables": [
+    {
+      "name": "tenant_enterprise_entitlements",
+      "rows": 0,
+      "ddlSha256": "5ef41df1d335a2f983a58b4084479ea3ee1d66fcf0ef88694e29869b1dc0896b"
+    },
+    {
+      "name": "tenant_enterprise_entitlement_current",
+      "rows": 0,
+      "ddlSha256": "a0bc5e11de8e590d86cdc6a7083dd93e256beeae3f867629cd606a36a7d01a1f"
+    },
+    {
+      "name": "tenant_enterprise_entitlement_migrations",
+      "rows": 0,
+      "ddlSha256": "40482b3fa675eba34d63b3fc5676383c1f3c191e6e27710ea3ce5c5ebe326c8b"
+    },
+    {
+      "name": "tenant_enterprise_entitlement_state_commands",
+      "rows": 0,
+      "ddlSha256": "36c951b0ba631039c5757bcdbb74cc17ab086b9dc1810e6a47fc8fdf3243f4bd"
+    },
+    {
+      "name": "tenant_enterprise_order_fulfillments",
+      "rows": 0,
+      "ddlSha256": "7546eb310674ac68453f7f2cf47df265ce43cd976b6c69dbea15de20796be5f3"
+    },
+    {
+      "name": "enterprise_order_approvals",
+      "rows": 0,
+      "ddlSha256": "15f86b61a8dff75cf87ff8ef82dbec4ae7288b79b5cbd4cc4e4cc8402aa5f41f"
+    },
+    {
+      "name": "enterprise_order_acceptances",
+      "rows": 0,
+      "ddlSha256": "3c233cac981e0e65c7a18ed065c9bcd28302e73b6ea3fb2e7aa902b71ad16e2c"
+    },
+    {
+      "name": "tenant_scheduler_ownership",
+      "rows": 0,
+      "ddlSha256": "9c27c0df7047fee97fafb72e5fe6841339126268e2b01b537d53bac79203d310"
+    },
+    {
+      "name": "tenant_scheduler_ownership_receipts",
+      "rows": 0,
+      "ddlSha256": "3d73c444a2bf8d8d9296711eca7ea34b2bd2d5e58b44e5fda575dbb133526129"
+    },
+    {
+      "name": "enterprise_recovery_routes",
+      "rows": 0,
+      "ddlSha256": "3cb650b883f6e60614403e96b059897db32011fcab5b99a2b6e2fb0f078c832c"
+    },
+    {
+      "name": "enterprise_recovery_route_receipts",
+      "rows": 0,
+      "ddlSha256": "46bb75d106dab8ed944f5f927608402db0759eec82956d3c124983677faf2574"
+    },
+    {
+      "name": "enterprise_external_drain_approvals",
+      "rows": 0,
+      "ddlSha256": "c12ae31491edf58af0ab9defa669ba5892c0765c058b21d6e7aac58173a85cb1"
+    },
+    {
+      "name": "enterprise_drain_activity_approvals",
+      "rows": 0,
+      "ddlSha256": "61f3096dd6a3a7261abb086dc400ec9bfd16f8c842bad2793caab42b04a8ab3c"
+    }
+  ],
+  "checksEnforced": 4,
+  "businessRowsWritten": false,
+  "legacyTablesModified": false,
+  "applicationDeploymentVerified": false
+}

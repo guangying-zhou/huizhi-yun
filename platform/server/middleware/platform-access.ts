@@ -18,7 +18,9 @@ const RUNTIME_DEPRECATION_MESSAGE = '/api/platform/runtime is deprecated; use /a
 const TENANT_RUNTIME_BOOTSTRAP_PATHS = new Set([
   '/api/v1/runtime/release-public-key',
   '/api/v1/runtime/enroll',
-  '/api/v1/runtime/agent-heartbeat'
+  '/api/v1/runtime/agent-heartbeat',
+  '/api/v1/runtime/cutover-activation', // authenticates enrolled Runtime control token and observes committed DB receipt
+  '/api/v1/runtime/recovery-route' // validates the exact enrolled Runtime control token itself
 ])
 
 type EventWithAccessContext = Parameters<typeof defineEventHandler>[0] extends (event: infer T) => unknown ? T : never

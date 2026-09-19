@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import { useAimsModule } from '../../../layer/useAimsModule'
+
+const { moduleUrl, hosted, cacheKey } = useAimsModule()
 /** 在模块树中选择归属；模块是可选分类，不把它变成创建需求的前置条件。 */
 const props = withDefaults(defineProps<{
   productCode: string
@@ -14,7 +17,7 @@ const parentId = computed(() => trail.value.at(-1)?.id ?? null)
 const page = ref(1)
 const pageSize = 20
 const selected = ref<{ id: number | null, name: string } | null>(props.modelValue === null ? { id: null, name: '未分类' } : props.initialLabel ? { id: props.modelValue, name: props.initialLabel } : null)
-const { data, status, error, refresh } = useFetch(() => `/api/v1/products/${encodeURIComponent(props.productCode)}/components`, {
+const { data, status, error, refresh } = useFetch(() => moduleUrl(`/api/v1/products/${encodeURIComponent(props.productCode)}/components`), { ...(hosted ? { key: computed(() => cacheKey('aims/app/components/products/ComponentPicker.vue:0' + ':' + String(toValue(() => moduleUrl(`/api/v1/products/${encodeURIComponent(props.productCode)}/components`))))) } : {}),
   server: false,
   query: computed(() => ({ parentId: parentId.value ?? undefined, page: page.value, pageSize })),
   transform: (response: { code: number, data: { items: ComponentRow[], total: number, parent_id: number | null } }) => {

@@ -1,0 +1,16 @@
+{
+  "schemaVersion": "isolated-mysql-verification.v1",
+  "verifiedAt": "2026-09-15T03:12:05Z",
+  "baseCommit": "39be2e18732c46f970cfdc55eb3bf4cd51bec711",
+  "command": "node data-runtime/scripts/test-product-version-idempotency-mysql.mjs",
+  "exitCode": 0,
+  "goPackageSeconds": 0.929,
+  "testSourceSha256": "8ab88cdeb8cee818d8a20add5b8b2c8bc7898a5262095ad6a69f51eb196f3e3a",
+  "runnerSourceSha256": "916b6e77d48951f3dbceba70b079063d80d6256583a3f597b7fed582da19f404",
+  "scope": "Fresh random /tmp MySQL 8.0.34 instance; version create commit followed by same command replay, same-key changed-payload rejection, one version row and one durable receipt",
+  "temporaryInstanceStopped": true,
+  "temporaryDirectoryRemoved": true,
+  "businessDatabaseAccessed": false,
+  "externalDeliveryVerified": false,
+  "oldInFlightOperationVerified": false
+}

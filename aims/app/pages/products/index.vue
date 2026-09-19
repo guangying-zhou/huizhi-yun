@@ -1,5 +1,10 @@
 <script setup lang="ts">
-import type { ProductLineGroup, ProductTreeItem, ProductTreePage } from '~/types/productTree'
+import ProductsCatalogRefresh from '../../components/products/CatalogRefresh.vue'
+import ProductsOnboardForm from '../../components/products/OnboardForm.vue'
+import ProductsLineOnboardForm from '../../components/products/LineOnboardForm.vue'
+import { useAimsModule } from '../../../layer/useAimsModule'
+const { moduleUrl, cacheKey, hosted } = useAimsModule()
+import type { ProductLineGroup, ProductTreeItem, ProductTreePage } from '../../types/productTree'
 
 definePageMeta({ layoutHeader: true, layoutHeaderTitle: '产品中心', layoutHeaderProjectSwitcher: false })
 const { search, debounced, flush, reset: resetSearch } = useDebouncedSearch()
@@ -24,7 +29,7 @@ async function fetchAll<T>(pick: (page: ProductTreePage) => T[] | undefined, ext
   let total = 0
   let last: ProductTreePage | null = null
   for (let page = 1; page <= MAX_FETCH_PAGES; page++) {
-    const response = await $fetch<{ code: number, data: ProductTreePage }>('/api/v1/products', {
+    const response = await $fetch<{ code: number, data: ProductTreePage }>(moduleUrl('/api/v1/products'), {
       query: { tree: 'true', page: String(page), pageSize: String(FETCH_PAGE_SIZE), ...extra }
     })
     const batch = response?.code === 0 ? pick(response.data) : undefined
@@ -41,13 +46,13 @@ const filterQuery = computed(() => ({
   ...(workspaceStatus.value === 'all' ? {} : { status: workspaceStatus.value })
 }))
 const { data, status, error, refresh } = await useAsyncData(
-  'product-line-tree',
+  cacheKey('product-line-tree'),
   () => fetchAll(page => page.groups, { ...filterQuery.value, ...(productLine.value ? { productLine: productLine.value } : {}) }),
   { server: false, watch: [debounced, productLine, workspaceStatus] }
 )
 // Filter options use the same scoped list, without the current keyword/status filters.
 const { data: lineChoices, status: lineChoiceStatus, error: lineChoiceError, refresh: refreshLineChoices } = await useAsyncData(
-  'product-line-filter-options',
+  cacheKey('product-line-filter-options'),
   () => fetchAll(page => page.groups, {}),
   { server: false }
 )
@@ -61,8 +66,8 @@ const lineOptions = computed(() => {
   return [{ value: 'all', label: '全部产品线' }, ...options]
 })
 const lineChoiceAlert = useApiErrorAlert(lineChoiceError, { fallbackTitle: '产品线选项加载失败，请刷新重试' })
-const { data: globalPermissions, status: permissionStatus, error: permissionError, refresh: refreshPermissions } = await useFetch('/api/v1/product-permissions', {
-  server: false, transform: (response: { code: number, data: { onboard: boolean } }) => response.code === 0 ? response.data : null
+const { data: globalPermissions, status: permissionStatus, error: permissionError, refresh: refreshPermissions } = await useFetch(moduleUrl('/api/v1/product-permissions'), {
+  key: cacheKey('product-permissions'), server: false, transform: (response: { code: number, data: { onboard: boolean } }) => response.code === 0 ? response.data : null
 })
 const permissionAlert = useApiErrorAlert(permissionError, { fallbackTitle: '产品管理权限加载失败' })
 const errorAlert = useApiErrorAlert(error, { fallbackTitle: '产品列表加载失败' })
@@ -123,7 +128,7 @@ const statusMeta: Record<string, { label: string, color: 'success' | 'neutral' }
   not_enabled: { label: '未启用', color: 'neutral' }
 }
 function productTarget(item: ProductTreeItem) {
-  return `/products/${encodeURIComponent(item.management_product_code || item.product_code)}${item.component_id ? '/components' : ''}`
+  return moduleUrl(`/products/${encodeURIComponent(item.management_product_code || item.product_code)}${item.component_id ? '/components' : ''}`)
 }
 function resetFilters() {
   resetSearch()
@@ -137,7 +142,7 @@ function resetFilters() {
       <p class="text-sm text-muted">
         按产品线展开查看产品。整条产品线尚未启用管理时，可统一管理，下属产品作为功能模块。
       </p>
-      <ProductsCatalogRefresh v-if="permissionStatus === 'success' && globalPermissions?.onboard === true" @activated="refreshTree()" />
+      <ProductsCatalogRefresh v-if="!hosted && permissionStatus === 'success' && globalPermissions?.onboard === true" @activated="refreshTree()" />
     </div>
     <UAlert v-if="permissionAlert" v-bind="permissionAlert" />
     <ProductsOnboardForm
@@ -185,7 +190,7 @@ function resetFilters() {
     <UAlert v-if="lineChoiceAlert" v-bind="lineChoiceAlert" />
     <UAlert v-if="lineChoices?.truncated" color="warning" title="产品线选项未全部加载，请刷新重试或使用产品搜索。" />
     <UAlert
-      v-if="ready && !catalog?.catalog_generation"
+      v-if="!hosted && ready && !catalog?.catalog_generation"
       color="info"
       variant="soft"
       icon="i-lucide-info"
@@ -200,7 +205,7 @@ function resetFilters() {
       title="产品线过多，仅显示部分"
       :description="`共 ${data?.total || 0} 条产品线，当前只加载了 ${lines.length} 条。请用搜索或产品线筛选缩小范围。`"
     />
-    <div v-if="ready && catalog?.catalog_updated_at" class="text-xs text-muted">
+    <div v-if="!hosted && ready && catalog?.catalog_updated_at" class="text-xs text-muted">
       产品目录更新于 {{ formatDateTime(catalog.catalog_updated_at) }}
     </div>
 
@@ -282,7 +287,7 @@ function resetFilters() {
               <td class="px-4 py-2.5">
                 <UButton
                   v-if="line.management_product_code"
-                  :to="`/products/${encodeURIComponent(line.management_product_code)}`"
+                  :to="moduleUrl(`/products/${encodeURIComponent(line.management_product_code)}`)"
                   color="neutral"
                   variant="ghost"
                   size="xs"

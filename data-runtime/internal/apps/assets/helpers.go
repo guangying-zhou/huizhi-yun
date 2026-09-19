@@ -26,7 +26,15 @@ func okWithMessage(data any, message string) map[string]any {
 }
 
 func (a *Adapter) queryMaps(ctx context.Context, query string, args ...any) ([]map[string]any, error) {
-	rows, err := a.DB().QueryContext(ctx, query, args...)
+	return queryMaps(ctx, a.DB(), query, args...)
+}
+
+type queryMapRunner interface {
+	QueryContext(context.Context, string, ...any) (*sql.Rows, error)
+}
+
+func queryMaps(ctx context.Context, runner queryMapRunner, query string, args ...any) ([]map[string]any, error) {
+	rows, err := runner.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}

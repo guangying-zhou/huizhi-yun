@@ -1,0 +1,30 @@
+{
+  "schemaVersion": "test-console-cpu-limit-blocker.v1",
+  "observedAt": "2026-09-14T17:31:25.990457+00:00",
+  "tenant": "C000001",
+  "environment": "test",
+  "worker": "hzy-test-console",
+  "activeVersion": "d7456308-bb6a-4aa9-90f3-0268f0087e93",
+  "activeTrafficPercent": 100,
+  "automaticSyncFailure": {
+    "gatewayStage": "console",
+    "consoleOutcome": "exceededCpu",
+    "cpuTimeMs": 10,
+    "wallTimeMs": 42571,
+    "policyMaxAgeMs": 300000
+  },
+  "attemptedChange": {
+    "cpu_ms": 1000,
+    "sameArtifact": true,
+    "cloudflareErrorCode": 100328,
+    "cloudflareError": "CPU limits are not supported for the Free plan",
+    "deployed": false,
+    "temporaryConfigRemoved": true,
+    "liveVersionBindingsAndSecretsUnchanged": true
+  },
+  "status": "awaiting-user-plan-decision",
+  "notes": [
+    "Manual sync restored a fresh snapshot for browser acceptance; periodic renewal is not reliable under the current Free CPU limit.",
+    "No subscription was purchased and no policy lifetime or signature validation was weakened."
+  ]
+}

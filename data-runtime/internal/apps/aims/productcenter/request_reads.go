@@ -105,15 +105,27 @@ func ValidateRequestPageQuery(q RequestPageQuery) error {
 	return nil
 }
 func ListProductRequests(ctx context.Context, db *sql.DB, code, uid string, permit AuthorizationPermit, q RequestPageQuery) (RequestPage, error) {
+	tx, err := db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
+	if err != nil {
+		return RequestPage{}, err
+	}
+	defer tx.Rollback()
+	out, err := ListProductRequestsInTransaction(ctx, tx, code, uid, permit, q)
+	if err != nil {
+		return RequestPage{}, err
+	}
+	if err := tx.Commit(); err != nil {
+		return RequestPage{}, err
+	}
+	return out, nil
+}
+
+// ListProductRequestsInTransaction shares the caller's generation and object lock boundary.
+func ListProductRequestsInTransaction(ctx context.Context, tx *sql.Tx, code, uid string, permit AuthorizationPermit, q RequestPageQuery) (RequestPage, error) {
 	var out RequestPage
 	if err := ValidateRequestPageQuery(q); err != nil {
 		return out, err
 	}
-	tx, err := db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
-	if err != nil {
-		return out, err
-	}
-	defer tx.Rollback()
 	// Every request mutation uses this same root lock: authorization, total and
 	// rows remain consistent without creating receipts or writing on a read.
 	if err := AuthorizeWorkspaceTransaction(ctx, tx, code, uid, "product_requests", "view", permit); err != nil {
@@ -162,19 +174,31 @@ func ListProductRequests(ctx context.Context, db *sql.DB, code, uid string, perm
 		return out, err
 	}
 	out.Page, out.PageSize, out.WorkspaceRevision = q.Page, q.PageSize, permit.Facts.Revision
-	return out, tx.Commit()
+	return out, nil
 }
 func ReadProductRequest(ctx context.Context, db *sql.DB, code, uid, bizID string, permit AuthorizationPermit) (RequestRecord, error) {
+	tx, err := db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
+	if err != nil {
+		return RequestRecord{}, err
+	}
+	defer tx.Rollback()
+	out, err := ReadProductRequestInTransaction(ctx, tx, code, uid, bizID, permit)
+	if err != nil {
+		return RequestRecord{}, err
+	}
+	if err := tx.Commit(); err != nil {
+		return RequestRecord{}, err
+	}
+	return out, nil
+}
+
+// ReadProductRequestInTransaction shares the caller's generation and object lock boundary.
+func ReadProductRequestInTransaction(ctx context.Context, tx *sql.Tx, code, uid, bizID string, permit AuthorizationPermit) (RequestRecord, error) {
 	var out RequestRecord
 	parsed, err := uuid.Parse(bizID)
 	if err != nil || parsed.String() != bizID {
 		return out, invalid("product_request_id_invalid", "需求标识无效")
 	}
-	tx, err := db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
-	if err != nil {
-		return out, err
-	}
-	defer tx.Rollback()
 	if err := AuthorizeWorkspaceTransaction(ctx, tx, code, uid, "product_requests", "view", permit); err != nil {
 		return out, err
 	}
@@ -186,5 +210,5 @@ func ReadProductRequest(ctx context.Context, db *sql.DB, code, uid, bizID string
 	if err != nil {
 		return RequestRecord{}, err
 	}
-	return out, tx.Commit()
+	return out, nil
 }

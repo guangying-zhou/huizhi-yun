@@ -1,3 +1,4 @@
+import { evaluateEnterpriseEntitlement, enterpriseModuleAvailability } from './enterpriseEntitlement'
 import { createError, type H3Event } from 'h3'
 import { resolveHzyDevApplications } from '@hzy/foundation/server/utils/devApplications'
 import { buildAllowedAppCodesFromPolicyBundle } from '@hzy/foundation/server/utils/applicationAuthorization'
@@ -28,6 +29,11 @@ export interface ConsoleUserApplication {
   basePath?: string | null
   sortOrder?: number | null
   appType: string
+  deploymentState?: 'deployed' | 'not-deployed'
+  configurationState?: 'unknown' | 'configured' | 'not-configured'
+  availabilityCode?: 'module_not_configured' | 'module_not_deployed' | null
+  availabilityReason?: string | null
+  availabilityMessage?: string | null
   status?: string | null
 }
 
@@ -211,6 +217,7 @@ export async function getConsoleApplicationCatalog(event: H3Event) {
   if (!bundle || invalidReason) {
     throw createError({ statusCode: 503, message: 'Signed application route catalog is unavailable' })
   }
+  if (bundle.tenantCode !== runtimeConfig.tenantCode) throw createError({ statusCode: 403, message: 'Policy tenant mismatch' })
   return mergeCurrentConsoleApp(appsFromBundle(event, bundle), currentApp)
 }
 
@@ -238,11 +245,18 @@ async function buildApplicationAuthorization(event: H3Event, uid: string, bundle
 }
 
 function appsFromBundle(event: H3Event, bundle: CachedPolicyBundle) {
+  const entitlement = evaluateEnterpriseEntitlement(bundle.payload, bundle.tenantCode)
+  if (!entitlement.allowed) throw createError({ statusCode: 403, message: 'Enterprise access is not active', data: { code: entitlement.reason } })
   const deployment = bundle.payload?.deployment as Record<string, unknown> | undefined
   const deploymentPublicUrl = nullableString(deployment?.publicUrl)
 
   return records(bundle.payload?.applications)
-    .map(item => normalizeAppItem(event, item, deploymentPublicUrl))
+    .map(item => {
+      const app = normalizeAppItem(event, item, deploymentPublicUrl)
+      if (!app) return null
+      const availability = enterpriseModuleAvailability(bundle.payload, app.appCode)
+      return availability ? { ...app, ...availability, homeUrl: availability.deploymentState === 'deployed' ? app.homeUrl : null } : app
+    })
     .filter((item): item is ConsoleUserApplication => Boolean(item))
     .filter(isActive)
 }
@@ -318,7 +332,7 @@ export async function getConsoleUserApplications(event: H3Event, uid: string) {
   const bundleApps = appsFromBundle(event, bundle)
 
   let apps = bundleApps
-  if (runtimeConfig.activationMode !== 'managed-cloud-multitenant') {
+  if (runtimeConfig.activationMode !== 'managed-cloud-multitenant' && !Object.hasOwn(bundle.payload, 'enterpriseEntitlement')) {
     try {
       const runtimeApps = await fetchRuntimeApplications(event, runtimeConfig)
       if (runtimeApps.length) {

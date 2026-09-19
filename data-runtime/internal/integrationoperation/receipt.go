@@ -102,6 +102,8 @@ WHERE receipt_id = ?
   AND version_no = 1`
 
 type ReceiptRepository struct {
+	receiptTable string
+	outboxTables *OutboxTables
 	db           *sql.DB
 	newReceiptID func() (string, error)
 }
@@ -226,13 +228,61 @@ func (r *ReceiptRepository) Execute(ctx context.Context, input ReceiptCommandInp
 		return ReceiptExecutionResult{}, err
 	}
 	defer rollback(tx)
+	result, err := r.executeInTransaction(ctx, tx, input, handler)
+	if err != nil {
+		return ReceiptExecutionResult{}, err
+	}
+	if err := tx.Commit(); err != nil {
+		return ReceiptExecutionResult{}, err
+	}
+	return result, nil
+}
 
-	existing, err := loadReceipt(ctx, tx, input)
+// ExecuteInTransaction participates in the caller's transaction. It never commits
+// or rolls back; the caller must roll back on any error and commit only after all
+// business effects, audit and receipt work succeed. The transaction must address
+// the repository's configured owning-domain receipt tables.
+func (r *ReceiptRepository) ExecuteInTransaction(ctx context.Context, tx *sql.Tx, input ReceiptCommandInput, handler ReceiptHandler) (ReceiptExecutionResult, error) {
+	if err := validateReceiptCommandInput(input); err != nil {
+		return ReceiptExecutionResult{}, err
+	}
+	if handler == nil {
+		return ReceiptExecutionResult{}, fmt.Errorf("service command receipt handler is required")
+	}
+	if tx == nil {
+		return ReceiptExecutionResult{}, fmt.Errorf("service command receipt transaction is required")
+	}
+	return r.executeInTransaction(ctx, tx, input, handler)
+}
+
+// OwnedReceiptCommandInput is only for trusted owning-domain commands, not
+// incoming cross-application requests. The owner normalizes actor/action/key
+// consistently across legacy and unified transports and audits the real caller.
+type OwnedReceiptCommandInput ReceiptCommandInput
+
+// ExecuteOwnedInTransaction uses the owning domain's receipt table and caller
+// transaction. It does not relax cross-application or outbox identity rules.
+func (r *ReceiptRepository) ExecuteOwnedInTransaction(ctx context.Context, tx *sql.Tx, owned OwnedReceiptCommandInput, handler ReceiptHandler) (ReceiptExecutionResult, error) {
+	input := ReceiptCommandInput(owned)
+	if input.TrustedContext.SourceApp != input.TargetApp || receiptSourceDeployment(input) != receiptTargetDeployment(input) || strings.TrimSpace(input.OriginalActorUID) == "" {
+		return ReceiptExecutionResult{}, fmt.Errorf("%w: owning domain, deployment and actor required", ErrInvalidIdentity)
+	}
+	if err := validateReceiptInput(input, true); err != nil {
+		return ReceiptExecutionResult{}, err
+	}
+	if tx == nil || handler == nil {
+		return ReceiptExecutionResult{}, fmt.Errorf("owning receipt transaction and handler required")
+	}
+	return r.executeInTransaction(ctx, tx, input, handler)
+}
+
+func (r *ReceiptRepository) executeInTransaction(ctx context.Context, tx *sql.Tx, input ReceiptCommandInput, handler ReceiptHandler) (ReceiptExecutionResult, error) {
+	existing, err := r.loadReceipt(ctx, tx, input)
 	if err != nil {
 		return ReceiptExecutionResult{}, err
 	}
 	if existing != nil {
-		return finishExistingReceipt(ctx, tx, input, *existing)
+		return r.finishExistingReceipt(ctx, tx, input, *existing)
 	}
 
 	receiptID, err := r.newReceiptID()
@@ -244,7 +294,7 @@ func (r *ReceiptRepository) Execute(ctx context.Context, input ReceiptCommandInp
 	}
 	insertResult, err := tx.ExecContext(
 		ctx,
-		insertReceiptSQL,
+		r.sql(insertReceiptSQL),
 		receiptID,
 		input.OperationID,
 		input.OperationCode,
@@ -271,14 +321,14 @@ func (r *ReceiptRepository) Execute(ctx context.Context, input ReceiptCommandInp
 		return ReceiptExecutionResult{}, err
 	}
 	if inserted == 0 {
-		existing, err := loadReceipt(ctx, tx, input)
+		existing, err := r.loadReceipt(ctx, tx, input)
 		if err != nil {
 			return ReceiptExecutionResult{}, err
 		}
 		if existing == nil {
 			return ReceiptExecutionResult{}, ErrIdempotencyPayloadMismatch
 		}
-		return finishExistingReceipt(ctx, tx, input, *existing)
+		return r.finishExistingReceipt(ctx, tx, input, *existing)
 	}
 	if inserted != 1 {
 		return ReceiptExecutionResult{}, fmt.Errorf("unexpected service command receipt insert count %d", inserted)
@@ -306,7 +356,7 @@ func (r *ReceiptRepository) Execute(ctx context.Context, input ReceiptCommandInp
 	}
 	result, err := tx.ExecContext(
 		ctx,
-		succeedReceiptSQL,
+		r.sql(succeedReceiptSQL),
 		nullableText(business.TargetBizType),
 		nullableText(business.TargetBizCode),
 		httpStatus,
@@ -319,9 +369,6 @@ func (r *ReceiptRepository) Execute(ctx context.Context, input ReceiptCommandInp
 	if err := requireOneRow(result); err != nil {
 		return ReceiptExecutionResult{}, err
 	}
-	if err := tx.Commit(); err != nil {
-		return ReceiptExecutionResult{}, err
-	}
 	return ReceiptExecutionResult{
 		ReceiptID:             receiptID,
 		TargetBizType:         business.TargetBizType,
@@ -332,7 +379,7 @@ func (r *ReceiptRepository) Execute(ctx context.Context, input ReceiptCommandInp
 	}, nil
 }
 
-func finishExistingReceipt(
+func (r *ReceiptRepository) finishExistingReceipt(
 	ctx context.Context,
 	tx *sql.Tx,
 	input ReceiptCommandInput,
@@ -364,7 +411,7 @@ func finishExistingReceipt(
 			}
 			result, err := tx.ExecContext(
 				ctx,
-				repairExistingReceiptSummarySQL,
+				r.sql(repairExistingReceiptSummarySQL),
 				digest,
 				nullableText(input.TrustedContext.RequestID),
 				existing.receiptID,
@@ -376,20 +423,14 @@ func finishExistingReceipt(
 			if err := requireOneRow(result); err != nil {
 				return ReceiptExecutionResult{}, err
 			}
-			if err := tx.Commit(); err != nil {
-				return ReceiptExecutionResult{}, err
-			}
 			existing.responseSummarySHA256 = sql.NullString{String: digest, Valid: true}
 			return receiptExecutionFromRow(existing), nil
 		}
-		result, err := tx.ExecContext(ctx, touchExistingReceiptSQL, nullableText(input.TrustedContext.RequestID), existing.receiptID, existing.version)
+		result, err := tx.ExecContext(ctx, r.sql(touchExistingReceiptSQL), nullableText(input.TrustedContext.RequestID), existing.receiptID, existing.version)
 		if err != nil {
 			return ReceiptExecutionResult{}, err
 		}
 		if err := requireOneRow(result); err != nil {
-			return ReceiptExecutionResult{}, err
-		}
-		if err := tx.Commit(); err != nil {
 			return ReceiptExecutionResult{}, err
 		}
 		return receiptExecutionFromRow(existing), nil
@@ -403,6 +444,10 @@ func finishExistingReceipt(
 }
 
 func validateReceiptCommandInput(input ReceiptCommandInput) error {
+	return validateReceiptInput(input, false)
+}
+
+func validateReceiptInput(input ReceiptCommandInput, owned bool) error {
 	if err := ValidateOperationID(input.OperationID); err != nil {
 		return err
 	}
@@ -417,7 +462,11 @@ func validateReceiptCommandInput(input ReceiptCommandInput) error {
 		IdempotencyKey: strings.TrimSpace(input.IdempotencyKey),
 		CommandSHA256:  strings.TrimSpace(input.CommandSHA256),
 	}
-	if err := identity.Validate(); err != nil {
+	if owned {
+		if err := identity.validateFields(); err != nil {
+			return err
+		}
+	} else if err := identity.Validate(); err != nil {
 		return err
 	}
 	if !identityValuePattern.MatchString(receiptTargetDeployment(input)) {
@@ -469,11 +518,11 @@ func validateReceiptBusinessResult(result ReceiptBusinessResult) error {
 	return validateOptionalSHA256("response_summary_sha256", strings.TrimSpace(result.ResponseSummarySHA256))
 }
 
-func loadReceipt(ctx context.Context, tx *sql.Tx, input ReceiptCommandInput) (*receiptRow, error) {
+func (r *ReceiptRepository) loadReceipt(ctx context.Context, tx *sql.Tx, input ReceiptCommandInput) (*receiptRow, error) {
 	var row receiptRow
 	err := tx.QueryRowContext(
 		ctx,
-		loadReceiptSQL,
+		r.sql(loadReceiptSQL),
 		input.TrustedContext.TenantCode,
 		receiptSourceDeployment(input),
 		receiptTargetDeployment(input),

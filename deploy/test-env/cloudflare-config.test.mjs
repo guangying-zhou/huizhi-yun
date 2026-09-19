@@ -28,14 +28,31 @@ test('every test Worker stays within the CF Free variable limit with its secrets
 })
 test('Console keeps every variable its runtime reads', () => {
   const { vars } = cloudflareConfig('console')
+  assert.equal(vars.HZY_PLATFORM_BUNDLE_CACHE_BACKEND, 'runtime')
+  assert.equal(vars.HZY_PLATFORM_BUNDLE_MAX_AGE_MS, '93600000')
+  assert.equal(vars.HZY_PLATFORM_POLICY_BUNDLE_FETCH_TIMEOUT_MS, '90000')
   for (const key of ['HZY_CONSOLE_API_URL', 'NUXT_PUBLIC_CONSOLE_URL', 'HZY_WORKFLOW_API_URL', 'NUXT_PUBLIC_WORKFLOW_ENABLED',
     'HZY_CONSOLE_DATA_ACCESS_MODE', 'HZY_CONSOLE_SERVICE_CLIENT_ID', 'NUXT_CONSOLE_USER_APPLICATIONS_TIMEOUT_MS',
     'NUXT_PUBLIC_APP_CODE', 'NUXT_PUBLIC_APP_BASE_PATH', 'HZY_PLATFORM_DEPLOYMENT_CODE', 'HZY_PLATFORM_BUNDLE_CACHE_BACKEND']) {
     assert.ok(vars[key], key)
   }
-  for (const key of ['HZY_AIMS_API_URL', 'NUXT_PUBLIC_AIMS_URL', 'HZY_CONSOLE_TARGET_DEPLOYMENT', 'NUXT_PUBLIC_ACCOUNT_URL']) {
+  // These are stale cross-app aliases from the pre-Free-limit Console Worker.
+  // Console reaches business apps through the Gateway and has no reader for
+  // them; retaining them would make Console + its nine secrets exceed 64.
+  for (const key of ['HZY_AIMS_API_URL', 'HZY_AIMS_TARGET_DEPLOYMENT', 'HZY_AIMS_URL',
+    'HZY_ALTOC_API_URL', 'HZY_ALTOC_TARGET_DEPLOYMENT', 'HZY_ALTOC_URL',
+    'HZY_ASSETS_API_URL', 'HZY_ASSETS_TARGET_DEPLOYMENT', 'HZY_ASSETS_URL',
+    'HZY_CODOCS_API_URL', 'HZY_CODOCS_TARGET_DEPLOYMENT', 'HZY_CODOCS_URL',
+    'HZY_COLLAB_ENABLED', 'HZY_CONSOLE_AUTH_CLIENT_MATERIALIZE_ENABLED', 'HZY_CONSOLE_TARGET_DEPLOYMENT',
+    'HZY_FINANCE_API_URL', 'HZY_FINANCE_TARGET_DEPLOYMENT', 'HZY_FINANCE_URL',
+    'HZY_PEOPLE_API_URL', 'HZY_PEOPLE_TARGET_DEPLOYMENT', 'HZY_PEOPLE_URL',
+    'HZY_PLATFORM_BUNDLE_ALLOW_LEGACY_CACHE', 'HZY_PLATFORM_BUNDLE_CACHE_LEGACY_FALLBACK',
+    'HZY_SYNC_APPROVAL_ACTIONS_ON_STARTUP', 'HZY_WORKFLOW_TARGET_DEPLOYMENT', 'HZY_WORKFLOW_URL',
+    'NUXT_PUBLIC_ACCOUNT_URL', 'NUXT_PUBLIC_AIMS_URL', 'NUXT_PUBLIC_ALTOC_URL', 'NUXT_PUBLIC_ASSETS_URL',
+    'NUXT_PUBLIC_CODOCS_URL', 'NUXT_PUBLIC_FINANCE_URL', 'NUXT_PUBLIC_PEOPLE_URL', 'NUXT_PUBLIC_WORKFLOW_URL']) {
     assert.equal(vars[key], undefined, key)
   }
+  assert.equal(Object.keys(vars).length, 50)
 })
 test('business Workers keep the variables their runtimes read', () => {
   for (const app of ['people', 'finance', 'altoc', 'codocs']) {

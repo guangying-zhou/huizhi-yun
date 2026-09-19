@@ -77,20 +77,14 @@ type MarkFailureNotifiedInput struct {
 	Now            time.Time
 }
 
-func (r *Repository) ListPendingFailureNotifications(
-	ctx context.Context,
-	tenantCode string,
-	deploymentCode string,
-	sourceApp string,
-	limit int,
-) ([]FailureNotificationCandidate, error) {
+func (r *Repository) listPendingFailureNotifications(ctx context.Context, executor notificationExecutor, tenantCode, deploymentCode, sourceApp string, limit int) ([]FailureNotificationCandidate, error) {
 	if err := validateFailureNotificationScope(tenantCode, deploymentCode, sourceApp); err != nil {
 		return nil, err
 	}
 	if limit < 1 || limit > 20 {
 		return nil, fmt.Errorf("failure notification limit must be between 1 and 20")
 	}
-	rows, err := r.db.QueryContext(ctx, listPendingFailureNotificationsSQL, tenantCode, deploymentCode, sourceApp, limit)
+	rows, err := executor.QueryContext(ctx, r.sql(listPendingFailureNotificationsSQL), tenantCode, deploymentCode, sourceApp, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -128,7 +122,7 @@ func (r *Repository) ListPendingFailureNotifications(
 	return result, nil
 }
 
-func (r *Repository) MarkFailureNotified(ctx context.Context, input MarkFailureNotifiedInput) (bool, error) {
+func (r *Repository) markFailureNotified(ctx context.Context, executor notificationExecutor, input MarkFailureNotifiedInput) (bool, error) {
 	if err := validateFailureNotificationScope(input.TenantCode, input.DeploymentCode, input.SourceApp); err != nil {
 		return false, err
 	}
@@ -141,9 +135,9 @@ func (r *Repository) MarkFailureNotified(ctx context.Context, input MarkFailureN
 	if input.Now.IsZero() {
 		return false, fmt.Errorf("failure notification time is required")
 	}
-	result, err := r.db.ExecContext(
+	result, err := executor.ExecContext(
 		ctx,
-		markFailureNotifiedSQL,
+		r.sql(markFailureNotifiedSQL),
 		input.Now,
 		input.NotificationID,
 		input.Now,
@@ -163,9 +157,9 @@ func (r *Repository) MarkFailureNotified(ctx context.Context, input MarkFailureN
 		return true, nil
 	}
 	var existing sql.NullString
-	err = r.db.QueryRowContext(
+	err = executor.QueryRowContext(
 		ctx,
-		loadFailureNotificationMarkerSQL,
+		r.sql(loadFailureNotificationMarkerSQL),
 		input.OperationID,
 		input.TenantCode,
 		input.DeploymentCode,

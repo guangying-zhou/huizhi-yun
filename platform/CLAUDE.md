@@ -37,7 +37,7 @@ pnpm --dir platform typecheck
 pnpm --dir platform build
 ```
 
-Run lint/typecheck before commit or after critical changes. Docs-only changes do not need code checks unless they include generated code or schema snippets.
+Choose affected checks under root `CLAUDE.md` Execution Style; the commands above are available entry points. Reuse applicable passing evidence when the relevant code and configuration have not changed; committing alone does not require rerunning checks. Docs-only changes need content, reference and formatting checks; executable generated code or schema changes need the corresponding validation.
 
 Deployment, PM2, Cloudflare, runtime isolation, public routing, diagnostics and signing-key operational details are runbook material. For those tasks, read the relevant scripts and docs first, especially:
 

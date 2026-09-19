@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import { useAimsModule } from '../../../layer/useAimsModule'
+
+const { moduleUrl, hosted, cacheKey } = useAimsModule()
 interface Candidate { biz_id: string, title: string, problem_statement: string | null, revision: number, decision_status: string }
 const props = defineProps<{ productCode: string, workspaceRevision: number, request: Candidate }>()
 const emit = defineEmits<{ saved: [], cancel: [] }>()
@@ -12,7 +15,7 @@ const reason = ref(''), impact = ref(''), busy = ref(false)
 const submitError = ref<Error | null>(null)
 const submitAlert = useApiErrorAlert(submitError, { fallbackTitle: '需求合并失败' })
 const expectedRevision = props.workspaceRevision, expectedRequestRevision = props.request.revision
-const { data, status, error } = await useFetch(() => `/api/v1/products/${encodeURIComponent(props.productCode)}/requests`, {
+const { data, status, error } = await useFetch(() => moduleUrl(`/api/v1/products/${encodeURIComponent(props.productCode)}/requests`), { ...(hosted ? { key: computed(() => cacheKey('aims/app/components/products/RequestMergeForm.vue:0' + ':' + String(toValue(() => moduleUrl(`/api/v1/products/${encodeURIComponent(props.productCode)}/requests`))))) } : {}),
   server: false, query: computed(() => ({ page: page.value, pageSize: 10, keyword: debounced.value || undefined })),
   transform: (response: { code: number, data: { items: Candidate[], total: number } }) => {
     if (response.code !== 0 || !Array.isArray(response.data?.items) || !Number.isSafeInteger(response.data.total) || response.data.total < 0) throw new Error('目标需求响应不完整')
@@ -32,7 +35,7 @@ async function submit() {
   }
   const chosen = { ...target.value }
   const body = { targetBizId: chosen.biz_id, expectedRevision, expectedRequestRevision, expectedTargetRevision: chosen.revision, reason: reason.value, impactNote: impact.value }
-  const endpoint = `/api/v1/products/${encodeURIComponent(props.productCode)}/requests/${props.request.biz_id}/merge`
+  const endpoint = moduleUrl(`/api/v1/products/${encodeURIComponent(props.productCode)}/requests/${props.request.biz_id}/merge`)
   busy.value = true
   try {
     if (!(await confirm({ title: '确认合并产品需求', message: `将「${props.request.title}」合并到「${chosen.title}」\n原因：${body.reason}\n影响：${body.impactNote || '未补充'}\n源需求将只读保留，原证据和项目工作保留，关联评估需要复评。`, tone: 'warning', confirmLabel: '确认合并' }))) return

@@ -1,4 +1,5 @@
 import type { H3Event } from 'h3'
+import { fetchDirectoryApi } from '@hzy/foundation/server/utils/directoryApi'
 
 interface DeptNode {
   deptCode: string

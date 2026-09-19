@@ -1,0 +1,30 @@
+{
+  "requestId": "C000001-external-drain-review-20260914",
+  "approvalReference": "ADR-018 C000001 test migration; environment owner confirmation 2026-09-14",
+  "decisions": [
+    {
+      "entryId": "coverage:deployed-worker-versions-and-direct-bindings",
+      "outcome": "verified-consumer-coverage",
+      "evidenceKind": "deployment-inventory",
+      "reference": "C000001.deployed-worker-versions-and-direct-bindings-evidence.json",
+      "explanation": "Actual deployed wrapper versions, registered artifact hashes and direct service bindings are recorded in the signed snapshot and deployment inventory.",
+      "evidencePath": "deploy/test-env/artifacts/C000001.deployed-worker-versions-and-direct-bindings-evidence.json"
+    },
+    {
+      "entryId": "coverage:pre-wrapper-inflight-history",
+      "outcome": "verified-not-sent",
+      "evidenceKind": "deployment-inventory",
+      "reference": "C000001.external-history-owner-confirmation.json",
+      "explanation": "Environment owner explicitly confirmed internal testing only with no external notifications or real external business system calls. This is owner attestation supported by deployment observations, not a provider export.",
+      "evidencePath": "deploy/test-env/artifacts/C000001.external-history-owner-confirmation.json"
+    },
+    {
+      "entryId": "coverage:external-notification-providers",
+      "outcome": "verified-not-sent",
+      "evidenceKind": "deployment-inventory",
+      "reference": "C000001.external-history-owner-confirmation.json",
+      "explanation": "Environment owner confirmed no external notifications were sent; current notification rows are empty and external channels are disabled. Historical conclusion relies on the owner statement, not the empty database alone.",
+      "evidencePath": "deploy/test-env/artifacts/C000001.external-history-owner-confirmation.json"
+    }
+  ]
+}

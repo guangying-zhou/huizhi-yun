@@ -9,7 +9,8 @@
  * 注：该组件故意通过 prop 直接修改 node 的内部字段——整棵大纲树是父页面持有的
  * 响应式状态容器，所有行节点共享同一个可变树。禁用 vue/no-mutating-props 规则是刻意的。
  */
-import type { UiNode, DeliverableType } from '~/types/decompose'
+import type { UiNode, DeliverableType } from '../../types/decompose'
+import MarkdownContent from '../MarkdownContent.vue'
 
 const props = withDefaults(defineProps<{
   node: UiNode

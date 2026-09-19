@@ -16,6 +16,11 @@ export interface UserApplicationItem {
   appType: string
   serviceRole?: string | null
   status?: string | null
+  deploymentState?: 'deployed' | 'not-deployed'
+  configurationState?: 'unknown' | 'configured' | 'not-configured'
+  availabilityCode?: 'module_not_configured' | 'module_not_deployed' | null
+  availabilityReason?: string | null
+  availabilityMessage?: string | null
 }
 
 const apps = ref<UserApplicationItem[]>([])
@@ -173,7 +178,12 @@ function parseCachedApplication(value: unknown): UserApplicationItem | null {
     apiBase: typeof record.apiBase === 'string' ? record.apiBase : null,
     sortOrder: Number.isFinite(Number(record.sortOrder)) ? Number(record.sortOrder) : null,
     serviceRole: typeof record.serviceRole === 'string' ? record.serviceRole : null,
-    status: typeof record.status === 'string' ? record.status : null
+    status: typeof record.status === 'string' ? record.status : null,
+    deploymentState: record.deploymentState === 'deployed' || record.deploymentState === 'not-deployed' ? record.deploymentState : undefined,
+    configurationState: record.configurationState === 'unknown' || record.configurationState === 'configured' || record.configurationState === 'not-configured' ? record.configurationState : undefined,
+    availabilityCode: record.availabilityCode === 'module_not_configured' || record.availabilityCode === 'module_not_deployed' ? record.availabilityCode : null,
+    availabilityReason: typeof record.availabilityReason === 'string' ? record.availabilityReason : null,
+    availabilityMessage: typeof record.availabilityMessage === 'string' ? record.availabilityMessage : null
   })
 }
 
@@ -298,7 +308,7 @@ async function refreshAuthAfterUnauthorized(error: unknown, auth: ReturnType<typ
 
 async function fetchApplications() {
   const res = await $fetch<{ code: number, data: UserApplicationItem[] }>('/api/user/applications')
-  return sortApplications((res.data || []).map(normalizeApplication).filter(app => app.homeUrl))
+  return sortApplications((res.data || []).map(normalizeApplication))
 }
 
 async function loadApplications(force = false) {

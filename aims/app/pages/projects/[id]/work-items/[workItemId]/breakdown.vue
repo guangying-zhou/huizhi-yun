@@ -14,7 +14,8 @@
  *       * todo 阶段：确认/撤回任务分配
  *       * in_progress 阶段：确认完成评审（complete）
  */
-import type { PivrStage, WorkItemType } from '~/types/aims'
+import { useAimsModule } from '../../../../../../layer/useAimsModule'
+import type { PivrStage, WorkItemType } from '../../../../../types/aims'
 import {
   typeConfig,
   priorityConfig,
@@ -25,8 +26,15 @@ import {
   deliverableTypeIcon,
   reviewLevelLabel,
   MULTI_ASSIGN_DELIVERABLE_TYPES
-} from '~/config/work-item'
+} from '../../../../../config/work-item'
+import { useProjectStore } from '../../../../../stores/project'
+import AimsDocumentPreview from '../../../../../components/AimsDocumentPreview.vue'
+import MarkdownContent from '../../../../../components/MarkdownContent.vue'
+import ProjectNavbar from '../../../../../components/project/ProjectNavbar.vue'
 
+
+// 同一份代码供独立应用与企业宿主使用：非宿主模式下 moduleUrl 原样返回路径。
+const { moduleUrl } = useAimsModule()
 definePageMeta({
   layoutHeader: true,
   layoutHeaderTitle: '任务分配',
@@ -529,7 +537,7 @@ async function startTargetExecution() {
   if (!canStartTargetExecution.value) return
   startingExecution.value = true
   try {
-    await $fetch(`/api/v1/work-items/${workItemId.value}`, {
+    await $fetch(moduleUrl(`/api/v1/work-items/${workItemId.value}`), {
       method: 'PUT',
       body: { status: 'in_progress' }
     })
@@ -683,7 +691,7 @@ async function reconcileCompletionReviewStatus(item: BreakdownContextData['item'
     const nextStatus = mapCompletionWorkflowStatusToWorkItemStatus(wfStatus)
     if (!nextStatus || nextStatus === item.status) return false
 
-    await $fetch(`/api/v1/work-items/${item.id}`, {
+    await $fetch(moduleUrl(`/api/v1/work-items/${item.id}`), {
       method: 'PUT',
       body: { status: nextStatus }
     })
@@ -749,7 +757,7 @@ async function saveAppendDrafts() {
   }
   savingAppend.value = true
   try {
-    await $fetch(`/api/v1/work-items/${workItemId.value}/append-tasks`, {
+    await $fetch(moduleUrl(`/api/v1/work-items/${workItemId.value}/append-tasks`), {
       method: 'POST',
       body: {
         subtasks: appendDrafts.value.map(task => ({
@@ -860,7 +868,7 @@ usePageWorkflow({
           async onApproved() {
             try {
               const res = await $fetch<{ code: number, data: { mattersUpdated: number } }>(
-                `/api/v1/work-items/${workItemId.value}/confirm-append`,
+                moduleUrl(`/api/v1/work-items/${workItemId.value}/confirm-append`),
                 { method: 'POST' }
               )
               if (res.code === 0) {
@@ -877,7 +885,7 @@ usePageWorkflow({
           },
           async onRejected() {
             try {
-              await $fetch(`/api/v1/work-items/${workItemId.value}/reject-append`, { method: 'POST' })
+              await $fetch(moduleUrl(`/api/v1/work-items/${workItemId.value}/reject-append`), { method: 'POST' })
               toast.add({ title: '新增任务申请已驳回，草稿已清理', color: 'neutral' })
             } finally {
               await loadContext()
@@ -892,21 +900,21 @@ usePageWorkflow({
         canSubmit: computed(() => item.status === 'in_progress' && completeIssues.value.length === 0),
         completenessIssues: completeIssues,
         async onSubmitted() {
-          await $fetch(`/api/v1/work-items/${workItemId.value}`, {
+          await $fetch(moduleUrl(`/api/v1/work-items/${workItemId.value}`), {
             method: 'PUT',
             body: { status: 'in_review' }
           })
           await loadContext()
         },
         async onApproved() {
-          await $fetch(`/api/v1/work-items/${workItemId.value}`, {
+          await $fetch(moduleUrl(`/api/v1/work-items/${workItemId.value}`), {
             method: 'PUT',
             body: { status: 'completed' }
           })
           await loadContext()
         },
         async onRejected() {
-          await $fetch(`/api/v1/work-items/${workItemId.value}`, {
+          await $fetch(moduleUrl(`/api/v1/work-items/${workItemId.value}`), {
             method: 'PUT',
             body: { status: 'in_progress' }
           })
@@ -941,7 +949,7 @@ usePageWorkflow({
         async onApproved() {
           try {
             const res = await $fetch<{ code: number, data: { targetStatus: string, mattersUpdated: number } }>(
-              `/api/v1/work-items/${workItemId.value}/confirm-distribute`,
+              moduleUrl(`/api/v1/work-items/${workItemId.value}/confirm-distribute`),
               { method: 'POST' }
             )
             if (res.code === 0) {
@@ -968,7 +976,7 @@ usePageWorkflow({
         async onApproved() {
           try {
             const res = await $fetch<{ code: number, data: { targetStatus: string, mattersUpdated: number } }>(
-              `/api/v1/work-items/${workItemId.value}/revoke-distribute`,
+              moduleUrl(`/api/v1/work-items/${workItemId.value}/revoke-distribute`),
               { method: 'POST' }
             )
             if (res.code === 0) {
@@ -1286,7 +1294,7 @@ async function loadContext() {
   try {
     const [projectRes, ctxRes] = await Promise.all([
       projectStore.fetchProject(projectId.value),
-      $fetch<{ code: number, data: BreakdownContextData }>(`/api/v1/work-items/${workItemId.value}/breakdown-context`)
+      $fetch<{ code: number, data: BreakdownContextData }>(moduleUrl(`/api/v1/work-items/${workItemId.value}/breakdown-context`))
     ])
     void projectRes
     if (ctxRes.code === 0) {
@@ -1295,7 +1303,7 @@ async function loadContext() {
       const reconciled = await reconcileCompletionReviewStatus(nextContext.item)
       if (reconciled) {
         const refreshed = await $fetch<{ code: number, data: BreakdownContextData }>(
-          `/api/v1/work-items/${workItemId.value}/breakdown-context`
+          moduleUrl(`/api/v1/work-items/${workItemId.value}/breakdown-context`)
         )
         if (refreshed.code === 0) {
           nextContext = refreshed.data
@@ -1365,7 +1373,7 @@ async function saveBreakdown() {
   }
   saving.value = true
   try {
-    await $fetch(`/api/v1/work-items/${workItemId.value}/breakdown`, {
+    await $fetch(moduleUrl(`/api/v1/work-items/${workItemId.value}/breakdown`), {
       method: 'PUT',
       body: {
         subtasks: tasks.value.map(task => ({

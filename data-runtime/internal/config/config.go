@@ -3,6 +3,7 @@ package config
 import (
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -21,6 +22,7 @@ const (
 )
 
 type Config struct {
+	Enterprise         EnterpriseConfig  `json:"enterprise"`
 	Server             ServerConfig      `json:"server"`
 	Tenant             string            `json:"tenant"`
 	Deployment         string            `json:"deployment"`
@@ -299,9 +301,20 @@ func Load() (Config, error) {
 	normalizeDBConfig(&cfg.Apps.Altoc.DB)
 	normalizeDBConfig(&cfg.Apps.Aims.DB)
 	normalizeDBConfig(&cfg.Apps.Codocs.DB)
+	if _, err := cfg.EnterpriseBinding(); err != nil {
+		return Config{}, err
+	}
 	return cfg, nil
 }
 
+// ErrJWTTrustAlreadyInitialized reports an attempt to point this Runtime at a
+// different authentication trust root after one was already established.
+var ErrJWTTrustAlreadyInitialized = errors.New("JWT trust overlay is already initialized with different values")
+
+// PersistJWTTrustOverlay writes the trust root once. A one-time bootstrap must
+// not double as a standing facility for swapping issuer or JWKS: re-running it
+// with identical values is an idempotent confirmation, and any difference is
+// refused so that changing the trust root stays a separate, audited operation.
 func PersistJWTTrustOverlay(configDir string, trust JWTConfig) error {
 	dir := strings.TrimSpace(configDir)
 	if dir == "" {
@@ -315,6 +328,16 @@ func PersistJWTTrustOverlay(configDir string, trust JWTConfig) error {
 	}
 	if overlay.Issuer == "" || overlay.Audience == "" || overlay.JWKSURL == "" {
 		return fmt.Errorf("JWT trust overlay is incomplete")
+	}
+	existing, initialized, err := loadJWTTrustOverlay(filepath.Join(dir, "auth-jwt-trust.json"))
+	if err != nil {
+		return err
+	}
+	if initialized {
+		if existing != overlay {
+			return ErrJWTTrustAlreadyInitialized
+		}
+		return nil
 	}
 	content, err := json.Marshal(overlay)
 	if err != nil {

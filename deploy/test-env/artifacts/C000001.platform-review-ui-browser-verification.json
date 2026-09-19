@@ -1,0 +1,21 @@
+{
+  "observedAt": "2026-09-14T14:24:39.527743+00:00",
+  "environment": "test",
+  "url": "https://hzy.wiztek.cn/admin/deployment-reviews",
+  "sourceCommit": "52ed822b03cce355d5516df4970d7da21322f347",
+  "authenticatedOperatorSession": true,
+  "checks": {
+    "initialApproveDisabled": true,
+    "pasteImportShowsTenantAndEnvironment": true,
+    "pendingLocksInputAndActions": true,
+    "invalidSignatureRejected": "drain_activity_snapshot_signature_invalid",
+    "failedCheckLeavesApproveDisabled": true,
+    "draftEditClearsLoadedInput": true,
+    "kindChangeClearsDraftAndInput": true,
+    "desktop1440": true,
+    "mobile390": true
+  },
+  "fileUpload": "Extension file URL permission unavailable; paste input verified instead.",
+  "approvalSubmitted": false,
+  "positivePlanVerified": false
+}

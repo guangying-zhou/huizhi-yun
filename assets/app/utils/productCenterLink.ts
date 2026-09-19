@@ -1,4 +1,4 @@
-import { applicationShellEntryUrl } from '../../../foundation/app/utils/applicationShell'
+import { applicationShellEntryUrl } from '../../../foundation/app/utils/applicationShell.ts'
 
 interface Application { appCode: string, homeUrl: string | null, basePath?: string | null }
 export function productCenterLink(apps: Application[], productCode: string, origin: string) {

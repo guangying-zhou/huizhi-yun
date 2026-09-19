@@ -613,3 +613,10 @@ Replay 在同一事务产生 `cancelled` closure；`RecordSuccessWithMutation` �
 - 不在错误响应中返回 SQL、secret、token。
 - 不让一个 app adapter 直接跨库 join 另一个 app 的表。
 - 不把 Console vault/OIDC 启动闭环迁入第一阶段 runtime。
+
+
+### ADR-018 AA-04：既有Aims审批回调的统一事务模式
+
+`POST /v1/aims/service/workflow/callback` 保持既有请求/响应，只有Runtime服务器配置 `enterprise.enableMilestoneReceivable=true` 且子类型为 `milestones/milestone_completion` 才分流。false继续旧adapter；true但Enterprise关闭或服务缺失返回503。协调模式重验严格Aims服务JWT、当前租户及legacy Aims deployment、`sub/client=aims.runtime`、当前credential/grant和精确 `altoc:receivable:mark-billable`；原 `aims.write` 入口要求仍保留。仅允许固定Runtime audience的组合token，不转发Workflow或Altoc audience token。
+
+审批事实仍从已认证Workflow→Aims BFF边界进入，浏览器不能提交可信授权。Aims审批、Altoc可开票变更、目标receipt、源ACK在同一Registry双域事务内提交，成功提交后响应operationStatus为succeeded；同键重放保留历史身份。详细开关、调用方及验证范围见[AA-04专项](./Unified-Enterprise-Altoc-Aims-Expansion.md)。此模式尚未在线上启用。

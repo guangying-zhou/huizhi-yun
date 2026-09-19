@@ -1,5 +1,7 @@
 <script setup lang="ts">
-import type { AcceptanceInput, ProductVersionAcceptancePreview, AcceptanceCheck, AcceptanceException, VersionExecutionItem } from '~/types/productVersionAcceptance'
+import { useAimsModule } from '../../../../../../layer/useAimsModule'
+const { moduleUrl, cacheKey } = useAimsModule()
+import type { AcceptanceInput, ProductVersionAcceptancePreview, AcceptanceCheck, AcceptanceException, VersionExecutionItem } from '../../../../../types/productVersionAcceptance'
 
 definePageMeta({ layoutHeader: true, layoutHeaderTitle: '版本整体验收', layoutHeaderProjectSwitcher: false })
 
@@ -7,12 +9,12 @@ const route = useRoute()
 const versionPerspectiveQuery = computed(() => route.query.view === 'gtm' ? { view: 'gtm' } : {})
 const code = computed(() => String(route.params.productCode || ''))
 const id = computed(() => String(route.params.versionId || ''))
-const base = computed(() => `/api/v1/products/${encodeURIComponent(code.value)}/versions/${encodeURIComponent(id.value)}`)
+const base = computed(() => moduleUrl(`/api/v1/products/${encodeURIComponent(code.value)}/versions/${encodeURIComponent(id.value)}`))
 
-const { data, status, error, refresh } = await useFetch<{ code: number, data: ProductVersionAcceptancePreview }>(() => `${base.value}/acceptance-preview`, { server: false })
+const { data, status, error, refresh } = await useFetch<{ code: number, data: ProductVersionAcceptancePreview }>(() => `${base.value}/acceptance-preview`, { server: false, key: computed(() => cacheKey(`version-acceptance-preview:${code.value}:${id.value}`)) })
 const alert = useApiErrorAlert(error, { fallbackTitle: '版本验收信息加载失败' })
 
-const { data: permission, error: permissionError, refresh: refreshPermission } = await useFetch<{ code: number, data: { product_code: string, status: string, accept: boolean, actor_uid: string } }>(() => `/api/v1/products/${encodeURIComponent(code.value)}/versions/permissions`, { server: false })
+const { data: permission, error: permissionError, refresh: refreshPermission } = await useFetch<{ code: number, data: { product_code: string, status: string, accept: boolean, actor_uid: string } }>(() => moduleUrl(`/api/v1/products/${encodeURIComponent(code.value)}/versions/permissions`), { server: false, key: computed(() => cacheKey(`version-acceptance-permission:${code.value}`)) })
 const permissionAlert = useApiErrorAlert(permissionError, { fallbackTitle: '版本权限加载失败' })
 
 const canAccept = computed(() => status.value === 'success' && data.value?.code === 0 && data.value.data.version.product_code === code.value && String(data.value.data.version.id) === id.value && data.value.data.product_status === 'active' && ['planning', 'developing'].includes(data.value.data.version.status) && permission.value?.code === 0 && permission.value.data.product_code === code.value && permission.value.data.status === 'active' && permission.value.data.accept === true && (!!data.value.data.version.business_owner_uid && data.value.data.version.business_owner_uid === permission.value.data.actor_uid))
@@ -223,10 +225,10 @@ watch([code, id], () => {
       :title="`验收记录 #${receipt} 已保存`"
       description="验收已保存，下一步进入本次验收记录核验并发布。"
     />
-    <UButton v-if="receipt" :to="{ path: `/products/${encodeURIComponent(code)}/versions/${encodeURIComponent(id)}/acceptances/${receipt}`, query: versionPerspectiveQuery }" trailing-icon="i-lucide-arrow-right">
+    <UButton v-if="receipt" :to="{ path: moduleUrl(`/products/${encodeURIComponent(code)}/versions/${encodeURIComponent(id)}/acceptances/${receipt}`), query: versionPerspectiveQuery }" trailing-icon="i-lucide-arrow-right">
       下一步：核验并发布
     </UButton>
-    <UButton :to="{ path: `/products/${encodeURIComponent(code)}/versions/${encodeURIComponent(id)}/acceptances`, query: versionPerspectiveQuery }" color="neutral" variant="outline">
+    <UButton :to="{ path: moduleUrl(`/products/${encodeURIComponent(code)}/versions/${encodeURIComponent(id)}/acceptances`), query: versionPerspectiveQuery }" color="neutral" variant="outline">
       验收记录与发布
     </UButton>
     <UAlert v-if="alert" v-bind="alert" />

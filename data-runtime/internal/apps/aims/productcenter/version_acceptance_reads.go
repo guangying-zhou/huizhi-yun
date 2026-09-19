@@ -31,6 +31,18 @@ type VersionAcceptanceDetail struct {
 // A matching scope revision alone does not prove readiness to publish: execution
 // facts and release authorization must be checked by the release command.
 func ListProductVersionAcceptances(ctx context.Context, db *sql.DB, code, uid string, permit AuthorizationPermit, versionID int64, q PlanningPageQuery) (VersionAcceptancePage, error) {
+	tx, err := db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
+	if err != nil {
+		return VersionAcceptancePage{}, err
+	}
+	defer tx.Rollback()
+	out, err := ListProductVersionAcceptancesInTransaction(ctx, tx, code, uid, permit, versionID, q)
+	if err != nil {
+		return out, err
+	}
+	return out, tx.Commit()
+}
+func ListProductVersionAcceptancesInTransaction(ctx context.Context, tx *sql.Tx, code, uid string, permit AuthorizationPermit, versionID int64, q PlanningPageQuery) (VersionAcceptancePage, error) {
 	out := VersionAcceptancePage{Items: []VersionAcceptanceRecord{}, Page: q.Page, PageSize: q.PageSize}
 	if versionID <= 0 || q.Keyword != "" || q.Lifecycle != "" || q.InvestmentCategory != "" {
 		return out, invalid("product_version_acceptance_query_invalid", "验收记录查询条件无效")
@@ -38,11 +50,10 @@ func ListProductVersionAcceptances(ctx context.Context, db *sql.DB, code, uid st
 	if err := ValidatePlanningPageQuery(q); err != nil {
 		return out, err
 	}
-	tx, err := db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
-	if err != nil {
-		return out, err
+	if tx == nil {
+		return out, invalid("product_transaction_required", "History requires a transaction")
 	}
-	defer tx.Rollback()
+	var err error
 	if err = AuthorizeWorkspaceTransaction(ctx, tx, code, uid, "product_versions", "view", permit); err != nil {
 		return out, err
 	}
@@ -71,21 +82,32 @@ func ListProductVersionAcceptances(ctx context.Context, db *sql.DB, code, uid st
 	if err != nil {
 		return out, err
 	}
-	return out, tx.Commit()
+	return out, nil
 }
 
 // Expose the human review evidence, not the complete stored execution snapshot:
 // project execution details retain their own access boundary.
 func ReadProductVersionAcceptance(ctx context.Context, db *sql.DB, code, uid string, permit AuthorizationPermit, versionID, acceptanceID int64) (VersionAcceptanceDetail, error) {
+	tx, err := db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
+	if err != nil {
+		return VersionAcceptanceDetail{}, err
+	}
+	defer tx.Rollback()
+	out, err := ReadProductVersionAcceptanceInTransaction(ctx, tx, code, uid, permit, versionID, acceptanceID)
+	if err != nil {
+		return out, err
+	}
+	return out, tx.Commit()
+}
+func ReadProductVersionAcceptanceInTransaction(ctx context.Context, tx *sql.Tx, code, uid string, permit AuthorizationPermit, versionID, acceptanceID int64) (VersionAcceptanceDetail, error) {
 	var out VersionAcceptanceDetail
 	if versionID <= 0 || acceptanceID <= 0 {
 		return out, invalid("product_version_acceptance_query_invalid", "验收记录标识无效")
 	}
-	tx, err := db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
-	if err != nil {
-		return out, err
+	if tx == nil {
+		return out, invalid("product_transaction_required", "History requires a transaction")
 	}
-	defer tx.Rollback()
+	var err error
 	if err = AuthorizeWorkspaceTransaction(ctx, tx, code, uid, "product_versions", "view", permit); err != nil {
 		return out, err
 	}
@@ -118,5 +140,5 @@ func ReadProductVersionAcceptance(ctx context.Context, db *sql.DB, code, uid str
 	if out.Exceptions == nil {
 		out.Exceptions = []VersionAcceptanceException{}
 	}
-	return out, tx.Commit()
+	return out, nil
 }

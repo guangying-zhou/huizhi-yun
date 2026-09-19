@@ -18,6 +18,7 @@ where to look next.
 
 | Task type | Read first | Then read if needed |
 | --- | --- | --- |
+| Unified enterprise app, tenant business DB, full-function entitlement | [`ADR-018-Unified-Enterprise-Application-and-Data.md`](./ADR-018-Unified-Enterprise-Application-and-Data.md) | [`Unified-Enterprise-Implementation-Plan.md`](./Unified-Enterprise-Implementation-Plan.md) — phase dependencies, TODO IDs and acceptance; existing paths remain effective until migrated |
 | Module-local UI/API change | Root `CLAUDE.md` + target module `CLAUDE.md` | Module `docs/`, local components, local server utils |
 | Non-trivial Nuxt UI work | Root `CLAUDE.md`, target module `CLAUDE.md`, project `nuxt-ui` skill | Existing pages/components in the target module |
 | Cross-module API or callback | `MODULE_CONTRACTS.md` | Target app API docs, service grant SQL seeds, module manifests |
@@ -36,14 +37,19 @@ where to look next.
 
 ## Validation Defaults
 
+Choose validation scope under root [`CLAUDE.md`](../CLAUDE.md#execution-style).
+The commands below are available entry points, not a checklist for every edit.
+Reuse applicable passing evidence when the relevant code and configuration have
+not changed; committing alone does not require rerunning checks.
+
 - Docs-only change: run Markdown/whitespace checks when practical; no code test
   required.
-- Single module change: run `pnpm --dir <module> lint` and
-  `pnpm --dir <module> typecheck` when the module has those scripts.
-- Module with tests: also run `pnpm --dir <module> test`.
-- Go runtime change: run `go test ./...` from the runtime directory.
-- Cross-module/runtime/deployment change: add the relevant root `validate:*`,
-  `probe:*`, `verify:*`, or `accept:*` script.
+- Module checks: use the relevant `pnpm --dir <module> lint`, `typecheck`, or
+  `test` script when available, narrowing to affected files/tests when supported.
+- Go runtime checks: test affected packages; use `go test ./...` when the change
+  warrants runtime-wide coverage.
+- Cross-module/runtime/deployment checks: select the relevant root `validate:*`,
+  `probe:*`, `verify:*`, or `accept:*` script under the root contract and release rules.
 
 ## Where Docs Live
 

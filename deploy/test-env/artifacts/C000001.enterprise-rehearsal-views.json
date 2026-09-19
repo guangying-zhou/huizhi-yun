@@ -1,0 +1,48 @@
+{
+  "kind": "enterprise-compatibility-views-rehearsal-receipt.v1",
+  "completedAt": "2026-09-14T04:39:28.623Z",
+  "target": "hzy_enterprise_rehearsal_20260914",
+  "migrationReviewHash": "6f45f24ffa4c64a4fb8914eea4c76323660d7bdcc1ea05a3dd73a14672817570",
+  "artifactSha256": "c901bce23e6373456a37372ff2f73350b5a9718b7f12e4825ed39367ceb6ebdf",
+  "viewPlans": {
+    "aims": {
+      "reviewHash": "a049fe3ed6ffa3b509191fc3ef58b27050ccfec25930c5570b52ae3c97705862",
+      "count": 44
+    },
+    "assets": {
+      "reviewHash": "97171a47147ed0fdf851e651414c5d860bb111031efb130305d1f86f4fe21d43",
+      "count": 11
+    }
+  },
+  "verification": {
+    "views": 55,
+    "invokerUpdatableViews": 55,
+    "readChecks": {
+      "aims": 44,
+      "assets": 11
+    },
+    "baseTables": 150,
+    "ledger": {
+      "reviewHash": "6f45f24ffa4c64a4fb8914eea4c76323660d7bdcc1ea05a3dd73a14672817570",
+      "status": "verified-shadow"
+    },
+    "registry": {
+      "tenant": "C000001",
+      "environment": "test",
+      "runtimeDeployment": "c000001-test-tenant-runtime",
+      "schemaVersion": "enterprise.v1",
+      "generation": 0
+    }
+  },
+  "runtimeBoundary": {
+    "verifyCompatibilityViews": "blocked as required: registry generation is 0 while runtime Binding generation is 1",
+    "productServiceConstruction": "blocked as required: NewProductService delegates to VerifyCompatibilityViews before reads"
+  },
+  "boundaries": {
+    "sourceFenced": false,
+    "registryActivated": false,
+    "routesChanged": false,
+    "businessRowsWritten": false,
+    "runtimePrincipalPermissionsChanged": false
+  }
+}

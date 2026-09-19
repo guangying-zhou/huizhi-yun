@@ -17,6 +17,7 @@ interface CatalogApp {
 }
 
 interface CatalogResponse {
+  catalogMode: 'legacy-plan' | 'enterprise-full' | 'enterprise-inactive'
   currentPlan: CatalogPlan | null
   applications: CatalogApp[]
 }
@@ -27,6 +28,7 @@ const pending = ref(false)
 const error = ref('')
 const currentPlan = ref<CatalogPlan | null>(null)
 const applications = ref<CatalogApp[]>([])
+const catalogMode = ref<CatalogResponse['catalogMode']>('legacy-plan')
 
 const enabledApps = computed(() => applications.value.filter(app => app.enabled))
 const upgradeApps = computed(() => applications.value.filter(app => !app.enabled))
@@ -40,6 +42,7 @@ async function loadCatalog() {
   if (!tenantCode) {
     applications.value = []
     currentPlan.value = null
+    catalogMode.value = 'legacy-plan'
     return
   }
 
@@ -55,6 +58,7 @@ async function loadCatalog() {
     })
     currentPlan.value = response.data.currentPlan
     applications.value = response.data.applications
+    catalogMode.value = response.data.catalogMode
   } catch (caught) {
     error.value = caught instanceof Error ? caught.message : '加载应用目录失败'
   } finally {
@@ -82,7 +86,9 @@ watch(() => currentTenantCode.value, () => loadCatalog(), { immediate: true })
               应用中心
             </h1>
             <p class="mt-1 text-sm text-muted">
-              查看企业可用的业务应用。订阅计划包含的应用会自动开通，无需逐个启用。
+              {{ catalogMode === 'legacy-plan'
+                ? '查看企业可用的业务应用。订阅计划包含的应用会自动开通，无需逐个启用。'
+                : '企业全量资格覆盖已发布模块；实际使用仍取决于部署状态和人员权限。' }}
             </p>
           </div>
           <UBadge
@@ -108,7 +114,7 @@ watch(() => currentTenantCode.value, () => loadCatalog(), { immediate: true })
         <section class="space-y-3">
           <div class="flex items-center gap-2">
             <h2 class="text-sm font-medium text-highlighted">
-              已开通
+              {{ catalogMode === 'enterprise-full' ? '企业全量目录' : '已开通' }}
             </h2>
             <UBadge
               color="success"
@@ -156,12 +162,14 @@ watch(() => currentTenantCode.value, () => loadCatalog(), { immediate: true })
             v-else-if="!pending"
             class="text-sm text-muted"
           >
-            当前套餐暂未包含业务应用。
+            {{ catalogMode === 'enterprise-inactive'
+              ? '企业服务当前未生效，不能使用业务模块。'
+              : '当前套餐暂未包含业务应用。' }}
           </p>
         </section>
 
         <section
-          v-if="upgradeApps.length"
+          v-if="catalogMode === 'legacy-plan' && upgradeApps.length"
           class="space-y-3"
         >
           <div class="flex items-center gap-2">

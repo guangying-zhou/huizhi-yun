@@ -1,0 +1,26 @@
+{
+  "observedAt": "2026-09-14T15:17:19.036Z",
+  "tenant": "C000001",
+  "environment": "test",
+  "mode": "closed",
+  "revision": 3,
+  "resolvedCount": 41,
+  "unresolvedCount": 0,
+  "counts": [
+    {
+      "actor": "aims",
+      "status": "settled",
+      "count": 107
+    },
+    {
+      "actor": "assets",
+      "status": "settled",
+      "count": 2
+    }
+  ],
+  "authorizationSha256": "c023532aacc5639b3c5c3b2abfca19e29ddc48a5206e4f61c090ac63c3d8d709",
+  "originalSnapshotSha256": "31ef0da89a8db2e98467c3551ce12c6ad6b5defddf0aabda59a1f11f5a1a8c7b",
+  "archiveDirectory": "/Users/gavinzhou/Library/Application Support/HuizhiYun/test-runtime/test-disposition-20260914",
+  "sourceDatabaseModified": false,
+  "businessSuccessAsserted": false
+}

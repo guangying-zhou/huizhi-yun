@@ -1,3 +1,4 @@
+import { useAimsModule } from '../../layer/useAimsModule'
 import type { ComputedRef, Ref } from 'vue'
 
 export interface ProductWorkspace {
@@ -26,10 +27,11 @@ export interface ProductWorkspacePermissions {
  * 产品工作台的导航栏、概览页和设置页共用同一份读取结果，按产品编码去重请求。
  */
 export function useProductWorkspace(code: Ref<string> | ComputedRef<string>) {
-  const workspaceRequest = useAsyncData(() => `product-workspace:${code.value}`, async () => {
+  const { moduleUrl, cacheKey } = useAimsModule()
+  const workspaceRequest = useAsyncData(() => cacheKey(`product-workspace:${code.value}`), async () => {
     const product = code.value
     if (!product) return null
-    const response = await $fetch<{ code: number, data: ProductWorkspace }, string>(`/api/v1/products/${encodeURIComponent(product)}`, { timeout: 30000 })
+    const response = await $fetch<{ code: number, data: ProductWorkspace }, string>(moduleUrl(`/api/v1/products/${encodeURIComponent(product)}`), { timeout: 30000 })
     const value = response.data
     if (response.code !== 0 || value?.product_code !== product || !Number.isSafeInteger(value.revision) || value.revision < 1 || !['active', 'archived'].includes(value.status)) {
       throw new Error('产品空间响应不完整')
@@ -37,10 +39,10 @@ export function useProductWorkspace(code: Ref<string> | ComputedRef<string>) {
     return value
   }, { server: false, watch: [code] })
 
-  const permissionRequest = useAsyncData(() => `product-workspace-permissions:${code.value}`, async () => {
+  const permissionRequest = useAsyncData(() => cacheKey(`product-workspace-permissions:${code.value}`), async () => {
     const product = code.value
     if (!product) return null
-    const response = await $fetch<{ code: number, data: ProductWorkspacePermissions }, string>(`/api/v1/products/${encodeURIComponent(product)}/permissions`, { timeout: 30000 })
+    const response = await $fetch<{ code: number, data: ProductWorkspacePermissions }, string>(moduleUrl(`/api/v1/products/${encodeURIComponent(product)}/permissions`), { timeout: 30000 })
     if (response.code !== 0 || !response.data) throw new Error('产品操作权限响应不完整')
     return response.data
   }, { server: false, watch: [code] })

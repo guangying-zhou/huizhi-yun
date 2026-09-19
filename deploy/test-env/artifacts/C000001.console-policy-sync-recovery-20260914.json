@@ -1,0 +1,43 @@
+{
+  "schemaVersion": "test-console-policy-sync-recovery.v1",
+  "observedAt": "2026-09-14T17:04:57.317Z",
+  "scope": {
+    "tenantCode": "C000001",
+    "environment": "test",
+    "deploymentCode": "wiztek-test-console"
+  },
+  "deployments": {
+    "console": {
+      "version": "d7456308-bb6a-4aa9-90f3-0268f0087e93",
+      "trafficPercent": 100
+    },
+    "gateway": {
+      "version": "0866464e-ffa4-4de8-a75e-895100a87bfa",
+      "trafficPercent": 100,
+      "policySyncCron": "*/2 * * * *"
+    }
+  },
+  "testOnlyTimeouts": {
+    "consolePlatformBundleFetchMs": 90000,
+    "gatewayConsoleSyncMs": 100000
+  },
+  "manualSync": {
+    "status": 200,
+    "stage": "console",
+    "elapsedMs": 51644
+  },
+  "persistentSnapshot": {
+    "bundleVersion": "pv_test_20260914161219_0014",
+    "syncedAtMs": 1789405373483,
+    "bundleHashPresent": true
+  },
+  "automaticRenewals": {
+    "syncedAtMs": [1789405010855, 1789405130353],
+    "intervalMs": [120206, 119498],
+    "freshnessLimitMs": 300000
+  },
+  "notes": [
+    "The authenticated Platform bundle request was observed at about 50.4 seconds; configured test-only bounds allow the signed request to complete.",
+    "No policy TTL, synced timestamp, signature validation, tenant, or deployment binding was changed."
+  ]
+}

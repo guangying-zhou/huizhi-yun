@@ -1,4 +1,5 @@
 import { v4 as uuidv4 } from 'uuid'
+import { createHash } from 'node:crypto'
 import { createRuntimeOSSClient } from '~~/server/utils/oss'
 import { createCabinetFileMetadata } from '~~/server/utils/cabinetRuntime'
 import { AIMS_PROJECT_CABINET_UPLOAD_SERVICE_AUTH, requireAimsProjectCabinetServiceAuth } from '~~/server/utils/serviceAuthGuard'
@@ -40,6 +41,10 @@ export default defineEventHandler(async (event) => {
   }
 
   const files = multipart.filter(x => x.filename)
+  const documentUuid = multipart.find(x => x.name === 'document_uuid')?.data.toString().trim()
+  if (documentUuid && (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(documentUuid) || files.length !== 1)) {
+    throw createError({ statusCode: 400, message: '文档标识无效或文件数量不符' })
+  }
   if (files.length === 0) {
     throw createError({ statusCode: 400, message: '请选择文件' })
   }
@@ -81,15 +86,12 @@ export default defineEventHandler(async (event) => {
       continue
     }
 
-    const uuid = uuidv4()
+    const uuid = documentUuid || uuidv4()
     const sanitizedName = originalName.replace(/[\\/:*?"<>|]/g, '_')
-    const ossPath = `codocs/projects/${safePathSegment(projectCode)}/cabinet/${uuid}.${ext}`
+    const contentHash = createHash('sha256').update(file.data).digest('hex')
+    const ossPath = `codocs/projects/${safePathSegment(projectCode)}/cabinet/${uuid}-${contentHash}.${ext}`
 
     try {
-      await client.put(ossPath, file.data, {
-        headers: { 'Content-Type': getContentType(ext) }
-      })
-
       const metadata = await createCabinetFileMetadata(event, 'project', {
         uuid,
         filename: sanitizedName,
@@ -109,6 +111,21 @@ export default defineEventHandler(async (event) => {
         })
       }
 
+      // Persist the immutable identity first. A conflicting retry must not
+      // replace the object, and a failed upload can be retried with this UUID.
+      let exists = false
+      try {
+        await client.head(ossPath)
+        exists = true
+      } catch (error) {
+        const failure = error as { status?: number, statusCode?: number, code?: string }
+        if (failure.status !== 404 && failure.statusCode !== 404 && failure.code !== 'NoSuchKey') throw error
+      }
+      if (!exists) await client.put(ossPath, file.data, {
+        forbidOverwrite: true,
+        headers: { 'Content-Type': getContentType(ext) }
+      })
+
       results.success++
       results.items.push({
         filename: originalName,
@@ -119,7 +136,7 @@ export default defineEventHandler(async (event) => {
         fileSize: file.data.length
       })
     } catch (err: unknown) {
-      await client.delete(ossPath).catch(() => {})
+      // Do not delete here: a concurrent/replayed request may own this object.
       const error = err as { message?: string }
       console.error(`[Project Cabinet Upload] Failed: ${originalName}`, err)
       results.failed++

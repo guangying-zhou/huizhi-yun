@@ -63,13 +63,30 @@ func ValidateRequestTransition(from string, input RequestDecision) error {
 }
 
 func DecideProductRequest(ctx context.Context, db *sql.DB, identity CommandIdentity, permit AuthorizationPermit, input RequestDecision, sourceContext ...integrationoperation.TrustedContext) (CommandResult, error) {
+	return decideProductRequest(ctx, identity, permit, input, func(authorize AuthorizeCommand, apply ApplyCommand) (CommandResult, error) {
+		return ExecuteCommand(ctx, db, identity, input, authorize, apply)
+	}, sourceContext...)
+}
+
+// DecideProductRequestInTransaction reuses the owning-domain command; the caller owns commit.
+func DecideProductRequestInTransaction(ctx context.Context, tx *sql.Tx, identity CommandIdentity, permit AuthorizationPermit, input RequestDecision, sourceContext ...integrationoperation.TrustedContext) (CommandResult, error) {
+	result, err := decideProductRequest(ctx, identity, permit, input, func(authorize AuthorizeCommand, apply ApplyCommand) (CommandResult, error) {
+		return ExecuteCommandInTransaction(ctx, tx, identity, input, authorize, apply)
+	}, sourceContext...)
+	if err != nil && tx != nil {
+		_ = tx.Rollback()
+	}
+	return result, err
+}
+
+func decideProductRequest(ctx context.Context, identity CommandIdentity, permit AuthorizationPermit, input RequestDecision, execute func(AuthorizeCommand, ApplyCommand) (CommandResult, error), sourceContext ...integrationoperation.TrustedContext) (CommandResult, error) {
 	if identity.Action != "product_requests:decide" {
 		return CommandResult{}, invalid("product_command_identity_invalid", "需求决策命令不匹配")
 	}
 	if err := ValidateRequestDecision(input); err != nil {
 		return CommandResult{}, err
 	}
-	return ExecuteCommand(ctx, db, identity, input, func(ctx context.Context, tx *sql.Tx) error {
+	return execute(func(ctx context.Context, tx *sql.Tx) error {
 		return AuthorizeWorkspaceTransaction(ctx, tx, identity.ProductCode, identity.ActorUID, "product_requests", "decide", permit)
 	}, func(ctx context.Context, tx *sql.Tx) (any, error) {
 		root, err := loadWorkspace(ctx, tx, identity.ProductCode)

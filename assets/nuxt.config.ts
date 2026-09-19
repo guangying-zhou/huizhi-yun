@@ -64,6 +64,14 @@ export default defineNuxtConfig({
     enabled: false
   },
 
+  typescript: {
+    tsConfig: {
+      compilerOptions: {
+        allowImportingTsExtensions: true
+      }
+    }
+  },
+
   app: {
     baseURL: appBasePath,
     head: {

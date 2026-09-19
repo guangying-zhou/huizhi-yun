@@ -1,0 +1,13 @@
+{
+ "status":"candidate-not-applied",
+ "clientCode":"aims.runtime",
+ "appCode":"aims",
+ "runtimePolicy":{"audiences":["data-runtime","tenant-runtime"],"capabilities":["aims:integration_operation:execute","aims:work-item-completion-callback:execute"]},
+ "externalServicePolicy":{"audience":"workflow","capabilities":["workflow:work-item-complete:create"]},
+ "seed":"console/docs/sql/Console-SQL-Seed-v2.6-aims-work-item-completion-grants.sql",
+ "verify":"console/docs/sql/Console-SQL-Verify-v2.6-aims-work-item-completion-grants.sql",
+ "workflowTargetPolicy":{"clientCode":"workflow.runtime","appCode":"workflow","runtimeAudiences":["data-runtime","tenant-runtime"],"runtimeCapabilities":["workflow:work-item-complete:create"],"callbackAudience":"aims","callbackCapabilities":["workflow:callback"],"seed":"console/docs/sql/Console-SQL-Seed-v2.7-workflow-work-item-completion-grants.sql","verify":"console/docs/sql/Console-SQL-Verify-v2.7-workflow-work-item-completion-grants.sql"},
+ "schemaPrerequisite":"deploy/test-env/enterprise-work-item-completion-additive.json",
+ "scheduledTransport":{"status":"candidate-not-enabled","binding":"HZY_TENANT_GATEWAY_SERVICE","gatewayOrigin":"HZY_TENANT_GATEWAY_SERVICE_URL","targetDeployment":"HZY_WORKFLOW_TARGET_DEPLOYMENT","path":"/workflow/api/v1/service/aims-work-item-completion-approval","cloudflareContextRequired":true,"publicDirectFallback":false},
+ "environmentVerificationRequired":["reviewed additive table/compatibility views","persistent writer and scheduler generation/owner/schema fences","active precise grants","real service-token issuance for every full scope/audience combination","Workflow callback grant and fixed route","HZY_WORKFLOW_SERVICE binding or reviewed on-premise service route","explicit event-less HZY_WORKFLOW_TARGET_DEPLOYMENT","true create/receipt/callback recovery test"]
+}

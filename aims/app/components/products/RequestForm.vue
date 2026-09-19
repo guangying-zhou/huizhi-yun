@@ -1,4 +1,8 @@
 <script setup lang="ts">
+import { useAimsModule } from '../../../layer/useAimsModule'
+import ProductsComponentPicker from './ComponentPicker.vue'
+
+const { moduleUrl } = useAimsModule()
 interface RequestDraft { biz_id: string, revision: number, title: string, problem_statement: string | null, source_type: string, urgency_level: string, component_id?: number | null, component_name?: string | null }
 const props = defineProps<{ productCode: string, workspaceRevision: number, request?: RequestDraft, initialComponentId?: number | null, initialComponentName?: string }>()
 const emit = defineEmits<{ saved: [], cancel: [] }>()
@@ -28,7 +32,7 @@ async function save() {
   if (retry?.payload !== payload) retry = { payload, key: crypto.randomUUID() }
   busy.value = true
   try {
-    const response = await $fetch<{ code: number }>(`/api/v1/products/${encodeURIComponent(props.productCode)}/requests${props.request ? `/${props.request.biz_id}` : ''}`, {
+    const response = await $fetch<{ code: number }>(moduleUrl(`/api/v1/products/${encodeURIComponent(props.productCode)}/requests${props.request ? `/${props.request.biz_id}` : ''}`), {
       method: props.request ? 'PATCH' : 'POST', body, headers: { 'Idempotency-Key': retry.key }
     })
     if (response.code !== 0) throw new Error('保存结果不完整，请重试')

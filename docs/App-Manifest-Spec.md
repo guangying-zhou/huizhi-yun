@@ -527,3 +527,18 @@ SELECT mra.id, mra.action_code
 
 2. 《App 接入实施指南》
    把 app 从本地资源定义迁到 manifest 的工程步骤整理出来
+
+
+## ADR-018 企业宿主组合登记
+
+`enterprise/app.manifest.json` 由原业务模块 manifest 生成，顶层 `resources` 和 `recommendedRoles` 为空；`composition` 使用 `schemaVersion=1`、`kind=hzy-enterprise-composition` 和 `registrationMode=preserve-logical-module-manifests`。模块条目保存原 manifest 与规范 JSON SHA-256，派生权限目录及其 hash 必须与模块内容完全一致。
+
+Platform 的 `registerAppManifest` 对组合执行以下规则：
+
+- 仅 enterprise 可提交组合；首期包含 Aims、Assets，拒绝重复模块、嵌套组合及 Platform/Console/Account 等非业务边界混入。
+- 所有参与应用必须已存在。按 app code 稳定顺序锁定应用，在同一事务中复用现有资源、动作与推荐角色物化函数，登记逻辑模块快照及 Host 发布记录。任一模块无效或 Host 已发布版本冲突时整体回滚。
+- 逻辑模块保留原 `app_code`、resource/action/role 代码与快照来源，不产生 `enterprise:原权限` 之类改名。组合注册不会给用户分配角色。
+- 逻辑模块登记只生成/复用 manifest、注册流水及目录，不用 Host 版本伪造独立模块 release，也不改写其历史已发布 release。模块注册流水的 submitted version 表示此次 Host 提交，来源记录标明 module。Host release 的原 manifest 包含不可变组合内容，返回结果的 `composition` 提供逻辑 app code 与 manifest ID。
+- 软件发布与部署仍使用既有流程；登记不表示已发布、已部署或全员获权。签名 bundle 的逻辑目录消费和统一技术开通需按 ADR-018 合同验收。
+
+校验入口：`platform/test/enterpriseComposition.test.ts`；`node --experimental-strip-types platform/scripts/test-enterprise-composition-mysql.mjs` 已通过真实隔离 MySQL，覆盖同事务登记、原命名空间、无人员授予、重复快照复用、仅 Host release、已发布冲突及第二模块失败整体回滚；并发发布与实际环境治理仍须按发布合同验收。

@@ -1,0 +1,43 @@
+{
+  "schemaVersion": "enterprise-browser-acceptance.v1",
+  "tenant": "C000001",
+  "environment": "test",
+  "observedAt": "2026-09-14T17:23:23.367135+00:00",
+  "hostVersion": "d6a2d58c-b225-4558-92c7-f1f7cc2095ba",
+  "hostBuiltSource": "bd55fe14da1a8320eeace33a79bbc7cf4dbe111e",
+  "readChecks": {
+    "assetsColdFirstLoad": {
+      "dictionaries": 200,
+      "categories": 200,
+      "products": 200,
+      "productCount": 53,
+      "categoryCount": 8,
+      "retryRequired": false
+    },
+    "aimsProductLines": 6,
+    "productLineFilter": {
+      "code": "FC",
+      "resultCount": 1,
+      "verifiedBeforeFinalHost": true
+    },
+    "legacyCatalogSyncUiHidden": true,
+    "productWorkspaceName": "智慧房产",
+    "requestsPageLoaded": true,
+    "versionsPageLoaded": true,
+    "structurePageLoaded": true,
+    "moduleCount": 9
+  },
+  "writeChecks": {
+    "testRequestTitle": "[内部验收] 统一库写入验证 20260914",
+    "create": "passed",
+    "detailRead": "passed",
+    "decisionToEvaluating": "passed",
+    "decisionToRejected": "passed-after-policy-sync-recovery",
+    "lastObservedState": "rejected"
+  },
+  "limitations": [
+    "Automatic policy renewal is blocked by the Console Worker Free plan CPU limit; see C000001.console-cpu-limit-blocker-20260914.json. Manual sync enabled the final write check but does not resolve periodic availability.",
+    "No claim of complete AA03/AA04 activation or all-domain migration.",
+    "Version publish and remaining write workflows were not validated in this browser pass."
+  ]
+}

@@ -91,7 +91,7 @@ test('Assets proxy derives trusted scope after authentication and does not trust
   assert.match(middleware, /delete context\.body\.current_user_assets_object_access/)
   assert.match(middleware, /delete context\.body\.current_user_assets_permission_action/)
   assert.match(middleware, /resolveAssetsObjectScopeQuery\(/)
-  assert.match(middleware, /\['dashboard', 'asset_items', 'ip_assets', 'assignments', 'alerts', 'offboarding_recoveries'\]/)
+  assert.match(middleware, /\['dashboard', 'asset_items', 'ip_assets', 'assignments', 'alerts', 'offboarding_recoveries', 'products', 'admin'\]/)
   assert.match(middleware, /current_user_assets_permission_action/)
   const resolver = readFileSync(new URL('../server/utils/assetsScopedAuthorization.ts', import.meta.url), 'utf8')
   assert.doesNotMatch(resolver, /activeRoleCode|authorizationMode/)

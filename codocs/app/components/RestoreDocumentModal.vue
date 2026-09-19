@@ -25,6 +25,7 @@ const isRestoring = ref(false)
 const hasConflict = ref(false)
 const newTitle = ref('')
 const checking = ref(false)
+const checkError = ref('')
 
 // 当弹窗打开时检查冲突
 watch(() => props.open, async (isOpen) => {
@@ -32,28 +33,32 @@ watch(() => props.open, async (isOpen) => {
     hasConflict.value = false
     newTitle.value = props.doc.title
     checking.value = true
+    checkError.value = ''
+    try {
+      const conflict = await checkNameConflict({
+        title: props.doc.title,
+        doc_type: props.doc.doc_type,
+        owner_uid: props.doc.owner_uid,
+        folder_id: props.doc.folder_id,
+        dept_code: props.doc.dept_code,
+        project_code: props.doc.project_code,
+        exclude_uuid: props.doc.uuid
+      })
 
-    const conflict = await checkNameConflict({
-      title: props.doc.title,
-      doc_type: props.doc.doc_type,
-      owner_uid: props.doc.owner_uid,
-      folder_id: props.doc.folder_id,
-      dept_code: props.doc.dept_code,
-      project_code: props.doc.project_code,
-      exclude_uuid: props.doc.uuid
-    })
-
-    if (conflict) {
-      hasConflict.value = true
-      newTitle.value = generateConflictName(props.doc.title)
+      if (conflict) {
+        hasConflict.value = true
+        newTitle.value = generateConflictName(props.doc.title)
+      }
+    } catch {
+      checkError.value = '名称检查失败，请重新打开后重试'
+    } finally {
+      checking.value = false
     }
-
-    checking.value = false
   }
 })
 
 const doRestore = async () => {
-  if (!props.doc) return
+  if (!props.doc || checking.value || checkError.value) return
 
   isRestoring.value = true
   try {
@@ -83,6 +88,8 @@ const doRestore = async () => {
       emit('update:open', false)
       emit('restored')
     }
+  } catch {
+    checkError.value = '名称检查失败，请重新打开后重试'
   } finally {
     isRestoring.value = false
   }
@@ -119,6 +126,9 @@ const close = () => {
           <span class="text-sm text-muted">检查文件名冲突...</span>
         </div>
 
+        <p v-else-if="checkError" role="alert" class="text-error">
+          {{ checkError }}
+        </p>
         <div v-else class="space-y-3">
           <p v-if="!hasConflict" class="text-muted">
             确定要恢复文档 <strong class="text-default">"{{ doc?.title }}"</strong> 到原文件夹吗？
@@ -147,7 +157,7 @@ const close = () => {
             <UButton
               color="primary"
               :loading="isRestoring"
-              :disabled="checking || (hasConflict && !newTitle.trim())"
+              :disabled="checking || !!checkError || (hasConflict && !newTitle.trim())"
               @click="doRestore"
             >
               恢复

@@ -268,4 +268,30 @@ describe('Console service-token tenant-runtime forwarding', () => {
     assert.equal(body.app_code, 'workflow')
     assert.equal(body.client_secret, undefined)
   })
+
+  test('coalesces concurrent cold requests for the same service token', async () => {
+    let requests = 0
+    let release: (() => void) | undefined
+    const pending = new Promise<void>(resolve => { release = resolve })
+    ;(globalThis as { useRuntimeConfig?: () => unknown }).useRuntimeConfig = () => ({
+      hzy: { appCode: 'aims', consoleUrl: 'https://console.example.test', serviceClient: { clientId: 'aims.runtime', clientSecret: 'test-secret' } }
+    })
+    const event = {
+      context: { cloudflare: { env: { HZY_CONSOLE_SERVICE: {
+        async fetch() {
+          requests += 1
+          await pending
+          return Response.json({ access_token: 'coalesced-token', token_type: 'Bearer', expires_in: 900 })
+        }
+      } } } },
+      node: { req: { headers: { host: 'aims.example.test', 'x-forwarded-proto': 'https' }, url: '/api/test', originalUrl: '/api/test' } }
+    } as never
+
+    const first = requestServiceAccessToken({ audience: 'data-runtime', scope: 'aims:coalesced:test', event })
+    const second = requestServiceAccessToken({ audience: 'data-runtime', scope: 'aims:coalesced:test', event })
+    await new Promise(resolve => setTimeout(resolve, 0))
+    assert.equal(requests, 1)
+    release?.()
+    assert.deepEqual(await Promise.all([first, second]), ['coalesced-token', 'coalesced-token'])
+  })
 })

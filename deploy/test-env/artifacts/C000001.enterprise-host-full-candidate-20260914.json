@@ -1,0 +1,29 @@
+{
+  "candidateOnly": true,
+  "deployed": false,
+  "environment": "test",
+  "tenant": "C000001",
+  "worker": "hzy-test-enterprise",
+  "deployment": "C000001-test-enterprise",
+  "pilot": false,
+  "outputFiles": 374,
+  "outputKiB": 8644,
+  "outputSha256": "b5e0656782b31ac83fb99ddab3d8020c3f4a695881bae95c97f1a7b9ecfb2bb9",
+  "protectedReceiptSha256": "8e04b76b4bc724ecb941e86390a684a915fc52695f0ac44e7471283477345e14",
+  "sourceSnapshotSha256": "8c00771ae814326953407827466b7184dca88ae66bac8721d71845aa3d3539f2",
+  "checks": [
+    "typecheck",
+    "full-cloudflare-build",
+    "wrangler-dry-run"
+  ],
+  "routeArtifacts": {
+    "aims": 149,
+    "assets": 37
+  },
+  "observedRollbackVersion": "20cf726f-75e0-4ab3-abb0-574efbff6c1a",
+  "remaining": [
+    "unified-registry-activation",
+    "full-gateway-routing",
+    "authenticated-business-page-acceptance"
+  ]
+}

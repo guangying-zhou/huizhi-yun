@@ -146,7 +146,7 @@ func (a *Adapter) freezePeopleContributionSnapshot(ctx context.Context, rawProje
 	}
 	actor := strings.TrimSpace(firstBodyText(body, "current_user"))
 	creator := contributionOperationCreator(actor, trusted.ServiceClientID)
-	_, err = tx.ExecContext(ctx, `INSERT INTO integration_operation (operation_id,operation_key,correlation_key,sequence_no,tenant_code,deployment_code,source_app,target_app,operation_code,required_capability,source_biz_type,source_biz_code,idempotency_key,command_schema_version,command_json,command_sha256,status,original_request_id,original_actor_uid,service_client_id,created_by,updated_by,next_attempt_at) VALUES (?,?,?,1,?,?,'aims','people',?,'people:write','project',?,?,'v1',?,?,'pending',?,?,?,?,?,UTC_TIMESTAMP(3))`, operationID, operationKey, operationKey, trusted.TenantCode, trusted.DeploymentCode, aimsPeopleContributionOperation, projectCode, operationKey, string(commandJSON), hash, nullableText(trusted.RequestID), nullableText(actor), nullableText(trusted.ServiceClientID), nullableText(creator), nullableText(creator))
+	_, err = tx.ExecContext(ctx, trusted.SQL(`INSERT INTO integration_operation (operation_id,operation_key,correlation_key,sequence_no,tenant_code,deployment_code,source_app,target_app,operation_code,required_capability,source_biz_type,source_biz_code,idempotency_key,command_schema_version,command_json,command_sha256,status,original_request_id,original_actor_uid,service_client_id,created_by,updated_by,next_attempt_at) VALUES (?,?,?,1,?,?,'aims','people',?,'people:write','project',?,?,'v1',?,?,'pending',?,?,?,?,?,UTC_TIMESTAMP(3))`), operationID, operationKey, operationKey, trusted.TenantCode, trusted.DeploymentCode, aimsPeopleContributionOperation, projectCode, operationKey, string(commandJSON), hash, nullableText(trusted.RequestID), nullableText(actor), nullableText(trusted.ServiceClientID), nullableText(creator), nullableText(creator))
 	if err != nil {
 		return nil, err
 	}
@@ -184,7 +184,7 @@ func contributionOperationCreator(actor, serviceClientID string) string {
 
 func validateStoredPeopleContributionOperation(ctx context.Context, tx *sql.Tx, trusted integrationoperation.TrustedContext, operationKey, projectCode, commandHash string) (string, error) {
 	var status, targetApp, operationCode, sourceBizType, sourceBizCode, storedHash string
-	err := tx.QueryRowContext(ctx, `SELECT status,target_app,operation_code,source_biz_type,source_biz_code,command_sha256 FROM integration_operation WHERE tenant_code=? AND deployment_code=? AND source_app='aims' AND operation_key=? FOR UPDATE`, trusted.TenantCode, trusted.DeploymentCode, operationKey).Scan(&status, &targetApp, &operationCode, &sourceBizType, &sourceBizCode, &storedHash)
+	err := tx.QueryRowContext(ctx, trusted.SQL(`SELECT status,target_app,operation_code,source_biz_type,source_biz_code,command_sha256 FROM integration_operation WHERE tenant_code=? AND deployment_code=? AND source_app='aims' AND operation_key=? FOR UPDATE`), trusted.TenantCode, trusted.DeploymentCode, operationKey).Scan(&status, &targetApp, &operationCode, &sourceBizType, &sourceBizCode, &storedHash)
 	if err != nil {
 		return "", err
 	}

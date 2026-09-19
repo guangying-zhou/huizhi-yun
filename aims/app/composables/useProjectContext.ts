@@ -1,8 +1,11 @@
+import { useAimsModule } from '../../layer/useAimsModule'
+import { useProjectStore } from '../stores/project'
 /**
  * 项目上下文管理
  * 通过 Cookie 持久化当前选中的项目，控制主菜单/项目菜单切换
  */
 export function useProjectContext() {
+  const { moduleUrl } = useAimsModule()
   const projectStore = useProjectStore()
   const currentProjectId = useCookie<string | null>('aims_current_project_id', {
     default: () => null,
@@ -25,14 +28,14 @@ export function useProjectContext() {
     const project = await projectStore.fetchProject(projectId)
     if (!project) return false
     currentProjectId.value = String(projectId)
-    await navigateTo(`/projects/${projectId}`)
+    await navigateTo(moduleUrl(`/projects/${projectId}`))
     return true
   }
 
   // 退出项目（返回项目总览）
   function exitProject() {
     currentProjectId.value = null
-    navigateTo('/projects')
+    navigateTo(moduleUrl('/projects'))
   }
 
   // 切换项目
@@ -40,7 +43,7 @@ export function useProjectContext() {
     const project = await projectStore.fetchProject(projectId)
     if (!project) return false
     currentProjectId.value = String(projectId)
-    await navigateTo(`/projects/${projectId}`)
+    await navigateTo(moduleUrl(`/projects/${projectId}`))
     return true
   }
 

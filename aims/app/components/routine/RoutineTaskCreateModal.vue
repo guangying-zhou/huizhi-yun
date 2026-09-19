@@ -1,7 +1,14 @@
 <script setup lang="ts">
+import { useAimsModule } from '../../../layer/useAimsModule'
 import type { Department } from '@hzy/foundation/app/types/account'
-import type { CreateWorkItemRequest, RoutineScope } from '~/types/aims'
+import type { CreateWorkItemRequest, RoutineScope } from '../../types/aims'
+import { useAccessibleDepartments } from '../../composables/useAccessibleDepartments'
+import { useProjectStore } from '../../stores/project'
+import { useWorkItemStore } from '../../stores/workItem'
 
+
+// 同一份代码供独立应用与企业宿主使用：非宿主模式下 moduleUrl 原样返回路径。
+const { moduleUrl } = useAimsModule()
 const props = defineProps<{
   open: boolean
   projectId: number
@@ -138,7 +145,7 @@ async function createRoutineTask() {
     let failedDocuments = 0
     for (const documentId of pendingDocIds.value) {
       try {
-        await $fetch(`/api/v1/work-items/${item.id}/documents`, {
+        await $fetch(moduleUrl(`/api/v1/work-items/${item.id}/documents`), {
           method: 'POST',
           body: { documentId }
         })

@@ -1,0 +1,47 @@
+{
+  "schemaVersion": "test-worker-deployment-receipt.v1",
+  "observedAt": "2026-09-14T16:31:00Z",
+  "worker": "hzy-test-console",
+  "tenant": "C000001",
+  "environment": "test",
+  "source": {
+    "commit": "12ddf1809b1f47e2ee54679e2a87d2692f600a29",
+    "tree": "d0cb790c119537ec81b2c6c0afe4cfda2c48e190",
+    "node": "24.18.0",
+    "nitroPreset": "cloudflare-module"
+  },
+  "artifact": {
+    "outputManifestSha256": "a6821b21cc46123c46fa054bdff233f94bd4ea0badd45e87bb797645aa3730d4",
+    "files": 668,
+    "bytes": 8943278
+  },
+  "deployment": {
+    "deploymentId": "4df93dd0-fbd1-46c5-bd49-ef2cce2609c8",
+    "versionId": "2d4b0cb0-7721-4187-ade3-80ed4e72b833",
+    "previousActiveVersionId": "952afe48-8399-477f-b4ec-9951ff8794c1",
+    "trafficPercent": 100,
+    "status": "active",
+    "scriptEtag": "a94b5ab4819a26625a5b0fea448704ffa66bdb800a7d27d0705666ef521b3a6d"
+  },
+  "readback": {
+    "versionIsActive": true,
+    "latestDeploymentIsSingleVersion": true,
+    "trafficIs100Percent": true,
+    "tenant": "C000001",
+    "environment": "test",
+    "platformDeployment": "wiztek-test-console",
+    "bundleCacheBackend": "runtime",
+    "bindingCount": 58,
+    "secretBindingCount": 9,
+    "serviceBindingCount": 0,
+    "assetsEnabled": true,
+    "compatibilityDate": "2026-05-23",
+    "production": false
+  },
+  "scope": {
+    "platformOrBusinessSwitch": false,
+    "runtimeConfigChanged": false,
+    "secretsValuesRecorded": false,
+    "preservedExistingBindings": true
+  }
+}

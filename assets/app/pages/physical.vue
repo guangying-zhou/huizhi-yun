@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { ApiResponse, AssetListItem, ListPayload, SummaryMetric } from '~/types'
+import { useAssetsModule } from '../../layer/useAssetsModule'
 
 usePageTitle('实物资产')
 
@@ -12,7 +13,8 @@ const { search, debounced: debouncedSearch } = useDebouncedSearch({
   }
 })
 const selectedStatus = ref<'all' | 'in_stock' | 'in_use'>('all')
-const { loadDictionaries, getLabel } = useAssetLabels()
+const { hosted, moduleUrl, cacheKey } = useAssetsModule()
+const { loadDictionaries, getLabel } = useAssetLabels('asset-items')
 await loadDictionaries()
 
 watch(selectedStatus, () => {
@@ -27,7 +29,8 @@ const query = computed(() => ({
   status: selectedStatus.value === 'all' ? undefined : selectedStatus.value
 }))
 
-const { data: response, refresh, status } = await useFetch<ApiResponse<ListPayload<AssetListItem>>>('/api/v1/assets', {
+const { data: response, refresh, status } = await useFetch<ApiResponse<ListPayload<AssetListItem>>>(moduleUrl('/api/v1/assets'), {
+  key: cacheKey('physical-assets'),
   query
 })
 const { setRefresh, clearRefresh } = usePageActions()
@@ -54,12 +57,12 @@ const columns = [
 ]
 
 const handleRowSelect = (_event: Event, row: { original: AssetListItem }) => {
-  navigateTo(`/items/${row.original.public_id || row.original.id}`)
+  navigateTo(moduleUrl(`/items/${row.original.public_id || row.original.id}`))
 }
 
 const handleCreated = async (asset: { id: number, public_id?: string | null }) => {
   await refresh()
-  await navigateTo(`/items/${asset.public_id || asset.id}`)
+  await navigateTo(moduleUrl(`/items/${asset.public_id || asset.id}`))
 }
 </script>
 
@@ -74,6 +77,7 @@ const handleCreated = async (asset: { id: number, public_id?: string | null }) =
             <div class="flex items-center justify-between gap-3">
               <span class="font-semibold">资产列表</span>
               <UButton
+                v-if="!hosted"
                 icon="i-lucide-plus"
                 color="primary"
                 variant="soft"
@@ -150,6 +154,7 @@ const handleCreated = async (asset: { id: number, public_id?: string | null }) =
   </UDashboardPanel>
 
   <AssetsAssetCreateSlideover
+    v-if="!hosted"
     :open="createOpen"
     category="physical"
     @update:open="createOpen = $event"

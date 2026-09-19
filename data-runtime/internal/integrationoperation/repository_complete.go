@@ -125,6 +125,25 @@ func (r *Repository) RecordSuccess(ctx context.Context, input RecordSuccessInput
 // RecordSuccessWithMutation commits a source business checkpoint in the same
 // transaction as the operation attempt and terminal success evidence.
 func (r *Repository) RecordSuccessWithMutation(ctx context.Context, input RecordSuccessInput, mutation func(context.Context, *sql.Tx) error) (RecordResult, error) {
+	return r.recordSuccess(ctx, input, mutation, nil)
+}
+
+// RecordSuccessWithMutationInTransaction keeps completion evidence and source checkpoints
+// inside the caller's generation-fenced transaction. Errors abort that transaction.
+func (r *Repository) RecordSuccessWithMutationInTransaction(ctx context.Context, tx *sql.Tx, input RecordSuccessInput, mutation func(context.Context, *sql.Tx) error) (RecordResult, error) {
+	if tx == nil {
+		return RecordResult{}, fmt.Errorf("integration operation transaction is required")
+	}
+	return r.recordSuccess(ctx, input, mutation, tx)
+}
+
+func (r *Repository) recordSuccess(ctx context.Context, input RecordSuccessInput, mutation func(context.Context, *sql.Tx) error, supplied *sql.Tx) (out RecordResult, returnedErr error) {
+	defer func() {
+		if supplied != nil && returnedErr != nil {
+			rollback(supplied)
+		}
+	}()
+
 	if err := validateCompletionLease(input.Lease); err != nil {
 		return RecordResult{}, err
 	}
@@ -156,12 +175,15 @@ func (r *Repository) RecordSuccessWithMutation(ctx context.Context, input Record
 		return RecordResult{}, err
 	}
 
-	tx, err := beginTx(ctx, r.db)
-	if err != nil {
-		return RecordResult{}, err
+	tx := supplied
+	if tx == nil {
+		tx, err = beginTx(ctx, r.db)
+		if err != nil {
+			return RecordResult{}, err
+		}
+		defer rollback(tx)
 	}
-	defer rollback(tx)
-	state, err := loadAndValidateCompletionState(ctx, tx, input.Lease, input.Now)
+	state, err := r.loadAndValidateCompletionState(ctx, tx, input.Lease, input.Now)
 	if err != nil {
 		return RecordResult{}, err
 	}
@@ -174,7 +196,7 @@ func (r *Repository) RecordSuccessWithMutation(ctx context.Context, input Record
 
 	result, err := tx.ExecContext(
 		ctx,
-		recordAttemptSuccessSQL,
+		r.sql(recordAttemptSuccessSQL),
 		nullableHTTPStatus(input.HTTPStatus),
 		nullableText(input.TargetBizType),
 		nullableText(input.TargetBizCode),
@@ -196,7 +218,7 @@ func (r *Repository) RecordSuccessWithMutation(ctx context.Context, input Record
 	version := state.version + 1
 	result, err = tx.ExecContext(
 		ctx,
-		recordOperationSuccessSQL,
+		r.sql(recordOperationSuccessSQL),
 		nullableText(input.TargetReceiptID),
 		nullableText(input.TargetBizType),
 		nullableText(input.TargetBizCode),
@@ -217,7 +239,7 @@ func (r *Repository) RecordSuccessWithMutation(ctx context.Context, input Record
 	if err := requireOneRow(result); err != nil {
 		return RecordResult{}, err
 	}
-	if err := markLatestDeadLetterGenerationClosure(ctx, tx, input.Lease.OperationID, state.version, "resolved", version, input.Now); err != nil {
+	if err := r.markLatestDeadLetterGenerationClosure(ctx, tx, input.Lease.OperationID, state.version, "resolved", version, input.Now); err != nil {
 		return RecordResult{}, err
 	}
 	if mutation != nil {
@@ -225,13 +247,34 @@ func (r *Repository) RecordSuccessWithMutation(ctx context.Context, input Record
 			return RecordResult{}, err
 		}
 	}
-	if err := tx.Commit(); err != nil {
-		return RecordResult{}, err
+	if supplied == nil {
+		if err := tx.Commit(); err != nil {
+			return RecordResult{}, err
+		}
 	}
 	return RecordResult{Status: StatusSucceeded, Version: version}, nil
 }
 
 func (r *Repository) RecordFailure(ctx context.Context, input RecordFailureInput) (RecordResult, error) {
+	return r.recordFailure(ctx, input, nil)
+}
+
+// RecordFailureInTransaction keeps completion evidence and source checkpoints
+// inside the caller's generation-fenced transaction. Errors abort that transaction.
+func (r *Repository) RecordFailureInTransaction(ctx context.Context, tx *sql.Tx, input RecordFailureInput) (RecordResult, error) {
+	if tx == nil {
+		return RecordResult{}, fmt.Errorf("integration operation transaction is required")
+	}
+	return r.recordFailure(ctx, input, tx)
+}
+
+func (r *Repository) recordFailure(ctx context.Context, input RecordFailureInput, supplied *sql.Tx) (out RecordResult, returnedErr error) {
+	defer func() {
+		if supplied != nil && returnedErr != nil {
+			rollback(supplied)
+		}
+	}()
+
 	if err := validateCompletionLease(input.Lease); err != nil {
 		return RecordResult{}, err
 	}
@@ -257,12 +300,15 @@ func (r *Repository) RecordFailure(ctx context.Context, input RecordFailureInput
 	}
 	classification := ClassifyFailure(input.Failure)
 
-	tx, err := beginTx(ctx, r.db)
-	if err != nil {
-		return RecordResult{}, err
+	tx := supplied
+	if tx == nil {
+		tx, err = beginTx(ctx, r.db)
+		if err != nil {
+			return RecordResult{}, err
+		}
+		defer rollback(tx)
 	}
-	defer rollback(tx)
-	state, err := loadAndValidateCompletionState(ctx, tx, input.Lease, input.Now)
+	state, err := r.loadAndValidateCompletionState(ctx, tx, input.Lease, input.Now)
 	if err != nil {
 		return RecordResult{}, err
 	}
@@ -290,7 +336,7 @@ func (r *Repository) RecordFailure(ctx context.Context, input RecordFailureInput
 
 	result, err := tx.ExecContext(
 		ctx,
-		recordAttemptFailureSQL,
+		r.sql(recordAttemptFailureSQL),
 		decision.Status,
 		nullableHTTPStatus(input.Failure.HTTPStatus),
 		nullableText(input.ErrorCode),
@@ -341,7 +387,7 @@ func (r *Repository) RecordFailure(ctx context.Context, input RecordFailureInput
 	version := state.version + 1
 	result, err = tx.ExecContext(
 		ctx,
-		recordOperationFailureSQL,
+		r.sql(recordOperationFailureSQL),
 		decision.Status,
 		nextAttemptAt,
 		nullableHTTPStatus(input.Failure.HTTPStatus),
@@ -368,20 +414,22 @@ func (r *Repository) RecordFailure(ctx context.Context, input RecordFailureInput
 		return RecordResult{}, err
 	}
 	if decision.Status == StatusSucceeded {
-		if err := markLatestDeadLetterGenerationClosure(ctx, tx, input.Lease.OperationID, state.version, "resolved", version, input.Now); err != nil {
+		if err := r.markLatestDeadLetterGenerationClosure(ctx, tx, input.Lease.OperationID, state.version, "resolved", version, input.Now); err != nil {
 			return RecordResult{}, err
 		}
 	}
-	if err := tx.Commit(); err != nil {
-		return RecordResult{}, err
+	if supplied == nil {
+		if err := tx.Commit(); err != nil {
+			return RecordResult{}, err
+		}
 	}
 	return RecordResult{Status: decision.Status, Version: version, Decision: decision}, nil
 }
 
-func loadAndValidateCompletionState(ctx context.Context, tx *sql.Tx, lease CompletionLease, now time.Time) (completionState, error) {
+func (r *Repository) loadAndValidateCompletionState(ctx context.Context, tx *sql.Tx, lease CompletionLease, now time.Time) (completionState, error) {
 	var state completionState
 	var status string
-	err := tx.QueryRowContext(ctx, loadCompletionStateSQL, lease.OperationID).Scan(
+	err := tx.QueryRowContext(ctx, r.sql(loadCompletionStateSQL), lease.OperationID).Scan(
 		&status,
 		&state.lockedBy,
 		&state.lockedUntil,

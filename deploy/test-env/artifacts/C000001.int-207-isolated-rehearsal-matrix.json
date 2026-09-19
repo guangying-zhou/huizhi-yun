@@ -1,0 +1,64 @@
+{
+ "recordedAt": "2026-09-15T15:18:38.983968+00:00",
+ "purpose": "INT-207 full-process rehearsal on isolated MySQL: scenario to executed test mapping",
+ "harness": "dedicated mysqld instances under /tmp/hzy-product-center.* and /tmp/hzy-test-mysql-*, loopback port, per-suite schemas; no shared or production database",
+ "scenarios": [
+  {
+   "scenario": "改名立即可读 (authoritative rename visible immediately)",
+   "test": "internal/enterprise TestDirectoryIsolatedMySQL",
+   "result": "pass",
+   "notes": "renamed master and category label are read through the authorized directory query in the same snapshot; the onboarding history snapshot stays frozen"
+  },
+  {
+   "scenario": "部分产品线接入 (partial line onboarding)",
+   "test": "internal/apps/aims/productcenter TestMySQLLineUnifiesRemainingProductsAroundManagedOnes, TestMySQLLineUnifiesAroundNonOnboardableProducts",
+   "result": "pass",
+   "notes": "already-managed and lifecycle-blocked products are skipped; only the selected products become modules; the line is no longer unifiable afterwards"
+  },
+  {
+   "scenario": "需求→版本→确认/转交 (requirement to version to confirmation/handoff)",
+   "test": "internal/server TestEnterprisePlanningHTTPMySQL; Handoff MySQL suites",
+   "result": "pass",
+   "notes": "planning service runs over compatibility views with the enterprise identity; handoff paths exercised through HTTP"
+  },
+  {
+   "scenario": "并发编辑 (concurrent edits)",
+   "test": "internal/enterprise registry/scheduler transaction tests; productcenter concurrency suites",
+   "result": "pass",
+   "notes": "generation fencing and revision conflicts reject the losing writer"
+  },
+  {
+   "scenario": "唯一归属冲突 (single ownership conflict)",
+   "test": "internal/apps/aims/productcenter TestMySQLLineAndIndividualConcurrentOnboard",
+   "result": "pass",
+   "notes": "line onboarding and individual onboarding of the same product race to exactly one success"
+  },
+  {
+   "scenario": "重复提交 (duplicate submission)",
+   "test": "internal/apps/aims/productcenter TestMySQLLineOnboardConcurrentReplayAndDifferentPayload",
+   "result": "pass",
+   "notes": "same key and payload replays the frozen result; a different payload is rejected"
+  },
+  {
+   "scenario": "迁移中断 (interrupted migration)",
+   "test": "internal/migrations/unified TestFullProductChainShadowMigrationMySQL",
+   "result": "pass",
+   "notes": "committed prefix, copying checkpoint and trigger reinstall resume only the interrupted table, then guarded final recopy and activation"
+  },
+  {
+   "scenario": "新旧命令重放 (old and new entry replay)",
+   "test": "internal/server TestEnterpriseAssetsProductsHTTPMySQL",
+   "result": "pass",
+   "notes": "cross-entry replay with the same key returns the original receipt and keeps a single business row; a different payload conflicts"
+  }
+ ],
+ "wholeSuite": {
+  "isolatedMySQLTests": {
+   "pass": 189,
+   "skip": 3,
+   "harnessLimited": 2
+  },
+  "raceRun": "internal/enterprise, internal/server, aims and assets packages pass with -race"
+ },
+ "redaction": "Only test names, counts and outcomes are recorded. No business rows, credentials or SQL parameters are stored."
+}

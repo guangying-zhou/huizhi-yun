@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { h, resolveComponent } from 'vue'
+import { useCodocsModule } from '../../../layer/useCodocsModule'
 
 definePageMeta({
   layout: 'default'
@@ -32,13 +33,14 @@ usePageTitle('个人收藏')
 const UButton = resolveComponent('UButton')
 const toast = useToast()
 const apiFetch = useRequestFetch()
+const { moduleUrl, cacheKey } = useCodocsModule()
 const { user } = useAuth()
 const { downloadDocument } = useDocumentDownload()
 const uid = computed(() => user.value || 'user1')
 
 // Fetch starred documents
 const fetchFavorites = async () => {
-  const response = await apiFetch<DocumentsListResponse>('/api/documents', {
+  const response = await apiFetch<DocumentsListResponse>(moduleUrl('/api/documents'), {
     query: {
       owner: uid.value,
       starred: true
@@ -48,7 +50,7 @@ const fetchFavorites = async () => {
 }
 
 const { data: documents, pending, refresh } = await useAsyncData(
-  'my-favorites',
+  cacheKey('my-favorites'),
   fetchFavorites,
   {
     getCachedData: () => undefined, // Always fetch fresh data on navigation
@@ -116,7 +118,7 @@ const toggleStar = async (doc: FavoriteDocument) => {
   // Better to just call API and refresh.
 
   try {
-    await $fetch(`/api/documents/${doc.uuid}`, {
+    await $fetch(moduleUrl(`/api/documents/${doc.uuid}`), {
       method: 'PATCH',
       body: { star_flag: newStatus }
     })

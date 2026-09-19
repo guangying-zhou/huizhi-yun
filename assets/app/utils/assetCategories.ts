@@ -1,8 +1,8 @@
 import {
   assetCategoryDefaultsByScope,
   type AssetCategoryScope
-} from '~~/shared/assetCategoryDefaults'
-import type { AssetCategoryGroup, AssetCategoryItem } from '~/types'
+} from '../../shared/assetCategoryDefaults'
+import type { AssetCategoryGroup, AssetCategoryItem } from '../types'
 
 type RawRecord = Record<string, unknown>
 

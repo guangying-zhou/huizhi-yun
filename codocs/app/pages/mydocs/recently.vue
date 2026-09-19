@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { useCodocsModule } from '../../../layer/useCodocsModule'
+
 definePageMeta({
   layout: 'default'
 })
@@ -14,6 +16,7 @@ const { user } = useAuth()
 const userId = computed(() => user.value || 'user1')
 const apiFetch = useRequestFetch()
 const { downloadDocument } = useDocumentDownload()
+const { moduleUrl, cacheKey } = useCodocsModule()
 
 usePageTitle('最近使用')
 
@@ -42,7 +45,7 @@ const columns = [
 // Fetch data
 const fetchRecentlyEdited = async () => {
   // Fetch docs where current user is the last_editor
-  const response = await apiFetch<{ data?: { items: DocRecord[] } }>('/api/documents', {
+  const response = await apiFetch<{ data?: { items: DocRecord[] } }>(moduleUrl('/api/documents'), {
     query: {
       last_editor: userId.value
     }
@@ -50,7 +53,7 @@ const fetchRecentlyEdited = async () => {
   return response?.data?.items || []
 }
 
-const { data: documents, pending } = await useAsyncData('my-recent-docs', fetchRecentlyEdited)
+const { data: documents, pending } = await useAsyncData(cacheKey('my-recent-docs'), fetchRecentlyEdited)
 </script>
 
 <template>

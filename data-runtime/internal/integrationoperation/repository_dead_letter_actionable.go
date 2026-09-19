@@ -187,7 +187,7 @@ func normalizeRecipientUIDs(values []string) ([]string, error) {
 	return result, nil
 }
 
-func (r *Repository) ListPendingDeadLetterActionables(ctx context.Context, tenantCode, deploymentCode, sourceApp string, limit int, now time.Time) ([]DeadLetterActionableCandidate, error) {
+func (r *Repository) listPendingDeadLetterActionables(ctx context.Context, executor notificationExecutor, tenantCode, deploymentCode, sourceApp string, limit int, now time.Time) ([]DeadLetterActionableCandidate, error) {
 	if err := validateFailureNotificationScope(tenantCode, deploymentCode, sourceApp); err != nil {
 		return nil, err
 	}
@@ -197,10 +197,10 @@ func (r *Repository) ListPendingDeadLetterActionables(ctx context.Context, tenan
 	if now.IsZero() {
 		return nil, fmt.Errorf("dead-letter actionable scan time is required")
 	}
-	if _, err := r.db.ExecContext(ctx, materializeDeadLetterActionablesSQL, now, now, tenantCode, deploymentCode, sourceApp); err != nil {
+	if _, err := executor.ExecContext(ctx, r.sql(materializeDeadLetterActionablesSQL), now, now, tenantCode, deploymentCode, sourceApp); err != nil {
 		return nil, err
 	}
-	rows, err := r.db.QueryContext(ctx, listPendingDeadLetterActionablesSQL, tenantCode, deploymentCode, sourceApp, limit)
+	rows, err := executor.QueryContext(ctx, r.sql(listPendingDeadLetterActionablesSQL), tenantCode, deploymentCode, sourceApp, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -218,7 +218,7 @@ func (r *Repository) ListPendingDeadLetterActionables(ctx context.Context, tenan
 	return items, rows.Err()
 }
 
-func (r *Repository) MarkDeadLetterActionablePublished(ctx context.Context, input MarkDeadLetterActionablePublishedInput) (bool, error) {
+func (r *Repository) markDeadLetterActionablePublished(ctx context.Context, executor notificationExecutor, input MarkDeadLetterActionablePublishedInput) (bool, error) {
 	if err := validateFailureNotificationScope(input.TenantCode, input.DeploymentCode, input.SourceApp); err != nil {
 		return false, err
 	}
@@ -238,7 +238,7 @@ func (r *Repository) MarkDeadLetterActionablePublished(ctx context.Context, inpu
 		return false, err
 	}
 	recipientJSON, _ := json.Marshal(recipients)
-	result, err := r.db.ExecContext(ctx, markDeadLetterActionablePublishedSQL, input.NotificationID, string(recipientJSON), input.Now, input.Now, input.OperationID, input.Generation, input.TenantCode, input.DeploymentCode, input.SourceApp, input.OperationVersion, input.ActionableKey, input.ObjectVersion)
+	result, err := executor.ExecContext(ctx, r.sql(markDeadLetterActionablePublishedSQL), input.NotificationID, string(recipientJSON), input.Now, input.Now, input.OperationID, input.Generation, input.TenantCode, input.DeploymentCode, input.SourceApp, input.OperationVersion, input.ActionableKey, input.ObjectVersion)
 	if err != nil {
 		return false, err
 	}
@@ -250,7 +250,7 @@ func (r *Repository) MarkDeadLetterActionablePublished(ctx context.Context, inpu
 		return true, nil
 	}
 	var notificationID, storedRecipients, objectVersion string
-	err = r.db.QueryRowContext(ctx, loadDeadLetterActionablePublishedAckSQL, input.OperationID, input.Generation, input.TenantCode, input.DeploymentCode, input.SourceApp, input.OperationVersion, input.ActionableKey).Scan(&notificationID, &storedRecipients, &objectVersion)
+	err = executor.QueryRowContext(ctx, r.sql(loadDeadLetterActionablePublishedAckSQL), input.OperationID, input.Generation, input.TenantCode, input.DeploymentCode, input.SourceApp, input.OperationVersion, input.ActionableKey).Scan(&notificationID, &storedRecipients, &objectVersion)
 	if errors.Is(err, sql.ErrNoRows) {
 		return false, ErrOperationNotFound
 	}
@@ -263,14 +263,14 @@ func (r *Repository) MarkDeadLetterActionablePublished(ctx context.Context, inpu
 	return false, ErrPersistenceRace
 }
 
-func (r *Repository) ListPendingDeadLetterClosures(ctx context.Context, tenantCode, deploymentCode, sourceApp string, limit int) ([]DeadLetterClosureCandidate, error) {
+func (r *Repository) listPendingDeadLetterClosures(ctx context.Context, executor notificationExecutor, tenantCode, deploymentCode, sourceApp string, limit int) ([]DeadLetterClosureCandidate, error) {
 	if err := validateFailureNotificationScope(tenantCode, deploymentCode, sourceApp); err != nil {
 		return nil, err
 	}
 	if err := validateDeadLetterLimit(limit); err != nil {
 		return nil, err
 	}
-	rows, err := r.db.QueryContext(ctx, listPendingDeadLetterClosuresSQL, tenantCode, deploymentCode, sourceApp, limit)
+	rows, err := executor.QueryContext(ctx, r.sql(listPendingDeadLetterClosuresSQL), tenantCode, deploymentCode, sourceApp, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -290,7 +290,7 @@ func (r *Repository) ListPendingDeadLetterClosures(ctx context.Context, tenantCo
 	return items, rows.Err()
 }
 
-func (r *Repository) MarkDeadLetterClosureAcknowledged(ctx context.Context, input MarkDeadLetterClosureAcknowledgedInput) (bool, error) {
+func (r *Repository) markDeadLetterClosureAcknowledged(ctx context.Context, executor notificationExecutor, input MarkDeadLetterClosureAcknowledgedInput) (bool, error) {
 	if err := validateFailureNotificationScope(input.TenantCode, input.DeploymentCode, input.SourceApp); err != nil {
 		return false, err
 	}
@@ -308,7 +308,7 @@ func (r *Repository) MarkDeadLetterClosureAcknowledged(ctx context.Context, inpu
 	if input.ExpectedVersion == input.NextVersion {
 		return false, fmt.Errorf("closure versions must differ")
 	}
-	result, err := r.db.ExecContext(ctx, markDeadLetterClosureAcknowledgedSQL, input.Now, input.Now, input.OperationID, input.Generation, input.TenantCode, input.DeploymentCode, input.SourceApp, input.ActionableKey, input.ExpectedVersion, input.NextVersion, input.State)
+	result, err := executor.ExecContext(ctx, r.sql(markDeadLetterClosureAcknowledgedSQL), input.Now, input.Now, input.OperationID, input.Generation, input.TenantCode, input.DeploymentCode, input.SourceApp, input.ActionableKey, input.ExpectedVersion, input.NextVersion, input.State)
 	if err != nil {
 		return false, err
 	}
@@ -320,7 +320,7 @@ func (r *Repository) MarkDeadLetterClosureAcknowledged(ctx context.Context, inpu
 		return true, nil
 	}
 	var acknowledged sql.NullTime
-	err = r.db.QueryRowContext(ctx, loadDeadLetterClosureAckSQL, input.OperationID, input.Generation, input.TenantCode, input.DeploymentCode, input.SourceApp, input.ActionableKey, input.ExpectedVersion, input.NextVersion, input.State).Scan(&acknowledged)
+	err = executor.QueryRowContext(ctx, r.sql(loadDeadLetterClosureAckSQL), input.OperationID, input.Generation, input.TenantCode, input.DeploymentCode, input.SourceApp, input.ActionableKey, input.ExpectedVersion, input.NextVersion, input.State).Scan(&acknowledged)
 	if errors.Is(err, sql.ErrNoRows) {
 		return false, ErrOperationNotFound
 	}
@@ -333,8 +333,8 @@ func (r *Repository) MarkDeadLetterClosureAcknowledged(ctx context.Context, inpu
 	return false, ErrPersistenceRace
 }
 
-func markLatestDeadLetterGenerationClosure(ctx context.Context, tx *sql.Tx, operationID string, maximumSourceVersion uint64, state string, operationVersion uint64, now time.Time) error {
-	_, err := tx.ExecContext(ctx, markLatestDeadLetterGenerationClosureSQL, state, state, operationVersion, now, now, operationID, maximumSourceVersion)
+func (r *Repository) markLatestDeadLetterGenerationClosure(ctx context.Context, tx *sql.Tx, operationID string, maximumSourceVersion uint64, state string, operationVersion uint64, now time.Time) error {
+	_, err := tx.ExecContext(ctx, r.sql(markLatestDeadLetterGenerationClosureSQL), state, state, operationVersion, now, now, operationID, maximumSourceVersion)
 	return err
 }
 
@@ -352,7 +352,7 @@ func (r *Repository) AuthorizeDeadLetterNotification(ctx context.Context, input 
 	var closureState sql.NullString
 	var status string
 	var currentVersion, sourceVersion uint64
-	err := r.db.QueryRowContext(ctx, authorizeDeadLetterNotificationSQL, input.OperationID, input.NotificationID, input.TenantCode, input.DeploymentCode, input.SourceApp).Scan(&recipientsJSON, &closureState, &status, &currentVersion, &sourceVersion)
+	err := r.db.QueryRowContext(ctx, r.sql(authorizeDeadLetterNotificationSQL), input.OperationID, input.NotificationID, input.TenantCode, input.DeploymentCode, input.SourceApp).Scan(&recipientsJSON, &closureState, &status, &currentVersion, &sourceVersion)
 	if errors.Is(err, sql.ErrNoRows) {
 		return false, "not_found", nil
 	}

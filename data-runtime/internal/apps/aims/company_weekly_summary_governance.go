@@ -233,7 +233,7 @@ func (a *Adapter) cancelCompanyWeeklySummaryPublish(
 	var operationID, operationStatus string
 	var operationVersion uint64
 	var receiptID sql.NullString
-	err = tx.QueryRowContext(ctx, `
+	err = tx.QueryRowContext(ctx, trusted.SQL(`
 		SELECT operation_id, status, version_no, target_receipt_id
 		FROM integration_operation
 		WHERE tenant_code = ?
@@ -246,7 +246,7 @@ func (a *Adapter) cancelCompanyWeeklySummaryPublish(
 		  AND JSON_UNQUOTE(JSON_EXTRACT(command_json, '$.summaryVersionId')) = CAST(? AS CHAR)
 		LIMIT 1
 		FOR UPDATE
-	`, trusted.TenantCode, trusted.DeploymentCode, companyWeeklySummaryOperationCode,
+	`), trusted.TenantCode, trusted.DeploymentCode, companyWeeklySummaryOperationCode,
 		periodKey, versionID).Scan(&operationID, &operationStatus, &operationVersion, &receiptID)
 	if err != nil {
 		return nil, err
@@ -255,7 +255,7 @@ func (a *Adapter) cancelCompanyWeeklySummaryPublish(
 		operationStatus != string(integrationoperation.StatusRetryWait)) {
 		return nil, httperror.New(http.StatusConflict, "company_weekly_summary_publish_not_cancellable", "publish can only be cancelled before target delivery starts")
 	}
-	result, err := tx.ExecContext(ctx, `
+	result, err := tx.ExecContext(ctx, trusted.SQL(`
 		UPDATE integration_operation
 		SET status = 'cancelled', next_attempt_at = UTC_TIMESTAMP(6),
 		    locked_by = NULL, locked_until = NULL,
@@ -265,7 +265,7 @@ func (a *Adapter) cancelCompanyWeeklySummaryPublish(
 		  AND version_no = ?
 		  AND status IN ('pending','retry_wait')
 		  AND target_receipt_id IS NULL
-	`, actor, operationID, operationVersion)
+	`), actor, operationID, operationVersion)
 	if err != nil {
 		return nil, err
 	}
@@ -354,7 +354,11 @@ func (a *Adapter) retryCompanyWeeklySummaryPublish(
 	var operationID, operationKey, status string
 	var operationVersion uint64
 	var summaryVersionID int64
-	err = a.DB().QueryRowContext(ctx, `
+	outbox, err := a.enterpriseOutbox()
+	if err != nil {
+		return nil, err
+	}
+	err = a.DB().QueryRowContext(ctx, outbox.SQL(`
 		SELECT operation.operation_id, operation.operation_key, operation.status,
 		       operation.version_no, version.id
 		FROM company_weekly_summaries summary
@@ -374,7 +378,7 @@ func (a *Adapter) retryCompanyWeeklySummaryPublish(
 		  AND operation.deployment_code = ?
 		ORDER BY version.revision_no DESC
 		LIMIT 1
-	`, companyWeeklySummaryOperationCode, periodKey, trusted.TenantCode, trusted.DeploymentCode).Scan(
+	`), companyWeeklySummaryOperationCode, periodKey, trusted.TenantCode, trusted.DeploymentCode).Scan(
 		&operationID, &operationKey, &status, &operationVersion, &summaryVersionID,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -410,7 +414,7 @@ func (a *Adapter) retryCompanyWeeklySummaryPublish(
 		}
 		status = string(result.Status)
 	case integrationoperation.StatusRetryWait, integrationoperation.StatusPartialUnknown:
-		result, err := a.DB().ExecContext(ctx, `
+		result, err := a.DB().ExecContext(ctx, outbox.SQL(`
 			UPDATE integration_operation
 			SET next_attempt_at = UTC_TIMESTAMP(6),
 			    version_no = version_no + 1,
@@ -419,7 +423,7 @@ func (a *Adapter) retryCompanyWeeklySummaryPublish(
 			  AND version_no = ?
 			  AND status IN ('retry_wait','partial_unknown')
 			  AND target_receipt_id IS NULL
-		`, actor, operationID, operationVersion)
+		`), actor, operationID, operationVersion)
 		if err != nil {
 			return nil, err
 		}
@@ -1449,7 +1453,7 @@ func enqueueCompanyWeeklySummaryPublishOperationTx(
 	if err := identity.Validate(); err != nil {
 		return nil, err
 	}
-	if _, err := tx.ExecContext(ctx, `
+	if _, err := tx.ExecContext(ctx, trusted.SQL(`
 		INSERT INTO integration_operation (
 		  operation_id, operation_key, correlation_key, sequence_no, depends_on_operation_key,
 		  tenant_code, deployment_code, source_app, target_app, operation_code,
@@ -1458,7 +1462,7 @@ func enqueueCompanyWeeklySummaryPublishOperationTx(
 		  original_request_id, original_actor_uid, service_client_id, created_by, updated_by,
 		  next_attempt_at
 		) VALUES (?, ?, ?, 1, NULL, ?, ?, 'aims', 'codocs', ?, ?, 'company_weekly_summary', ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, UTC_TIMESTAMP(3))
-	`, operationID, operationKey, operationKey, trusted.TenantCode, trusted.DeploymentCode,
+	`), operationID, operationKey, operationKey, trusted.TenantCode, trusted.DeploymentCode,
 		companyWeeklySummaryOperationCode, companyWeeklySummaryRequiredCapability,
 		periodKey, operationKey, companyWeeklySummaryCommandSchema, string(commandJSON), commandSHA256,
 		nullableText(trusted.RequestID), nullableText(actor), nullableText(trusted.ServiceClientID),
