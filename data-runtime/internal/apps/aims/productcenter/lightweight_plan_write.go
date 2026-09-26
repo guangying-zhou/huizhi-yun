@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"github.com/google/uuid"
+	"github.com/huizhi-yun/data-runtime/internal/integrationoperation"
 	"strconv"
 	"strings"
 )
@@ -20,6 +21,23 @@ func invalidateSimplePlanTx(ctx context.Context, tx *sql.Tx, versionID int64, ui
 	return e
 }
 func EditLightweightVersionPlan(ctx context.Context, db *sql.DB, identity CommandIdentity, permit AuthorizationPermit, input LightweightVersionPlanEdit) (CommandResult, error) {
+	return editLightweightVersionPlan(ctx, identity, permit, input, func(authorize AuthorizeCommand, apply ApplyCommand) (CommandResult, error) {
+		return ExecuteCommand(ctx, db, identity, input, authorize, apply)
+	})
+}
+
+// EditLightweightVersionPlanInTransaction shares the owning-domain command with a caller-owned transaction.
+func EditLightweightVersionPlanInTransaction(ctx context.Context, tx *sql.Tx, identity CommandIdentity, permit AuthorizationPermit, input LightweightVersionPlanEdit) (CommandResult, error) {
+	result, err := editLightweightVersionPlan(ctx, identity, permit, input, func(authorize AuthorizeCommand, apply ApplyCommand) (CommandResult, error) {
+		return ExecuteCommandInTransaction(ctx, tx, identity, input, authorize, apply)
+	})
+	if err != nil && tx != nil {
+		_ = tx.Rollback()
+	}
+	return result, err
+}
+
+func editLightweightVersionPlan(ctx context.Context, identity CommandIdentity, permit AuthorizationPermit, input LightweightVersionPlanEdit, execute func(AuthorizeCommand, ApplyCommand) (CommandResult, error)) (CommandResult, error) {
 	if identity.Action != "product_versions:plan-edit" {
 		return CommandResult{}, invalid("product_command_identity_invalid", "计划编辑命令不匹配")
 	}
@@ -29,7 +47,7 @@ func EditLightweightVersionPlan(ctx context.Context, db *sql.DB, identity Comman
 	if input.AvailablePersonDays != nil && *input.AvailablePersonDays < 0 || input.ReservePersonDays != nil && *input.ReservePersonDays < 0 {
 		return CommandResult{}, invalid("product_version_plan_invalid", "人日不能为负")
 	}
-	return ExecuteCommand(ctx, db, identity, input, func(ctx context.Context, tx *sql.Tx) error {
+	return execute(func(ctx context.Context, tx *sql.Tx) error {
 		return AuthorizeWorkspaceTransaction(ctx, tx, identity.ProductCode, identity.ActorUID, "product_versions", "edit", permit)
 	}, func(ctx context.Context, tx *sql.Tx) (any, error) {
 		root, e := loadWorkspace(ctx, tx, identity.ProductCode)
@@ -107,6 +125,24 @@ func ListLightweightVersionPlanItems(ctx context.Context, db *sql.DB, code, uid 
 		return out, e
 	}
 	defer tx.Rollback()
+	out, e = ListLightweightVersionPlanItemsInTransaction(ctx, tx, code, uid, versionID, permit, requestPermit, q)
+	if e != nil {
+		return out, e
+	}
+	return out, tx.Commit()
+}
+
+// ListLightweightVersionPlanItemsInTransaction uses the caller's generation-fenced transaction.
+// The owning authorization and query semantics are shared with the legacy entry.
+func ListLightweightVersionPlanItemsInTransaction(ctx context.Context, tx *sql.Tx, code, uid string, versionID int64, permit, requestPermit AuthorizationPermit, q LightweightVersionPlanItemQuery) (LightweightVersionPlanItemPage, error) {
+	out := LightweightVersionPlanItemPage{Items: []LightweightVersionPlanItemRecord{}, Page: q.Page, PageSize: q.PageSize}
+	if q.Page < 1 || q.PageSize < 1 || q.PageSize > 100 || !validPlanText(q.Keyword, 200, false) {
+		return out, invalid("product_version_plan_scope_invalid", "范围分页或搜索无效")
+	}
+	if tx == nil {
+		return out, invalid("product_command_configuration", "缺少产品读取事务")
+	}
+	var e error
 	if e = AuthorizeWorkspaceTransaction(ctx, tx, code, uid, "product_versions", "view", permit); e != nil {
 		return out, e
 	}
@@ -150,10 +186,27 @@ func ListLightweightVersionPlanItems(ctx context.Context, db *sql.DB, code, uid 
 	out.VersionRevision = v.Revision
 	out.PlanRevision = p.Revision
 	out.ScopeRevision = p.ScopeRevision
-	return out, tx.Commit()
+	return out, nil
 }
 
-func CreateLightweightVersionPlanItem(ctx context.Context, db *sql.DB, identity CommandIdentity, versionPermit, requestViewPermit, requestDecisionPermit, planningPermit AuthorizationPermit, input LightweightVersionPlanItemCreate) (CommandResult, error) {
+func CreateLightweightVersionPlanItem(ctx context.Context, db *sql.DB, identity CommandIdentity, versionPermit, requestViewPermit, requestDecisionPermit, planningPermit AuthorizationPermit, input LightweightVersionPlanItemCreate, sourceContext ...integrationoperation.TrustedContext) (CommandResult, error) {
+	return createLightweightVersionPlanItem(ctx, identity, versionPermit, requestViewPermit, requestDecisionPermit, planningPermit, input, sourceContext, func(authorize AuthorizeCommand, apply ApplyCommand) (CommandResult, error) {
+		return ExecuteCommand(ctx, db, identity, input, authorize, apply)
+	})
+}
+
+// CreateLightweightVersionPlanItemInTransaction shares the owning-domain command with a caller-owned transaction.
+func CreateLightweightVersionPlanItemInTransaction(ctx context.Context, tx *sql.Tx, identity CommandIdentity, versionPermit, requestViewPermit, requestDecisionPermit, planningPermit AuthorizationPermit, input LightweightVersionPlanItemCreate, sourceContext ...integrationoperation.TrustedContext) (CommandResult, error) {
+	result, err := createLightweightVersionPlanItem(ctx, identity, versionPermit, requestViewPermit, requestDecisionPermit, planningPermit, input, sourceContext, func(authorize AuthorizeCommand, apply ApplyCommand) (CommandResult, error) {
+		return ExecuteCommandInTransaction(ctx, tx, identity, input, authorize, apply)
+	})
+	if err != nil && tx != nil {
+		_ = tx.Rollback()
+	}
+	return result, err
+}
+
+func createLightweightVersionPlanItem(ctx context.Context, identity CommandIdentity, versionPermit, requestViewPermit, requestDecisionPermit, planningPermit AuthorizationPermit, input LightweightVersionPlanItemCreate, sourceContext []integrationoperation.TrustedContext, execute func(AuthorizeCommand, ApplyCommand) (CommandResult, error)) (CommandResult, error) {
 	if identity.Action != "product_versions:plan-item-create" {
 		return CommandResult{}, invalid("product_command_identity_invalid", "计划范围命令不匹配")
 	}
@@ -166,7 +219,7 @@ func CreateLightweightVersionPlanItem(ctx context.Context, db *sql.DB, identity 
 	if input.EstimatePersonDays != nil && *input.EstimatePersonDays <= 0 {
 		return CommandResult{}, invalid("product_version_plan_scope_invalid", "估算必须大于零")
 	}
-	return ExecuteCommand(ctx, db, identity, input, func(ctx context.Context, tx *sql.Tx) error {
+	return execute(func(ctx context.Context, tx *sql.Tx) error {
 		if e := AuthorizeWorkspaceTransaction(ctx, tx, identity.ProductCode, identity.ActorUID, "product_versions", "edit", versionPermit); e != nil {
 			return e
 		}
@@ -278,6 +331,17 @@ func CreateLightweightVersionPlanItem(ctx context.Context, db *sql.DB, identity 
 		if e != nil {
 			return nil, e
 		}
+
+		var trusted integrationoperation.TrustedContext
+		if len(sourceContext) > 0 {
+			trusted = sourceContext[0]
+		}
+		if e = enqueueFeedbackDecisionTx(ctx, tx, trusted, identity.ActorUID, identity.ProductCode, requestID, input.RequestBizID, "accepted", root.Revision+1); e != nil {
+			return nil, e
+		}
+		if e = enqueueFeedbackProgressTx(ctx, tx, trusted, identity.ActorUID, identity.ProductCode, requestID, root.Revision+1); e != nil {
+			return nil, e
+		}
 		out := map[string]any{"id": scopeID, "planning_item_biz_id": itemBiz, "request_biz_id": input.RequestBizID, "workspace_revision": root.Revision + 1, "version_revision": v.Revision + 1, "plan_revision": p.Revision, "scope_revision": p.ScopeRevision + 1}
 		return out, lightweightPlanAudit(ctx, tx, identity, input.VersionID, "plan-item-create", v.Revision+1, map[string]any{"input": input, "result": out})
 	})
@@ -308,13 +372,30 @@ func editPlanScope(ctx context.Context, tx *sql.Tx, identity CommandIdentity, in
 	return v, p, nil
 }
 func EditLightweightVersionPlanItem(ctx context.Context, db *sql.DB, identity CommandIdentity, permit AuthorizationPermit, input LightweightVersionPlanItemEdit) (CommandResult, error) {
+	return editLightweightVersionPlanItem(ctx, identity, permit, input, func(authorize AuthorizeCommand, apply ApplyCommand) (CommandResult, error) {
+		return ExecuteCommand(ctx, db, identity, input, authorize, apply)
+	})
+}
+
+// EditLightweightVersionPlanItemInTransaction shares the owning-domain command with a caller-owned transaction.
+func EditLightweightVersionPlanItemInTransaction(ctx context.Context, tx *sql.Tx, identity CommandIdentity, permit AuthorizationPermit, input LightweightVersionPlanItemEdit) (CommandResult, error) {
+	result, err := editLightweightVersionPlanItem(ctx, identity, permit, input, func(authorize AuthorizeCommand, apply ApplyCommand) (CommandResult, error) {
+		return ExecuteCommandInTransaction(ctx, tx, identity, input, authorize, apply)
+	})
+	if err != nil && tx != nil {
+		_ = tx.Rollback()
+	}
+	return result, err
+}
+
+func editLightweightVersionPlanItem(ctx context.Context, identity CommandIdentity, permit AuthorizationPermit, input LightweightVersionPlanItemEdit, execute func(AuthorizeCommand, ApplyCommand) (CommandResult, error)) (CommandResult, error) {
 	if identity.Action != "product_versions:plan-item-edit" || input.ScopeID < 1 || !validPlanText(input.ScopeSummary, 10000, false) || !validPlanText(input.AcceptanceCriteria, 10000, false) {
 		return CommandResult{}, invalid("product_version_plan_scope_invalid", "范围编辑字段无效")
 	}
 	if input.EstimatePersonDays != nil && *input.EstimatePersonDays <= 0 {
 		return CommandResult{}, invalid("product_version_plan_scope_invalid", "估算必须大于零")
 	}
-	return ExecuteCommand(ctx, db, identity, input, func(ctx context.Context, tx *sql.Tx) error {
+	return execute(func(ctx context.Context, tx *sql.Tx) error {
 		return AuthorizeWorkspaceTransaction(ctx, tx, identity.ProductCode, identity.ActorUID, "product_versions", "edit", permit)
 	}, func(ctx context.Context, tx *sql.Tx) (any, error) {
 		root, e := loadWorkspace(ctx, tx, identity.ProductCode)
@@ -381,10 +462,27 @@ func EditLightweightVersionPlanItem(ctx context.Context, db *sql.DB, identity Co
 	})
 }
 func DeleteLightweightVersionPlanItem(ctx context.Context, db *sql.DB, identity CommandIdentity, permit AuthorizationPermit, input LightweightVersionPlanItemDelete) (CommandResult, error) {
+	return deleteLightweightVersionPlanItem(ctx, identity, permit, input, func(authorize AuthorizeCommand, apply ApplyCommand) (CommandResult, error) {
+		return ExecuteCommand(ctx, db, identity, input, authorize, apply)
+	})
+}
+
+// DeleteLightweightVersionPlanItemInTransaction shares the owning-domain command with a caller-owned transaction.
+func DeleteLightweightVersionPlanItemInTransaction(ctx context.Context, tx *sql.Tx, identity CommandIdentity, permit AuthorizationPermit, input LightweightVersionPlanItemDelete) (CommandResult, error) {
+	result, err := deleteLightweightVersionPlanItem(ctx, identity, permit, input, func(authorize AuthorizeCommand, apply ApplyCommand) (CommandResult, error) {
+		return ExecuteCommandInTransaction(ctx, tx, identity, input, authorize, apply)
+	})
+	if err != nil && tx != nil {
+		_ = tx.Rollback()
+	}
+	return result, err
+}
+
+func deleteLightweightVersionPlanItem(ctx context.Context, identity CommandIdentity, permit AuthorizationPermit, input LightweightVersionPlanItemDelete, execute func(AuthorizeCommand, ApplyCommand) (CommandResult, error)) (CommandResult, error) {
 	if identity.Action != "product_versions:plan-item-delete" || input.ScopeID < 1 || input.ExpectedScopeRevision == 0 || !validPlanText(input.Reason, 2000, true) {
 		return CommandResult{}, invalid("product_version_plan_scope_invalid", "范围删除字段无效")
 	}
-	return ExecuteCommand(ctx, db, identity, input, func(ctx context.Context, tx *sql.Tx) error {
+	return execute(func(ctx context.Context, tx *sql.Tx) error {
 		return AuthorizeWorkspaceTransaction(ctx, tx, identity.ProductCode, identity.ActorUID, "product_versions", "edit", permit)
 	}, func(ctx context.Context, tx *sql.Tx) (any, error) {
 		root, e := loadWorkspace(ctx, tx, identity.ProductCode)
@@ -446,10 +544,27 @@ func DeleteLightweightVersionPlanItem(ctx context.Context, db *sql.DB, identity 
 	})
 }
 func ConfirmLightweightVersionPlan(ctx context.Context, db *sql.DB, identity CommandIdentity, versionPermit, planningPermit AuthorizationPermit, input LightweightVersionPlanConfirm) (CommandResult, error) {
+	return confirmLightweightVersionPlan(ctx, identity, versionPermit, planningPermit, input, func(authorize AuthorizeCommand, apply ApplyCommand) (CommandResult, error) {
+		return ExecuteCommand(ctx, db, identity, input, authorize, apply)
+	})
+}
+
+// ConfirmLightweightVersionPlanInTransaction shares the owning-domain command with a caller-owned transaction.
+func ConfirmLightweightVersionPlanInTransaction(ctx context.Context, tx *sql.Tx, identity CommandIdentity, versionPermit, planningPermit AuthorizationPermit, input LightweightVersionPlanConfirm) (CommandResult, error) {
+	result, err := confirmLightweightVersionPlan(ctx, identity, versionPermit, planningPermit, input, func(authorize AuthorizeCommand, apply ApplyCommand) (CommandResult, error) {
+		return ExecuteCommandInTransaction(ctx, tx, identity, input, authorize, apply)
+	})
+	if err != nil && tx != nil {
+		_ = tx.Rollback()
+	}
+	return result, err
+}
+
+func confirmLightweightVersionPlan(ctx context.Context, identity CommandIdentity, versionPermit, planningPermit AuthorizationPermit, input LightweightVersionPlanConfirm, execute func(AuthorizeCommand, ApplyCommand) (CommandResult, error)) (CommandResult, error) {
 	if identity.Action != "product_versions:plan-confirm" || input.VersionID < 1 || input.ExpectedScopeRevision == 0 {
 		return CommandResult{}, invalid("product_version_plan_confirm_invalid", "确认修订无效")
 	}
-	return ExecuteCommand(ctx, db, identity, input, func(ctx context.Context, tx *sql.Tx) error {
+	return execute(func(ctx context.Context, tx *sql.Tx) error {
 		if e := AuthorizeWorkspaceTransaction(ctx, tx, identity.ProductCode, identity.ActorUID, "product_versions", "edit", versionPermit); e != nil {
 			return e
 		}

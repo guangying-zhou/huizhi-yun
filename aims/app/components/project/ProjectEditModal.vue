@@ -1,10 +1,13 @@
 <script setup lang="ts">
-import type { UpdateProjectRequest, AimsProject } from '~/types/aims'
+import type { UpdateProjectRequest, AimsProject } from '../../types/aims'
 import {
   methodologyOptions as methodologyOpts,
   projectSecurityLevelConfig,
   projectSecurityLevelOptions
-} from '~/config/project'
+} from '../../config/project'
+import { useAccessibleDepartments } from '../../composables/useAccessibleDepartments'
+import { usePortfolioStore } from '../../stores/portfolio'
+import { useProjectStore } from '../../stores/project'
 
 const props = defineProps<{
   open: boolean

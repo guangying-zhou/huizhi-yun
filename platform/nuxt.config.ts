@@ -31,6 +31,7 @@ export default defineNuxtConfig({
   },
 
   runtimeConfig: {
+    policyEnvelopeIssuer: process.env.HZY_PLATFORM_POLICY_ENVELOPE_ISSUER || '',
     db: {
       host: process.env.DB_HOST || '127.0.0.1',
       port: Number(process.env.DB_PORT || '3306'),

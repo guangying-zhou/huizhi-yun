@@ -1,7 +1,16 @@
 <script setup lang="ts">
-import type { WorkItemType } from '~/types/aims'
-import { typeConfig, priorityConfig, getStatusColor, getStatusLabel } from '~/config/work-item'
+import { useAimsModule } from '../../../../../../layer/useAimsModule'
+import type { WorkItemType } from '../../../../../types/aims'
+import { typeConfig, priorityConfig, getStatusColor, getStatusLabel, deliverableTypeOptions } from '../../../../../config/work-item'
 
+import { useProjectStore } from '../../../../../stores/project'
+import AimsDocumentPicker from '../../../../../components/AimsDocumentPicker.vue'
+import AimsDocumentPreview from '../../../../../components/AimsDocumentPreview.vue'
+import MarkdownContent from '../../../../../components/MarkdownContent.vue'
+import ProjectNavbar from '../../../../../components/project/ProjectNavbar.vue'
+
+// 同一份代码供独立应用与企业宿主使用：非宿主模式下 moduleUrl 原样返回路径。
+const { moduleUrl, hosted } = useAimsModule()
 definePageMeta({
   layoutHeader: true,
   layoutHeaderTitle: '任务执行',
@@ -60,8 +69,8 @@ interface ExecutionContextData {
     id: number
     projectId: number
     projectCode: string
-    milestoneId: number
-    milestoneName: string
+    milestoneId: number | null
+    milestoneName: string | null
     itemNumber: number
     itemKey: string
     tier: string
@@ -135,6 +144,9 @@ const loading = ref(false)
 const submittingReview = ref(false)
 const syncingGitlab = ref(false)
 const context = ref<ExecutionContextData | null>(null)
+const showCreateDeliverable = ref(false)
+const creatingDeliverable = ref(false)
+const newDeliverable = reactive({ name: '', description: '', acceptanceCriteria: '', deliverableType: 'document', required: true })
 
 // 工时表单
 const showTimeForm = ref(false)
@@ -153,7 +165,7 @@ async function cloneRequirementChange() {
   cloningChange.value = true
   try {
     const res = await $fetch<{ code: number, data: { id: number, itemKey: string, round: number } }>(
-      `/api/v1/work-items/${workItemId.value}/clone-from-template`,
+      moduleUrl(`/api/v1/work-items/${workItemId.value}/clone-from-template`),
       { method: 'POST' }
     )
     toast.add({
@@ -161,7 +173,7 @@ async function cloneRequirementChange() {
       description: `新工作项：${res.data.itemKey}（第 ${res.data.round} 轮）`,
       color: 'success'
     })
-    navigateTo(`/projects/${projectId.value}/work-items/${res.data.id}/decompose`)
+    navigateTo(moduleUrl(`/projects/${projectId.value}/work-items/${res.data.id}/decompose`))
   } catch (error: unknown) {
     const msg = (error as { data?: { message?: string } })?.data?.message || (error as Error).message
     toast.add({ title: '克隆失败', description: msg, color: 'error' })
@@ -190,7 +202,7 @@ async function openDiffModal(commit: CommitItem) {
   diffData.value = []
   try {
     const res = await $fetch<{ code: number, data: typeof diffData.value }>(
-      `/api/v1/work-items/${workItemId.value}/commits/${commit.id}/diff`
+      moduleUrl(`/api/v1/work-items/${workItemId.value}/commits/${commit.id}/diff`)
     )
     if (res.code === 0) {
       diffData.value = res.data
@@ -217,7 +229,7 @@ function toggleDiff(commitId: number) {
     // 加载 diff 数据
     loadingDiff.value = true
     $fetch<{ code: number, data: typeof diffData.value }>(
-      `/api/v1/work-items/${workItemId.value}/commits/${commitId}/diff`
+      moduleUrl(`/api/v1/work-items/${workItemId.value}/commits/${commitId}/diff`)
     ).then((res) => {
       if (res.code === 0) {
         diffData.value = res.data
@@ -347,6 +359,36 @@ const isExecutionReadonly = computed(() => {
   return status === 'in_review' || status === 'completed'
 })
 
+const canCreateMatterDeliverable = computed(() => hosted && context.value?.item.tier === 'matter'
+  && context.value.item.status === 'in_progress' && isWorkItemEditable.value && !workflowReadonly.value
+  && !isApprovalMode.value && (projectStore.currentProject?.currentUserRole === 'manager'
+    || projectStore.currentProject?.currentUserIsProjectAdmin === true))
+
+async function createMatterDeliverable() {
+  if (!canCreateMatterDeliverable.value || creatingDeliverable.value) return
+  const name = newDeliverable.name.trim()
+  if (!name) {
+    toast.add({ title: '请填写成果名称', color: 'warning' })
+    return
+  }
+  creatingDeliverable.value = true
+  try {
+    await $fetch(moduleUrl(`/api/v1/work-items/${workItemId.value}/deliverables`), {
+      method: 'POST', body: { ...newDeliverable, name }
+    })
+    showCreateDeliverable.value = false
+    Object.assign(newDeliverable, { name: '', description: '', acceptanceCriteria: '', deliverableType: 'document', required: true })
+    await loadContext()
+    toast.add({ title: '已添加工作成果', color: 'success' })
+  } catch (error: unknown) {
+    const failure = error as { statusCode?: number, data?: { message?: string } }
+    toast.add({ title: failure.statusCode === 409 ? '成果已存在或当前不可修改' : '添加成果失败', description: failure.data?.message, color: 'error' })
+    // Keep the form intact so a conflict can be corrected without retyping.
+  } finally {
+    creatingDeliverable.value = false
+  }
+}
+
 function mapWorkflowFinalStatusToWorkItemStatus(status: string): 'completed' | 'in_progress' | null {
   if (status === 'approved') return 'completed'
   if (status === 'rejected') return 'in_progress'
@@ -369,7 +411,7 @@ async function reconcileCompletionReviewStatus(item: ExecutionContextData['item'
     const nextStatus = mapWorkflowFinalStatusToWorkItemStatus(wfStatus)
     if (!nextStatus) return false
 
-    await $fetch(`/api/v1/work-items/${item.id}`, {
+    await $fetch(moduleUrl(`/api/v1/work-items/${item.id}`), {
       method: 'PUT',
       body: { status: nextStatus }
     })
@@ -384,7 +426,7 @@ async function loadContext() {
   try {
     const [projectRes, ctxRes] = await Promise.all([
       projectStore.fetchProject(projectId.value),
-      $fetch<{ code: number, data: ExecutionContextData }>(`/api/v1/work-items/${workItemId.value}/execution-context`)
+      $fetch<{ code: number, data: ExecutionContextData }>(moduleUrl(`/api/v1/work-items/${workItemId.value}/execution-context`))
     ])
     void projectRes
     if (ctxRes.code === 0) {
@@ -393,7 +435,7 @@ async function loadContext() {
       // 兜底同步：若已提交完成确认且流程已完结，自动回写业务状态
       const reconciled = await reconcileCompletionReviewStatus(nextContext.item)
       if (reconciled) {
-        const refreshed = await $fetch<{ code: number, data: ExecutionContextData }>(`/api/v1/work-items/${workItemId.value}/execution-context`)
+        const refreshed = await $fetch<{ code: number, data: ExecutionContextData }>(moduleUrl(`/api/v1/work-items/${workItemId.value}/execution-context`))
         if (refreshed.code === 0) {
           nextContext = refreshed.data
         }
@@ -461,7 +503,7 @@ async function saveTimeEntry() {
   savingTime.value = true
   try {
     if (editingTimeEntryId.value) {
-      await $fetch(`/api/v1/work-items/${workItemId.value}/time-entries/${editingTimeEntryId.value}`, {
+      await $fetch(moduleUrl(`/api/v1/work-items/${workItemId.value}/time-entries/${editingTimeEntryId.value}`), {
         method: 'PATCH',
         body: {
           entryDate: timeForm.entryDate,
@@ -471,7 +513,7 @@ async function saveTimeEntry() {
       })
       toast.add({ title: '工时已更新', color: 'success' })
     } else {
-      await $fetch(`/api/v1/work-items/${workItemId.value}/time-entries`, {
+      await $fetch(moduleUrl(`/api/v1/work-items/${workItemId.value}/time-entries`), {
         method: 'POST',
         body: {
           entryDate: timeForm.entryDate,
@@ -503,7 +545,7 @@ async function deleteTimeEntry(entryId: number) {
     tone: 'danger'
   }))) return
   try {
-    await $fetch(`/api/v1/work-items/${workItemId.value}/time-entries/${entryId}`, { method: 'DELETE' })
+    await $fetch(moduleUrl(`/api/v1/work-items/${workItemId.value}/time-entries/${entryId}`), { method: 'DELETE' })
     if (editingTimeEntryId.value === entryId) {
       showTimeForm.value = false
       editingTimeEntryId.value = null
@@ -521,7 +563,7 @@ async function syncGitlab() {
   syncingGitlab.value = true
   try {
     const res = await $fetch<{ code: number, data: { message: string, synced: number } }>(
-      `/api/v1/projects/${projectId.value}/sync-gitlab`,
+      moduleUrl(`/api/v1/projects/${projectId.value}/sync-gitlab`),
       { method: 'POST' }
     )
     if (res.code === 0) {
@@ -549,7 +591,7 @@ async function searchCommits() {
   loadingCommits.value = true
   try {
     const res = await $fetch<{ code: number, data: GitlabCommitOption[] }>(
-      `/api/v1/projects/${projectId.value}/gitlab-commits`,
+      moduleUrl(`/api/v1/projects/${projectId.value}/gitlab-commits`),
       { params: { unlinked: 'true', uid: currentUserUid.value || undefined, keyword: commitSearchKeyword.value || undefined } }
     )
     if (res.code === 0) {
@@ -561,7 +603,7 @@ async function searchCommits() {
 }
 
 async function linkCommit(commitId: number) {
-  await $fetch(`/api/v1/work-items/${workItemId.value}/commits`, {
+  await $fetch(moduleUrl(`/api/v1/work-items/${workItemId.value}/commits`), {
     method: 'POST',
     body: { commitId }
   })
@@ -569,7 +611,7 @@ async function linkCommit(commitId: number) {
   toast.add({ title: '已关联提交', color: 'success' })
   // 异步获取 diff 回填文件数（不阻塞 UI）
   $fetch<{ code: number, data: unknown[] }>(
-    `/api/v1/work-items/${workItemId.value}/commits/${commitId}/diff`
+    moduleUrl(`/api/v1/work-items/${workItemId.value}/commits/${commitId}/diff`)
   ).then((res) => {
     if (res.code === 0 && context.value) {
       const commit = context.value.commits.find(c => c.id === commitId)
@@ -581,7 +623,7 @@ async function linkCommit(commitId: number) {
 }
 
 async function unlinkCommit(commitId: number) {
-  await $fetch(`/api/v1/work-items/${workItemId.value}/commits/${commitId}`, {
+  await $fetch(moduleUrl(`/api/v1/work-items/${workItemId.value}/commits/${commitId}`), {
     method: 'DELETE'
   })
   await loadContext()
@@ -607,7 +649,7 @@ function hasLinkedDocument(d: DeliverableItem) {
 }
 
 async function saveEvidence(deliverableId: number) {
-  await $fetch(`/api/v1/work-items/${workItemId.value}/deliverables/${deliverableId}`, {
+  await $fetch(moduleUrl(`/api/v1/work-items/${workItemId.value}/deliverables/${deliverableId}`), {
     method: 'PATCH',
     body: {
       evidenceUrl: evidenceForm.evidenceUrl || null,
@@ -653,7 +695,7 @@ async function handleDeliverableDocSelected(docRef: import('~/composables/useAim
       data: {
         deliverable?: DeliverableItem
       }
-    }>(`/api/v1/work-items/${workItemId.value}/deliverables/${deliverableId}`, {
+    }>(moduleUrl(`/api/v1/work-items/${workItemId.value}/deliverables/${deliverableId}`), {
       method: 'PATCH',
       body: {
         status: 'submitted',
@@ -704,7 +746,7 @@ function openDocPreview(d: DeliverableItem) {
 
 async function submitGenericDeliverable(deliverableId: number) {
   try {
-    await $fetch(`/api/v1/work-items/${workItemId.value}/deliverables/${deliverableId}`, {
+    await $fetch(moduleUrl(`/api/v1/work-items/${workItemId.value}/deliverables/${deliverableId}`), {
       method: 'PATCH',
       body: { status: 'submitted' }
     })
@@ -785,7 +827,7 @@ const { isReadonly: workflowReadonly } = usePageWorkflow({
       async beforeSubmit() {
         const noteText = completionNote.value.trim()
         if (noteText && noteText !== savedCompletionNote.value) {
-          await $fetch(`/api/v1/work-items/${workItemId.value}/comments`, {
+          await $fetch(moduleUrl(`/api/v1/work-items/${workItemId.value}/comments`), {
             method: 'POST',
             body: { content: `完成说明：${noteText}` }
           })
@@ -793,21 +835,21 @@ const { isReadonly: workflowReadonly } = usePageWorkflow({
         }
       },
       async onSubmitted() {
-        await $fetch(`/api/v1/work-items/${workItemId.value}`, {
+        await $fetch(moduleUrl(`/api/v1/work-items/${workItemId.value}`), {
           method: 'PUT',
           body: { status: 'in_review' }
         })
         await loadContext()
       },
       async onApproved() {
-        await $fetch(`/api/v1/work-items/${workItemId.value}`, {
+        await $fetch(moduleUrl(`/api/v1/work-items/${workItemId.value}`), {
           method: 'PUT',
           body: { status: 'completed' }
         })
         await loadContext()
       },
       async onRejected() {
-        await $fetch(`/api/v1/work-items/${workItemId.value}`, {
+        await $fetch(moduleUrl(`/api/v1/work-items/${workItemId.value}`), {
           method: 'PUT',
           body: { status: 'in_progress' }
         })
@@ -831,7 +873,7 @@ async function handleSaveCompletionNote() {
       toast.add({ title: '完成说明已是最新', color: 'neutral' })
       return
     }
-    await $fetch(`/api/v1/work-items/${workItemId.value}/comments`, {
+    await $fetch(moduleUrl(`/api/v1/work-items/${workItemId.value}/comments`), {
       method: 'POST',
       body: { content: `完成说明：${noteText}` }
     })
@@ -974,10 +1016,20 @@ onBeforeUnmount(clearRefresh)
           <!-- 工作成果 -->
           <UCard class="shadow-sm">
             <template #header>
-              <div class="flex items-center gap-2">
-                <UIcon name="i-lucide-clipboard-check" class="size-5 text-primary" />
-                <span class="font-semibold">工作成果</span>
-                <span class="text-sm text-muted">{{ context.deliverables.length }} 项</span>
+              <div class="flex items-center justify-between gap-2">
+                <div class="flex items-center gap-2">
+                  <UIcon name="i-lucide-clipboard-check" class="size-5 text-primary" />
+                  <span class="font-semibold">工作成果</span>
+                  <span class="text-sm text-muted">{{ context.deliverables.length }} 项</span>
+                </div>
+                <UButton
+                  v-if="canCreateMatterDeliverable"
+                  label="添加成果"
+                  icon="i-lucide-plus"
+                  size="xs"
+                  variant="soft"
+                  @click="showCreateDeliverable = true"
+                />
               </div>
             </template>
 
@@ -1330,6 +1382,53 @@ onBeforeUnmount(clearRefresh)
           </UCard>
         </div>
       </div>
+
+      <UModal v-model:open="showCreateDeliverable" title="添加工作成果">
+        <template #body>
+          <div class="space-y-4">
+            <UFormField label="成果名称" required>
+              <UInput
+                v-model="newDeliverable.name"
+                class="w-full"
+                maxlength="200"
+                placeholder="填写成果名称"
+              />
+            </UFormField>
+            <UFormField label="成果类型">
+              <USelect v-model="newDeliverable.deliverableType" :items="deliverableTypeOptions" class="w-full" />
+            </UFormField>
+            <UFormField label="说明">
+              <UTextarea
+                v-model="newDeliverable.description"
+                class="w-full"
+                :rows="2"
+                maxlength="2000"
+              />
+            </UFormField>
+            <UFormField label="验收标准">
+              <UTextarea
+                v-model="newDeliverable.acceptanceCriteria"
+                class="w-full"
+                :rows="2"
+                maxlength="2000"
+              />
+            </UFormField>
+            <UCheckbox v-model="newDeliverable.required" label="完成前必须提交此成果" />
+          </div>
+        </template>
+        <template #footer>
+          <div class="flex w-full justify-end gap-2">
+            <UButton
+              label="取消"
+              color="neutral"
+              variant="ghost"
+              :disabled="creatingDeliverable"
+              @click="showCreateDeliverable = false"
+            />
+            <UButton label="添加成果" :loading="creatingDeliverable" @click="createMatterDeliverable" />
+          </div>
+        </template>
+      </UModal>
     </template>
   </UDashboardPanel>
 

@@ -470,3 +470,139 @@ func succeededReceiptRows(input ReceiptCommandInput) *sqlmock.Rows {
 		"succeeded", "asset", "ASSET-1", 200, digest, 1,
 	)
 }
+
+func TestReceiptCallerTransactionRemainsOpenAfterReplay(t *testing.T) {
+	for _, commit := range []bool{false, true} {
+		t.Run(fmt.Sprintf("commit=%v", commit), func(t *testing.T) {
+			database, mock, err := sqlmock.New()
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer database.Close()
+			repository, err := NewReceiptRepository(database)
+			if err != nil {
+				t.Fatal(err)
+			}
+			input := validReceiptCommandInput(t)
+			mock.ExpectBegin()
+			mock.ExpectQuery(receiptSelectPattern).WillReturnRows(succeededReceiptRows(input))
+			mock.ExpectExec(`(?s)UPDATE service_command_receipt.*SET last_request_id`).WillReturnResult(sqlmock.NewResult(0, 1))
+			// A later caller-owned audit must still execute in this same transaction.
+			mock.ExpectExec(`INSERT INTO caller_audit`).WillReturnResult(sqlmock.NewResult(1, 1))
+			if commit {
+				mock.ExpectCommit()
+			} else {
+				mock.ExpectRollback()
+			}
+			tx, err := database.BeginTx(context.Background(), nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			result, err := repository.ExecuteInTransaction(context.Background(), tx, input, func(context.Context, *sql.Tx, json.RawMessage) (ReceiptBusinessResult, error) {
+				t.Fatal("replayed handler must not run")
+				return ReceiptBusinessResult{}, nil
+			})
+			if err != nil || !result.Existing {
+				t.Fatalf("replay = %+v, %v", result, err)
+			}
+			if _, err := tx.ExecContext(context.Background(), "INSERT INTO caller_audit VALUES (1)"); err != nil {
+				t.Fatal(err)
+			}
+			if commit {
+				err = tx.Commit()
+			} else {
+				err = tx.Rollback()
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := mock.ExpectationsWereMet(); err != nil {
+				t.Fatal(err)
+			}
+		})
+	}
+}
+
+func TestReceiptCallerTransactionRejectsMissingTransaction(t *testing.T) {
+	database, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer database.Close()
+	repository, err := NewReceiptRepository(database)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = repository.ExecuteInTransaction(context.Background(), nil, validReceiptCommandInput(t), func(context.Context, *sql.Tx, json.RawMessage) (ReceiptBusinessResult, error) {
+		t.Fatal("unexpected handler")
+		return ReceiptBusinessResult{}, nil
+	})
+	if err == nil {
+		t.Fatal("missing transaction accepted")
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestOwnedReceiptDoesNotRelaxTransportOrOutboxIdentity(t *testing.T) {
+	input := validReceiptCommandInput(t)
+	input.TrustedContext.SourceApp = "assets"
+	input.OriginalActorUID = "actor-1"
+	if err := validateReceiptCommandInput(input); err == nil {
+		t.Fatal("transport accepted same-domain identity")
+	}
+	if err := (Identity{TenantCode: "TENANT-A", DeploymentCode: "DEPLOYMENT-A", SourceApp: "assets", TargetApp: "assets", OperationCode: "assets.product.create.v1", SourceBizType: "product", SourceBizCode: "p1", IdempotencyKey: "key", CommandSHA256: input.CommandSHA256}).Validate(); err == nil {
+		t.Fatal("outbox accepted same-domain identity")
+	}
+	database, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer database.Close()
+	repository, err := NewReceiptRepository(database)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mock.ExpectBegin()
+	mock.ExpectQuery(receiptSelectPattern).WillReturnRows(succeededReceiptRows(input))
+	mock.ExpectExec(`(?s)UPDATE service_command_receipt.*SET last_request_id`).WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectRollback()
+	tx, err := database.BeginTx(context.Background(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := repository.ExecuteOwnedInTransaction(context.Background(), tx, OwnedReceiptCommandInput(input), func(context.Context, *sql.Tx, json.RawMessage) (ReceiptBusinessResult, error) {
+		t.Fatal("replay handler ran")
+		return ReceiptBusinessResult{}, nil
+	})
+	if err != nil || !result.Existing {
+		t.Fatalf("owned replay = %+v, %v", result, err)
+	}
+	if err := tx.Rollback(); err != nil {
+		t.Fatal(err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestOwnedReceiptRejectsMismatchedOwnerDeploymentOrMissingActor(t *testing.T) {
+	for name, mutate := range map[string]func(*ReceiptCommandInput){
+		"different owner":      func(input *ReceiptCommandInput) { input.TargetApp = "aims" },
+		"different deployment": func(input *ReceiptCommandInput) { input.TargetDeploymentCode = "other" },
+		"missing actor":        func(input *ReceiptCommandInput) { input.OriginalActorUID = "" },
+	} {
+		t.Run(name, func(t *testing.T) {
+			input := validReceiptCommandInput(t)
+			input.TrustedContext.SourceApp = "assets"
+			input.OriginalActorUID = "actor-1"
+			mutate(&input)
+			var repository ReceiptRepository
+			_, err := repository.ExecuteOwnedInTransaction(context.Background(), nil, OwnedReceiptCommandInput(input), nil)
+			if !errors.Is(err, ErrInvalidIdentity) {
+				t.Fatalf("expected owner identity error, got %v", err)
+			}
+		})
+	}
+}

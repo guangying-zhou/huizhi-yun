@@ -13,6 +13,18 @@ type FeatureRequestPageQuery struct {
 }
 
 func ListFeatureRequests(ctx context.Context, db *sql.DB, code, uid string, requestPermit, featurePermit AuthorizationPermit, q FeatureRequestPageQuery) (RequestPage, error) {
+	tx, err := db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
+	if err != nil {
+		return RequestPage{}, err
+	}
+	defer tx.Rollback()
+	out, err := ListFeatureRequestsInTransaction(ctx, tx, code, uid, requestPermit, featurePermit, q)
+	if err != nil {
+		return out, err
+	}
+	return out, tx.Commit()
+}
+func ListFeatureRequestsInTransaction(ctx context.Context, tx *sql.Tx, code, uid string, requestPermit, featurePermit AuthorizationPermit, q FeatureRequestPageQuery) (RequestPage, error) {
 	var out RequestPage
 	id, err := uuid.Parse(q.FeatureBizID)
 	if err != nil || id.String() != q.FeatureBizID {
@@ -21,11 +33,9 @@ func ListFeatureRequests(ctx context.Context, db *sql.DB, code, uid string, requ
 	if err := ValidateRequestPageQuery(RequestPageQuery{Page: q.Page, PageSize: q.PageSize}); err != nil {
 		return out, err
 	}
-	tx, err := db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
-	if err != nil {
-		return out, err
+	if tx == nil {
+		return out, invalid("product_transaction_required", "事务不可用")
 	}
-	defer tx.Rollback()
 	if err := AuthorizeWorkspaceTransaction(ctx, tx, code, uid, "product_requests", "view", requestPermit); err != nil {
 		return out, err
 	}
@@ -60,5 +70,5 @@ func ListFeatureRequests(ctx context.Context, db *sql.DB, code, uid string, requ
 		return out, err
 	}
 	out.Page, out.PageSize, out.WorkspaceRevision = q.Page, q.PageSize, requestPermit.Facts.Revision
-	return out, tx.Commit()
+	return out, nil
 }

@@ -238,7 +238,9 @@ export interface IpAssetItem {
   status: string
   owner_uid?: string | null
   notes?: string | null
-  product_count: number
+  // Enterprise IP reads omit product relations until their separate object
+  // scope is available, so a count is not always present.
+  product_count?: number
   documents?: AssetDocument[]
   linked_products?: IpLinkedProduct[]
 }

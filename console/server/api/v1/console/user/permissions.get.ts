@@ -5,6 +5,7 @@ import {
   type PolicyAuthorizationRole
 } from '~~/server/utils/policyAuthorization'
 import { verifyAccessToken, writeTokenEvent } from '~~/server/utils/oidc'
+import { authDiagnosticRequestId, logAuthDependencyFailure } from '@hzy/foundation/server/utils/authDependencyDiagnostic'
 
 function stringValue(value: unknown) {
   return String(value || '').trim()
@@ -55,15 +56,30 @@ export default defineEventHandler(async (event) => {
   }
 
   try {
-    const snapshot = await loadPolicyAuthorizationSnapshot(uid, targetAppCode, event)
+    const policyStartedAt = Date.now()
+    let snapshot
+    try {
+      snapshot = await loadPolicyAuthorizationSnapshot(uid, targetAppCode, event)
+    } catch (error) {
+      logAuthDependencyFailure(event, 'console-permissions-policy', error, Date.now() - policyStartedAt)
+      throw error
+    }
 
+    const auditStartedAt = Date.now()
     await writeTokenEvent(event, {
       eventType: 'introspect',
       clientId: audience || null,
       uid,
       sessionHash: typeof payload.sid === 'string' ? payload.sid : null,
       result: 'success'
-    }).catch(() => undefined)
+    }).catch(error => {
+      logAuthDependencyFailure(event, 'console-permissions-audit', error, Date.now() - auditStartedAt)
+    })
+    const auditDurationMs = Date.now() - auditStartedAt
+    if (auditDurationMs > 1000) {
+      console.warn(JSON.stringify({ event: 'console-auth-audit-slow', requestId: authDiagnosticRequestId(event),
+        stage: 'permissions-token-event', durationMs: auditDurationMs }))
+    }
 
     return {
       code: 0,

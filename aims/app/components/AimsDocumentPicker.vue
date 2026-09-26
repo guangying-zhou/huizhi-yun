@@ -1,7 +1,14 @@
 <script setup lang="ts">
-import type { DocumentSource, DocumentSourceTab, DocumentRef, RepoDocFile } from '~/composables/useAimsDocumentPicker'
-import type { ProjectRepo } from '~/types/aims'
+import { useAimsModule } from '../../layer/useAimsModule'
+import type { DocumentSource, DocumentSourceTab, DocumentRef, RepoDocFile } from '../composables/useAimsDocumentPicker'
+import type { ProjectRepo } from '../types/aims'
+import { useAimsDocumentPicker } from '../composables/useAimsDocumentPicker'
+import { fetchRepoDocContent } from '../composables/useAimsDocumentPicker'
+import MarkdownContent from './MarkdownContent.vue'
 
+
+// 同一份组件供独立应用与企业宿主使用：非宿主模式下 moduleUrl 原样返回路径。
+const { moduleUrl } = useAimsModule()
 type DefaultSourceProp = DocumentSource | DocumentSourceTab
 
 const props = withDefaults(defineProps<{
@@ -119,7 +126,7 @@ async function selectRepoFile(file: RepoDocFile) {
     const content = await fetchRepoDocContent(selectedRepoCode.value, file.path, {
       ref,
       aimsProjectId: props.aimsProjectId
-    })
+    }, moduleUrl)
     if (content) {
       repoPreview.value = {
         content: content.content,

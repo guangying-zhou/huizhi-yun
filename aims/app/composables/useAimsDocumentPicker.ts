@@ -1,3 +1,4 @@
+import { useAimsModule } from '../../layer/useAimsModule'
 /**
  * useAimsDocumentPicker
  * 统一文档选择器的数据获取逻辑：
@@ -79,6 +80,8 @@ function extractRequestErrorMessage(error: unknown, fallback: string) {
 }
 
 export function useAimsDocumentPicker() {
+  // 同一份代码供独立应用与企业宿主使用：非宿主模式下 moduleUrl 原样返回路径。
+  const { moduleUrl } = useAimsModule()
   // 部门文档
   const deptFolders = ref<CodocsFolderItem[]>([])
   const deptDocuments = ref<CodocsDocumentItem[]>([])
@@ -107,7 +110,7 @@ export function useAimsDocumentPicker() {
         code: number
         data: { folders: CodocsFolderItem[], items: CodocsDocumentItem[] }
       }>(
-        '/api/v1/codocs/department-documents',
+        moduleUrl('/api/v1/codocs/department-documents'),
         { params: { deptCode } }
       )
       if (res.code === 0) {
@@ -132,7 +135,7 @@ export function useAimsDocumentPicker() {
     portfolioLoading.value = true
     try {
       const res = await $fetch<{ code: number, data: { folders: CodocsFolderItem[], items: CodocsDocumentItem[], gitGroup: string | null } }>(
-        '/api/v1/codocs/project-documents',
+        moduleUrl('/api/v1/codocs/project-documents'),
         { params: { aimsProjectId } }
       )
       if (res.code === 0) {
@@ -158,7 +161,7 @@ export function useAimsDocumentPicker() {
     repoLoading.value = true
     try {
       const res = await $fetch<{ code: number, data: RepoTreeResult, message?: string }>(
-        `/api/account/projects/docs-tree/${encodeURIComponent(repoProjectCode)}`,
+        moduleUrl(`/api/account/projects/docs-tree/${encodeURIComponent(repoProjectCode)}`),
         { params: { ...(ref ? { ref } : {}), aimsProjectId: aimsProjectId || '' } }
       )
       if (res.code === 0) {
@@ -206,7 +209,10 @@ export interface RepoDocResult {
 export async function fetchRepoDocContent(
   repoProjectCode: string,
   filePath: string,
-  options?: { ref?: string, commitId?: string | null, aimsProjectId?: number | null }
+  options?: { ref?: string, commitId?: string | null, aimsProjectId?: number | null },
+  // 本函数从事件处理器调用，那里不保证有 Nuxt 实例，所以不在内部调 useAimsModule；
+  // 由调用方传入构造器，默认恒等 —— 独立应用行为不变。
+  urlFor: (path: string) => string = path => path
 ): Promise<RepoDocResult | null> {
   try {
     const params: Record<string, string> = { path: filePath }
@@ -214,7 +220,7 @@ export async function fetchRepoDocContent(
     if (options?.commitId) params.commit_id = options.commitId
     if (options?.aimsProjectId) params.aimsProjectId = String(options.aimsProjectId)
     const res = await $fetch<{ code: number, data: RepoDocResult }>(
-      `/api/account/projects/doc/${encodeURIComponent(repoProjectCode)}`,
+      urlFor(`/api/account/projects/doc/${encodeURIComponent(repoProjectCode)}`),
       { params }
     )
     if (res.code === 0) return res.data

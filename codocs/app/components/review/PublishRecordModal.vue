@@ -198,6 +198,7 @@
 </template>
 
 <script setup lang="ts">
+import { useCodocsModule } from '../../../layer/useCodocsModule'
 interface ReviewFlowNode {
   name: string
   reviewers?: string[]
@@ -270,14 +271,15 @@ const isOpen = computed({
   set: value => emit('update:open', value)
 })
 
-const accountStore = useAccountStore()
+const { hosted, moduleUrl } = useCodocsModule()
+const userNames = ref<Record<string, string>>({})
 const loading = ref(false)
 const record = ref<PublishRecord | null>(null)
 
 const getUserDisplayName = (uid?: string | null) => {
   const normalized = String(uid || '').trim()
   if (!normalized) return ''
-  return accountStore.getUserByUid(normalized)?.realName || normalized
+  return userNames.value[normalized] || normalized
 }
 
 const loadUserProfiles = async (data: PublishRecord) => {
@@ -290,7 +292,15 @@ const loadUserProfiles = async (data: PublishRecord) => {
   data.send_records?.forEach(item => item.sender_uid && uidSet.add(item.sender_uid))
 
   if (uidSet.size > 0) {
-    await accountStore.fetchUsersBatch(Array.from(uidSet))
+    try {
+      const response = await $fetch<{ data?: Array<{ uid: string, realName?: string, real_name?: string }> }>(
+        hosted ? '/api/directory/users/batch' : '/api/account/users/batch',
+        { method: 'POST', body: { uids: Array.from(uidSet) } }
+      )
+      userNames.value = Object.fromEntries((response.data || []).map(user => [user.uid, user.realName || user.real_name || user.uid]))
+    } catch {
+      // The record remains readable with stable UIDs when directory lookup fails.
+    }
   }
 }
 
@@ -300,7 +310,7 @@ const loadRecord = async () => {
     record.value = null
 
     if (props.ossPath) {
-      const res = await $fetch<PublishRecordResponse>('/api/reviews/by-oss-path', {
+      const res = await $fetch<PublishRecordResponse>(moduleUrl('/api/reviews/by-oss-path'), {
         params: { path: props.ossPath }
       })
       if (res.data) {
@@ -311,7 +321,7 @@ const loadRecord = async () => {
     }
 
     if (props.documentUuid) {
-      const res = await $fetch<PublishRecordResponse>(`/api/reviews/by-document/${props.documentUuid}`)
+      const res = await $fetch<PublishRecordResponse>(moduleUrl(`/api/reviews/by-document/${props.documentUuid}`))
       record.value = res.data
       if (res.data) {
         await loadUserProfiles(res.data)

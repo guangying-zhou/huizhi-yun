@@ -236,10 +236,52 @@ func (r *Repository) claim(
 	}
 	defer rollback(tx)
 
+	result, err := r.claimInTransaction(ctx, tx, tenantCode, deploymentCode, sourceApp, operationKey, worker, now, lease, forceImmediateTrigger)
+	if err != nil {
+		return nil, err
+	}
+	if err = tx.Commit(); err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
+// ClaimNextInTransaction retains lease recovery, SKIP LOCKED and fencing in the
+// caller-owned transaction. Delivery starts only after the caller commits it.
+func (r *Repository) ClaimNextInTransaction(ctx context.Context, tx *sql.Tx, tenantCode, deploymentCode, sourceApp, worker string, now time.Time, lease time.Duration) (*ClaimedOperation, error) {
+	return r.claimShared(ctx, tx, tenantCode, deploymentCode, sourceApp, "", worker, now, lease, false)
+}
+
+func (r *Repository) ClaimByOperationKeyInTransaction(ctx context.Context, tx *sql.Tx, tenantCode, deploymentCode, sourceApp, operationKey, worker string, now time.Time, lease time.Duration) (*ClaimedOperation, error) {
+	if !identityValuePattern.MatchString(operationKey) {
+		if tx != nil {
+			rollback(tx)
+		}
+		return nil, fmt.Errorf("%w: operation_key", ErrInvalidIdentity)
+	}
+	return r.claimShared(ctx, tx, tenantCode, deploymentCode, sourceApp, operationKey, worker, now, lease, true)
+}
+
+func (r *Repository) claimShared(ctx context.Context, tx *sql.Tx, tenantCode, deploymentCode, sourceApp, operationKey, worker string, now time.Time, lease time.Duration, immediate bool) (out *ClaimedOperation, err error) {
+	if tx == nil {
+		return nil, fmt.Errorf("integration operation transaction is required")
+	}
+	defer func() {
+		if err != nil {
+			rollback(tx)
+		}
+	}()
+	if err = validateRepositoryScope(tenantCode, deploymentCode, sourceApp, worker, now, lease); err != nil {
+		return nil, err
+	}
+	return r.claimInTransaction(ctx, tx, tenantCode, deploymentCode, sourceApp, operationKey, worker, now, lease, immediate)
+}
+
+func (r *Repository) claimInTransaction(ctx context.Context, tx *sql.Tx, tenantCode, deploymentCode, sourceApp, operationKey, worker string, now time.Time, lease time.Duration, forceImmediateTrigger bool) (*ClaimedOperation, error) {
 	if operationKey == "" {
 		if _, err := tx.ExecContext(
 			ctx,
-			recoverExpiredLeaseAttemptsSQL,
+			r.sql(recoverExpiredLeaseAttemptsSQL),
 			now, now,
 			tenantCode, deploymentCode, sourceApp, now,
 		); err != nil {
@@ -247,7 +289,7 @@ func (r *Repository) claim(
 		}
 		if _, err := tx.ExecContext(
 			ctx,
-			recoverExpiredLeasesSQL,
+			r.sql(recoverExpiredLeasesSQL),
 			now, worker, now,
 			tenantCode, deploymentCode, sourceApp, now,
 		); err != nil {
@@ -256,7 +298,7 @@ func (r *Repository) claim(
 	} else {
 		if _, err := tx.ExecContext(
 			ctx,
-			recoverExpiredLeaseAttemptByOperationKeySQL,
+			r.sql(recoverExpiredLeaseAttemptByOperationKeySQL),
 			now, now,
 			tenantCode, deploymentCode, sourceApp, operationKey, now,
 		); err != nil {
@@ -264,7 +306,7 @@ func (r *Repository) claim(
 		}
 		if _, err := tx.ExecContext(
 			ctx,
-			recoverExpiredLeaseByOperationKeySQL,
+			r.sql(recoverExpiredLeaseByOperationKeySQL),
 			now, worker, now,
 			tenantCode, deploymentCode, sourceApp, operationKey, now,
 		); err != nil {
@@ -274,15 +316,12 @@ func (r *Repository) claim(
 
 	var claimQuery *sql.Row
 	if operationKey == "" {
-		claimQuery = tx.QueryRowContext(ctx, claimNextSQL, tenantCode, deploymentCode, sourceApp, now)
+		claimQuery = tx.QueryRowContext(ctx, r.sql(claimNextSQL), tenantCode, deploymentCode, sourceApp, now)
 	} else {
-		claimQuery = tx.QueryRowContext(ctx, claimByOperationKeySQL, tenantCode, deploymentCode, sourceApp, now, operationKey)
+		claimQuery = tx.QueryRowContext(ctx, r.sql(claimByOperationKeySQL), tenantCode, deploymentCode, sourceApp, now, operationKey)
 	}
 	row, err := scanClaimRow(claimQuery)
 	if errors.Is(err, sql.ErrNoRows) {
-		if err := tx.Commit(); err != nil {
-			return nil, err
-		}
 		return nil, nil
 	}
 	if err != nil {
@@ -303,7 +342,7 @@ func (r *Repository) claim(
 	lockedUntil := now.Add(lease)
 	result, err := tx.ExecContext(
 		ctx,
-		markClaimedSQL,
+		r.sql(markClaimedSQL),
 		attemptCount,
 		now,
 		worker,
@@ -329,7 +368,7 @@ func (r *Repository) claim(
 	}
 	if _, err := tx.ExecContext(
 		ctx,
-		insertAttemptSQL,
+		r.sql(insertAttemptSQL),
 		attemptID,
 		row.operation.OperationID,
 		row.operation.Identity.OperationCode,
@@ -341,9 +380,6 @@ func (r *Repository) claim(
 		fencingToken,
 		now,
 	); err != nil {
-		return nil, err
-	}
-	if err := tx.Commit(); err != nil {
 		return nil, err
 	}
 

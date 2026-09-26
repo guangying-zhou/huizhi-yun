@@ -29,13 +29,30 @@ func ValidateRequestSourceDelete(input RequestSourceDelete) error {
 	return nil
 }
 func DeleteManualRequestSource(ctx context.Context, db *sql.DB, identity CommandIdentity, permit AuthorizationPermit, input RequestSourceDelete) (CommandResult, error) {
+	return deleteManualRequestSource(ctx, identity, permit, input, func(authorize AuthorizeCommand, apply ApplyCommand) (CommandResult, error) {
+		return ExecuteCommand(ctx, db, identity, input, authorize, apply)
+	})
+}
+
+// DeleteManualRequestSourceInTransaction reuses the owning-domain command; the caller owns commit.
+func DeleteManualRequestSourceInTransaction(ctx context.Context, tx *sql.Tx, identity CommandIdentity, permit AuthorizationPermit, input RequestSourceDelete) (CommandResult, error) {
+	result, err := deleteManualRequestSource(ctx, identity, permit, input, func(authorize AuthorizeCommand, apply ApplyCommand) (CommandResult, error) {
+		return ExecuteCommandInTransaction(ctx, tx, identity, input, authorize, apply)
+	})
+	if err != nil && tx != nil {
+		_ = tx.Rollback()
+	}
+	return result, err
+}
+
+func deleteManualRequestSource(ctx context.Context, identity CommandIdentity, permit AuthorizationPermit, input RequestSourceDelete, execute func(AuthorizeCommand, ApplyCommand) (CommandResult, error)) (CommandResult, error) {
 	if identity.Action != "product_requests:source-delete" {
 		return CommandResult{}, invalid("product_command_identity_invalid", "来源删除命令不匹配")
 	}
 	if err := ValidateRequestSourceDelete(input); err != nil {
 		return CommandResult{}, err
 	}
-	return ExecuteCommand(ctx, db, identity, input, func(ctx context.Context, tx *sql.Tx) error {
+	return execute(func(ctx context.Context, tx *sql.Tx) error {
 		return AuthorizeWorkspaceTransaction(ctx, tx, identity.ProductCode, identity.ActorUID, "product_requests", "delete", permit)
 	}, func(ctx context.Context, tx *sql.Tx) (any, error) {
 		root, err := loadWorkspace(ctx, tx, identity.ProductCode)

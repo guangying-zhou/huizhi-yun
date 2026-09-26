@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import { useAimsModule } from '../../../layer/useAimsModule'
+
+const { moduleUrl, hosted, cacheKey } = useAimsModule()
 /** 子层仅在展开时读取；每层独立分页，避免一次取完整产品树。 */
 const props = withDefaults(defineProps<{
   productCode: string
@@ -10,7 +13,7 @@ const emit = defineEmits<{ select: [value: { id: number, name: string }], resolv
 interface Module { id: number, name: string, product_code: string, parent_id: number | null, child_count: number }
 const page = ref(1), pageSize = 20
 const expanded = ref<number[]>([])
-const { data, status, error, refresh } = await useFetch(() => `/api/v1/products/${encodeURIComponent(props.productCode)}/components`, {
+const { data, status, error, refresh } = await useFetch(() => moduleUrl(`/api/v1/products/${encodeURIComponent(props.productCode)}/components`), { ...(hosted ? { key: computed(() => cacheKey('StructureModuleTree:1' + ':' + String(props.productCode) + ':' + String(props.parentId ?? 'root'))) } : {}),
   key: computed(() => `product-structure-tree:${props.productCode}:${props.parentId ?? 'root'}`),
   server: false,
   query: computed(() => ({ parentId: props.parentId ?? undefined, page: page.value, pageSize })),
@@ -28,7 +31,9 @@ watch([data, () => props.selected], () => {
   const item = data.value?.items.find(item => String(item.id) === props.selected)
   if (item) emit('resolved', { id: item.id, name: item.name })
 }, { immediate: true })
-watch(page, () => { expanded.value = [] })
+watch(page, () => {
+  expanded.value = []
+})
 </script>
 
 <template>
@@ -76,7 +81,7 @@ watch(page, () => { expanded.value = [] })
             {{ item.name }}
           </UButton>
         </div>
-        <ProductsStructureModuleTree
+        <StructureModuleTree
           v-if="expanded.includes(item.id)"
           :product-code="productCode"
           :parent-id="item.id"

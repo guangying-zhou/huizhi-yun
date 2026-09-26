@@ -134,6 +134,20 @@ function boundWorkflowFallback(
     : null
 }
 
+// Status and machine code only: eligibility errors are createError codes or
+// transport error classes, never request bodies, tokens or recipient data.
+function eligibilityFailureCause(reason: unknown) {
+  const error = (reason || {}) as { statusCode?: unknown, status?: unknown, message?: unknown, name?: unknown, cause?: { code?: unknown } }
+  const status = Number(error.statusCode ?? error.status)
+  const code = [error.message, error.cause?.code].map(value => String(value || '').trim())
+    .find(value => /^[a-z][a-z0-9_.:-]{2,79}$/i.test(value))
+  return {
+    ...(Number.isInteger(status) && status >= 100 && status <= 599 ? { causeStatus: status } : {}),
+    ...(code ? { causeCode: code } : {}),
+    ...(typeof error.name === 'string' && /^[A-Za-z]{1,40}$/.test(error.name) ? { causeClass: error.name } : {})
+  }
+}
+
 export async function deliverWorkflowRuntimeNotifications(
   event: H3Event,
   notifications: RuntimeNotification[] = [],
@@ -195,9 +209,11 @@ export async function deliverWorkflowRuntimeNotifications(
       subjectUid,
       purpose: contract.purpose
     })))
-    if (eligibility.some(result => result.status === 'rejected')) {
+    const rejected = eligibility.find((result): result is PromiseRejectedResult => result.status === 'rejected')
+    if (rejected) {
       dependencies.error?.('[WorkflowRuntime] 收件人 eligibility 服务不可用', {
-        code: 'workflow_notification_eligibility_unavailable'
+        code: 'workflow_notification_eligibility_unavailable',
+        ...eligibilityFailureCause(rejected.reason)
       })
       results.push({ idempotencyKey, status: 'failed', code: 'workflow_notification_eligibility_unavailable' })
       continue

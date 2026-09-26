@@ -38,6 +38,7 @@ interface Props {
   documentId?: string
   versions?: VersionItem[]
   versionsLoading?: boolean
+  versionsError?: string
   showVersionHistory?: boolean
   showSharePanel?: boolean
   isProjectDoc?: boolean
@@ -50,6 +51,7 @@ interface Props {
   canManageShares?: boolean
   activeVersionNum?: number | null
   aiAbstract?: string
+  aiEnabled?: boolean
   readonly?: boolean
 }
 
@@ -58,6 +60,7 @@ const props = withDefaults(defineProps<Props>(), {
   documentId: '',
   versions: () => [],
   versionsLoading: false,
+  versionsError: '',
   showVersionHistory: false,
   showSharePanel: false,
   isProjectDoc: false,
@@ -70,6 +73,7 @@ const props = withDefaults(defineProps<Props>(), {
   canManageShares: true,
   activeVersionNum: null,
   aiAbstract: '',
+  aiEnabled: true,
   readonly: false
 })
 
@@ -158,7 +162,7 @@ const getGitLabCommitsUrl = () => {
     return '#'
   }
   // 使用环境变量中的 GitLab base URL
-  const gitlabBaseUrl = (config.public.gitlabBaseUrl || 'https://gitlab.wiztek.cn').replace(/\/$/, '')
+  const gitlabBaseUrl = String(config.public.gitlabBaseUrl || 'https://gitlab.wiztek.cn').replace(/\/$/, '')
   // 从 repoUrl 提取项目路径 (例如: huizhi-yun/account)
   const repoPath = props.projectRepoUrl
     .replace(gitlabBaseUrl, '')
@@ -220,7 +224,7 @@ const getGitLabCommitsUrl = () => {
             <UIcon name="i-lucide-message-square-text" class="w-5 h-5" />
           </button>
           <button
-            v-if="viewMode === 'edit'"
+            v-if="viewMode === 'edit' && aiEnabled"
             class="flex-1 flex items-center justify-center py-1 text-sm font-medium border-b-2 transition-colors"
             :class="activeTab === 'ai'
               ? 'bg-primary-50 dark:bg-primary-900/20 text-primary-600 dark:text-primary-400 border-primary'
@@ -282,6 +286,21 @@ const getGitLabCommitsUrl = () => {
           <UIcon name="i-lucide-loader-2" class="w-8 h-8 animate-spin text-primary" />
         </div>
 
+        <div v-else-if="versionsError" class="flex-1 flex flex-col items-center justify-center gap-3 px-4 py-20 text-center">
+          <UIcon name="i-lucide-triangle-alert" class="size-8 text-warning" />
+          <p class="text-sm text-muted">
+            {{ versionsError }}
+          </p>
+          <UButton
+            color="neutral"
+            variant="soft"
+            size="sm"
+            @click="emit('load-versions')"
+          >
+            重新加载
+          </UButton>
+        </div>
+
         <!-- 版本列表 -->
         <div v-else-if="versions.length > 0" class="flex-1 min-h-0 overflow-y-auto p-3">
           <UAlert
@@ -292,6 +311,10 @@ const getGitLabCommitsUrl = () => {
             description="只读状态下不可查看历史版本内容差异，也不可恢复历史版本。"
             class="mb-3"
           />
+          <p class="mb-3 flex items-start gap-1.5 text-xs text-muted">
+            <UIcon name="i-lucide-info" class="mt-0.5 size-3.5 shrink-0" />
+            <span>历史版本被新版本替换 30 天后按存储保留策略清理，届时无法查看或恢复。</span>
+          </p>
           <div class="relative">
             <!-- 时间线 -->
             <div class="absolute left-1.25 top-2 bottom-2 w-px bg-gray-200 dark:bg-gray-700" />
@@ -402,7 +425,7 @@ const getGitLabCommitsUrl = () => {
 
       <!-- AI 标签页 -->
       <div
-        v-show="activeTab === 'ai'"
+        v-if="aiEnabled && activeTab === 'ai'"
         class="min-h-0 flex flex-col overflow-hidden"
         style="height: calc(100vh - 120px);"
       >

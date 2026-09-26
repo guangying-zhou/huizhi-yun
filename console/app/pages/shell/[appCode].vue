@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { createShellMigrationResolver } from '../../../../foundation/app/utils/applicationShellMigration'
 definePageMeta({
   layout: false
 })
@@ -43,6 +44,11 @@ const route = useRoute()
 const { apps, loaded, loading, loadApps } = useUserApplications()
 const frames = ref<ShellFrame[]>([])
 const frameElements = new Map<string, HTMLIFrameElement>()
+const migrationError = ref(false)
+let activationGeneration = 0
+const resolveMigration = createShellMigrationResolver((appCode, target) => $fetch('/api/application-shell-migration', {
+  query: { appCode, target }, cache: 'no-store', timeout: 10000
+}))
 
 const routeAppCode = computed(() => String(route.params.appCode || '').trim().toLowerCase())
 const activeApplication = computed(() => (
@@ -161,7 +167,14 @@ function trimRetainedFrames(activeAppCode: string) {
   }
 }
 
-function activateRouteFrame() {
+async function resolveMigratedTarget(application: ShellApplication, target: string) {
+  if (!import.meta.client || !application.appCode || !target) return ''
+  return resolveMigration(application.appCode, target)
+}
+
+async function activateRouteFrame() {
+  const generation = ++activationGeneration
+  migrationError.value = false
   if (!import.meta.client || !loaded.value || !shellReady.value || !activeApplication.value?.homeUrl) return
 
   const application = activeApplication.value
@@ -171,6 +184,22 @@ function activateRouteFrame() {
     window.location.origin,
     application.basePath
   )
+  const activationKey = `${application.appCode}:${target}`
+  // The trusted Gateway projection is checked before creating or updating an
+  // iframe. Unknown/unmigrated pages continue through the legacy Shell.
+  let migratedTarget: string
+  try { migratedTarget = await resolveMigratedTarget(application, target) }
+  catch {
+    if (generation === activationGeneration) migrationError.value = true
+    return
+  }
+  if (generation !== activationGeneration) return
+  if (routeAppCode.value !== application.appCode || activeApplication.value?.appCode !== application.appCode
+    || `${activeApplication.value.appCode}:${applicationShellTargetUrl(requestedTarget(), activeApplication.value.homeUrl, window.location.origin, activeApplication.value.basePath)}` !== activationKey) return
+  if (migratedTarget) {
+    window.location.replace(migratedTarget)
+    return
+  }
   const existing = frames.value.find(frame => frame.appCode === application.appCode)
   const now = Date.now()
 
@@ -199,18 +228,26 @@ function activateRouteFrame() {
   trimRetainedFrames(application.appCode)
 }
 
-function prewarmApplication(appCode: string) {
+async function prewarmApplication(appCode: string) {
   if (!import.meta.client || frames.value.some(frame => frame.appCode === appCode)) return
 
   const application = apps.value.find(app => app.appCode === appCode) as ShellApplication | undefined
   if (!application?.homeUrl || !isApplicationShellApplication(application.appCode)) return
 
   const target = applicationShellTargetUrl(
-    directEntryFor(application),
+    application.homeUrl,
     application.homeUrl,
     window.location.origin,
     application.basePath
   )
+  let migratedTarget: string
+  try { migratedTarget = await resolveMigratedTarget(application, target) }
+  catch { return } // A prewarm failure must neither navigate nor create a frame.
+  if (migratedTarget) {
+    // AppRail intent prewarming must never navigate the current document.
+    return
+  }
+  if (frames.value.some(frame => frame.appCode === appCode)) return
   frames.value.push({
     appCode: application.appCode,
     appName: application.appName,
@@ -355,6 +392,7 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
+  activationGeneration++
   window.removeEventListener('message', onFrameMessage)
   window.removeEventListener('popstate', onShellHistoryPopState)
 })
@@ -442,6 +480,11 @@ useHead(() => ({
             title="无法在企业应用容器中打开"
             description="应用未获授权、属于 Console 原生入口，或部署地址不符合当前企业域名。"
           />
+        </div>
+
+        <div v-else-if="migrationError" class="flex h-full flex-col items-center justify-center gap-3 p-6" role="status">
+          <p>应用入口暂不可用，请重试。</p>
+          <UButton color="neutral" variant="soft" @click="activateRouteFrame">重试</UButton>
         </div>
 
         <template v-else>

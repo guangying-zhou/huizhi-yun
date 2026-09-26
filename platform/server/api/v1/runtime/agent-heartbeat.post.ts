@@ -114,8 +114,8 @@ export default defineEventHandler(async (event) => {
       `INSERT INTO tenant_runtime_instance_apps
         (runtime_instance_id, deployment_id, app_code, status, schema_status, created_at, updated_at)
        SELECT ?, d.id, d.app_code,
-              CASE WHEN d.app_code = 'console' THEN 'schema_ready' ELSE 'pending' END,
-              CASE WHEN d.app_code = 'console' THEN 'not_applicable' ELSE 'unknown' END,
+              CASE WHEN d.app_code = 'console' THEN 'schema_ready' WHEN d.app_code = 'enterprise' THEN 'active' ELSE 'pending' END,
+              CASE WHEN d.app_code IN ('console', 'enterprise') THEN 'not_applicable' ELSE 'unknown' END,
               UTC_TIMESTAMP(), UTC_TIMESTAMP()
        FROM deployments d
        INNER JOIN (
@@ -129,12 +129,16 @@ export default defineEventHandler(async (event) => {
        ON DUPLICATE KEY UPDATE
          deployment_id = VALUES(deployment_id),
          status = CASE
-           WHEN VALUES(app_code) = 'console' THEN VALUES(status)
+           WHEN VALUES(app_code) IN ('console', 'enterprise') THEN VALUES(status)
            ELSE tenant_runtime_instance_apps.status
          END,
          schema_status = CASE
-           WHEN VALUES(app_code) = 'console' THEN VALUES(schema_status)
+           WHEN VALUES(app_code) IN ('console', 'enterprise') THEN VALUES(schema_status)
            ELSE tenant_runtime_instance_apps.schema_status
+         END,
+         last_error_code = CASE
+           WHEN VALUES(app_code) IN ('console', 'enterprise') THEN NULL
+           ELSE tenant_runtime_instance_apps.last_error_code
          END,
          updated_at = UTC_TIMESTAMP()`,
       [instance.id, instance.tenant_code, instance.environment, ...bindingAppCodes]
@@ -143,12 +147,12 @@ export default defineEventHandler(async (event) => {
     await tx.execute<ResultSetHeader>(
       `UPDATE tenant_runtime_instance_apps
        SET status = ?, schema_status = ?, last_error_code = ?, updated_at = UTC_TIMESTAMP()
-       WHERE runtime_instance_id = ? AND app_code <> 'console'`,
+       WHERE runtime_instance_id = ? AND app_code NOT IN ('console', 'enterprise')`,
       [status === 'ready' ? 'runtime_ready' : 'blocked', status === 'ready' ? 'unknown' : 'failed', errorCode, instance.id]
     )
 
     for (const [appCode, raw] of Object.entries(apps)) {
-      if (appCode === 'console') continue
+      if (appCode === 'console' || appCode === 'enterprise') continue
       const app = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw as Record<string, unknown> : {}
       const enabled = app.enabled === true
       const schemaStatus = String(app.schemaStatus || (enabled ? 'unknown' : 'disabled')).trim()

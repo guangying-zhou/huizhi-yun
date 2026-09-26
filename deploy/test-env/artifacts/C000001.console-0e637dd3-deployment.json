@@ -1,0 +1,44 @@
+{
+  "schemaVersion": "test-console-policy-freshness-deployment.v1",
+  "deployedAt": "2026-09-15T00:39:12.863Z",
+  "scope": {
+    "tenantCode": "C000001",
+    "environment": "test",
+    "deploymentCode": "wiztek-test-console",
+    "worker": "hzy-test-console"
+  },
+  "source": {
+    "commit": "0e637dd3",
+    "summary": "test-only bounded durable policy freshness configuration"
+  },
+  "deployment": {
+    "versionId": "29be09c1-b326-4474-86b6-990ae36a1e1d",
+    "trafficPercent": 100,
+    "buildNodeMajor": 24,
+    "dryRunCompleted": true
+  },
+  "effectiveConfiguration": {
+    "cacheBackend": "runtime",
+    "environment": "test",
+    "policyMaxAgeMs": 93600000,
+    "memoryTtlMs": 300000,
+    "platformBundleFetchTimeoutMs": 90000,
+    "secretBindingTypesPreserved": ["secret_text", "secret_key"]
+  },
+  "securityProperties": {
+    "defaultAndNonTestPolicyMaxAgeMs": 300000,
+    "testPolicyMaxAgeUpperBoundMs": 93600000,
+    "signedBundleExpiresAt": "enforced when present",
+    "persistentReadDoesNotRefreshPlatform": true,
+    "ttlOrSignatureValidationWeakened": false
+  },
+  "validation": {
+    "persistentPolicyAndBundleCacheTests": "21 passed",
+    "testCloudflareConfigTests": "5 passed",
+    "consoleTypecheck": "passed"
+  },
+  "pending": [
+    "Gateway daily schedule deployment and automatic-sync observation are separate work and are not claimed by this receipt.",
+    "The active signed test bundle currently has no expiresAt value; if a signed expiresAt is present, Console still rejects it at or after that time."
+  ]
+}

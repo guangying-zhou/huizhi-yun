@@ -1,0 +1,109 @@
+{
+  "observedAt": "2026-09-21T23:38:08.867Z",
+  "tokenProbes": [
+    {
+      "app": "console",
+      "audience": "data-runtime",
+      "scope": "console:policy-bundle:read",
+      "status": 200,
+      "issued": true
+    },
+    {
+      "app": "enterprise",
+      "audience": "data-runtime",
+      "scope": "console:policy-bundle:read",
+      "status": 200,
+      "issued": true
+    },
+    {
+      "app": "console",
+      "audience": "tenant-runtime",
+      "scope": "console:policy-bundle:read",
+      "status": 200,
+      "issued": true
+    },
+    {
+      "app": "enterprise",
+      "audience": "tenant-runtime",
+      "scope": "console:policy-bundle:read",
+      "status": 200,
+      "issued": true
+    }
+  ],
+  "routeProbes": [
+    {
+      "app": "console",
+      "audience": "data-runtime",
+      "status": 200,
+      "revision": 14,
+      "issuedAt": 1790033770843,
+      "acceptedAt": 1790033782502
+    },
+    {
+      "app": "enterprise",
+      "audience": "data-runtime",
+      "status": 200,
+      "revision": 14,
+      "issuedAt": 1790033770843,
+      "acceptedAt": 1790033782502
+    },
+    {
+      "app": "console",
+      "audience": "tenant-runtime",
+      "status": 401,
+      "expectedAudienceRejection": true
+    },
+    {
+      "app": "enterprise",
+      "audience": "tenant-runtime",
+      "status": 401,
+      "expectedAudienceRejection": true
+    },
+    {
+      "method": "GET",
+      "path": "/v1/enterprise/console-policy",
+      "status": 403
+    },
+    {
+      "method": "GET",
+      "path": "/v1/console/verified-policy",
+      "status": 403
+    },
+    {
+      "method": "PUT",
+      "path": "/v1/enterprise/console-policy",
+      "status": 405
+    }
+  ],
+  "acceptancePassed": false,
+  "firstSnapshot": {
+    "issuedAt": 1790033770843,
+    "acceptedAt": 1790033782502,
+    "revision": 14,
+    "etag": "95ff47cbd066f9e5a13d60989f7356f5b90e4a1aa1ead1c9da4f10a884c2146b"
+  },
+  "enterpriseWriteDenied": true,
+  "enterpriseWriteStatus": 400,
+  "realStoreReplay": {
+    "status": 200,
+    "identicalReceipt": true,
+    "acceptanceTimeUnchanged": true
+  },
+  "periodicRefresh": {
+    "observedAt": "2026-09-21T23:42:06.259Z",
+    "previousIssuedAt": 1790033770843,
+    "currentIssuedAt": 1790034032767,
+    "currentAcceptedAt": 1790034036882,
+    "sameRevision": true,
+    "signatureVerified": true,
+    "validUntil": 1790034332767
+  },
+  "browser": {
+    "origin": "https://hzy0.isme.dev",
+    "normalEntryLoginPassed": true,
+    "enterpriseHomeVisible": true,
+    "navigationVisible": true,
+    "myDocumentsListVisible": true,
+    "fullBusinessAcceptance": false
+  }
+}

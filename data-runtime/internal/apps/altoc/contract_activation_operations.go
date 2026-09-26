@@ -30,10 +30,20 @@ type contractActivationOperationRecord struct {
 	DependsOn       string   `json:"dependsOn,omitempty"`
 }
 
-func (a *Adapter) freezeContractActivationOperationsTx(ctx context.Context, tx *sql.Tx, contract map[string]any, body map[string]any, operator string) ([]contractActivationOperationRecord, error) {
+func (a *Adapter) freezeContractActivationOperationsTx(ctx context.Context, tx *sql.Tx, contract map[string]any, body map[string]any, operator string, sources ...integrationoperation.TrustedContext) ([]contractActivationOperationRecord, error) {
 	trusted, err := integrationoperation.TrustedContextFromMap(body, "altoc")
 	if err != nil {
 		return nil, err
+	}
+	if len(sources) > 1 {
+		return nil, integrationoperation.ErrInvalidIdentity
+	}
+	if len(sources) == 1 {
+		source := sources[0]
+		if source.TenantCode != trusted.TenantCode || source.DeploymentCode != trusted.DeploymentCode || source.SourceApp != trusted.SourceApp || source.ServiceClientID != trusted.ServiceClientID {
+			return nil, integrationoperation.ErrInvalidIdentity
+		}
+		trusted = source
 	}
 	if err := a.enrichContractActivationInputsTx(ctx, tx, contract); err != nil {
 		return nil, err
@@ -94,6 +104,10 @@ func (a *Adapter) freezeContractActivationOperationsTx(ctx context.Context, tx *
 }
 
 func insertContractActivationOperationTx(ctx context.Context, tx *sql.Tx, trusted integrationoperation.TrustedContext, actor, contractCode, correlationKey, operationKey, dependsOn string, sequence int, operationCode string, command map[string]any) (string, string, error) {
+	table, err := trusted.OperationTable()
+	if err != nil {
+		return "", "", err
+	}
 	commandSHA, err := integrationoperation.ValidateAndDigestCommand(command)
 	if err != nil {
 		return "", "", err
@@ -105,7 +119,7 @@ func insertContractActivationOperationTx(ctx context.Context, tx *sql.Tx, truste
 	var existingID, existingCode, existingCapability, existingHash, existingStatus string
 	err = tx.QueryRowContext(ctx, `
 		SELECT operation_id, operation_code, required_capability, command_sha256, status
-		FROM integration_operation
+		FROM `+table+`
 		WHERE tenant_code = ? AND deployment_code = ? AND source_app = 'altoc' AND operation_key = ?
 		FOR UPDATE`, trusted.TenantCode, trusted.DeploymentCode, operationKey).Scan(&existingID, &existingCode, &existingCapability, &existingHash, &existingStatus)
 	if err == nil {
@@ -127,7 +141,7 @@ func insertContractActivationOperationTx(ctx context.Context, tx *sql.Tx, truste
 	}
 	createdBy := firstNonEmptyText(strings.TrimSpace(actor), trusted.ServiceClientID)
 	_, err = tx.ExecContext(ctx, `
-		INSERT INTO integration_operation (
+		INSERT INTO `+table+` (
 		  operation_id, operation_key, correlation_key, sequence_no, depends_on_operation_key,
 		  tenant_code, deployment_code, source_app, target_app, operation_code, required_capability,
 		  source_biz_type, source_biz_code, idempotency_key, command_schema_version, command_json,

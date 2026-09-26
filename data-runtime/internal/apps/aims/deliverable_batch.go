@@ -112,6 +112,13 @@ func (a *Adapter) createDeliverablesBatch(ctx context.Context, query url.Values,
 		return nil, err
 	}
 	for _, row := range rows {
+		if row.OwnerKind == deliverableOwnerMatter {
+			if err := lockMatterDeliverableWriteTx(ctx, tx, row.ProjectID, row.OwnerID); err != nil {
+				return nil, err
+			}
+		}
+	}
+	for _, row := range rows {
 		if err := ensureDeliverableBatchNameAvailable(ctx, tx, row); err != nil {
 			return nil, err
 		}

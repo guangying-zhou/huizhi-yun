@@ -23,12 +23,13 @@
  */
 
 definePageMeta({
-  layout: 'embed'
+  layout: 'embed',
+  publicEditorShell: true
 })
 
 const route = useRoute()
-const { user: authUser } = useAuth()
-const authUserId = computed(() => authUser.value || '')
+const appBase = useRuntimeConfig().app.baseURL.replace(/\/$/, '')
+const documentApi = computed(() => `${appBase}/api/documents/${encodeURIComponent(documentId.value)}`)
 
 const documentId = computed(() => route.params.uuid as string)
 const isReadonly = computed(() => route.query.readonly === '1')
@@ -107,9 +108,7 @@ const loadDocument = async () => {
   error.value = ''
 
   try {
-    const res = await $fetch<DocResponse>(`/api/documents/${documentId.value}`, {
-      params: { uid: authUserId.value }
-    })
+    const res = await $fetch<DocResponse>(documentApi.value)
 
     if (res.success && res.data) {
       docTitle.value = res.data.title || ''
@@ -139,7 +138,7 @@ const saveDocument = async (force = false) => {
 
   saving.value = true
   try {
-    await $fetch(`/api/documents/${documentId.value}`, {
+    await $fetch(documentApi.value, {
       method: 'PUT',
       body: {
         content: editorContent.value,

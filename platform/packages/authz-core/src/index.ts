@@ -363,6 +363,34 @@ export function isActiveAt(grant: AuthorizationGrant, now: Date): boolean {
 }
 
 /**
+ * Policy bundle records carry their lifecycle timestamps in addition to status.
+ * Consumers must evaluate them again because a signed bundle may outlive an
+ * assignment's effective period in a local cache. Invalid timestamps fail closed.
+ */
+export function isRecordActiveAt(record: Record<string, unknown>, now: Date = new Date()): boolean {
+  const status = String(record.status ?? '').trim()
+  if (status && status !== 'active') return false
+
+  const nowAt = now.getTime()
+  if (!Number.isFinite(nowAt)) return false
+
+  const timestamp = (...keys: string[]) => {
+    for (const key of keys) {
+      const raw = record[key]
+      if (raw === null || raw === undefined || !String(raw).trim()) continue
+      return Date.parse(String(raw))
+    }
+    return null
+  }
+
+  const startsAt = timestamp('startsAt', 'starts_at')
+  if (startsAt !== null && (!Number.isFinite(startsAt) || startsAt > nowAt)) return false
+
+  const expiresAt = timestamp('expiresAt', 'expires_at', 'expiredAt', 'expired_at')
+  return expiresAt === null || (Number.isFinite(expiresAt) && expiresAt > nowAt)
+}
+
+/**
  * 有效权限判定（文档 8.6）。
  *
  * 普通运行下多个授权取“允许并集”，但每个授权单元必须各自完整成立：动作满足 + 该授权

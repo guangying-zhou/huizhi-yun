@@ -47,7 +47,14 @@ export function resolveOpsPermission(path: string, method: string): { resourceCo
     case 'invoices':
     case 'payments':
       return { resourceCode: 'ops.subscriptions', requiredAction }
+    case 'deployment-sites':
+      if (READ_METHODS.has(normalizedMethod)) return { resourceCode: 'ops.deployments', requiredAction: 'view' }
+      return { resourceCode: 'ops.deployments', requiredAction: 'deploy' }
     case 'deployments':
+      if (normalizedMethod === 'POST' && /^\/api\/platform\/ops\/deployments\/(external-drain|drain-activity)\/?$/.test(normalizedPath)) {
+        return { resourceCode: 'ops.deployments', requiredAction: 'admin' }
+      }
+      // falls through
     case 'runtime-releases':
       if (READ_METHODS.has(normalizedMethod)) return { resourceCode: 'ops.deployments', requiredAction: 'view' }
       if (normalizedMethod === 'DELETE') return { resourceCode: 'ops.deployments', requiredAction: 'admin' }

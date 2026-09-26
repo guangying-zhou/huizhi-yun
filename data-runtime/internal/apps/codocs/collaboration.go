@@ -22,6 +22,11 @@ func (a *Adapter) collaborationContext(ctx context.Context, query url.Values) (m
 	if uuid == "" {
 		return nil, httperror.New(http.StatusBadRequest, "invalid_document", "Document uuid is required")
 	}
+	// A v2 document has no current .yjs pair; opening a session would resume
+	// stale collaboration state (stage B connects Collab to v2).
+	if err := refuseSnapshotV2Document(ctx, a.db, uuid); err != nil {
+		return nil, err
+	}
 
 	row := a.db.QueryRowContext(ctx, `
 		SELECT id, uuid, doc_type, oss_path, owner_uid, dept_code, readonly_flag, status

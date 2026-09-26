@@ -19,6 +19,7 @@ export interface NotificationAuthorizationDescriptor {
 }
 
 const SUPPORTED_NOTIFICATION_DETAIL_SOURCE_APPS = new Set(['workflow', 'aims', 'assets', 'people', 'finance', 'altoc'])
+const ENTERPRISE_CODOCS_SNAPSHOT_TYPES = new Set(['document_share', 'department_share', 'document_review'])
 const SUPPORTED_ASSETS_NOTIFICATION_DETAIL_RESOURCES = new Set([
   'asset_item',
   'ip_asset',
@@ -260,5 +261,30 @@ export function notificationDetailResponse(row: NotificationDetailFact) {
     bizId: row.bizId,
     createdAt: row.createdAt,
     expiresAt: row.expiresAt
+  }
+}
+
+/** A recipient-bound message snapshot never exposes the current business object. */
+export function enterpriseNotificationSnapshotDetail(row: NotificationDetailFact) {
+  if (normalizedAppCode(row.sourceAppCode) !== 'enterprise') return null
+  const metadata = parseMetadata(row.metadataJson)
+  if (
+    metadata.notificationKind !== 'business_event'
+    || metadata.moduleAppCode !== 'codocs'
+    || !ENTERPRISE_CODOCS_SNAPSHOT_TYPES.has(stringValue(row.bizType))
+  ) return null
+  return {
+    notificationId: row.notificationId,
+    sourceAppCode: 'enterprise',
+    title: row.title,
+    summary: row.summary,
+    body: row.body,
+    actionUrl: null,
+    actionTargetAppCode: 'codocs',
+    bizType: null,
+    bizId: null,
+    createdAt: row.createdAt,
+    expiresAt: row.expiresAt,
+    detailMode: 'notification_snapshot' as const
   }
 }

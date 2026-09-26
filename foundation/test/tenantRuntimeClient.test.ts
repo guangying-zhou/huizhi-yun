@@ -6,9 +6,11 @@ import {
   buildServiceCommandRuntimeHeaders,
   hashServiceCommandPayload,
   isPlatformRuntimeBootstrapToken,
+  localTestRuntimeDialEndpoint,
   maybeCallTenantRuntime,
+  prepareTenantRuntime,
   tenantRuntimeTokenScope,
-  verifyServiceCommandRuntimeHeaders
+  verifyServiceCommandRuntimeHeaders, verifiedServiceCommandActor
 } from '../server/utils/tenantRuntimeClient.ts'
 import { setLocalServiceTokenIssuer } from '../server/utils/serviceOidc.ts'
 import { tenantRuntimeErrorData } from '../server/utils/tenantRuntimeErrors.ts'
@@ -16,7 +18,108 @@ import { classifyServiceOperationFailure } from '../server/utils/serviceOperatio
 
 type ServiceCommandHeaders = Record<string, string>
 
+test('hzy0 loopback changes only the Runtime dial under exact trusted local context', () => {
+  const beforeNodeEnv = process.env.NODE_ENV
+  const beforeLocal = process.env.HZY0_LOCAL_CONSOLE_FACADE
+  const beforeWorkflowLocal = process.env.HZY0_WORKFLOW_LOCAL_ONLY
+  process.env.NODE_ENV = 'development'
+  process.env.HZY0_LOCAL_CONSOLE_FACADE = 'true'
+  const canonical = 'https://hzy-test-runtime.isme.dev'
+  const headers = { 'x-hzy-local-runtime-dial-url': 'http://127.0.0.1:18084',
+    'x-hzy-gateway': 'tenant-gateway', 'x-hzy-gateway-token': 'local-fixture',
+    'x-hzy-data-runtime-url': canonical, 'x-hzy-data-runtime-code': 'c000001-test-tenant-runtime',
+    'x-hzy-tenant': 'C000001', 'x-hzy-environment': 'test',
+    'x-hzy-app-code': 'console', 'x-hzy-deployment': 'wiztek-test-console',
+    'x-forwarded-host': 'hzy0.isme.dev' }
+  const event = (values: Record<string, string>) => ({ context: {}, node: { req: { headers: values } } }) as never
+  const config = { hzy: { cloudflareInternalToken: 'local-fixture' } }
+  try {
+    assert.equal(localTestRuntimeDialEndpoint(event(headers), canonical, config), 'http://127.0.0.1:18084')
+    assert.equal(localTestRuntimeDialEndpoint(event({ ...headers, 'x-hzy-app-code': 'collab',
+      'x-hzy-deployment': 'C000001-test-collab' }), canonical, config), 'http://127.0.0.1:18084')
+    for (const [appCode, deployment] of [['aims', 'C000001-test-aims'], ['workflow', 'C000001-test-workflow-local']]) {
+      const local = { ...headers, 'x-hzy-app-code': appCode, 'x-hzy-deployment': deployment }
+      assert.throws(() => localTestRuntimeDialEndpoint(event(local), canonical, config))
+      process.env.HZY0_WORKFLOW_LOCAL_ONLY = 'true'
+      assert.equal(localTestRuntimeDialEndpoint(event(local), canonical, config), 'http://127.0.0.1:18084')
+      assert.throws(() => localTestRuntimeDialEndpoint(event({ ...local, 'x-hzy-deployment': 'wrong' }), canonical, config))
+      process.env.HZY0_WORKFLOW_LOCAL_ONLY = 'false'
+    }
+    assert.throws(() => localTestRuntimeDialEndpoint(event({ ...headers, 'x-hzy-app-code': 'collab' }), canonical, config))
+    assert.equal(localTestRuntimeDialEndpoint(event({ ...headers, 'x-hzy-local-runtime-dial-url': '' }), canonical, config), canonical)
+    for (const bad of [
+      { 'x-hzy-gateway-token': 'forged' }, { 'x-hzy-tenant': 'other' },
+      { 'x-hzy-data-runtime-url': 'http://127.0.0.1:18084' },
+      { 'x-hzy-local-runtime-dial-url': 'http://localhost:18084' },
+      { 'x-hzy-deployment': 'other' }, { 'x-forwarded-host': 'other.test' }
+    ]) assert.throws(() => localTestRuntimeDialEndpoint(event({ ...headers, ...bad }), canonical, config))
+    process.env.HZY0_LOCAL_CONSOLE_FACADE = 'false'
+    assert.throws(() => localTestRuntimeDialEndpoint(event(headers), canonical, config))
+  } finally {
+    if (beforeNodeEnv === undefined) delete process.env.NODE_ENV
+    else process.env.NODE_ENV = beforeNodeEnv
+    if (beforeLocal === undefined) delete process.env.HZY0_LOCAL_CONSOLE_FACADE
+    else process.env.HZY0_LOCAL_CONSOLE_FACADE = beforeLocal
+    if (beforeWorkflowLocal === undefined) delete process.env.HZY0_WORKFLOW_LOCAL_ONLY
+    else process.env.HZY0_WORKFLOW_LOCAL_ONLY = beforeWorkflowLocal
+  }
+})
+
+test('verified command actors stay request-local, target-bound and authenticated', async () => {
+  const command = { actorUid: 'person-a', actorDeptCodes: ['DEPT-1'] }
+  const event = { context: { consoleAuth: { authenticated: true, subjectType: 'service', tokenUse: 'service',
+    appCode: 'enterprise', clientCode: 'enterprise.runtime', tenant: 'T', deployment: 'HOST',
+    scopes: ['aims:project-documents:write'] } } } as never
+  const envelope = { operationId: crypto.randomUUID(), targetApp: 'aims', operationCode: 'enterprise.aims.project-document-writes.create-markdown.v1',
+    requiredCapability: 'aims:project-documents:write', idempotencyKey: 'document-1', commandSchemaVersion: 'v1',
+    commandSha256: await hashServiceCommandPayload(command), command }
+  const input = { token: 'test-token', method: 'POST' as const, requestTarget: '/aims/api/service',
+    requestId: 'request-1', tenantCode: 'T', sourceDeploymentCode: 'HOST', targetDeploymentCode: 'AIMS',
+    sourceApp: 'enterprise', sourceClientId: 'enterprise.runtime', targetApp: 'aims', envelope }
+  const headers = await buildServiceCommandRuntimeHeaders(input)
+  assert.equal(verifiedServiceCommandActor(event, 'aims'), null)
+  await assert.rejects(() => verifyServiceCommandRuntimeHeaders({ ...input, event, token: 'wrong', readHeader: name => headers[name] }))
+  assert.equal(verifiedServiceCommandActor(event, 'aims'), null)
+  await verifyServiceCommandRuntimeHeaders({ ...input, event, readHeader: name => headers[name] })
+  assert.deepEqual(verifiedServiceCommandActor(event, 'aims'), { uid: 'person-a', deptCodes: ['DEPT-1'] })
+  assert.equal(verifiedServiceCommandActor(event, 'codocs'), null)
+  const independent = { context: { ...(event as { context: object }).context } } as never
+  assert.equal(verifiedServiceCommandActor(independent, 'aims'), null)
+  const auth = (event as { context: { consoleAuth: { scopes: string[] } } }).context.consoleAuth
+  auth.scopes = []
+  assert.equal(verifiedServiceCommandActor(event, 'aims'), null)
+})
+
 describe('tenant runtime token scope', () => {
+  test('Console integration preserves only its two registered scopes for Runtime audiences', () => {
+    for (const audience of ['data-runtime', 'tenant-runtime']) {
+      for (const scope of ['integration_config:view', 'credential_vault:resolve']) {
+        assert.equal(tenantRuntimeTokenScope(audience, scope, 'console-integration'), scope)
+      }
+      for (const scope of ['', '*', 'credential_vault:*', 'integration_config:edit', 'integration_config:view credential_vault:resolve', 'data-runtime:integration_config:view']) {
+        assert.throws(() => tenantRuntimeTokenScope(audience, scope, 'console-integration'))
+      }
+    }
+    assert.throws(() => tenantRuntimeTokenScope('codocs', 'integration_config:view', 'console-integration'))
+  })
+  test('registered enterprise paths preserve exact business capabilities for both audiences', () => {
+    for (const audience of ['data-runtime', 'tenant-runtime']) {
+      assert.equal(tenantRuntimeTokenScope(audience, 'assets:product:read', 'business'), 'assets:product:read')
+      for (const invalid of ['', '*', 'assets.read', 'assets:product:*', `${audience}:assets:read`]) {
+        assert.throws(() => tenantRuntimeTokenScope(audience, invalid, 'business'))
+      }
+    }
+  })
+  test('permits only AA-04’s fixed raw Aims and receivable combination', () => {
+    for (const audience of ['data-runtime', 'tenant-runtime']) {
+      assert.equal(
+        tenantRuntimeTokenScope(audience, 'aims.write altoc:receivable:mark-billable', 'aims-milestone-receivable'),
+        'aims.write altoc:receivable:mark-billable'
+      )
+    }
+    assert.throws(() => tenantRuntimeTokenScope('data-runtime', 'aims.write altoc:service-ticket:delivery-result:sync', 'aims-milestone-receivable'))
+    assert.throws(() => tenantRuntimeTokenScope('other-runtime', 'aims.write altoc:receivable:mark-billable', 'aims-milestone-receivable'))
+  })
   test('binds transport and business capabilities to the requested audience', () => {
     assert.equal(
       tenantRuntimeTokenScope('data-runtime', 'altoc.read altoc:dashboard:view'),
@@ -62,6 +165,71 @@ describe('tenant runtime bootstrap token classification', () => {
 })
 
 describe('managed Console Runtime bootstrap refresh', () => {
+  test('coalesces an exact trusted binding, retries failures, and separates rotated credentials', async () => {
+    let requests = 0
+    let rejectNext = true
+    const server = createServer((request, response) => {
+      if (request.url !== '/api/platform/internal/tenant-gateway/runtime-bootstrap-token') {
+        response.writeHead(404).end()
+        return
+      }
+      requests += 1
+      setTimeout(() => {
+        if (rejectNext) {
+          response.writeHead(503).end()
+          return
+        }
+        const token = [
+          Buffer.from(JSON.stringify({ alg: 'EdDSA', kid: 'test-key' })).toString('base64url'),
+          Buffer.from(JSON.stringify({ token_use: 'platform_runtime_bootstrap', tenant: 'tenant-flight',
+            deployment: 'tenant-flight-console', appCode: 'console' })).toString('base64url'),
+          'signature'
+        ].join('.')
+        response.setHeader('content-type', 'application/json')
+        response.end(JSON.stringify({ data: { token, expiresAt: new Date(Date.now() + 90_000).toISOString(),
+          tenantCode: 'tenant-flight', deploymentCode: 'tenant-flight-console', appCode: 'console' } }))
+      }, 25)
+    })
+    await new Promise<void>((resolve, reject) => {
+      server.once('error', reject)
+      server.listen(0, '127.0.0.1', resolve)
+    })
+    const address = server.address()
+    if (!address || typeof address === 'string') throw new Error('bootstrap test server did not bind')
+    let gatewayToken = 'gateway-secret-v1'
+    const config = { hzy: { cloudflareInternalToken: gatewayToken,
+      platform: { baseUrl: `http://127.0.0.1:${address.port}` },
+      tenantRuntime: { endpoint: `http://127.0.0.1:${address.port}`, dataAccessMode: 'tenant-runtime',
+        tenant: 'tenant-flight', deployment: 'tenant-flight-console' } } }
+    const globals = globalThis as typeof globalThis & { useRuntimeConfig?: () => unknown }
+    const originalUseRuntimeConfig = globals.useRuntimeConfig
+    globals.useRuntimeConfig = () => config
+    const issue = () => prepareTenantRuntime({ context: {}, node: { req: { headers: {
+      'x-hzy-gateway': 'tenant-gateway', 'x-hzy-gateway-token': gatewayToken,
+      'x-hzy-tenant': 'tenant-flight', 'x-hzy-deployment': 'tenant-flight-console',
+      'x-hzy-environment': 'test', 'x-hzy-app-code': 'console'
+    }, url: '/oauth/token' } } } as never, { appCode: 'console',
+      scope: 'console:service-token:issue', requireStaticRuntimeToken: true })
+    try {
+      const failures = await Promise.allSettled(Array.from({ length: 6 }, issue))
+      assert.equal(failures.filter(result => result.status === 'rejected').length, 6)
+      assert.equal(requests, 1)
+      rejectNext = false
+      assert.deepEqual(await Promise.all(Array.from({ length: 6 }, issue)), Array(6).fill(true))
+      assert.equal(requests, 2)
+      assert.equal(await issue(), true)
+      assert.equal(requests, 2)
+      gatewayToken = 'gateway-secret-v2'
+      config.hzy.cloudflareInternalToken = gatewayToken
+      assert.deepEqual(await Promise.all(Array.from({ length: 6 }, issue)), Array(6).fill(true))
+      assert.equal(requests, 3)
+    } finally {
+      if (originalUseRuntimeConfig) globals.useRuntimeConfig = originalUseRuntimeConfig
+      else delete globals.useRuntimeConfig
+      await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()))
+    }
+  })
+
   test('reuses the trusted forwarded Platform bootstrap during Console scheduler token exchange', async () => {
     const bootstrapToken = [
       Buffer.from(JSON.stringify({ alg: 'EdDSA', kid: 'platform-key' })).toString('base64url'),
@@ -1125,6 +1293,44 @@ describe('Workflow proxy runtime actor delegation', () => {
       if (originalUseRuntimeConfig) globals.useRuntimeConfig = originalUseRuntimeConfig
       else delete globals.useRuntimeConfig
       await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()))
+    }
+  })
+})
+
+describe('unified scheduler route table', () => {
+  test('each unified route is bound to its own app, exact scope and POST before any network call', async () => {
+    const config = { hzy: { tenantRuntime: { endpoint: 'http://127.0.0.1:1', tenant: 'tenant-a', deployment: 'deployment-a', dataAccessMode: 'tenant-runtime' } } }
+    const globals = globalThis as typeof globalThis & { useRuntimeConfig?: () => unknown }
+    const originalUseRuntimeConfig = globals.useRuntimeConfig
+    globals.useRuntimeConfig = () => config
+    const event = { context: {}, node: { req: { headers: {}, url: '/api/internal/integration-operations/drain' } } } as never
+    const scheduler = { generation: '7' }
+    const statusOf = async (path: string, options: Parameters<typeof maybeCallTenantRuntime>[2]) => {
+      try {
+        await maybeCallTenantRuntime(event, path, options)
+      } catch (error) {
+        return (error as { statusCode?: number }).statusCode
+      }
+      return 200
+    }
+    try {
+      const contractViolations: Array<[string, Parameters<typeof maybeCallTenantRuntime>[2]]> = [
+        ['/v1/enterprise/assets/notifications:scan-due', { appCode: 'aims', scope: 'assets:notifications-due:execute', method: 'POST', body: {}, enterpriseScheduler: scheduler }],
+        ['/v1/enterprise/aims/milestones:rollover-due', { appCode: 'aims', scope: 'aims:integration_operation:execute', method: 'POST', body: {}, enterpriseScheduler: scheduler }],
+        ['/v1/enterprise/aims/notifications:scan-due', { appCode: 'aims', scope: 'aims:milestone-rollover:execute', method: 'POST', body: {}, enterpriseScheduler: scheduler }],
+        ['/v1/enterprise/aims/notifications:acknowledge', { appCode: 'aims', scope: 'aims:notifications-due:execute', method: 'POST', body: {} }],
+        ['/v1/aims/service/notifications:scan-due', { appCode: 'aims', scope: 'aims:notifications-due:execute', method: 'POST', body: {}, enterpriseScheduler: scheduler }],
+        ['/v1/enterprise/assets/notifications:acknowledge-closure', { appCode: 'assets', scope: 'assets:notifications-due:execute', method: 'GET', enterpriseScheduler: scheduler }]
+      ]
+      for (const [path, options] of contractViolations) {
+        assert.equal(await statusOf(path, options), 403, `${path} ${JSON.stringify(options)}`)
+      }
+      // A correct contract still requires the signed Gateway wake of the route's app.
+      assert.equal(await statusOf('/v1/enterprise/assets/notifications:scan-due', { appCode: 'assets', scope: 'assets:notifications-due:execute', method: 'POST', body: {}, enterpriseScheduler: scheduler }), 404)
+      assert.equal(await statusOf('/v1/enterprise/aims/milestones:rollover-due', { appCode: 'aims', scope: 'aims:milestone-rollover:execute', method: 'POST', body: {}, enterpriseScheduler: scheduler }), 404)
+    } finally {
+      if (originalUseRuntimeConfig) globals.useRuntimeConfig = originalUseRuntimeConfig
+      else delete globals.useRuntimeConfig
     }
   })
 })

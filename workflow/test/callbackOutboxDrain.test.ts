@@ -9,6 +9,9 @@ const endpoint = readFileSync(
 
 test('Workflow durable outboxes have a trusted Tenant Gateway scheduled drain', () => {
   assert.match(endpoint, /requireTenantGatewaySchedulerRequest\(event, 'workflow'\)/)
+  assert.match(endpoint, /await drainWorkflowNotificationOutbox\(event\)/)
+  assert.ok(endpoint.indexOf('drainWorkflowNotificationOutbox(event)') < endpoint.indexOf('drainWorkflowActionableLifecycleOutbox(event)'),
+    'creation notifications must drain before lifecycle CAS')
   assert.match(endpoint, /await drainWorkflowActionableLifecycleOutbox\(event\)/)
   assert.match(endpoint, /await drainWorkflowCallbackOutbox\(event\)/)
   assert.doesNotMatch(endpoint, /readBody|getQuery|Authorization/)

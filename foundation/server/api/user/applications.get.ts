@@ -38,6 +38,11 @@ interface AppItem {
   appType: string
   serviceRole?: string | null
   status?: string | null
+  deploymentState?: 'deployed' | 'not-deployed'
+  configurationState?: 'unknown' | 'configured' | 'not-configured'
+  availabilityCode?: 'module_not_configured' | 'module_not_deployed' | null
+  availabilityReason?: string | null
+  availabilityMessage?: string | null
 }
 
 type BundleRecord = Record<string, unknown>
@@ -270,7 +275,12 @@ function normalizeAppItem(event: H3Event, value: unknown, deploymentPublicUrl?: 
     sortOrder: Number.isFinite(Number(record.sortOrder)) ? Number(record.sortOrder) : null,
     appType: stringValue(record.appType) || 'business',
     serviceRole: nullableString(record.serviceRole),
-    status: nullableString(record.status)
+    status: nullableString(record.status),
+    deploymentState: record.deploymentState === 'deployed' ? 'deployed' : record.deploymentState === 'not-deployed' ? 'not-deployed' : undefined,
+    configurationState: record.configurationState === 'configured' ? 'configured' : record.configurationState === 'not-configured' ? 'not-configured' : record.configurationState === 'unknown' ? 'unknown' : undefined,
+    availabilityCode: record.availabilityCode === 'module_not_configured' || record.availabilityCode === 'module_not_deployed' ? record.availabilityCode : null,
+    availabilityReason: nullableString(record.availabilityReason),
+    availabilityMessage: nullableString(record.availabilityMessage)
   }
 }
 

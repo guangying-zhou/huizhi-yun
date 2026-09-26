@@ -16,4 +16,5 @@
 - 默认部署形态是 Console embedded：`console/server/plugins/collab-runtime.ts` 调用 `collab` 包的 `startCollabRuntime()`，少一个独立进程；`pnpm --filter collab dev/start` 仍作为 standalone 模式保留。
 - 配置目标由 Console 管理；当前保留 `.env` 是 standalone 或迁移期启动方式。
 - Console embedded 模式下，Console 的 `DB_*` 指向 `hzy_console`；Collab 不允许直连 Codocs DB，必须通过 `HZY_TENANT_RUNTIME_URL` 或 `COLLAB_CODOCS_RUNTIME_URL` 调用 Codocs runtime 获取文档上下文、权限和版本写入能力。
-- Console embedded 模式下，OSS 持久化优先由 Console `oss.default` 集成配置和 vault secret 注入；standalone 或迁移期才使用 `COLLAB_OSS_*` / legacy `ALIYUN_OSS_*`。
+- 旧 v1 文档仍由 Collab 直接使用 OSS；Console embedded 模式可从 Console `oss.default` 解析注入，standalone/迁移期沿用 `COLLAB_OSS_*` / legacy `ALIYUN_OSS_*`。此配置不用于 v2 快照。
+- v2 快照文档（写入协调合同阶段 B）走独立路径：`COLLAB_V2_ENABLED=true` 时，连接 token 为 Host 签发的一次性票据 `v2.<hex>`，以 `collab.runtime` 服务身份（Foundation `createStandaloneServiceTokenClient`）兑换后才加载；Collab 不持有 OSS 凭据，快照字节经 Runtime `/v1/codocs/collaboration-snapshots:upload|download`，再以精确版本配对发布；租约续租失败即断开。旧 v1 文档路径与 HMAC token 不变。见 `docs/Codocs-Document-Write-Coordination.md`。

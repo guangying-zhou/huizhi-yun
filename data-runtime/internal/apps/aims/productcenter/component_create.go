@@ -19,13 +19,28 @@ type ProductComponentDraft struct {
 }
 
 func CreateProductComponent(ctx context.Context, db *sql.DB, identity CommandIdentity, permit AuthorizationPermit, input ProductComponentDraft) (CommandResult, error) {
+	return createProductComponent(ctx, identity, permit, input, func(authorize AuthorizeCommand, apply ApplyCommand) (CommandResult, error) {
+		return ExecuteCommand(ctx, db, identity, input, authorize, apply)
+	})
+}
+func CreateProductComponentInTransaction(ctx context.Context, tx *sql.Tx, identity CommandIdentity, permit AuthorizationPermit, input ProductComponentDraft) (CommandResult, error) {
+	result, err := createProductComponent(ctx, identity, permit, input, func(authorize AuthorizeCommand, apply ApplyCommand) (CommandResult, error) {
+		return ExecuteCommandInTransaction(ctx, tx, identity, input, authorize, apply)
+	})
+	if err != nil && tx != nil {
+		_ = tx.Rollback()
+	}
+	return result, err
+}
+func createProductComponent(ctx context.Context, identity CommandIdentity, permit AuthorizationPermit, input ProductComponentDraft, execute func(AuthorizeCommand, ApplyCommand) (CommandResult, error)) (CommandResult, error) {
+
 	if identity.Action != "product_components:create" {
 		return CommandResult{}, invalid("product_command_identity_invalid", "模块创建命令不匹配")
 	}
 	if input.ExpectedRevision < 1 || (input.ParentID != nil && *input.ParentID < 1) || strings.TrimSpace(input.Name) == "" || !utf8.ValidString(input.Name) || utf8.RuneCountInString(input.Name) > 255 || strings.ContainsRune(input.Name, '\x00') || !utf8.ValidString(input.Description) || utf8.RuneCountInString(input.Description) > 10000 || strings.ContainsRune(input.Description, '\x00') {
 		return CommandResult{}, invalid("product_component_draft_invalid", "模块名称、描述或父模块无效")
 	}
-	return ExecuteCommand(ctx, db, identity, input, func(ctx context.Context, tx *sql.Tx) error {
+	return execute(func(ctx context.Context, tx *sql.Tx) error {
 		return AuthorizeWorkspaceTransaction(ctx, tx, identity.ProductCode, identity.ActorUID, "product_components", "edit", permit)
 	}, func(ctx context.Context, tx *sql.Tx) (any, error) {
 		root, err := loadWorkspace(ctx, tx, identity.ProductCode)

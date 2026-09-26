@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { Project } from '~/types/account'
+import { qualityStatusBadge } from '../../../utils/projectDeliverablePresentation'
 
 definePageMeta({
   layoutHeader: true,
@@ -161,23 +162,6 @@ const deliverableStats = computed(() => {
   const pending = documentDeliverables.value.filter(d => getDisplayDeliverableStatus(d) === 'pending').length
   return { total, approved, submitted, pending }
 })
-
-const deliverableStatusConfig: Record<string, { label: string, color: string }> = {
-  pending: { label: '待提交', color: 'neutral' },
-  submitted: { label: '已提交', color: 'info' },
-  approved: { label: '已通过', color: 'success' },
-  rejected: { label: '已驳回', color: 'error' }
-}
-
-const qualityStatusConfig: Record<string, { label: string, color: string }> = {
-  not_submitted: { label: '未送检', color: 'neutral' },
-  pending: { label: '未送检', color: 'neutral' },
-  preparing_review: { label: '送检准备中', color: 'warning' },
-  awaiting_review: { label: '质量待审', color: 'info' },
-  returned: { label: '质量退回', color: 'error' },
-  passed: { label: '质量通过', color: 'success' },
-  waived: { label: '已豁免', color: 'warning' }
-}
 
 const documentDeliverables = computed(() =>
   deliverables.value.filter(d => d.deliverableType === 'document')
@@ -725,11 +709,11 @@ async function submitQualityWaiver() {
 
                 <template #status-cell="{ row }">
                   <UBadge
-                    :color="(qualityStatusConfig[row.original.original.qualityStatus]?.color as any) || 'neutral'"
+                    :color="qualityStatusBadge(row.original.original.qualityStatus, row.original.status).color"
                     variant="subtle"
                     size="sm"
                   >
-                    {{ qualityStatusConfig[row.original.original.qualityStatus]?.label || deliverableStatusConfig[row.original.status]?.label || row.original.status }}
+                    {{ qualityStatusBadge(row.original.original.qualityStatus, row.original.status).label }}
                   </UBadge>
                 </template>
                 <template #submittedDocumentName-cell="{ row }">

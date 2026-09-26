@@ -6,6 +6,11 @@ import {
   hashOpaqueValue,
   issueServiceAccessToken,
   issueTokenSet,
+  getOidcIssuer,
+  getOidcTtl,
+  loadOidcPolicyDigest,
+  logServiceTokenTimings,
+  measureServiceTokenStage,
   requireOidcClient,
   writeTokenEvent
 } from '~~/server/utils/oidc'
@@ -14,6 +19,10 @@ import {
   consumeServiceClientCredentials
 } from '~~/server/utils/serviceClients'
 import { serviceTokenSourceBindingForCredential } from '~~/server/utils/serviceTokenSourceBinding'
+import { exchangeConsoleServiceClientToken, exchangeConsoleGatewayToken } from '@hzy/foundation/server/utils/consoleTenantRuntimeClient'
+import { authDiagnosticRequestId, logAuthDependencyFailure } from '@hzy/foundation/server/utils/authDependencyDiagnostic'
+
+import { checkedGatewayAssertion, gatewayAssertionLaneEnabled } from '~~/server/utils/gatewayAssertionForwarding'
 
 type TokenBody = Record<string, unknown>
 
@@ -128,46 +137,105 @@ export default defineEventHandler(async (event) => {
     if (grantType === 'client_credentials') {
       const clientId = stringValue(body.client_id) || basicCredentials.clientId
       const clientSecret = stringValue(body.client_secret) || basicCredentials.clientSecret
-      const serviceClient = clientSecret
-        ? await consumeServiceClientCredentials({
-            event,
-            clientId,
-            clientSecret,
-            audience: body.audience,
-            scope: body.scope
-          })
-        : await consumeRuntimeAppIdentity({
-            event,
-            appCode: body.app_code,
-            clientId,
-            audience: body.audience,
-            scope: body.scope
-          })
-      const token = await issueServiceAccessToken({
-        event,
-        audience: stringValue(body.audience),
-        scope: serviceClient.scope,
-        // A credential always binds to its verified grant policy. A
-        // credential-less Runtime identity may request the same fixed policy
-        // only after consumeRuntimeAppIdentity has verified its trusted
-        // tenant-gateway app identity; no tenant/deployment value comes from
-        // the request body.
-        sourceBinding: serviceTokenSourceBindingForCredential(
+      if (clientSecret && process.env.HZY_CONSOLE_SERVICE_TOKEN_EXCHANGE_ENABLED === 'true') {
+        const policy = await loadOidcPolicyDigest(event)
+        if (!policy.policyVersion || !policy.caps) {
+          throw createError({ statusCode: 503, message: 'Verified Console policy summary is required for token exchange' })
+        }
+        const exchanged = await exchangeConsoleServiceClientToken(event, {
+          clientId,
           clientSecret,
-          clientSecret ? undefined : body.source_binding
-        ),
-        serviceClient
-      })
+          audience: stringValue(body.audience),
+          scope: stringValue(body.scope),
+          issuer: getOidcIssuer(event),
+          ttlSeconds: getOidcTtl(event, 'accessTokenTtlSeconds'),
+          sourceBinding: 'service-client-policy',
+          policyVersion: policy.policyVersion,
+          caps: policy.caps
+        })
+        setHeader(event, 'Cache-Control', 'no-store')
+        return {
+          access_token: exchanged.data.accessToken,
+          token_type: exchanged.data.tokenType,
+          expires_in: exchanged.data.expiresIn,
+          scope: exchanged.data.scope
+        }
+      }
+      const assertion = String(getHeader(event, 'x-hzy-gateway-service-assertion') || '')
+      if (gatewayAssertionLaneEnabled(assertion, clientSecret, process.env.HZY_CONSOLE_GATEWAY_EXCHANGE_ENABLED === 'true')) {
+        if (serviceTokenSourceBindingForCredential('', body.source_binding) !== 'trusted-gateway') throw createError({ statusCode: 400, message: 'gateway_exchange_source_binding_invalid' })
+        const signedRequest = checkedGatewayAssertion(event, assertion, {
+          clientId, audience: stringValue(body.audience), scope: stringValue(body.scope), appCode: stringValue(body.app_code)
+        })
+        const policy = await loadOidcPolicyDigest(event)
+        if (!policy.policyVersion || !policy.caps) throw createError({ statusCode: 503, message: 'gateway_exchange_policy_unavailable' })
+        const exchanged = await exchangeConsoleGatewayToken(event, {
+          ...signedRequest, issuer: getOidcIssuer(event), ttlSeconds: getOidcTtl(event, 'accessTokenTtlSeconds'),
+          policyVersion: policy.policyVersion, caps: policy.caps
+        })
+        setHeader(event, 'Cache-Control', 'no-store')
+        return { access_token: exchanged.data.accessToken, token_type: exchanged.data.tokenType, expires_in: exchanged.data.expiresIn, scope: exchanged.data.scope }
+      }
+      const identityStartedAt = Date.now()
+      let serviceClient
+      try {
+        serviceClient = await measureServiceTokenStage(event, 'identity', async () => clientSecret
+          ? await consumeServiceClientCredentials({
+              event,
+              clientId,
+              clientSecret,
+              audience: body.audience,
+              scope: body.scope
+            })
+          : await consumeRuntimeAppIdentity({
+              event,
+              appCode: body.app_code,
+              clientId,
+              audience: body.audience,
+              scope: body.scope
+            }))
+      } catch (error) {
+        logAuthDependencyFailure(event, 'service-identity', error, Date.now() - identityStartedAt)
+        throw error
+      }
+      const issueStartedAt = Date.now()
+      let token
+      try {
+        token = await issueServiceAccessToken({
+          event,
+          audience: stringValue(body.audience),
+          scope: serviceClient.scope,
+          // A credential always binds to its verified grant policy. A
+          // credential-less Runtime identity may request the same fixed policy
+          // only after consumeRuntimeAppIdentity has verified its trusted
+          // tenant-gateway app identity; no tenant/deployment value comes from
+          // the request body.
+          sourceBinding: serviceTokenSourceBindingForCredential(
+            clientSecret,
+            clientSecret ? undefined : body.source_binding
+          ),
+          serviceClient
+        })
+      } catch (error) {
+        logAuthDependencyFailure(event, 'service-issue', error, Date.now() - issueStartedAt)
+        throw error
+      }
 
-      await writeTokenEvent(event, {
+      const auditStartedAt = Date.now()
+      await measureServiceTokenStage(event, 'audit', () => writeTokenEvent(event, {
         eventType: 'issue_service',
         clientId: serviceClient.clientId,
         uid: null,
         sessionHash: null,
         result: 'success'
-      })
+      }))
+      if (Date.now() - auditStartedAt > 1000) {
+        console.warn(JSON.stringify({ event: 'console-auth-audit-slow', requestId: authDiagnosticRequestId(event),
+          stage: 'service-token-event', durationMs: Date.now() - auditStartedAt }))
+      }
 
       setHeader(event, 'Cache-Control', 'no-store')
+      logServiceTokenTimings(event, clientSecret ? 'credential' : 'gateway')
       return {
         access_token: token.accessToken,
         token_type: token.tokenType,

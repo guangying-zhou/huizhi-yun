@@ -1,18 +1,12 @@
 # NEXT — 下一步做什么
 
-> 最后更新：2026-09-06。保持 20 行以内。
-> 当前执行台账：[设计评审与落地执行计划](docs/设计评审与落地执行计划-2026-09-05.md)。
-> 本轮证据：[9/6 执行记录与 26 条分诊](docs/设计评审落地执行记录-2026-09-06.md)。
+> 最后更新：2026-09-25。保持 20 行以内。当前制品、环境开关和已验收范围以[当前运行组合](docs/Current-Running-Combination-20260925.md)为准；此前 2026-09-22 的 INT-606c/G1/FE-2 顺序是历史计划。
 
-**目标：9 月 Aims 公司落地；10 月 Altoc + Finance 真实经营财务闭环。tenant 已确认 C000001。**
+**当前主线**：review `5a019bbd` 第一、二批已提交（`6a1c6f62`、`a8093f5c`）；Collab 保持关闭，不部署。第三批当前状态文档送审。
 
-已落地：发布链路/迁移清单、Aims 一页说明；B-007 503 透传、B-020 入站精确 scope、B-014 文档修正；看板明确局部金额范围。
-验证：两应用 70 项定向测试、11 项 release/scheduler、5 个 Go package 无缓存测试及授权/Cloudflare 检查通过。未发布，未完成业务验收。
+1. 第三批文档审查后，按本机 CPU 任务书在本分支测测试 Console 基线、做 A1–A4 与复测；P1 先设计。生产/main 不动。
+2. CPU 批次后，依次写 matter 完成设计与 D4-2 第 3 阶段设计，分别送审；环境写入继续走独立关口。
+3. Workflow A2 本机 completion→审批→callback 已验；actionable 通知关闭顺序仍是后续设计项。
+4. Codocs snapshot v2 在 hzy0 已开并通过双标签 409 快检；实时 Collab 关闭。将来启用需同步部署 Runtime `expiresAt` 响应与 Collab 租约修复并单独验收。
 
-1. **FIN-02**：财务确认票种、唯一键与作废/红冲语义；只读预检 SQL 已准备，确认后补约束/并发/409/重放测试。
-2. **REL-01 → FIN-04**：C000001/test 现有 Console/People；补核完整财务链部署、grant、Binding、schema，再按八类场景验收。
-3. **AIMS-01/02**：核验 PIVR/People 生产状态；业务提供在管项目/成员清单，持有人本人验入口并选试点。
-4. **SAFE-HIST-01**：9/7 核查历史/克隆/构建副本；当前 Git 跟踪已无原始 CSV 和 .wrangler。
-
-FIN-03 全量聚合仍后置；其他开放 ISSUE 见分诊，不沿用历史 P0 数量。一个主要开发任务在制。
-未把审批启动当核销完成，未把隔离测试当真实到账或持续采纳。下一次输入/环境检查 9/7。
+历史与证据：[统一企业应用实施台账](docs/Unified-Enterprise-Implementation-Plan.md)、[G1 收口跟踪](docs/Huizhi-Yun-Local-Enterprise-Test-Plan-v1.0-20260920/docs/G1-Closeout-Tracker.md)、[写入协调](docs/Codocs-Document-Write-Coordination.md)、[本机运行记录](deploy/test-env/LOCAL_RUNTIME.md)。计划文字不自动授权提交、部署或环境写入。

@@ -1,0 +1,231 @@
+{
+ "observationWindow": {
+  "startedAt": "2026-09-15T14:12:51.504625+00:00",
+  "finishedAt": "2026-09-15T14:13:01.833073+00:00"
+ },
+ "account": "6cf3948db481580745329253415d59d3",
+ "workers": {
+  "hzy-test-gateway": {
+   "activeDeployment": {
+    "id": "37b2f893-7bde-42d6-9dd6-9a6fe81632cc",
+    "createdOn": "2026-09-14T16:54:24.285749Z",
+    "versions": [
+     {
+      "versionId": "0866464e-ffa4-4de8-a75e-895100a87bfa",
+      "percentage": 100
+     }
+    ]
+   },
+   "version": {
+    "id": "0866464e-ffa4-4de8-a75e-895100a87bfa",
+    "bindingCounts": {
+     "plain_text": 12,
+     "service": 6,
+     "secret_text": 4
+    },
+    "serviceBindings": [
+     "HZY_AIMS_SERVICE->hzy-test-aims",
+     "HZY_ASSETS_SERVICE->hzy-test-assets",
+     "HZY_CONSOLE_SERVICE->hzy-test-console",
+     "HZY_DRAIN_COORDINATOR->hzy-test-drain-coordinator",
+     "HZY_ENTERPRISE_SERVICE->hzy-test-enterprise",
+     "HZY_FINANCE_SERVICE->hzy-test-finance"
+    ],
+    "compatibilityDate": "2026-05-23"
+   },
+   "schedules": [
+    {
+     "cron": "0 16 * * *",
+     "created_on": "2026-09-15T00:43:42.403013Z",
+     "modified_on": "2026-09-15T00:43:42.403013Z"
+    }
+   ]
+  },
+  "hzy-test-enterprise": {
+   "activeDeployment": {
+    "id": "e13b7cbe-a671-49e3-b1a9-f3e800a7ee51",
+    "createdOn": "2026-09-14T21:18:30.323963Z",
+    "versions": [
+     {
+      "versionId": "bcf7157b-7a08-4e04-bb82-1a6d300c0d9a",
+      "percentage": 100
+     }
+    ]
+   },
+   "version": {
+    "id": "bcf7157b-7a08-4e04-bb82-1a6d300c0d9a",
+    "bindingCounts": {
+     "assets": 1,
+     "plain_text": 17,
+     "service": 1,
+     "secret_text": 1
+    },
+    "serviceBindings": [
+     "HZY_CONSOLE_SERVICE->hzy-test-console"
+    ],
+    "compatibilityDate": "2026-06-15"
+   },
+   "schedules": []
+  },
+  "hzy-test-console": {
+   "activeDeployment": {
+    "id": "01afdc2d-55af-4c9e-b06f-a5c4bbf42bc7",
+    "createdOn": "2026-09-15T00:39:12.863931Z",
+    "versions": [
+     {
+      "versionId": "29be09c1-b326-4474-86b6-990ae36a1e1d",
+      "percentage": 100
+     }
+    ]
+   },
+   "version": {
+    "id": "29be09c1-b326-4474-86b6-990ae36a1e1d",
+    "bindingCounts": {
+     "assets": 1,
+     "plain_text": 50,
+     "secret_text": 9
+    },
+    "serviceBindings": [],
+    "compatibilityDate": "2026-05-23"
+   },
+   "schedules": []
+  },
+  "hzy-test-aims": {
+   "activeDeployment": {
+    "id": "019f31c4-76cb-4d93-9b41-4e4b77107c71",
+    "createdOn": "2026-09-14T04:42:14.189596Z",
+    "versions": [
+     {
+      "versionId": "b4b4763b-57ac-4ad8-b4a8-67e042c31ad0",
+      "percentage": 100
+     }
+    ]
+   },
+   "version": {
+    "id": "b4b4763b-57ac-4ad8-b4a8-67e042c31ad0",
+    "bindingCounts": {
+     "assets": 1,
+     "plain_text": 59,
+     "secret_text": 2,
+     "service": 4
+    },
+    "serviceBindings": [
+     "HZY_ASSETS_SERVICE->hzy-test-assets",
+     "HZY_CONSOLE_SERVICE->hzy-test-console",
+     "HZY_DRAIN_COORDINATOR->hzy-test-drain-coordinator",
+     "HZY_FINANCE_SERVICE->hzy-test-finance"
+    ],
+    "compatibilityDate": "2026-06-15"
+   },
+   "schedules": []
+  },
+  "hzy-test-assets": {
+   "activeDeployment": {
+    "id": "2eb8f063-9e99-4d53-a4d8-de1286dcb6ff",
+    "createdOn": "2026-09-14T04:42:51.669581Z",
+    "versions": [
+     {
+      "versionId": "7f090cc0-b98f-4cec-ab2f-2612591c46ce",
+      "percentage": 100
+     }
+    ]
+   },
+   "version": {
+    "id": "7f090cc0-b98f-4cec-ab2f-2612591c46ce",
+    "bindingCounts": {
+     "assets": 1,
+     "plain_text": 59,
+     "service": 4,
+     "secret_text": 2
+    },
+    "serviceBindings": [
+     "HZY_AIMS_SERVICE->hzy-test-aims",
+     "HZY_CONSOLE_SERVICE->hzy-test-console",
+     "HZY_DRAIN_COORDINATOR->hzy-test-drain-coordinator",
+     "HZY_FINANCE_SERVICE->hzy-test-finance"
+    ],
+    "compatibilityDate": "2026-06-15"
+   },
+   "schedules": []
+  },
+  "hzy-test-drain-coordinator": {
+   "schedules": [],
+   "note": "service-binding target only; no cron trigger registered"
+  }
+ },
+ "tenant": "C000001",
+ "environment": "test",
+ "purpose": "INT-001 single-window readback: component versions/bindings/triggers, integration drain trigger closure, Enterprise identity bindings",
+ "dataRuntime": {
+  "version": "0.3.219-test.adr018-candidate.7",
+  "status": "ok",
+  "tenant": "C000001",
+  "deployment": "c000001-test-tenant-runtime",
+  "enabledAppsDb": {
+   "aims": "ok",
+   "assets": "ok",
+   "console": "ok",
+   "directory": "ok",
+   "finance": "ok",
+   "people": "ok"
+  },
+  "readVia": [
+   "http://127.0.0.1:18084/runtime/health",
+   "https://hzy-test-runtime.isme.dev/runtime/health"
+  ]
+ },
+ "integrationDrainTrigger": {
+  "question": "INT-001 gap: who actually triggers the Aims/Assets integration drain?",
+  "finding": "No scheduled trigger invokes the integration drain in this environment.",
+  "evidence": [
+   "Only hzy-test-gateway has a cron trigger: 0 16 * * * (daily 00:00 Asia/Shanghai).",
+   "deploy/test-env/cloudflare-gateway.mjs dispatches scheduled() by cron value: controller.cron === TEST_POLICY_SYNC_CRON runs policy sync, otherwise runIntegrationDrains.",
+   "TEST_POLICY_SYNC_CRON is '0 16 * * *', which equals the only registered cron, so the drain branch is unreachable by schedule.",
+   "hzy-test-aims, hzy-test-assets, hzy-test-enterprise, hzy-test-console and hzy-test-drain-coordinator have zero cron triggers.",
+   "Deployed gateway version 0866464e declares handlers [\"scheduled\",\"fetch\"] with annotation \"fix(gateway): allow bounded test policy sync completion\"."
+  ],
+  "remainingPath": "Drain runs request-driven only: app workers call the HZY_DRAIN_COORDINATOR service binding, and the protected /__test/drain/* control endpoints on the gateway.",
+  "consequence": "The wrapper keeps drain-dispatch code that no cron can reach; enabling scheduled drains requires registering a second, distinct cron (INT-305)."
+ },
+ "enterpriseIdentity": {
+  "oidcClient": {
+   "clientId": "enterprise",
+   "clientType": "public",
+   "authMode": "oidc",
+   "status": "active",
+   "homeUrl": "https://hzy-test.huizhi.yun/",
+   "logoutUrl": "https://hzy-test.huizhi.yun/api/auth/oidc-post-logout",
+   "source": "bundle"
+  },
+  "redirectUriRows": {
+   "enterprise": 0,
+   "note": "All 11 OIDC clients in hzy_console_test_local_20260910 have zero auth_client_redirect_uris rows; redirect URIs are carried by the policy bundle, so this is not an Enterprise-specific gap."
+  },
+  "serviceClient": {
+   "clientCode": "enterprise.runtime",
+   "clientType": "runtime",
+   "appCode": "enterprise",
+   "status": "active"
+  },
+  "grants": {
+   "active": 38,
+   "total": 38,
+   "sample": [
+    "aims:product-components:{create,edit,delete,move,read}",
+    "aims:product-features:*",
+    "aims:product-requests:*",
+    "aims:product-versions:*"
+   ]
+  },
+  "deploymentBindings": {
+   "console": "wiztek-test-console",
+   "people": "C000001-test-people",
+   "aims": "C000001-test-aims",
+   "assets": "C000001-test-assets",
+   "finance": "C000001-test-finance",
+   "enterprise": "C000001-test-enterprise"
+  },
+  "readVia": "read-only SQL against hzy_console_test_local_20260910 and the runtime config deploymentBindings; no credential material recorded"
+ },
+ "scope": "Shared test tenant C000001/test only. Production and other tenants were not read and must not be inferred from this window."
+}

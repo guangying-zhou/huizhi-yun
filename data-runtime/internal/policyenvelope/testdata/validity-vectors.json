@@ -1,0 +1,28 @@
+{
+  "description": "Shared TS/Go vectors for evaluatePolicyEnvelopeValidity / EvaluateValidity. issuedAt=1000000, expiresAt=issuedAt+60min unless noted.",
+  "constants": {
+    "longMaxAgeMs": 3600000,
+    "outageGraceMs": 86400000,
+    "renewalLivenessMs": 1800000
+  },
+  "cases": [
+    { "name": "fresh envelope is valid", "body": { "status": "active", "issuedAt": 1000000, "expiresAt": 4600000, "policyExpiresAt": null }, "renewal": null, "now": 1001000, "expect": { "verdict": "valid", "validUntil": 4600000 } },
+    { "name": "refused renewal does not shorten a still-valid envelope", "body": { "status": "active", "issuedAt": 1000000, "expiresAt": 4600000, "policyExpiresAt": null }, "renewal": { "state": "refused", "attemptedAt": 1900000 }, "now": 2000000, "expect": { "verdict": "valid", "validUntil": 4600000 } },
+    { "name": "expires exactly at expiresAt without renewal state", "body": { "status": "active", "issuedAt": 1000000, "expiresAt": 4600000, "policyExpiresAt": null }, "renewal": null, "now": 4600000, "expect": { "verdict": "expired", "validUntil": null } },
+    { "name": "renewal state ok grants no grace", "body": { "status": "active", "issuedAt": 1000000, "expiresAt": 4600000, "policyExpiresAt": null }, "renewal": { "state": "ok", "attemptedAt": 4650000 }, "now": 4660000, "expect": { "verdict": "expired", "validUntil": null } },
+    { "name": "platform outage enters grace bounded by syncer liveness", "body": { "status": "active", "issuedAt": 1000000, "expiresAt": 4600000, "policyExpiresAt": null }, "renewal": { "state": "platform_unavailable", "attemptedAt": 4650000 }, "now": 4660000, "expect": { "verdict": "grace", "validUntil": 6450000 } },
+    { "name": "explicit refusal grants no grace", "body": { "status": "active", "issuedAt": 1000000, "expiresAt": 4600000, "policyExpiresAt": null }, "renewal": { "state": "refused", "attemptedAt": 4650000 }, "now": 4660000, "expect": { "verdict": "expired", "validUntil": null } },
+    { "name": "stopped syncer loses grace after liveness window", "body": { "status": "active", "issuedAt": 1000000, "expiresAt": 4600000, "policyExpiresAt": null }, "renewal": { "state": "platform_unavailable", "attemptedAt": 4650000 }, "now": 6450000, "expect": { "verdict": "expired", "validUntil": null } },
+    { "name": "grace ends 24h after issuance", "body": { "status": "active", "issuedAt": 1000000, "expiresAt": 4600000, "policyExpiresAt": null }, "renewal": { "state": "platform_unavailable", "attemptedAt": 87300000 }, "now": 87400000, "expect": { "verdict": "expired", "validUntil": null } },
+    { "name": "last millisecond of grace", "body": { "status": "active", "issuedAt": 1000000, "expiresAt": 4600000, "policyExpiresAt": null }, "renewal": { "state": "platform_unavailable", "attemptedAt": 87300000 }, "now": 87399999, "expect": { "verdict": "grace", "validUntil": 87400000 } },
+    { "name": "policyExpiresAt caps grace", "body": { "status": "active", "issuedAt": 1000000, "expiresAt": 4600000, "policyExpiresAt": 4720000 }, "renewal": { "state": "platform_unavailable", "attemptedAt": 4650000 }, "now": 4660000, "expect": { "verdict": "grace", "validUntil": 4720000 } },
+    { "name": "no grace past policyExpiresAt", "body": { "status": "active", "issuedAt": 1000000, "expiresAt": 4600000, "policyExpiresAt": 4720000 }, "renewal": { "state": "platform_unavailable", "attemptedAt": 4710000 }, "now": 4720000, "expect": { "verdict": "expired", "validUntil": null } },
+    { "name": "signed suspension is inactive even inside its window", "body": { "status": "suspended", "issuedAt": 1000000, "expiresAt": 4600000, "policyExpiresAt": null }, "renewal": null, "now": 1001000, "expect": { "verdict": "inactive", "validUntil": null } },
+    { "name": "signed revocation is inactive during an outage", "body": { "status": "revoked", "issuedAt": 1000000, "expiresAt": 4600000, "policyExpiresAt": null }, "renewal": { "state": "platform_unavailable", "attemptedAt": 4650000 }, "now": 4660000, "expect": { "verdict": "inactive", "validUntil": null } },
+    { "name": "renewal attempt in the future is rejected", "body": { "status": "active", "issuedAt": 1000000, "expiresAt": 4600000, "policyExpiresAt": null }, "renewal": { "state": "platform_unavailable", "attemptedAt": 4670000 }, "now": 4660000, "expect": { "verdict": "expired", "validUntil": null } },
+    { "name": "renewal attempt before issuance is rejected", "body": { "status": "active", "issuedAt": 1000000, "expiresAt": 4600000, "policyExpiresAt": null }, "renewal": { "state": "platform_unavailable", "attemptedAt": 999000 }, "now": 4660000, "expect": { "verdict": "expired", "validUntil": null } },
+    { "name": "envelope issued in the future is rejected", "body": { "status": "active", "issuedAt": 1000000, "expiresAt": 4600000, "policyExpiresAt": null }, "renewal": null, "now": 999000, "expect": { "verdict": "expired", "validUntil": null } },
+    { "name": "invalid Platform response grants no grace", "body": { "status": "active", "issuedAt": 1000000, "expiresAt": 4600000, "policyExpiresAt": null }, "renewal": { "state": "invalid", "attemptedAt": 4650000 }, "now": 4660000, "expect": { "verdict": "expired", "validUntil": null } },
+    { "name": "unknown renewal state grants no grace", "body": { "status": "active", "issuedAt": 1000000, "expiresAt": 4600000, "policyExpiresAt": null }, "renewal": { "state": "unknown", "attemptedAt": 4650000 }, "now": 4660000, "expect": { "verdict": "expired", "validUntil": null } }
+  ]
+}

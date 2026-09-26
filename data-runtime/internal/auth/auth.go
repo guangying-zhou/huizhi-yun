@@ -25,10 +25,11 @@ import (
 )
 
 type Requirement struct {
-	StrictServiceClaims bool
-	AppCode             string
-	Scope               string
-	SourceAppCode       string
+	StrictServiceClaims      bool
+	RequireDeploymentBinding bool
+	AppCode                  string
+	Scope                    string
+	SourceAppCode            string
 }
 
 type Context struct {
@@ -328,6 +329,9 @@ func (a *Authenticator) authenticateJWT(r *http.Request, required Requirement) (
 	if tenant != "" && tenant != a.cfg.Tenant {
 		log.Printf("[auth] reject reason=tenant_mismatch method=%s path=%s token.tenant=%q cfg.tenant=%q sub=%q", r.Method, r.URL.Path, tenant, a.cfg.Tenant, subject)
 		return Context{}, httperror.New(http.StatusForbidden, "tenant_mismatch", "Token tenant is not enrolled on this Agent")
+	}
+	if required.RequireDeploymentBinding && strings.TrimSpace(a.cfg.DeploymentBindings[appCode]) == "" {
+		return Context{}, httperror.New(http.StatusForbidden, "deployment_binding_required", "An explicit application deployment binding is required")
 	}
 	expectedDeployment := a.cfg.DeploymentForApp(appCode)
 	if deployment != "" && deployment != expectedDeployment {

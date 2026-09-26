@@ -19,6 +19,91 @@ func TestConsoleRuntimeServiceDeploymentUsesAuthenticatedBinding(t *testing.T) {
 	}
 }
 
+func TestConsoleRuntimeServiceIdentityUsesLiveReadWithoutProvisioning(t *testing.T) {
+	database, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer database.Close()
+	adapter := &Adapter{db: database}
+	mock.ExpectQuery(`(?s)SELECT id,status,app_code,client_type,current_credential_id.*FROM service_clients`).
+		WithArgs(consoleRuntimeClientCode).
+		WillReturnRows(sqlmock.NewRows([]string{"id", "status", "app_code", "client_type", "current_credential_id"}).AddRow(64, "active", "console", "runtime", 4))
+	mock.ExpectQuery(`(?s)SELECT scc.id.*FROM service_client_credentials`).
+		WithArgs(int64(4), uint64(64), consoleRuntimeClientCode).
+		WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(4))
+	mock.ExpectQuery(`(?s)SELECT resource_code,action FROM service_client_grants`).
+		WithArgs(uint64(64)).
+		WillReturnRows(sqlmock.NewRows([]string{"resource_code", "action"}).AddRow("console:policy-bundle", "read"))
+	identity, err := adapter.ensureConsoleRuntimeServiceIdentity(context.Background(), "actor")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if identity.CredentialID != 4 || len(identity.Scopes) != 1 || identity.Scopes[0] != "console:policy-bundle:read" {
+		t.Fatalf("unexpected live identity: %+v", identity)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestConsoleRuntimeServiceIdentityDoesNotReactivateRevokedClient(t *testing.T) {
+	database, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer database.Close()
+	adapter := &Adapter{db: database}
+	mock.ExpectQuery(`(?s)SELECT id,status,app_code,client_type,current_credential_id.*FROM service_clients`).
+		WithArgs(consoleRuntimeClientCode).
+		WillReturnRows(sqlmock.NewRows([]string{"id", "status", "app_code", "client_type", "current_credential_id"}).AddRow(64, "inactive", "console", "runtime", 4))
+	if _, err := adapter.ensureConsoleRuntimeServiceIdentity(context.Background(), "actor"); err == nil {
+		t.Fatal("revoked client must fail closed without provisioning")
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestConsoleRuntimeServiceIdentityRejectsConflictingBinding(t *testing.T) {
+	database, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer database.Close()
+	adapter := &Adapter{db: database}
+	mock.ExpectQuery(`(?s)SELECT id,status,app_code,client_type,current_credential_id.*FROM service_clients`).
+		WithArgs(consoleRuntimeClientCode).
+		WillReturnRows(sqlmock.NewRows([]string{"id", "status", "app_code", "client_type", "current_credential_id"}).AddRow(64, "active", "another-app", "runtime", 4))
+	if _, err := adapter.ensureConsoleRuntimeServiceIdentity(context.Background(), "actor"); err == nil {
+		t.Fatal("conflicting client binding must fail closed without provisioning")
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestConsoleRuntimeServiceIdentityDoesNotRestoreRevokedCredential(t *testing.T) {
+	database, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer database.Close()
+	adapter := &Adapter{db: database}
+	mock.ExpectQuery(`(?s)SELECT id,status,app_code,client_type,current_credential_id.*FROM service_clients`).
+		WithArgs(consoleRuntimeClientCode).
+		WillReturnRows(sqlmock.NewRows([]string{"id", "status", "app_code", "client_type", "current_credential_id"}).AddRow(64, "active", "console", "runtime", 4))
+	mock.ExpectQuery(`(?s)SELECT scc.id.*FROM service_client_credentials`).
+		WithArgs(int64(4), uint64(64), consoleRuntimeClientCode).
+		WillReturnRows(sqlmock.NewRows([]string{"id"}))
+	if _, err := adapter.ensureConsoleRuntimeServiceIdentity(context.Background(), "actor"); err == nil {
+		t.Fatal("revoked credential must fail closed without provisioning")
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestServiceClientSecretMatchesHashOnlyMaterial(t *testing.T) {
 	adapter := &Adapter{}
 	secret := "hzy_cr_test_secret"

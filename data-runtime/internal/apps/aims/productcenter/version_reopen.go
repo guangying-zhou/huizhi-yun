@@ -19,13 +19,28 @@ type ProductVersionReopenInput struct {
 }
 
 func ReopenProductVersion(ctx context.Context, db *sql.DB, identity CommandIdentity, permit AuthorizationPermit, input ProductVersionReopenInput, sourceContext ...integrationoperation.TrustedContext) (CommandResult, error) {
+	return reopenProductVersion(ctx, identity, permit, input, sourceContext, func(authorize AuthorizeCommand, apply ApplyCommand) (CommandResult, error) {
+		return ExecuteCommand(ctx, db, identity, input, authorize, apply)
+	})
+}
+func ReopenProductVersionInTransaction(ctx context.Context, tx *sql.Tx, identity CommandIdentity, permit AuthorizationPermit, input ProductVersionReopenInput, sourceContext ...integrationoperation.TrustedContext) (CommandResult, error) {
+	result, err := reopenProductVersion(ctx, identity, permit, input, sourceContext, func(authorize AuthorizeCommand, apply ApplyCommand) (CommandResult, error) {
+		return ExecuteCommandInTransaction(ctx, tx, identity, input, authorize, apply)
+	})
+	if err != nil && tx != nil {
+		_ = tx.Rollback()
+	}
+	return result, err
+}
+func reopenProductVersion(ctx context.Context, identity CommandIdentity, permit AuthorizationPermit, input ProductVersionReopenInput, sourceContext []integrationoperation.TrustedContext, execute func(AuthorizeCommand, ApplyCommand) (CommandResult, error)) (CommandResult, error) {
+
 	if identity.Action != "product_versions:reopen" {
 		return CommandResult{}, invalid("product_command_identity_invalid", "版本更正命令不匹配")
 	}
 	if input.VersionID <= 0 || input.ReleaseRecordID <= 0 || input.ExpectedRevision == 0 || input.ExpectedVersionRevision == 0 || !utf8.ValidString(input.Reason) || strings.TrimSpace(input.Reason) == "" || utf8.RuneCountInString(input.Reason) > 2000 || strings.ContainsRune(input.Reason, '\x00') {
 		return CommandResult{}, invalid("product_version_reopen_invalid", "更正需要原发布记录、修订号和原因")
 	}
-	return ExecuteCommand(ctx, db, identity, input, func(ctx context.Context, tx *sql.Tx) error {
+	return execute(func(ctx context.Context, tx *sql.Tx) error {
 		return AuthorizeWorkspaceTransaction(ctx, tx, identity.ProductCode, identity.ActorUID, "product_versions", "reopen", permit)
 	}, func(ctx context.Context, tx *sql.Tx) (any, error) {
 		root, err := loadWorkspace(ctx, tx, identity.ProductCode)

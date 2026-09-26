@@ -34,13 +34,25 @@ func ValidateLegacyProductVersionScopeCriteria(input LegacyProductVersionScopeCr
 
 // Historical scope criteria can be completed without fabricating planning decisions.
 func UpdateLegacyProductVersionScopeCriteria(ctx context.Context, db *sql.DB, identity CommandIdentity, permit AuthorizationPermit, input LegacyProductVersionScopeCriteria) (CommandResult, error) {
+	return updateLegacyProductVersionScopeCriteria(ctx, identity, permit, input, func(payload any, authorize AuthorizeCommand, apply ApplyCommand) (CommandResult, error) {
+		return ExecuteCommand(ctx, db, identity, payload, authorize, apply)
+	})
+}
+
+func UpdateLegacyProductVersionScopeCriteriaInTransaction(ctx context.Context, tx *sql.Tx, identity CommandIdentity, permit AuthorizationPermit, input LegacyProductVersionScopeCriteria) (CommandResult, error) {
+	return updateLegacyProductVersionScopeCriteria(ctx, identity, permit, input, func(payload any, authorize AuthorizeCommand, apply ApplyCommand) (CommandResult, error) {
+		return ExecuteCommandInTransaction(ctx, tx, identity, payload, authorize, apply)
+	})
+}
+
+func updateLegacyProductVersionScopeCriteria(ctx context.Context, identity CommandIdentity, permit AuthorizationPermit, input LegacyProductVersionScopeCriteria, execute func(any, AuthorizeCommand, ApplyCommand) (CommandResult, error)) (CommandResult, error) {
 	if identity.Action != "product_versions:scope-legacy-criteria" {
 		return CommandResult{}, invalid("product_command_identity_invalid", "历史范围标准命令不匹配")
 	}
 	if err := ValidateLegacyProductVersionScopeCriteria(input); err != nil {
 		return CommandResult{}, err
 	}
-	return ExecuteCommand(ctx, db, identity, input, func(ctx context.Context, tx *sql.Tx) error {
+	return execute(input, func(ctx context.Context, tx *sql.Tx) error {
 		return AuthorizeWorkspaceTransaction(ctx, tx, identity.ProductCode, identity.ActorUID, "product_versions", "edit", permit)
 	}, func(ctx context.Context, tx *sql.Tx) (any, error) {
 		root, err := loadWorkspace(ctx, tx, identity.ProductCode)

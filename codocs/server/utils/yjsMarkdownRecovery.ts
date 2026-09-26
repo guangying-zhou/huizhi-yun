@@ -1,5 +1,5 @@
 import * as Y from 'yjs'
-import { downloadDocumentBuffer } from './oss'
+import { downloadDocumentBuffer, type RuntimeOSSClientOptions } from './oss'
 
 type YXmlChild = Y.XmlElement | Y.XmlText
 
@@ -159,8 +159,8 @@ export function yjsSnapshotToMarkdown(snapshot: Uint8Array) {
   return content
 }
 
-export async function recoverMarkdownFromYjsSnapshot(ossPath: string, docType?: string) {
-  const snapshot = await downloadDocumentBuffer(getYjsSnapshotPath(ossPath), docType)
+export async function recoverMarkdownFromYjsSnapshot(ossPath: string, docType?: string, options: RuntimeOSSClientOptions = {}) {
+  const snapshot = await downloadDocumentBuffer(getYjsSnapshotPath(ossPath), docType, options)
   if (!snapshot || snapshot.length === 0) return ''
   return yjsSnapshotToMarkdown(new Uint8Array(snapshot))
 }

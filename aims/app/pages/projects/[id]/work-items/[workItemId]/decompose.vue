@@ -10,13 +10,18 @@
  *
  * 详见 docs/Aims-Requirement-Decomposition-Design.md
  */
-import { useMarkdownOutline, type OutlineNode } from '~/composables/useMarkdownOutline'
+import { useAimsModule } from '../../../../../../layer/useAimsModule'
+import { useMarkdownOutline, type OutlineNode } from '../../../../../composables/useMarkdownOutline'
 import type {
   DecomposeMode as Mode,
   RequirementCategory,
   UiNode
-} from '~/types/decompose'
+} from '../../../../../types/decompose'
+import DecomposeRequirementRow from '../../../../../components/decompose/DecomposeRequirementRow.vue'
 
+
+// 同一份代码供独立应用与企业宿主使用：非宿主模式下 moduleUrl 原样返回路径。
+const { moduleUrl } = useAimsModule()
 definePageMeta({
   layoutHeader: true,
   layoutHeaderTitle: '需求分解',
@@ -156,7 +161,7 @@ async function loadContext() {
   loadingContext.value = true
   try {
     const res = await $fetch<{ code: number, data: DecomposeContext }>(
-      `/api/v1/work-items/${workItemId.value}/decompose-context`
+      moduleUrl(`/api/v1/work-items/${workItemId.value}/decompose-context`)
     )
     context.value = res.data
     if (res.data.sourceDocumentCandidates.length > 0) {
@@ -176,7 +181,7 @@ async function loadDocumentContent() {
   loadingContent.value = true
   try {
     const res = await $fetch<DocContentResponse>(
-      `/api/v1/codocs/documents/${encodeURIComponent(selectedDocUuid.value)}/content`,
+      moduleUrl(`/api/v1/codocs/documents/${encodeURIComponent(selectedDocUuid.value)}/content`),
       {
         query: {
           projectId: projectId.value
@@ -487,7 +492,7 @@ async function doSubmit() {
       items: serializedItems
     }
     const res = await $fetch<{ code: number, data: { createdWorkItems: unknown[], sourceWorkItemStatus: string } }>(
-      `/api/v1/work-items/${workItemId.value}/decompose-submit`,
+      moduleUrl(`/api/v1/work-items/${workItemId.value}/decompose-submit`),
       { method: 'POST', body: payload }
     )
     toast.add({
@@ -497,7 +502,7 @@ async function doSubmit() {
     })
     submitDialogOpen.value = false
     // 跳回工作项详情页
-    navigateTo(`/projects/${projectId.value}/board/${workItemId.value}/execution`)
+    navigateTo(moduleUrl(`/projects/${projectId.value}/board/${workItemId.value}/execution`))
   } catch (error: unknown) {
     const msg = (error as { data?: { message?: string } })?.data?.message || (error as Error).message
     toast.add({ title: '提交失败', description: msg, color: 'error' })

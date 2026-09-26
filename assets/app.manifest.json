@@ -19,6 +19,13 @@
   },
   "resources": [
     {
+      "code": "ip-asset",
+      "name": "知识产权资产服务",
+      "description": "服务能力 assets:ip-asset:read/create/edit：按用户对象范围读取或维护知识产权资产；不授予用户角色",
+      "actions": ["read", "create", "edit"],
+      "sortOrder": 72
+    },
+    {
       "code": "dashboard",
       "name": "工作台",
       "description": "Assets 工作台、首页看板、待处理预警和资产摘要",
@@ -33,10 +40,24 @@
       "sortOrder": 10
     },
     {
+      "code": "asset-item",
+      "name": "资产台账读取服务",
+      "description": "服务能力 assets:asset-item:read：在用户精确对象范围内读取字典、实物资产和资源资产列表及详情；不授予用户角色",
+      "actions": ["read"],
+      "sortOrder": 11
+    },
+    {
+      "code": "digital-asset",
+      "name": "数字资产服务",
+      "description": "服务能力 assets:digital-asset:read/create/edit：在用户精确对象范围内读取或写入数字资产；不授予用户角色",
+      "actions": ["read", "create", "edit"],
+      "sortOrder": 12
+    },
+    {
       "code": "product",
       "name": "产品目录服务",
-      "description": "服务能力 assets:product:read：读取有界产品主档目录及变更水位；调用方由 Console 精确 service grant 授权",
-      "actions": ["read"],
+      "description": "服务能力 assets:product:read/edit：读取或维护有界产品主档；调用方由 Console 精确 service grant 授权",
+      "actions": ["read", "edit"],
       "sortOrder": 14
     },
     {
@@ -143,6 +164,13 @@
       "description": "诊断并受控重放 Assets 发起的跨应用可靠操作",
       "actions": ["view", "replay"],
       "sortOrder": 95
+    },
+    {
+      "code": "notifications-due",
+      "name": "到期通知检查点服务",
+      "description": "统一调度路径按 generation 扫描到期与离职未回收条件并保存通知检查点的精确服务能力，不授予普通用户角色",
+      "actions": ["execute"],
+      "sortOrder": 96
     },
     {
       "code": "admin",

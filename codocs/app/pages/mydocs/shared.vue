@@ -1,11 +1,13 @@
 <script setup lang="ts">
-definePageMeta({
-  layout: 'default'
-})
+import { useDocumentPreviewBootstrap } from '../../composables/useDocumentPreviewBootstrap'
+import { useResizablePanel } from '../../composables/useResizablePanel'
+import { useCodocsModule } from '../../../layer/useCodocsModule'
+import { useAccountStore } from '@hzy/foundation/app/stores/account'
 
 usePageTitle('协同文档中心')
 
 const { user } = useAuth()
+const { moduleUrl, documentUrl, cacheKey } = useCodocsModule()
 const router = useRouter()
 const accountStore = useAccountStore()
 const { hasPermission, loadPermissions } = usePermissions()
@@ -123,7 +125,7 @@ const currentQueryKey = computed(() => JSON.stringify({
 }))
 
 const fetchCollabDocs = async () => {
-  const res = await $fetch<CollabDocsResponse>('/api/collab-docs', {
+  const res = await $fetch<CollabDocsResponse>(moduleUrl('/api/collab-docs'), {
     params: {
       category: category.value,
       scope: scope.value,
@@ -141,7 +143,7 @@ const fetchCollabDocs = async () => {
 }
 
 const { data, pending, refresh } = await useAsyncData(
-  'collab-docs',
+  cacheKey('collab-docs'),
   fetchCollabDocs,
   {
     watch: [category, scope, searchKeyword, selectedDeptCode, selectedOwnerUid],
@@ -169,7 +171,9 @@ const sharedTabs = computed(() => [
 const visibleItems = computed(() => {
   if (category.value !== 'shared') return items.value
   if (sharedTab.value === 'received') {
-    return items.value.filter(item => item.relationTypes.includes('shared_to_me'))
+    // Shares created by the current Runtime use shared_with_me; retain the
+    // older shared_to_me relation used by existing collaboration records.
+    return items.value.filter(item => item.relationTypes.some(type => type === 'shared_with_me' || type === 'shared_to_me'))
   }
   return items.value.filter(item => item.relationTypes.includes('shared_by_me'))
 })
@@ -284,7 +288,7 @@ const loadPreview = async (uuid: string) => {
   previewReadonly.value = true
 
   try {
-    const response = await $fetch<DocumentPreviewResponse>(`/api/documents/${uuid}`)
+    const response = await $fetch<DocumentPreviewResponse>(moduleUrl(`/api/documents/${uuid}`))
     if (response.success) {
       previewContent.value = response.data?.content || ''
       previewAbstract.value = response.data?.ai_abstract || ''
@@ -341,7 +345,7 @@ const openDocument = () => {
     })
   }
 
-  router.push(`/documents/${selectedDoc.value.uuid}?fromCollab=1`)
+  router.push({ path: documentUrl(selectedDoc.value.uuid), query: { fromCollab: '1' } })
 }
 
 const handleSealSuccess = async () => {
@@ -574,7 +578,7 @@ const handleReceiveSuccess = async () => {
                 </div>
                 <div class="shrink-0">
                   <span class="text-muted">协同关系：</span>
-                  <span class="font-medium">{{ selectedDoc.relationLabels.join('、') }}</span>
+                  <span class="font-medium">{{ selectedDoc.relationLabels.map(label => label === 'shared_with_me' ? '共享给我' : label).join('、') }}</span>
                 </div>
                 <div class="shrink-0 text-muted">
                   |

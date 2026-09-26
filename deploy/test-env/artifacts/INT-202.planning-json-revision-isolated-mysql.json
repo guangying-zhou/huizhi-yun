@@ -1,0 +1,19 @@
+{
+  "schema": "hzy.enterprise.migration-json-revision-verification.v1",
+  "executedAt": "2026-09-15T03:41:11Z",
+  "environment": "fresh random /tmp MySQL instance created by temporary-mysql-harness; automatically removed",
+  "businessData": "synthetic only",
+  "command": "node data-runtime/scripts/test-enterprise-migration-conflicts-mysql.mjs",
+  "result": "PASS",
+  "checks": [
+    "invalid product-planning command JSON is blocking",
+    "unknown operation_code and command_schema_version pairing is blocking",
+    "missing source master and mismatched JSON requestBizId references are blocking",
+    "decreasing product activity revision ordered by audit id is blocking",
+    "all conflict identities are domain-separated SHA-256 values without JSON payload or business keys",
+    "apply rejects the reviewed conflict plan before opening a migration connection or creating a target"
+  ],
+  "productionAccess": false,
+  "deployment": false,
+  "temporaryInstanceCleaned": true
+}

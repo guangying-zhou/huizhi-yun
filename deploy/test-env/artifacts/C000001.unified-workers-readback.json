@@ -1,0 +1,59 @@
+{
+  "checkedAt": "2026-09-14T16:15:10.015Z",
+  "environment": "test",
+  "workers": [
+    {
+      "worker": "hzy-test-gateway",
+      "versionId": "6c281245-1f1d-4b15-a6e8-ccc2c4f6fe29",
+      "traffic": 100,
+      "testPrefixEnabled": true,
+      "serviceBindings": [
+        {
+          "binding": "HZY_AIMS_SERVICE",
+          "service": "hzy-test-aims"
+        },
+        {
+          "binding": "HZY_ASSETS_SERVICE",
+          "service": "hzy-test-assets"
+        },
+        {
+          "binding": "HZY_CONSOLE_SERVICE",
+          "service": "hzy-test-console"
+        },
+        {
+          "binding": "HZY_DRAIN_COORDINATOR",
+          "service": "hzy-test-drain-coordinator"
+        },
+        {
+          "binding": "HZY_ENTERPRISE_SERVICE",
+          "service": "hzy-test-enterprise"
+        },
+        {
+          "binding": "HZY_FINANCE_SERVICE",
+          "service": "hzy-test-finance"
+        }
+      ],
+      "secretBindingsPreserved": [
+        "HZY_DRAIN_CONTROL_TOKEN",
+        "HZY_PLATFORM_INTERNAL_TOKEN",
+        "HZY_TENANT_GATEWAY_INTERNAL_TOKEN",
+        "HZY_TENANT_GATEWAY_REGISTRY_JSON"
+      ]
+    },
+    {
+      "worker": "hzy-test-enterprise",
+      "versionId": "579ef868-1738-4cfe-94c5-49caa7e26a35",
+      "traffic": 100,
+      "testPrefixEnabled": true,
+      "serviceBindings": [
+        {
+          "binding": "HZY_CONSOLE_SERVICE",
+          "service": "hzy-test-console"
+        }
+      ],
+      "secretBindingsPreserved": [
+        "HZY_TENANT_GATEWAY_INTERNAL_TOKEN"
+      ]
+    }
+  ]
+}

@@ -35,6 +35,7 @@ var requiredTables = []string{
 	"flow_tasks",
 	"flow_actions",
 	"flow_actionable_outbox",
+	"flow_notification_outbox",
 	"flow_callback_logs",
 	"service_command_receipt",
 }

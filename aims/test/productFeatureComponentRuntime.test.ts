@@ -10,7 +10,7 @@ import * as workspace from '../server/utils/productWorkspaceInput'
 
 interface RuntimeArgs { scope: string, idempotencyKey?: string, query: { current_user: string }, body: { input: Record<string, unknown>, authorization: { facts: { actor_uid: string } } } }
 
-const compiled = ts.transpileModule(readFileSync(new URL('../server/api/v1/products/[productCode]/features/[featureId]/component.post.ts', import.meta.url), 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText
+const compiled = ts.transpileModule(readFileSync(new URL('../server/utils/productFeatureComponentRuntime.ts', import.meta.url), 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText
 function harness(options: { body?: unknown, query?: Record<string, unknown>, key?: string | null, denied?: boolean, response?: unknown } = {}) {
   const calls: { path: string, args: RuntimeArgs }[] = []
   const permissions: string[] = []
@@ -35,7 +35,8 @@ function harness(options: { body?: unknown, query?: Record<string, unknown>, key
     if (name.endsWith('/aimsRuntimeForward')) return { runtimeEnvelopeError: () => createError({ statusCode: 409 }) }
     throw new Error(`Unexpected dependency ${name}`)
   } })
-  return { run: (action: string) => exports.default!({}, action), calls, permissions, headers }
+  // The route only delegates to this handler; the action label is descriptive.
+  return { run: (_action: string) => exports.handleProductFeatureComponent!({}, undefined as never), calls, permissions, headers }
 }
 
 test('feature classification BFF binds trusted actor, product scope and idempotency without browser authority', async () => {
@@ -67,4 +68,8 @@ test('invalid or unauthorized requests never reach runtime; unavailable runtime 
   await assert.rejects(harness({ response: { handled: true, data: { code: 1 } } }).run('move'), { statusCode: 409 })
 })
 
-
+test('the component route only delegates to the tested runtime handler', () => {
+  const route = readFileSync(new URL('../server/api/v1/products/[productCode]/features/[featureId]/component.post.ts', import.meta.url), 'utf8')
+  assert.match(route, /import \{ handleProductFeatureComponent \} from '..\/..\/..\/..\/..\/..\/utils\/productFeatureComponentRuntime'/)
+  assert.match(route, /export default defineEventHandler\(event => handleProductFeatureComponent\(event\)\)/)
+})

@@ -1,4 +1,5 @@
 import { defineStore } from 'pinia'
+import { useAimsModule } from '../../layer/useAimsModule'
 import type {
   WorkItem,
   WorkItemDetail,
@@ -7,7 +8,7 @@ import type {
   UpdateWorkItemRequest,
   WorkItemListQuery,
   PaginatedList
-} from '~/types/aims'
+} from '../types/aims'
 
 type RawWorkItem = Partial<WorkItem> & Record<string, unknown>
 
@@ -95,6 +96,8 @@ function groupWorkItemsByStatus(items: WorkItem[]) {
 }
 
 export const useWorkItemStore = defineStore('workItem', () => {
+  // 同一份 store 供独立应用与企业宿主使用：非宿主模式下 moduleUrl 原样返回路径。
+  const { moduleUrl } = useAimsModule()
   // ---- State ----
   const items = ref<WorkItem[]>([])
   const total = ref(0)
@@ -122,7 +125,7 @@ export const useWorkItemStore = defineStore('workItem', () => {
       if (query?.pageSize) params.set('page_size', String(query.pageSize))
 
       const res = await $fetch<{ code: number, data: PaginatedList<WorkItem> | unknown }>(
-        `/api/v1/projects/${projectId}/work-items?${params.toString()}`
+        moduleUrl(`/api/v1/projects/${projectId}/work-items?${params.toString()}`)
       )
       if (res.code === 0) {
         items.value = normalizeWorkItemList(res.data)
@@ -143,7 +146,7 @@ export const useWorkItemStore = defineStore('workItem', () => {
       if (opts?.versionId) params.set('version_id', String(opts.versionId))
 
       const res = await $fetch<{ code: number, data: Record<string, WorkItem[]> | PaginatedList<WorkItem> | unknown }>(
-        `/api/v1/projects/${projectId}/work-items?${params.toString()}`
+        moduleUrl(`/api/v1/projects/${projectId}/work-items?${params.toString()}`)
       )
       if (res.code === 0) {
         if (res.data && typeof res.data === 'object' && Array.isArray((res.data as { items?: unknown }).items)) {
@@ -170,7 +173,7 @@ export const useWorkItemStore = defineStore('workItem', () => {
     loading.value = true
     try {
       const res = await $fetch<{ code: number, data: WorkItemDetail }>(
-        `/api/v1/work-items/${id}`
+        moduleUrl(`/api/v1/work-items/${id}`)
       )
       if (res.code === 0) {
         currentItem.value = res.data
@@ -182,7 +185,7 @@ export const useWorkItemStore = defineStore('workItem', () => {
 
   async function createItem(projectId: number, data: CreateWorkItemRequest) {
     const res = await $fetch<{ code: number, data: WorkItem }>(
-      `/api/v1/projects/${projectId}/work-items`,
+      moduleUrl(`/api/v1/projects/${projectId}/work-items`),
       { method: 'POST', body: data }
     )
     if (res.code === 0) {
@@ -196,7 +199,7 @@ export const useWorkItemStore = defineStore('workItem', () => {
 
   async function updateItem(id: number, data: UpdateWorkItemRequest) {
     const res = await $fetch<{ code: number, data: WorkItem }>(
-      `/api/v1/work-items/${id}`,
+      moduleUrl(`/api/v1/work-items/${id}`),
       { method: 'PUT', body: data }
     )
     if (res.code === 0) {
@@ -212,7 +215,7 @@ export const useWorkItemStore = defineStore('workItem', () => {
   }
 
   async function deleteItem(id: number) {
-    await $fetch(`/api/v1/work-items/${id}`, { method: 'DELETE' })
+    await $fetch(moduleUrl(`/api/v1/work-items/${id}`), { method: 'DELETE' })
     items.value = items.value.filter(i => i.id !== id)
     total.value--
     if (currentItem.value?.id === id) {
@@ -222,7 +225,7 @@ export const useWorkItemStore = defineStore('workItem', () => {
 
   async function batchUpdate(ids: number[], changes: Record<string, unknown>) {
     const res = await $fetch<{ code: number, data: { updated: number } }>(
-      '/api/v1/work-items/batch',
+      moduleUrl('/api/v1/work-items/batch'),
       { method: 'PATCH', body: { ids, changes } }
     )
     return res.data
@@ -231,7 +234,7 @@ export const useWorkItemStore = defineStore('workItem', () => {
   // ---- Comments ----
   async function addComment(workItemId: number, content: string) {
     const res = await $fetch<{ code: number, data: WorkItemComment }>(
-      `/api/v1/work-items/${workItemId}/comments`,
+      moduleUrl(`/api/v1/work-items/${workItemId}/comments`),
       { method: 'POST', body: { content } }
     )
     if (res.code === 0 && currentItem.value?.id === workItemId) {

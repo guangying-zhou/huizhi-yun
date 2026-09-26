@@ -1,0 +1,36 @@
+{
+  "observedAt": "2026-09-14T04:56:22.050Z",
+  "applied": true,
+  "schema": "hzy_assets_test_local_20260910",
+  "instanceId": "37d8994e-4c12-11ee-afad-8cb2da2e572b",
+  "migrations": [
+    {
+      "file": "assets/docs/migrations/20260710_assets_integration_operations.sql",
+      "createStatementsSha256": "2f4ba39436ee0a74a16becd01ad9c0d6db2724bf80a83e8bc521c6c3ea9aa854"
+    },
+    {
+      "file": "assets/docs/migrations/20260711_assets_dead_letter_actionable_lifecycle.sql",
+      "createStatementsSha256": "25776dc6c673ceab625c2dcdaf7168f929997bb9e566d5eb78ddbcf82d20c574"
+    }
+  ],
+  "tables": [
+    {
+      "table": "integration_operation",
+      "rows": 0,
+      "ddlSha256": "cdaefa8ffa3351d0bc71b2a80152a2ba080faff95d9b6d86da55ef7868038387"
+    },
+    {
+      "table": "integration_operation_attempt",
+      "rows": 0,
+      "ddlSha256": "3f16909348c6a3454b73c2cb364648090ae57ccb79f810af30b801d96afbfeb6"
+    },
+    {
+      "table": "integration_operation_dead_letter_actionable",
+      "rows": 0,
+      "ddlSha256": "2116dda68493446dd9f9f79b6720e9afb2c7af5cda1ad522e442936ec821ef51"
+    }
+  ],
+  "enforcedChecks": 5,
+  "businessRowsWritten": false,
+  "existingTablesAltered": false
+}

@@ -1,3 +1,4 @@
+import { readSchedulerOwnership, schedulerOwnershipSelection } from '~~/server/utils/tenantSchedulerOwnership'
 import type { RowDataPacket } from 'mysql2/promise'
 import { ok, requireString } from '~~/server/utils/api'
 import { queryRow, queryRows } from '~~/server/utils/db'
@@ -179,6 +180,13 @@ export default defineEventHandler(async (event) => {
       apiBase: deployment.api_base,
       ...(runtimeEndpoint ? { dataRuntime: { endpoint: runtimeEndpoint } } : {})
     }
+  }
+
+  const ownership = await readSchedulerOwnership(site.tenant_code, site.environment)
+  const aimsDeployments = deployments.filter(item => item.app_code === 'aims')
+  const selection = schedulerOwnershipSelection(ownership, runtimeInstance, aimsDeployments.length === 1 ? aimsDeployments[0]?.deployment_code : undefined)
+  if (selection) {
+    apps.aims = { ...((apps.aims || {}) as Record<string, unknown>), enterpriseScheduler: selection }
   }
 
   return ok({

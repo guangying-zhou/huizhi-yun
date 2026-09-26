@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs'
 import test from 'node:test'
 
 const source = readFileSync(
-  new URL('../server/api/v1/project-documents/accessible.get.ts', import.meta.url),
+  new URL('../server/utils/accessibleProjectDocuments.ts', import.meta.url),
   'utf8'
 )
 
@@ -20,4 +20,18 @@ test('repository documents use project membership instead of Codocs UUID access 
   assert.match(branch, /allowedDocumentIds\.add\(doc\.id\)/)
   assert.match(branch, /accessById\.set\(doc\.id, access\)/)
   assert.doesNotMatch(branch, /checkCodocsDocumentAccess/)
+})
+
+test('Codocs denial and dependency errors never fall back to project membership', () => {
+  const branch = source.slice(source.indexOf('const uuid = documentUuid(doc)'))
+  assert.doesNotMatch(branch, /directProjectMemberAccess/)
+  assert.match(branch, /if \(!access.allowed\) return/)
+  assert.match(branch, /if \(status === 403 \|\| status === 404\) return/)
+  assert.match(branch, /throw error/)
+  assert.doesNotMatch(source, /updateCodocsDocumentAccessPolicy|canRepairMissingSourcePolicy/)
+})
+
+test('empty project folders are retained only for project members', () => {
+  assert.match(source, /filter\(doc => doc.isFolder && projectContext.isMember/)
+  assert.match(source, /isDirectProjectDocument\(doc, projectId, projectContext.projectCode\)/)
 })

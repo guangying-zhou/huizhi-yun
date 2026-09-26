@@ -1,0 +1,52 @@
+TAP version 13
+# Subtest: the menu is organised by business area, never by owning application
+ok 1 - the menu is organised by business area, never by owning application
+  ---
+  duration_ms: 0.823474
+  type: 'test'
+  ...
+# Subtest: every menu target is a registered Host page and appears once
+ok 2 - every menu target is a registered Host page and appears once
+  ---
+  duration_ms: 0.164498
+  type: 'test'
+  ...
+# Subtest: an area or group nobody contributed to is dropped, not shown empty
+ok 3 - an area or group nobody contributed to is dropped, not shown empty
+  ---
+  duration_ms: 0.129966
+  type: 'test'
+  ...
+# Subtest: composition refuses targets outside the module, off the route table or in an unknown group
+ok 4 - composition refuses targets outside the module, off the route table or in an unknown group
+  ---
+  duration_ms: 1.796685
+  type: 'test'
+  ...
+# Subtest: menu labels follow the specification rather than the source application
+ok 5 - menu labels follow the specification rather than the source application
+  ---
+  duration_ms: 0.209086
+  type: 'test'
+  ...
+# Subtest: object workspaces resolve to registered pages of their own module
+ok 6 - object workspaces resolve to registered pages of their own module
+  ---
+  duration_ms: 0.455929
+  type: 'test'
+  ...
+# Subtest: an object menu target that is not a registered page is refused at build time
+ok 7 - an object menu target that is not a registered page is refused at build time
+  ---
+  duration_ms: 0.302087
+  type: 'test'
+  ...
+1..7
+# tests 7
+# suites 0
+# pass 7
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 66.963457

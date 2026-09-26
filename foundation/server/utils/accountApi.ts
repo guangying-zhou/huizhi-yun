@@ -14,6 +14,7 @@ import { getHeader, type H3Event } from 'h3'
 import type { AccountUser } from '../../app/types/account'
 import { resolveConsoleRuntimeBaseUrl } from './consoleRuntime'
 import { requestServiceAccessToken } from './serviceOidc'
+import { consoleServiceFetch } from './consoleServiceBinding'
 
 type ConsoleAuditFetch = <T>(
   url: string,
@@ -71,8 +72,13 @@ function resolveConsoleAuditBaseUrl(config: Record<string, unknown>) {
   ]) || process.env.HZY_CONSOLE_API_URL || process.env.HZY_CONSOLE_URL || resolveConsoleRuntimeBaseUrl(config) || '')
 }
 
-async function fetchConsoleAuditApi<T>(path: string, body: Record<string, unknown>) {
-  const config = useRuntimeConfig() as unknown as Record<string, unknown>
+export interface OperationAuditOptions {
+  event?: H3Event
+  idempotencyKey?: string
+}
+
+async function fetchConsoleAuditApi<T>(path: string, body: Record<string, unknown>, options: OperationAuditOptions = {}) {
+  const config = useRuntimeConfig(options.event) as unknown as Record<string, unknown>
   const baseUrl = resolveConsoleAuditBaseUrl(config)
   if (!baseUrl) {
     throw new Error('Console audit API is not configured')
@@ -80,19 +86,22 @@ async function fetchConsoleAuditApi<T>(path: string, body: Record<string, unknow
 
   const accessToken = await requestServiceAccessToken({
     audience: 'audit',
-    scope: 'audit:write'
+    scope: 'audit:write',
+    event: options.event
   })
 
-  const fetchConsoleAudit = $fetch as unknown as ConsoleAuditFetch
-  return await fetchConsoleAudit<T>(`${baseUrl}${path}`, {
+  const request = {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${accessToken}`,
-      'Idempotency-Key': `foundation:audit:${globalThis.crypto.randomUUID()}`
+      'Idempotency-Key': options.idempotencyKey || `foundation:audit:${globalThis.crypto.randomUUID()}`
     },
     body,
     timeout: 5000
-  })
+  } as const
+  if (options.event) return await consoleServiceFetch<T>(options.event, `${baseUrl}${path}`, request)
+  const fetchConsoleAudit = $fetch as unknown as ConsoleAuditFetch
+  return await fetchConsoleAudit<T>(`${baseUrl}${path}`, request)
 }
 
 export function getAccountApiConfig() {
@@ -241,9 +250,9 @@ interface LoginAuditPayload {
  * }).catch(() => {})
  * ```
  */
-export async function reportOperationAudit(payload: OperationAuditPayload): Promise<void> {
+export async function reportOperationAudit(payload: OperationAuditPayload, options: OperationAuditOptions = {}): Promise<void> {
   try {
-    const runtimeConfig = useRuntimeConfig() as unknown as {
+    const runtimeConfig = useRuntimeConfig(options.event) as unknown as {
       public?: { appCode?: string, appName?: string }
     }
     const appName = runtimeConfig.public?.appCode || runtimeConfig.public?.appName || 'external'
@@ -258,16 +267,16 @@ export async function reportOperationAudit(payload: OperationAuditPayload): Prom
       result: payload.result || 'success',
       operatorUid: payload.operatorUid || null,
       operatorUserId: payload.operatorUserId ?? null
-    })
-  } catch (error: unknown) {
-    console.error('[Foundation.reportOperationAudit] failed:', getErrorMessage(error))
+    }, options)
+  } catch {
+    console.error('[Foundation.reportOperationAudit] failed')
   }
 }
 
 export async function reportLoginAudit(payload: LoginAuditPayload): Promise<void> {
   try {
     await fetchConsoleAuditApi<ApiResponse<null>>('/api/v1/login-logs', { ...payload })
-  } catch (error: unknown) {
-    console.error('[Foundation.reportLoginAudit] failed:', getErrorMessage(error))
+  } catch {
+    console.error('[Foundation.reportLoginAudit] failed')
   }
 }

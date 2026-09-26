@@ -1,0 +1,17 @@
+{
+  "schema": "hzy.enterprise.migration-unknown-json-verification.v1",
+  "command": "node data-runtime/scripts/test-enterprise-migration-conflicts-mysql.mjs",
+  "result": "PASS",
+  "scope": "random isolated MySQL; synthetic unknown snapshot JSON",
+  "checks": [
+    "populated unregistered JSON field emits redacted BlockingConflicts with row count",
+    "registered project audit JSON remains subject to its semantic validator",
+    "unregistered planning command family fails closed",
+    "apply rejects conflict plans before target creation"
+  ],
+  "candidateCodeTableCount": 151,
+  "activatedEvidenceTableCount": 150,
+  "businessDataAccess": false,
+  "deployment": false,
+  "temporaryInstanceCleaned": true
+}

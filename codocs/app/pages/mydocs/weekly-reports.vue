@@ -1,13 +1,18 @@
 <script setup lang="ts">
+import { useDocumentPreviewBootstrap } from '../../composables/useDocumentPreviewBootstrap'
+import { useResizablePanel } from '../../composables/useResizablePanel'
+import { useCodocsModule } from '../../../layer/useCodocsModule'
+import { createCreationAttempt } from '../../../layer/creationAttempt.mjs'
+
 /**
  * 个人工作周报页面
  * 左侧日历（按周选择），右侧查看/编辑周报
  * 参照部门周报，简化为个人使用（无部门选择）
  */
 
-definePageMeta({ layout: 'default' })
-
 usePageTitle('工作周报')
+const { moduleUrl, documentUrl, cacheKey } = useCodocsModule()
+const weeklyReportCreationAttempt = createCreationAttempt()
 
 interface WeeklyReportItem {
   uuid: string
@@ -55,7 +60,7 @@ const getErrorMessage = (error: unknown, fallback: string) => {
 }
 
 const toast = useToast()
-const { user, userRealname, userDeptCode } = useAuth()
+const { user, userRealname } = useAuth()
 const { setPayload: setDocumentPreviewBootstrap } = useDocumentPreviewBootstrap()
 const uid = computed(() => user.value || 'user1')
 const { panelWidth, panelCollapsed, onResizeStart, showPanel } = useResizablePanel(320)
@@ -84,11 +89,10 @@ const submitReport = async () => {
   if (!selectedReport.value) return
   isSubmitting.value = true
   try {
-    await $fetch(`/api/documents/${selectedReport.value.uuid}`, {
+    await $fetch(moduleUrl(`/api/documents/${selectedReport.value.uuid}`), {
       method: 'PATCH',
       body: {
-        readonly_flag: true,
-        dept_code: userDeptCode.value || undefined
+        readonly_flag: true
       }
     })
     selectedReport.value.readonly_flag = 1
@@ -247,7 +251,7 @@ const fetchReports = async () => {
 
   for (const yr of yearsToFetch) {
     try {
-      const res = await $fetch<WeeklyReportListResponse>('/api/personal-weekly-reports/list', {
+      const res = await $fetch<WeeklyReportListResponse>(moduleUrl('/api/personal-weekly-reports/list'), {
         query: { owner: uid.value, year: yr }
       })
       if (res.success && res.data?.items) {
@@ -317,7 +321,7 @@ const checkSelectedWeek = async () => {
 const loadReport = async (report: WeeklyReportItem) => {
   previewLoading.value = true
   try {
-    const docRes = await $fetch<DocumentContentResponse>(`/api/documents/${report.uuid}`, {
+    const docRes = await $fetch<DocumentContentResponse>(moduleUrl(`/api/documents/${report.uuid}`), {
       params: { uid: uid.value }
     })
     if (docRes.success && docRes.data) {
@@ -337,9 +341,12 @@ const createReport = async () => {
   if (selectedWeek.value === null || !uid.value) return
 
   isCreating.value = true
+  const payload = { year: selectedWeekYear.value, week: selectedWeek.value }
+  const attemptKey = weeklyReportCreationAttempt.keyFor(cacheKey('weekly-report-create'), payload)
   try {
-    const res = await $fetch<CreateWeeklyReportResponse>('/api/personal-weekly-reports/create', {
+    const res = await $fetch<CreateWeeklyReportResponse>(moduleUrl('/api/personal-weekly-reports/create'), {
       method: 'POST',
+      headers: { 'Idempotency-Key': attemptKey },
       body: {
         owner_uid: uid.value,
         owner_realname: userRealname.value || '',
@@ -349,8 +356,9 @@ const createReport = async () => {
     })
 
     if (res.success && res.data) {
+      weeklyReportCreationAttempt.complete(attemptKey)
       await fetchReports()
-      navigateTo(`/documents/${res.data.uuid}`)
+      navigateTo(documentUrl(res.data.uuid))
     }
   } catch (err: unknown) {
     toast.add({ title: getErrorMessage(err, '创建周报失败'), color: 'error' })
@@ -366,7 +374,7 @@ const editReport = () => {
         content: previewContent.value
       })
     }
-    navigateTo(`/documents/${selectedReport.value.uuid}`)
+    navigateTo(documentUrl(selectedReport.value.uuid))
   }
 }
 

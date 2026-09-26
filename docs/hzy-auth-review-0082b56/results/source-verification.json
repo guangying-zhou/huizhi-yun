@@ -1,0 +1,26 @@
+[
+  {
+    "path": "console-egress.mjs",
+    "sha": "5a4ab96551791a2359d9763bbfc774d96672a2a0",
+    "expected": "5a4ab96551791a2359d9763bbfc774d96672a2a0",
+    "matched": true
+  },
+  {
+    "path": "error-contract.mjs",
+    "sha": "9a4281b98a9fc57f41e15656900375e32309728b",
+    "expected": "9a4281b98a9fc57f41e15656900375e32309728b",
+    "matched": true
+  },
+  {
+    "path": "test/console-egress.test.mjs",
+    "sha": "3443b56a533e93560dfd9473f89738baef0ff280",
+    "expected": "3443b56a533e93560dfd9473f89738baef0ff280",
+    "matched": true
+  },
+  {
+    "path": "test/error-contract.test.mjs",
+    "sha": "89d87eae60e9673dbab838d13e14f79dadbc6980",
+    "expected": "89d87eae60e9673dbab838d13e14f79dadbc6980",
+    "matched": true
+  }
+]

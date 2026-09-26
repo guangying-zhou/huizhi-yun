@@ -1,0 +1,253 @@
+{
+  "schema": "enterprise-oauth-live.v1",
+  "verifiedAt": "2026-09-13T19:41:06.219Z",
+  "tenant": "C000001",
+  "deployment": "C000001-test-enterprise",
+  "audience": "data-runtime",
+  "registrySha256": "204800c68c34fb7df5b582307a76fbd55ecd2410ddeed2b847a0a1aafcc81907",
+  "results": [
+    {
+      "scope": "aims:product-components:create",
+      "oauthIssued": true,
+      "tokenVerified": true,
+      "cfRayPresent": true,
+      "testGatewayMarker": true
+    },
+    {
+      "scope": "aims:product-components:delete",
+      "oauthIssued": true,
+      "tokenVerified": true,
+      "cfRayPresent": true,
+      "testGatewayMarker": true
+    },
+    {
+      "scope": "aims:product-components:edit",
+      "oauthIssued": true,
+      "tokenVerified": true,
+      "cfRayPresent": true,
+      "testGatewayMarker": true
+    },
+    {
+      "scope": "aims:product-components:move",
+      "oauthIssued": true,
+      "tokenVerified": true,
+      "cfRayPresent": true,
+      "testGatewayMarker": true
+    },
+    {
+      "scope": "aims:product-components:read",
+      "oauthIssued": true,
+      "tokenVerified": true,
+      "cfRayPresent": true,
+      "testGatewayMarker": true
+    },
+    {
+      "scope": "aims:product-features:component-assign",
+      "oauthIssued": true,
+      "tokenVerified": true,
+      "cfRayPresent": true,
+      "testGatewayMarker": true
+    },
+    {
+      "scope": "aims:product-features:create",
+      "oauthIssued": true,
+      "tokenVerified": true,
+      "cfRayPresent": true,
+      "testGatewayMarker": true
+    },
+    {
+      "scope": "aims:product-features:delete",
+      "oauthIssued": true,
+      "tokenVerified": true,
+      "cfRayPresent": true,
+      "testGatewayMarker": true
+    },
+    {
+      "scope": "aims:product-features:edit",
+      "oauthIssued": true,
+      "tokenVerified": true,
+      "cfRayPresent": true,
+      "testGatewayMarker": true
+    },
+    {
+      "scope": "aims:product-features:lifecycle",
+      "oauthIssued": true,
+      "tokenVerified": true,
+      "cfRayPresent": true,
+      "testGatewayMarker": true
+    },
+    {
+      "scope": "aims:product-features:read",
+      "oauthIssued": true,
+      "tokenVerified": true,
+      "cfRayPresent": true,
+      "testGatewayMarker": true
+    },
+    {
+      "scope": "aims:product-features:request-link",
+      "oauthIssued": true,
+      "tokenVerified": true,
+      "cfRayPresent": true,
+      "testGatewayMarker": true
+    },
+    {
+      "scope": "aims:product-priorities:read",
+      "oauthIssued": true,
+      "tokenVerified": true,
+      "cfRayPresent": true,
+      "testGatewayMarker": true
+    },
+    {
+      "scope": "aims:product-requests:create",
+      "oauthIssued": true,
+      "tokenVerified": true,
+      "cfRayPresent": true,
+      "testGatewayMarker": true
+    },
+    {
+      "scope": "aims:product-requests:decide",
+      "oauthIssued": true,
+      "tokenVerified": true,
+      "cfRayPresent": true,
+      "testGatewayMarker": true
+    },
+    {
+      "scope": "aims:product-requests:edit",
+      "oauthIssued": true,
+      "tokenVerified": true,
+      "cfRayPresent": true,
+      "testGatewayMarker": true
+    },
+    {
+      "scope": "aims:product-requests:merge",
+      "oauthIssued": true,
+      "tokenVerified": true,
+      "cfRayPresent": true,
+      "testGatewayMarker": true
+    },
+    {
+      "scope": "aims:product-requests:read",
+      "oauthIssued": true,
+      "tokenVerified": true,
+      "cfRayPresent": true,
+      "testGatewayMarker": true
+    },
+    {
+      "scope": "aims:product-requests:source-create",
+      "oauthIssued": true,
+      "tokenVerified": true,
+      "cfRayPresent": true,
+      "testGatewayMarker": true
+    },
+    {
+      "scope": "aims:product-requests:source-delete",
+      "oauthIssued": true,
+      "tokenVerified": true,
+      "cfRayPresent": true,
+      "testGatewayMarker": true
+    },
+    {
+      "scope": "aims:product-versions:accept",
+      "oauthIssued": true,
+      "tokenVerified": true,
+      "cfRayPresent": true,
+      "testGatewayMarker": true
+    },
+    {
+      "scope": "aims:product-versions:archive",
+      "oauthIssued": true,
+      "tokenVerified": true,
+      "cfRayPresent": true,
+      "testGatewayMarker": true
+    },
+    {
+      "scope": "aims:product-versions:create",
+      "oauthIssued": true,
+      "tokenVerified": true,
+      "cfRayPresent": true,
+      "testGatewayMarker": true
+    },
+    {
+      "scope": "aims:product-versions:delete",
+      "oauthIssued": true,
+      "tokenVerified": true,
+      "cfRayPresent": true,
+      "testGatewayMarker": true
+    },
+    {
+      "scope": "aims:product-versions:edit",
+      "oauthIssued": true,
+      "tokenVerified": true,
+      "cfRayPresent": true,
+      "testGatewayMarker": true
+    },
+    {
+      "scope": "aims:product-versions:publish",
+      "oauthIssued": true,
+      "tokenVerified": true,
+      "cfRayPresent": true,
+      "testGatewayMarker": true
+    },
+    {
+      "scope": "aims:product-versions:read",
+      "oauthIssued": true,
+      "tokenVerified": true,
+      "cfRayPresent": true,
+      "testGatewayMarker": true
+    },
+    {
+      "scope": "aims:product-versions:reopen",
+      "oauthIssued": true,
+      "tokenVerified": true,
+      "cfRayPresent": true,
+      "testGatewayMarker": true
+    },
+    {
+      "scope": "aims:products:authorization-object",
+      "oauthIssued": true,
+      "tokenVerified": true,
+      "cfRayPresent": true,
+      "testGatewayMarker": true
+    },
+    {
+      "scope": "aims:products:onboard",
+      "oauthIssued": true,
+      "tokenVerified": true,
+      "cfRayPresent": true,
+      "testGatewayMarker": true
+    },
+    {
+      "scope": "aims:products:view",
+      "oauthIssued": true,
+      "tokenVerified": true,
+      "cfRayPresent": true,
+      "testGatewayMarker": true
+    },
+    {
+      "scope": "assets:product:read",
+      "oauthIssued": true,
+      "tokenVerified": true,
+      "cfRayPresent": true,
+      "testGatewayMarker": true
+    }
+  ],
+  "negatives": [
+    {
+      "scope": "aims:products:view",
+      "audience": "tenant-runtime",
+      "rejected": true,
+      "status": 400
+    },
+    {
+      "scope": "aims:unregistered:probe",
+      "audience": "data-runtime",
+      "rejected": true,
+      "status": 400
+    }
+  ],
+  "actualCombinedScopes": [],
+  "combinationReason": "Foundation callEnterpriseRuntime uses scope: route.capability; no combined-scope calls",
+  "configurationMutated": false,
+  "localSigning": false,
+  "browserAcceptance": false
+}

@@ -8,13 +8,12 @@ const runtimeAccess = readFileSync(
   'utf8'
 )
 
-test('Aims document access scope uses request-target signed markers', () => {
-  assert.match(aimsClient, /aims_trusted_document_access_project_codes/)
-  assert.match(aimsClient, /aims_trusted_document_access_roles/)
-  assert.match(
-    aimsClient,
-    /query:\s*\{[\s\S]*?AIMS_TRUSTED_DOCUMENT_ACCESS_PROJECT_CODES_QUERY[\s\S]*?actorProjectCodes\.join\(','\)[\s\S]*?AIMS_TRUSTED_DOCUMENT_ACCESS_ROLES_QUERY[\s\S]*?actorRoles\.join\(','\)/
-  )
+test('Aims document access facts cross the signed Codocs service boundary', () => {
+  const service = readFileSync(new URL('../../codocs/server/utils/projectDocumentAccessService.ts', import.meta.url), 'utf8')
+  assert.match(aimsClient, /callCodocsProjectAccess.*'check'/)
+  assert.match(service, /aims_trusted_document_access_project_codes: facts\(command.actorProjectCodes/)
+  assert.match(service, /aims_trusted_document_access_roles: facts\(command.actorRoles/)
+  assert.ok(service.indexOf('await verifyServiceCommandRuntimeHeaders') < service.indexOf('codocs_trusted_aims_document_access:'))
 })
 
 test('Codocs accepts Aims scope only for a signed delegated Aims actor', () => {

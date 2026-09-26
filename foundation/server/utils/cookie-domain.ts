@@ -1,6 +1,10 @@
 import { getRequestHeader, type H3Event } from 'h3'
 
 export function getAuthCookieDomain(event: H3Event): string | undefined {
+  if (process.env.HZY_AUTH_COOKIE_HOST_ONLY === 'true') {
+    return undefined
+  }
+
   const host = getRequestHeader(event, 'x-forwarded-host')
     || getRequestHeader(event, 'host')
     || ''

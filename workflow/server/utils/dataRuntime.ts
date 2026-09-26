@@ -1,10 +1,11 @@
-import type { H3Event } from 'h3'
+import { getHeader, type H3Event } from 'h3'
 import { $fetch } from 'ofetch'
 import { maybeCallTenantRuntime } from '@hzy/foundation/server/utils/tenantRuntimeClient'
-import { requestServiceAccessToken } from '@hzy/foundation/server/utils/serviceOidc'
+import { fetchConsoleServiceJson, requestServiceAccessToken, trustedServiceRequestHeaders } from '@hzy/foundation/server/utils/serviceOidc'
 import { sendNotification } from '@hzy/foundation/server/utils/notify'
 import { resolveServiceAppBaseUrl } from '@hzy/foundation/server/utils/serviceAppUrl'
 import { tenantGatewayServiceBinding } from '@hzy/foundation/server/utils/cloudflareServiceBinding'
+import { resolveTrustedTenantGatewayContext } from '@hzy/foundation/server/utils/tenantGatewayTrust'
 import { loadNotificationActionTargetCatalog } from '@hzy/foundation/server/utils/notificationActionTarget'
 import { checkSubjectEligibility } from '@hzy/foundation/server/utils/subjectEligibility'
 import {
@@ -17,6 +18,7 @@ import {
   type ActionableLifecycleDependencies,
   type RuntimeActionableLifecycle
 } from './runtimeActionableLifecycles'
+import { verifiedLocalWorkflowCallbackHeaders } from './localCallbackContext'
 
 interface RuntimeCallback {
   effectId?: number
@@ -97,7 +99,10 @@ export async function deliverWorkflowActionableLifecycles(
   lifecycles: RuntimeActionableLifecycle[] = [],
   dependencies: ActionableLifecycleDependencies = {
     requestAccessToken: requestServiceAccessToken,
-    request: (url, options) => $fetch(url, options),
+    request: (url, options) => fetchConsoleServiceJson(event, url, {
+      ...options,
+      headers: { ...trustedServiceRequestHeaders(event), ...options.headers }
+    }),
     resolveConsoleBaseUrl: runtimeEvent => resolveServiceAppBaseUrl(runtimeEvent, 'console'),
     checkpoint: checkpointWorkflowActionableLifecycle,
     publishNotifications: sendWorkflowRuntimeNotifications,
@@ -118,6 +123,49 @@ async function checkpointWorkflowActionableLifecycle(event: H3Event, effectId: n
     throw new Error(`workflow_actionable_lifecycle_${outcome}_failed`)
   }
   return runtime.data.data
+}
+
+interface RuntimeNotificationEffect {
+  effectId: number
+  notification: RuntimeNotification
+}
+
+async function checkpointWorkflowNotification(event: H3Event, effectId: number, outcome: 'ack' | 'fail') {
+  const runtime = await maybeCallWorkflowDataRuntime<WorkflowRuntimeEnvelope>(
+    event,
+    `/v1/workflow/notification-effects/${effectId}/${outcome}`,
+    { scope: 'workflow.write', method: 'POST', body: {} }
+  )
+  if (!runtime.handled || runtime.data.code !== 0) {
+    throw new Error(`workflow_notification_effect_${outcome}_failed`)
+  }
+}
+
+// Durable "new to-do" notifications. Runs before the lifecycle drain, whose
+// Runtime query holds back a CAS until the projection's creation is delivered.
+// A skipped notification can never be published (no recipients or a broken
+// contract), so it is acknowledged instead of retried forever.
+export async function drainWorkflowNotificationOutbox(event: H3Event) {
+  const runtime = await maybeCallWorkflowDataRuntime<WorkflowRuntimeEnvelope<RuntimeNotificationEffect[]>>(
+    event,
+    '/v1/workflow/notification-effects/pending',
+    { scope: 'workflow.read', method: 'GET', query: { limit: 100 } }
+  )
+  if (!runtime.handled || runtime.data.code !== 0 || !Array.isArray(runtime.data.data)) return []
+  const results: Array<{ effectId: number, status: string, code?: string }> = []
+  for (const effect of runtime.data.data) {
+    const effectId = Number(effect?.effectId)
+    if (!Number.isSafeInteger(effectId) || effectId <= 0 || !effect.notification) continue
+    const [result] = await sendWorkflowRuntimeNotifications(event, [effect.notification])
+    const status = result?.status || 'failed'
+    try {
+      await checkpointWorkflowNotification(event, effectId, status === 'failed' ? 'fail' : 'ack')
+    } catch (error) {
+      console.error('[WorkflowRuntime] 待办创建通知检查点写入失败', error)
+    }
+    results.push({ effectId, status, code: result?.code })
+  }
+  return results
 }
 
 export async function drainWorkflowActionableLifecycleOutbox(event: H3Event) {
@@ -142,7 +190,15 @@ async function sendRuntimeCallbacks(event: H3Event, callbacks: RuntimeCallback[]
       continue
     }
 
-    const baseUrl = resolveServiceAppBaseUrl(event, appCode)
+    const localOnly = process.env.HZY0_WORKFLOW_LOCAL_ONLY === 'true'
+    const baseUrl = localOnly
+      ? (appCode === 'aims' ? String(process.env.HZY0_LOCAL_AIMS_URL || '') : '')
+      : resolveServiceAppBaseUrl(event, appCode)
+    if (localOnly && (!/^http:\/\/127\.0\.0\.1:23141\/aims\/?$/u.test(baseUrl) || tenantGatewayServiceBinding(event))) {
+      results.push({ callback, status: 'failed', error: 'local_callback_target_unavailable' })
+      if (callback.effectId) await checkpointWorkflowCallback(event, callback.effectId, 'fail', 'local_callback_target_unavailable')
+      continue
+    }
     if (!baseUrl) {
       results.push({ callback, status: 'failed', error: 'callback_app_url_unavailable' })
       if (callback.effectId) await checkpointWorkflowCallback(event, callback.effectId, 'fail', 'callback_app_url_unavailable')
@@ -157,7 +213,9 @@ async function sendRuntimeCallbacks(event: H3Event, callbacks: RuntimeCallback[]
         event
       })
 
+      const localHeaders = localOnly ? localWorkflowCallbackHeaders(event, appCode) : {}
       const headers = {
+        ...localHeaders,
         'authorization': `Bearer ${accessToken}`,
         'content-type': 'application/json',
         ...(payload.event ? { 'x-workflow-event': String(payload.event) } : {})
@@ -196,6 +254,16 @@ async function sendRuntimeCallbacks(event: H3Event, callbacks: RuntimeCallback[]
     }
   }
   return results
+}
+
+function localWorkflowCallbackHeaders(event: H3Event, appCode: string) {
+  return verifiedLocalWorkflowCallbackHeaders({
+    appCode,
+    context: resolveTrustedTenantGatewayContext(event),
+    canonicalRuntimeUrl: getHeader(event, 'x-hzy-data-runtime-url') || '',
+    dialUrl: getHeader(event, 'x-hzy-local-runtime-dial-url') || '',
+    forwardedHeaders: trustedServiceRequestHeaders(event, 'aims')
+  })
 }
 
 async function checkpointWorkflowCallback(

@@ -10,7 +10,7 @@ const code = ts.transpileModule(readFileSync(new URL('../app/composables/useView
 }).outputText
 
 type Profile = { uid: string, realName?: string, mobileTail4?: string | null }
-function harness(fetcher: () => Promise<{ code: number, data: Profile }>) {
+function harness(fetcher: () => Promise<{ code: number, data: Profile }>, appCode = 'codocs') {
   const auth = { user: ref('u1'), tenant: ref('tenant-1'), userRealname: ref('查看者'), userMobileTail: ref<string | null>(null) }
   const data = ref<unknown>(null)
   const paths: string[] = []
@@ -20,6 +20,7 @@ function harness(fetcher: () => Promise<{ code: number, data: Profile }>) {
   runInNewContext(code, {
     exports, computed,
     useAuth: () => auth,
+    useRuntimeConfig: () => ({ public: { appCode } }),
     useAppUrls: () => ({ resolveCurrentAppPath: (path: string) => `/codocs${path}` }),
     useRequestFetch: () => async (path: string) => {
       paths.push(path)
@@ -45,6 +46,13 @@ test('OIDC viewer reads the self profile suffix without a legacy phone cookie', 
   await app.load()
   assert.equal(app.watermarkText.value, '目录姓名 0123')
   assert.deepEqual(app.paths, ['/codocs/api/directory/me'])
+})
+
+test('Enterprise document editor reads the Host directory endpoint without a false app prefix', async () => {
+  const app = harness(async () => ({ code: 0, data: { uid: 'u1', mobileTail4: '0123' } }), 'enterprise')
+  await app.load()
+  assert.deepEqual(app.paths, ['/api/directory/me'])
+  assert.equal(app.watermarkText.value, '查看者 0123')
 })
 
 test('missing or malformed suffix stays masked and never prints a full phone number', async () => {

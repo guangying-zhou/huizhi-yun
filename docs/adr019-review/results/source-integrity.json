@@ -1,0 +1,50 @@
+[
+  {
+    "path": "enterprise/composition/registry.mjs",
+    "expected": "f571c904788ce8b11e441fc3c98d241be3eea59f",
+    "actual": "f571c904788ce8b11e441fc3c98d241be3eea59f",
+    "match": true
+  },
+  {
+    "path": "enterprise/composition/business-areas.mjs",
+    "expected": "cb5a467faecf3c25297d29800c0597f15f9c5a52",
+    "actual": "cb5a467faecf3c25297d29800c0597f15f9c5a52",
+    "match": true
+  },
+  {
+    "path": "aims/layer/entry.mjs",
+    "expected": "693f026b0ef12c93861a17d93930e97d5d877185",
+    "actual": "693f026b0ef12c93861a17d93930e97d5d877185",
+    "match": true
+  },
+  {
+    "path": "assets/layer/entry.mjs",
+    "expected": "94840c300e7359ad6b808599c582c37d32f7be01",
+    "actual": "94840c300e7359ad6b808599c582c37d32f7be01",
+    "match": true
+  },
+  {
+    "path": "enterprise/app/layouts/default.vue",
+    "expected": "43bf8d3b67964927e0562d2bf2c324de323ff9dd",
+    "actual": "43bf8d3b67964927e0562d2bf2c324de323ff9dd",
+    "match": true
+  },
+  {
+    "path": "enterprise/app/components/HostObjectNav.vue",
+    "expected": "d997dad0502bdf15c85b887c42f3beb17f337385",
+    "actual": "d997dad0502bdf15c85b887c42f3beb17f337385",
+    "match": true
+  },
+  {
+    "path": "enterprise/test/business-navigation.test.mjs",
+    "expected": "68372f308e3c6487d75122f781d8c61020131bee",
+    "actual": "68372f308e3c6487d75122f781d8c61020131bee",
+    "match": true
+  },
+  {
+    "path": "deploy/test-env/enterprise-topology.mjs",
+    "expected": "23717e606bced29f4a3dac8405c2bed681793e98",
+    "actual": "23717e606bced29f4a3dac8405c2bed681793e98",
+    "match": true
+  }
+]

@@ -1,9 +1,14 @@
 <script setup lang="ts">
+import { useAimsModule } from '../../../../layer/useAimsModule'
+import ProductsStructureModuleManager from '../../../components/products/StructureModuleManager.vue'
+import ProductsStructureModuleTree from '../../../components/products/StructureModuleTree.vue'
+
+const { moduleUrl, hosted, cacheKey } = useAimsModule()
 definePageMeta({ layoutHeader: true, layoutHeaderTitle: '产品结构', layoutHeaderProjectSwitcher: false })
 const route = useRoute()
 const code = computed(() => String(route.params.productCode || ''))
-const productPath = computed(() => `/products/${encodeURIComponent(code.value)}`)
-const base = computed(() => `/api/v1/products/${encodeURIComponent(code.value)}`)
+const productPath = computed(() => moduleUrl(`/products/${encodeURIComponent(code.value)}`))
+const base = computed(() => moduleUrl(`/api/v1/products/${encodeURIComponent(code.value)}`))
 const states = { candidate: '候选', active: '已生效', deprecated: '已弃用' }
 interface Feature { component_id: number | null, biz_id: string, product_code: string, title: string, description: string | null, lifecycle: keyof typeof states, revision: number }
 const { search, debounced, flush } = useDebouncedSearch()
@@ -15,7 +20,7 @@ const selectedId = computed(() => /^[1-9]\d*$/.test(moduleFilter.value) && Numbe
 const invalidModule = computed(() => !['all', 'ungrouped'].includes(moduleFilter.value) && selectedId.value === null)
 const moduleLabel = computed(() => moduleFilter.value === 'all' ? '全部功能' : moduleFilter.value === 'ungrouped' ? '未分类功能' : selectedModule.value?.id === selectedId.value ? selectedModule.value.name : '当前模块')
 const query = computed(() => ({ page: page.value, pageSize, keyword: debounced.value || undefined, lifecycle: lifecycle.value === 'all' ? undefined : lifecycle.value, componentId: selectedId.value ?? undefined, ungrouped: moduleFilter.value === 'ungrouped' ? 'true' : undefined }))
-const { data, status, error, refresh } = await useFetch(() => `${base.value}/features`, {
+const { data, status, error, refresh } = await useFetch(() => `${base.value}/features`, { ...(hosted ? { key: computed(() => cacheKey('structure:1' + ':' + String(code.value))) } : {}),
   server: false,
   query,
   transform: (response: { code: number, data: { items: Feature[], total: number } }) => {
@@ -24,10 +29,53 @@ const { data, status, error, refresh } = await useFetch(() => `${base.value}/fea
   }
 })
 const alert = useApiErrorAlert(error, { fallbackTitle: '功能列表加载失败' })
-const { data: requestPermission } = await useFetch<{ code: number, data: { product_code: string, status: string, create: boolean } }>(() => `${base.value}/requests/permissions`, { server: false })
+const { data: requestPermission } = await useFetch<{ code: number, data: { product_code: string, status: string, create: boolean } }>(() => `${base.value}/requests/permissions`, { ...(hosted ? { key: computed(() => cacheKey('structure:2' + ':' + String(code.value))) } : {}), server: false })
 const canCreateRequest = computed(() => requestPermission.value?.code === 0 && requestPermission.value.data?.product_code === code.value && requestPermission.value.data.status === 'active' && requestPermission.value.data.create === true)
-const { data: permissions } = await useFetch<{ code: number, data: { product_code: string, status: string, edit: boolean, delete: boolean } }>(() => `${base.value}/components/permissions`, { server: false })
+const { data: permissions } = await useFetch<{ code: number, data: { product_code: string, status: string, edit: boolean, delete: boolean } }>(() => `${base.value}/components/permissions`, { ...(hosted ? { key: computed(() => cacheKey('structure:3' + ':' + String(code.value))) } : {}), server: false })
 const canManage = computed(() => permissions.value?.code === 0 && permissions.value.data?.product_code === code.value && permissions.value.data.status === 'active' && (permissions.value.data.edit === true || permissions.value.data.delete === true))
+const { data: featurePermission, status: featurePermissionStatus, refresh: refreshFeaturePermission } = await useFetch<{ code: number, data: { product_code: string, status: string, revision: number, edit: boolean } }>(() => `${base.value}/features/permissions`, { ...(hosted ? { key: computed(() => cacheKey('structure:4' + ':' + String(code.value))) } : {}), server: false })
+const canCreateFeature = computed(() => featurePermissionStatus.value === 'success' && featurePermission.value?.code === 0 && featurePermission.value.data.product_code === code.value && featurePermission.value.data.status === 'active' && featurePermission.value.data.edit === true && Number.isSafeInteger(featurePermission.value.data.revision) && featurePermission.value.data.revision > 0)
+const featureCreateOpen = ref(false), featureCreateBusy = ref(false), featureExpectedRevision = ref(0)
+const featureDraft = reactive({ title: '', description: '' })
+const featureCreateError = ref<Error | null>(null)
+const featureCreateAlert = useApiErrorAlert(featureCreateError, { fallbackTitle: '新增功能失败' })
+const toast = useToast()
+let featureRetry: { payload: string, key: string } | undefined
+async function openFeatureCreate() {
+  await refreshFeaturePermission()
+  if (!canCreateFeature.value) return
+  featureExpectedRevision.value = featurePermission.value!.data.revision
+  Object.assign(featureDraft, { title: '', description: '' })
+  featureCreateError.value = null
+  featureRetry = undefined
+  featureCreateOpen.value = true
+}
+async function createFeature() {
+  if (!featureCreateOpen.value || featureCreateBusy.value || !canCreateFeature.value || !featureDraft.title.trim()) return
+  const body = { expectedRevision: featureExpectedRevision.value, title: featureDraft.title.trim(), description: featureDraft.description.trim() }
+  const payload = JSON.stringify({ productCode: code.value, body })
+  if (featureRetry?.payload !== payload) featureRetry = { payload, key: crypto.randomUUID() }
+  featureCreateBusy.value = true
+  featureCreateError.value = null
+  try {
+    const result = await $fetch<{ code: number, data: { value: { biz_id: string, product_code: string, title: string, lifecycle: string, revision: number } } }>(`${base.value}/features`, { method: 'POST', body, headers: { 'Idempotency-Key': featureRetry.key } })
+    const value = result.data?.value
+    if (result.code !== 0 || value?.product_code !== code.value || value.title !== body.title || value.lifecycle !== 'candidate' || value.revision !== 1 || !/^[0-9a-f]{8}-[0-9a-f-]{27,}$/.test(value.biz_id)) throw new Error('功能创建结果不完整，请用原请求重试')
+    featureCreateOpen.value = false
+    featureRetry = undefined
+    toast.add({ title: '产品功能已创建', color: 'success' })
+    search.value = ''
+    lifecycle.value = 'all'
+    moduleFilter.value = 'all'
+    page.value = 1
+    flush()
+    await Promise.allSettled([refresh(), refreshFeaturePermission()])
+  } catch (cause) {
+    featureCreateError.value = cause instanceof Error ? cause : new Error('新增功能失败，请用原请求重试')
+  } finally {
+    featureCreateBusy.value = false
+  }
+}
 const managing = ref(false), managingBusy = ref(false), mobileTree = ref(false), treeRevision = ref(0)
 const requestModuleContext = computed(() => selectedId.value ? { moduleId: String(selectedId.value), ...(selectedModule.value?.id === selectedId.value ? { moduleNameId: String(selectedId.value), moduleName: selectedModule.value.name } : {}) } : {})
 const requestPath = computed(() => ({ path: `${productPath.value}/requests`, query: selectedId.value ? { ...requestModuleContext.value, includeDescendants: 'true' } : moduleFilter.value === 'ungrouped' ? { unassigned: 'true' } : {} }))
@@ -43,19 +91,30 @@ async function modulesChanged() {
   moduleFilter.value = 'all'
   await refresh()
 }
-onBeforeRouteLeave(() => !managingBusy.value)
-onBeforeRouteUpdate(() => !managingBusy.value)
+onBeforeRouteLeave(() => !managingBusy.value && !featureCreateBusy.value)
+onBeforeRouteUpdate(() => !managingBusy.value && !featureCreateBusy.value)
 </script>
 
 <template>
   <div class="mx-auto min-w-0 max-w-7xl space-y-4 p-4 sm:p-6">
     <div class="flex flex-wrap items-center justify-between gap-3">
       <p class="max-w-2xl text-sm text-muted">
-        按模块查看和维护产品的长期功能。新想法先登记到需求池，再安排版本实现。
+        按模块查看和维护产品的长期功能。待评估的新想法可先登记到需求池，再安排版本实现。
       </p>
-      <UButton v-if="canCreateRequest" :to="{ path: `${productPath}/requests`, query: { ...requestModuleContext, create: 'true' } }" icon="i-lucide-plus">
-        新增需求
-      </UButton>
+      <div class="flex flex-wrap gap-2">
+        <UButton v-if="canCreateFeature" icon="i-lucide-plus" @click="openFeatureCreate">
+          新增功能
+        </UButton>
+        <UButton
+          v-if="canCreateRequest"
+          :to="{ path: `${productPath}/requests`, query: { ...requestModuleContext, create: 'true' } }"
+          icon="i-lucide-plus"
+          color="neutral"
+          variant="outline"
+        >
+          新增需求
+        </UButton>
+      </div>
     </div>
     <div class="grid min-w-0 gap-4 lg:grid-cols-[17rem_minmax(0,1fr)]">
       <aside class="min-w-0 self-start rounded-lg border border-default p-3" aria-label="产品模块选择">
@@ -214,5 +273,50 @@ onBeforeRouteUpdate(() => !managingBusy.value)
         />
       </template>
     </USlideover>
+    <UModal
+      v-model:open="featureCreateOpen"
+      title="新增产品功能"
+      description="先创建候选功能，之后可在功能详情中归入产品模块。"
+      :dismissible="!featureCreateBusy"
+      :close="!featureCreateBusy"
+    >
+      <template #body>
+        <div class="space-y-4 p-4">
+          <UAlert v-if="featureCreateAlert" v-bind="featureCreateAlert" />
+          <UFormField label="功能名称" required>
+            <UInput
+              v-model="featureDraft.title"
+              class="w-full"
+              :maxlength="500"
+              placeholder="例如：用户登录"
+            />
+          </UFormField>
+          <UFormField label="说明">
+            <UTextarea
+              v-model="featureDraft.description"
+              class="w-full"
+              :maxlength="10000"
+              :rows="4"
+              placeholder="描述功能边界与用途"
+            />
+          </UFormField>
+        </div>
+      </template>
+      <template #footer>
+        <div class="flex w-full justify-end gap-2">
+          <UButton
+            color="neutral"
+            variant="outline"
+            :disabled="featureCreateBusy"
+            @click="featureCreateOpen = false"
+          >
+            取消
+          </UButton>
+          <UButton :loading="featureCreateBusy" :disabled="!featureDraft.title.trim()" @click="createFeature">
+            创建功能
+          </UButton>
+        </div>
+      </template>
+    </UModal>
   </div>
 </template>

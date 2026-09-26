@@ -1,0 +1,77 @@
+{
+  "receiptVersion": 1,
+  "createdAt": "2026-09-14T05:20:15Z",
+  "scope": "local protected development Platform build candidate; no remote deployment, PM2 action, database action, or traffic change",
+  "protectedSnapshot": {
+    "path": "/Users/gavinzhou/Library/Application Support/HuizhiYun/test-runtime/platform-candidates/enterprise-platform-local-20260914T051000Z",
+    "sourceArchiveSha256": "51cbb8c752ee2b0c2529c11d1b20d2b080e3341ae699814902018294bd760e02",
+    "sourceArchiveBytes": 6817280,
+    "sourceArchiveEntries": 979,
+    "sourceInputManifestSha256": "2dfc031db12dd6231a557daca761641c6a8813e90e63802242a1c12ada7335f0",
+    "sourceInputFiles": 775,
+    "environmentFilesIncluded": 0,
+    "nitropackPatch": {
+      "path": "patches/nitropack@2.13.4.patch",
+      "sha256": "023d8fffe979e91e8522ae7cc096a575cab9f72af5ae390c04f0b96e0cdbf110",
+      "bytes": 2851,
+      "lockfileAndWorkspaceReferenceVerified": true
+    },
+    "testFixture": {
+      "path": "enterprise/app.manifest.json",
+      "sha256": "59001360c909df9c34b1e712f56ba2169af0772b122c415e986507b856257d56",
+      "purpose": "enterpriseComposition test fixture"
+    }
+  },
+  "dependencyInstall": {
+    "command": "pnpm install --offline --frozen-lockfile",
+    "dependencySource": "/Users/gavinzhou/Library/pnpm/store/v11",
+    "downloadedPackages": 0,
+    "reusedPackages": 954,
+    "lockfileResolutionChanged": false,
+    "installNodeVersion": "v25.2.1",
+    "note": "The install emitted an engine warning. Validation and production build below explicitly used Node v24.18.0, the declared Platform engine range."
+  },
+  "validation": {
+    "nodeVersion": "v24.18.0",
+    "nodeOptions": "--max-old-space-size=4096",
+    "typecheck": {
+      "command": "pnpm --dir platform typecheck",
+      "result": "passed"
+    },
+    "build": {
+      "command": "pnpm --dir platform build",
+      "nitroPreset": "node-server",
+      "result": "passed"
+    },
+    "focusedTests": {
+      "command": "pnpm --dir platform exec node --test --experimental-strip-types test/enterpriseComposition.test.ts test/enterpriseEntitlement.test.ts test/enterpriseEntitlementBundle.test.ts test/enterpriseEntitlementRepository.test.ts test/enterpriseEntitlementState.test.ts test/enterpriseModuleRoutes.test.ts test/enterpriseOrderApproval.test.ts test/enterpriseOrderFulfillment.test.ts test/platformOpsPermissionRoutes.test.ts",
+      "passed": 51,
+      "failed": 0
+    },
+    "localNodeServerSmoke": {
+      "command": "HOST=127.0.0.1 PORT=18111 node .output/server/index.mjs; curl --fail http://127.0.0.1:18111/api/health",
+      "result": "HTTP 200 with platform status ok",
+      "configurationLimit": "The env-free protected snapshot correctly logged a rejected local default database connection during plugin initialization; no environment was copied."
+    }
+  },
+  "output": {
+    "path": "platform/.output",
+    "files": 849,
+    "bytes": 7316330,
+    "manifestSha256": "9331f2c20650e22e9ca44a65d424ac7f3f0065e2f58f9b7ca828db0d09b55cd5",
+    "entry": "platform/.output/server/index.mjs",
+    "serverPackage": "platform-prod@0.0.0",
+    "nativeNodeFiles": 0,
+    "darwinSpecificRuntimeFiles": 0
+  },
+  "linuxCompatibility": {
+    "dockerReadOnlyCheck": "unavailable: docker command is not installed; no virtualization software was installed",
+    "assessment": "The emitted Node-server output, including server/node_modules, contains no .node native module. The local workspace dependency tree has Darwin-only build-time native modules, but none were emitted into .output.",
+    "runtimeSmokePath": "On a Linux Node 24.18.0 host, copy this exact .output tree and run HOST=127.0.0.1 PORT=<isolated-port> node .output/server/index.mjs, then curl /api/health. If source rebuilding is required, use the protected source archive with pnpm install --offline --frozen-lockfile and pnpm --dir platform build on Linux; do not copy the macOS workspace node_modules."
+  },
+  "deploymentReadiness": {
+    "eligibleForReview": true,
+    "notDeployed": true,
+    "requiredBeforeAnyDevelopmentReplacement": "Independently perform the stated Linux smoke path and recheck the remote dev process, protected configuration, candidate output hash, and rollback entry immediately before a single hzy-platform-dev-only action."
+  }
+}

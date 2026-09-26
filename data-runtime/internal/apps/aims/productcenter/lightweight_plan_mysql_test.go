@@ -9,8 +9,11 @@ import (
 )
 
 func TestMySQLLightweightPlanAdoptConfirmAndStale(t *testing.T) {
-	db := mysqlTestDatabase(t)
-	migrateProductCenter(t, db)
+	exerciseLightweightPlanChain(t, false)
+}
+
+func exerciseLightweightPlanChain(t *testing.T, unified bool) {
+	commands, db := lightweightChainFixture(t, unified)
 	workspaceFixture(t, db, "P-SIMPLE")
 	if _, e := db.Exec(`INSERT INTO product_members(product_code,uid,relation_type,status,valid_from,created_by,updated_by,created_at,updated_at) VALUES('P-SIMPLE','pm','manager','active',UTC_TIMESTAMP(3),'pm','pm',UTC_TIMESTAMP(3),UTC_TIMESTAMP(3))`); e != nil {
 		t.Fatal(e)
@@ -21,7 +24,7 @@ func TestMySQLLightweightPlanAdoptConfirmAndStale(t *testing.T) {
 		p.Resource = resource
 		return p
 	}
-	requestResult, e := CreateProductRequest(ctx, db, CommandIdentity{ProductCode: "P-SIMPLE", ActorUID: "pm", Action: "product_requests:create", IdempotencyKey: "request"}, permit("product_requests", "create"), RequestDraft{ExpectedRevision: 1, Title: "登录优化", ProblemStatement: "重复登录", SourceType: "internal", UrgencyLevel: "P2"})
+	requestResult, e := commands.CreateProductRequest(ctx, db, CommandIdentity{ProductCode: "P-SIMPLE", ActorUID: "pm", Action: "product_requests:create", IdempotencyKey: "request"}, permit("product_requests", "create"), RequestDraft{ExpectedRevision: 1, Title: "登录优化", ProblemStatement: "重复登录", SourceType: "internal", UrgencyLevel: "P2"})
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -32,7 +35,7 @@ func TestMySQLLightweightPlanAdoptConfirmAndStale(t *testing.T) {
 		t.Fatal(e)
 	}
 	owner := "pm"
-	versionResult, e := CreateProductCenterVersion(ctx, db, CommandIdentity{ProductCode: "P-SIMPLE", ActorUID: "pm", Action: "product_versions:create", IdempotencyKey: "version"}, permit("product_versions", "edit"), ProductVersionDraft{ExpectedRevision: 2, VersionCode: "v-simple", Name: "轻量", PlanningMode: "simple", BusinessOwnerUID: &owner})
+	versionResult, e := commands.CreateProductCenterVersion(ctx, db, CommandIdentity{ProductCode: "P-SIMPLE", ActorUID: "pm", Action: "product_versions:create", IdempotencyKey: "version"}, permit("product_versions", "edit"), ProductVersionDraft{ExpectedRevision: 2, VersionCode: "v-simple", Name: "轻量", PlanningMode: "simple", BusinessOwnerUID: &owner})
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -45,10 +48,10 @@ func TestMySQLLightweightPlanAdoptConfirmAndStale(t *testing.T) {
 	available, _ := ParseHundredths("10")
 	reserve, _ := ParseHundredths("1")
 	estimate, _ := ParseHundredths("8")
-	if _, e = EditLightweightVersionPlan(ctx, db, CommandIdentity{ProductCode: "P-SIMPLE", ActorUID: "pm", Action: "product_versions:plan-edit", IdempotencyKey: "plan"}, permit("product_versions", "edit"), LightweightVersionPlanEdit{VersionID: version.ID, ExpectedRevision: 3, ExpectedVersionRevision: 1, ExpectedPlanRevision: 1, Goal: "完成登录", StartsOn: "2099-01-01", PlannedReleaseDate: "2099-01-31", AvailablePersonDays: &available, ReservePersonDays: &reserve}); e != nil {
+	if _, e = commands.EditLightweightVersionPlan(ctx, db, CommandIdentity{ProductCode: "P-SIMPLE", ActorUID: "pm", Action: "product_versions:plan-edit", IdempotencyKey: "plan"}, permit("product_versions", "edit"), LightweightVersionPlanEdit{VersionID: version.ID, ExpectedRevision: 3, ExpectedVersionRevision: 1, ExpectedPlanRevision: 1, Goal: "完成登录", StartsOn: "2099-01-01", PlannedReleaseDate: "2099-01-31", AvailablePersonDays: &available, ReservePersonDays: &reserve}); e != nil {
 		t.Fatal(e)
 	}
-	scopeResult, e := CreateLightweightVersionPlanItem(ctx, db, CommandIdentity{ProductCode: "P-SIMPLE", ActorUID: "pm", Action: "product_versions:plan-item-create", IdempotencyKey: "scope"}, permit("product_versions", "edit"), permit("product_requests", "view"), permit("product_requests", "decide"), permit("product_priorities", "edit"), LightweightVersionPlanItemCreate{VersionID: version.ID, ExpectedRevision: 4, ExpectedVersionRevision: 2, ExpectedPlanRevision: 2, ExpectedRequestRevision: 1, RequestBizID: request.BizID, ScopeSummary: "统一入口", AcceptanceCriteria: "可通过统一登录", AdoptRequest: true})
+	scopeResult, e := commands.CreateLightweightVersionPlanItem(ctx, db, CommandIdentity{ProductCode: "P-SIMPLE", ActorUID: "pm", Action: "product_versions:plan-item-create", IdempotencyKey: "scope"}, permit("product_versions", "edit"), permit("product_requests", "view"), permit("product_requests", "decide"), permit("product_priorities", "edit"), LightweightVersionPlanItemCreate{VersionID: version.ID, ExpectedRevision: 4, ExpectedVersionRevision: 2, ExpectedPlanRevision: 2, ExpectedRequestRevision: 1, RequestBizID: request.BizID, ScopeSummary: "统一入口", AcceptanceCriteria: "可通过统一登录", AdoptRequest: true})
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -59,26 +62,26 @@ func TestMySQLLightweightPlanAdoptConfirmAndStale(t *testing.T) {
 	if e = json.Unmarshal(scopeResult.Value, &scope); e != nil {
 		t.Fatal(e)
 	}
-	_, e = ConfirmLightweightVersionPlan(ctx, db, CommandIdentity{ProductCode: "P-SIMPLE", ActorUID: "pm", Action: "product_versions:plan-confirm", IdempotencyKey: "unknown"}, permit("product_versions", "edit"), permit("product_priorities", "prioritize"), LightweightVersionPlanConfirm{VersionID: version.ID, ExpectedRevision: 5, ExpectedVersionRevision: 3, ExpectedPlanRevision: 2, ExpectedScopeRevision: 2})
+	_, e = commands.ConfirmLightweightVersionPlan(ctx, db, CommandIdentity{ProductCode: "P-SIMPLE", ActorUID: "pm", Action: "product_versions:plan-confirm", IdempotencyKey: "unknown"}, permit("product_versions", "edit"), permit("product_priorities", "prioritize"), LightweightVersionPlanConfirm{VersionID: version.ID, ExpectedRevision: 5, ExpectedVersionRevision: 3, ExpectedPlanRevision: 2, ExpectedScopeRevision: 2})
 	requireProductRule(t, e, "product_version_plan_confirm_invalid")
 	tooLarge, _ := ParseHundredths("10")
-	_, e = EditLightweightVersionPlanItem(ctx, db, CommandIdentity{ProductCode: "P-SIMPLE", ActorUID: "pm", Action: "product_versions:plan-item-edit", IdempotencyKey: "over"}, permit("product_versions", "edit"), LightweightVersionPlanItemEdit{VersionID: version.ID, ScopeID: scope.ID, ExpectedRevision: 5, ExpectedVersionRevision: 3, ExpectedPlanRevision: 2, ExpectedScopeRevision: 2, ScopeSummary: "统一入口", EstimatePersonDays: &tooLarge, AcceptanceCriteria: "可通过统一登录"})
+	_, e = commands.EditLightweightVersionPlanItem(ctx, db, CommandIdentity{ProductCode: "P-SIMPLE", ActorUID: "pm", Action: "product_versions:plan-item-edit", IdempotencyKey: "over"}, permit("product_versions", "edit"), LightweightVersionPlanItemEdit{VersionID: version.ID, ScopeID: scope.ID, ExpectedRevision: 5, ExpectedVersionRevision: 3, ExpectedPlanRevision: 2, ExpectedScopeRevision: 2, ScopeSummary: "统一入口", EstimatePersonDays: &tooLarge, AcceptanceCriteria: "可通过统一登录"})
 	if e != nil {
 		t.Fatal(e)
 	}
-	_, e = ConfirmLightweightVersionPlan(ctx, db, CommandIdentity{ProductCode: "P-SIMPLE", ActorUID: "pm", Action: "product_versions:plan-confirm", IdempotencyKey: "over-confirm"}, permit("product_versions", "edit"), permit("product_priorities", "prioritize"), LightweightVersionPlanConfirm{VersionID: version.ID, ExpectedRevision: 6, ExpectedVersionRevision: 4, ExpectedPlanRevision: 2, ExpectedScopeRevision: 3})
+	_, e = commands.ConfirmLightweightVersionPlan(ctx, db, CommandIdentity{ProductCode: "P-SIMPLE", ActorUID: "pm", Action: "product_versions:plan-confirm", IdempotencyKey: "over-confirm"}, permit("product_versions", "edit"), permit("product_priorities", "prioritize"), LightweightVersionPlanConfirm{VersionID: version.ID, ExpectedRevision: 6, ExpectedVersionRevision: 4, ExpectedPlanRevision: 2, ExpectedScopeRevision: 3})
 	requireProductRule(t, e, "product_version_plan_confirm_invalid")
-	_, e = EditLightweightVersionPlanItem(ctx, db, CommandIdentity{ProductCode: "P-SIMPLE", ActorUID: "pm", Action: "product_versions:plan-item-edit", IdempotencyKey: "estimate"}, permit("product_versions", "edit"), LightweightVersionPlanItemEdit{VersionID: version.ID, ScopeID: scope.ID, ExpectedRevision: 6, ExpectedVersionRevision: 4, ExpectedPlanRevision: 2, ExpectedScopeRevision: 3, ScopeSummary: "统一入口", EstimatePersonDays: &estimate, AcceptanceCriteria: "可通过统一登录"})
+	_, e = commands.EditLightweightVersionPlanItem(ctx, db, CommandIdentity{ProductCode: "P-SIMPLE", ActorUID: "pm", Action: "product_versions:plan-item-edit", IdempotencyKey: "estimate"}, permit("product_versions", "edit"), LightweightVersionPlanItemEdit{VersionID: version.ID, ScopeID: scope.ID, ExpectedRevision: 6, ExpectedVersionRevision: 4, ExpectedPlanRevision: 2, ExpectedScopeRevision: 3, ScopeSummary: "统一入口", EstimatePersonDays: &estimate, AcceptanceCriteria: "可通过统一登录"})
 	if e != nil {
 		t.Fatal(e)
 	}
-	if _, e = ConfirmLightweightVersionPlan(ctx, db, CommandIdentity{ProductCode: "P-SIMPLE", ActorUID: "pm", Action: "product_versions:plan-confirm", IdempotencyKey: "confirm"}, permit("product_versions", "edit"), permit("product_priorities", "prioritize"), LightweightVersionPlanConfirm{VersionID: version.ID, ExpectedRevision: 7, ExpectedVersionRevision: 5, ExpectedPlanRevision: 2, ExpectedScopeRevision: 4}); e != nil {
+	if _, e = commands.ConfirmLightweightVersionPlan(ctx, db, CommandIdentity{ProductCode: "P-SIMPLE", ActorUID: "pm", Action: "product_versions:plan-confirm", IdempotencyKey: "confirm"}, permit("product_versions", "edit"), permit("product_priorities", "prioritize"), LightweightVersionPlanConfirm{VersionID: version.ID, ExpectedRevision: 7, ExpectedVersionRevision: 5, ExpectedPlanRevision: 2, ExpectedScopeRevision: 4}); e != nil {
 		t.Fatal(e)
 	}
 	if _, e = db.Exec(`CREATE TABLE pc_simple_handoff_drafts(id BIGINT PRIMARY KEY AUTO_INCREMENT,title VARCHAR(500)) ENGINE=InnoDB`); e != nil {
 		t.Fatal(e)
 	}
-	_, e = HandoffPlanningItem(ctx, db, CommandIdentity{ProductCode: "P-SIMPLE", ActorUID: "pm", Action: "product_priorities:handoff", IdempotencyKey: "success-handoff"}, permit("product_priorities", "handoff"), permit("product_requests", "handoff"), PlanningHandoffInput{PlanningDeliveryCheck: PlanningDeliveryCheck{ExpectedRevision: 7, ItemBizID: scope.PlanningItemBizID, ExpectedItemRevision: 3}, RequestBizID: request.BizID, ExpectedRequestRevision: 2, ProjectCode: "PJT", SliceKey: "success", Operation: "create", Title: "登录", ScopeSummary: "统一入口", Reason: "交付", PlannedVersionID: version.ID, PlannedVersionFeatureID: scope.ID}, PlanningHandoffTarget{AuthorizeProject: func(context.Context, *sql.Tx) (int64, error) { return 1, nil }, ResolveRequirement: func(ctx context.Context, tx *sql.Tx) (int64, error) {
+	_, e = commands.HandoffPlanningItem(ctx, db, CommandIdentity{ProductCode: "P-SIMPLE", ActorUID: "pm", Action: "product_priorities:handoff", IdempotencyKey: "success-handoff"}, permit("product_priorities", "handoff"), permit("product_requests", "handoff"), PlanningHandoffInput{PlanningDeliveryCheck: PlanningDeliveryCheck{ExpectedRevision: 7, ItemBizID: scope.PlanningItemBizID, ExpectedItemRevision: 3}, RequestBizID: request.BizID, ExpectedRequestRevision: 2, ProjectCode: "PJT", SliceKey: "success", Operation: "create", Title: "登录", ScopeSummary: "统一入口", Reason: "交付", PlannedVersionID: version.ID, PlannedVersionFeatureID: scope.ID}, PlanningHandoffTarget{AuthorizeProject: func(context.Context, *sql.Tx) (int64, error) { return 1, nil }, ResolveRequirement: func(ctx context.Context, tx *sql.Tx) (int64, error) {
 		r, e := tx.ExecContext(ctx, `INSERT INTO pc_simple_handoff_drafts(title) VALUES('登录')`)
 		if e != nil {
 			return 0, e
@@ -103,9 +106,9 @@ func TestMySQLLightweightPlanAdoptConfirmAndStale(t *testing.T) {
 	}
 	_, e = TransitionProductVersion(ctx, db, CommandIdentity{ProductCode: "P-SIMPLE", ActorUID: "pm", Action: "product_versions:transition", IdempotencyKey: "blocked-transition"}, permit("product_versions", "edit"), ProductVersionTransitionInput{VersionID: version.ID, ExpectedRevision: 9, ExpectedVersionRevision: 5, ToStatus: "developing", Reason: "开发"})
 	requireProductRule(t, e, "product_version_plan_confirmation_required")
-	_, e = HandoffPlanningItem(ctx, db, CommandIdentity{ProductCode: "P-SIMPLE", ActorUID: "pm", Action: "product_priorities:handoff", IdempotencyKey: "wrong-scope-item"}, permit("product_priorities", "handoff"), permit("product_requests", "handoff"), PlanningHandoffInput{PlanningDeliveryCheck: PlanningDeliveryCheck{ExpectedRevision: 9, ItemBizID: "00000000-0000-4000-8000-000000000099", ExpectedItemRevision: 5}, RequestBizID: request.BizID, ExpectedRequestRevision: 3, ProjectCode: "PJT", SliceKey: "wrong", Operation: "create", Title: "登录", ScopeSummary: "统一入口", Reason: "交付", PlannedVersionID: version.ID, PlannedVersionFeatureID: scope.ID}, PlanningHandoffTarget{AuthorizeProject: func(context.Context, *sql.Tx) (int64, error) { return 1, nil }, ResolveRequirement: func(context.Context, *sql.Tx) (int64, error) { return 1, nil }})
+	_, e = commands.HandoffPlanningItem(ctx, db, CommandIdentity{ProductCode: "P-SIMPLE", ActorUID: "pm", Action: "product_priorities:handoff", IdempotencyKey: "wrong-scope-item"}, permit("product_priorities", "handoff"), permit("product_requests", "handoff"), PlanningHandoffInput{PlanningDeliveryCheck: PlanningDeliveryCheck{ExpectedRevision: 9, ItemBizID: "00000000-0000-4000-8000-000000000099", ExpectedItemRevision: 5}, RequestBizID: request.BizID, ExpectedRequestRevision: 3, ProjectCode: "PJT", SliceKey: "wrong", Operation: "create", Title: "登录", ScopeSummary: "统一入口", Reason: "交付", PlannedVersionID: version.ID, PlannedVersionFeatureID: scope.ID}, PlanningHandoffTarget{AuthorizeProject: func(context.Context, *sql.Tx) (int64, error) { return 1, nil }, ResolveRequirement: func(context.Context, *sql.Tx) (int64, error) { return 1, nil }})
 	requireProductRule(t, e, "planning_handoff_version_invalid")
-	_, e = HandoffPlanningItem(ctx, db, CommandIdentity{ProductCode: "P-SIMPLE", ActorUID: "pm", Action: "product_priorities:handoff", IdempotencyKey: "blocked-handoff"}, permit("product_priorities", "handoff"), permit("product_requests", "handoff"), PlanningHandoffInput{PlanningDeliveryCheck: PlanningDeliveryCheck{ExpectedRevision: 9, ItemBizID: scope.PlanningItemBizID, ExpectedItemRevision: 5}, RequestBizID: request.BizID, ExpectedRequestRevision: 3, ProjectCode: "PJT", SliceKey: "one", Operation: "create", Title: "登录", ScopeSummary: "统一入口", Reason: "交付", PlannedVersionID: version.ID, PlannedVersionFeatureID: scope.ID}, PlanningHandoffTarget{AuthorizeProject: func(context.Context, *sql.Tx) (int64, error) { return 1, nil }, ResolveRequirement: func(context.Context, *sql.Tx) (int64, error) { return 1, nil }})
+	_, e = commands.HandoffPlanningItem(ctx, db, CommandIdentity{ProductCode: "P-SIMPLE", ActorUID: "pm", Action: "product_priorities:handoff", IdempotencyKey: "blocked-handoff"}, permit("product_priorities", "handoff"), permit("product_requests", "handoff"), PlanningHandoffInput{PlanningDeliveryCheck: PlanningDeliveryCheck{ExpectedRevision: 9, ItemBizID: scope.PlanningItemBizID, ExpectedItemRevision: 5}, RequestBizID: request.BizID, ExpectedRequestRevision: 3, ProjectCode: "PJT", SliceKey: "one", Operation: "create", Title: "登录", ScopeSummary: "统一入口", Reason: "交付", PlannedVersionID: version.ID, PlannedVersionFeatureID: scope.ID}, PlanningHandoffTarget{AuthorizeProject: func(context.Context, *sql.Tx) (int64, error) { return 1, nil }, ResolveRequirement: func(context.Context, *sql.Tx) (int64, error) { return 1, nil }})
 	requireProductRule(t, e, "product_version_plan_confirmation_required")
 }
 

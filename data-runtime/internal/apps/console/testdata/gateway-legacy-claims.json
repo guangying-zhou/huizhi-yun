@@ -1,0 +1,24 @@
+{
+  "iss": "https://example.test/console",
+  "sub": "client:aims.runtime",
+  "aud": "data-runtime",
+  "azp": "aims.runtime",
+  "client_id": "aims.runtime",
+  "scope": "aims:product:view",
+  "source_app": "aims",
+  "target_app": "data-runtime",
+  "tenant": "C000001",
+  "deployment": "C000001-test-aims",
+  "policy_ver": "v7",
+  "caps": "hash-7",
+  "token_use": "service",
+  "hzy": {
+    "subjectType": "service",
+    "subjectCode": "aims.runtime",
+    "clientCode": "aims.runtime",
+    "clientName": "Aims",
+    "clientType": "runtime",
+    "appCode": "aims",
+    "credentialId": 20
+  }
+}

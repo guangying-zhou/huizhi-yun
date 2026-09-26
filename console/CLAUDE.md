@@ -30,6 +30,7 @@
 - `POST /api/v1/console/bootstrap/token` 仅作为 legacy bootstrap 接口保留；新业务应用不再通过 app 级 `license.lic` 换取 service token。legacy 调用必须先以 Vault 中 `bootstrap.{deploymentCode}.access_key` 完成精确匹配，缺失或错误 key 均不得读取 service client 或签发 token；runtime config 仅可兼容暴露该 URL，绝不携带 access key 或其他 secret。
 - `server/plugins/collab-runtime.ts` 默认以内嵌模式启动 Collab Runtime；`CONSOLE_COLLAB_MODE=external` 使用独立服务，`disabled` 关闭。
 - Console 进程不得接收 `DB_*`、Hyperdrive、Vault master key 或 OIDC signing private key。内嵌 Collab 如启用，只能使用独立 `COLLAB_DB_*`。
+- 例外（R1，2026-09-22）：Console 可持有自己部署的 Ed25519 服务密钥（`HZY_CONSOLE_SERVICE_KEY` / `_FILE`）。它不是 OIDC 签名材料，只能在 Platform 不可达时换取 `console:service-token:issue`，且仅在 Console 策略信封含该公钥并处于有效或宽限期时被 Runtime 接受；公钥在策略同步时自动登记。见 `../docs/Console-Enterprise-Policy-Verification-Contract.md` §15。
 - Vault 加密和 OIDC 签名材料只由 Tenant Runtime 持有；Console 只传递受限命令并消费去敏回执。
 - Nuxt 业务模块不得直接使用 `integration_credentials` 或 `/vault/resolve`，必须通过 Foundation adapter 按 `integrationCode` 消费集成能力。
 - v1 不支持同一 integration 或 service client 并行 active credential。
@@ -37,6 +38,10 @@
 - 企业应用 Shell 覆盖当前用户应用目录中全部同源、非 Console 原生入口的业务应用，最多保留两个 iframe。目标 URL 必须位于 `/api/user/applications` 对应应用 `homeUrl/basePath`，postMessage 必须校验同源、来源窗口、appCode 和协议版本；`/shell/{appCode}?target=...` 仅作为内部启动地址，子应用确认导航后使用 History API 展示其规范业务路径，刷新规范路径时必须恢复 Shell；只有显式 `standalone=1` 才进入独立应用模式，跨源应用保持直接导航。Shell 品牌位使用嵌入应用运行时 `appLogo`，嵌入应用隐藏侧栏内重复的 Logo/名称。
 
 ## API 前缀
+
+目录服务读取能力 `console:directory-project-access:read` 与 `console:business-domain:view` 已补入 manifest，与既有 Service API 一致；不赋予人员管理权限。2026-09-20 经用户批准为 C000001 测试 `enterprise.runtime` 补齐这两项精确 grant，audience=console，source deployment=C000001-test-enterprise。受限修复与正式正反例探针见 `deploy/test-env/enterprise-directory-grants.mjs`、`verify-enterprise-directory.mjs`；不代表生产安装或页面验收。
+
+ADR-019 试点已迁移页面例外：旧 Shell 在创建 iframe 前调用 Foundation `/api/application-shell-migration`，仅使用 Gateway 受信、绑定 Console deployment 的登记页投影进行顶层导航；AppRail 预热不得跳转，接口失败显示重试，不当作未迁移页。未迁移页面仍遵守上文 Shell 规则。此协议生效需要同步发布 Gateway 和 Console，投影不授予任何业务权限。
 
 标准 API 前缀：
 
@@ -53,6 +58,17 @@
 - `docs/Console-Vault-Credential-Management-Plan.md`
 
 ## Platform Runtime
+
+2026-09-21 Enterprise 组合前策略合同核查：现有 Ed25519 只签 payload，
+持久化 HMAC 还保护外层版本/状态/有效期及同步时间。不能让 Enterprise 复制
+Gateway 密钥或仅验 payload 后跳过外层完整性。目标为 Console 模块在 Host
+内消费完整签名信封及 Runtime 当前状态；目前已实现默认关闭的 Runtime 新合同并
+通过临时 HTTP/MySQL 验证；Platform 新格式、Host 可选 gate 及 Console 显式
+`verified-runtime` 后端已于 2026-09-21 在 hzy0 显式切换，真实登录/导航/文档列表读取通过。
+本机使用独立策略表、5 分钟窗口、2 分钟有签名唤醒；Console owner 部署取受信目录，
+不能混用 Enterprise token 调用方部署。其他环境默认不切换，完整验收仍待完成，详见
+`../docs/Console-Enterprise-Policy-Verification-Contract.md`。本地独立 Console
+只是候选验证服务，不代表长期保留独立部署。
 
 涉及 Platform 激活、PM2、Cloudflare、prod/test/dev 隔离、诊断、public routing、runtime cache、签名 key 或部署验收时，先查相关脚本和运行手册，不把完整命令清单放在本常驻上下文中。主要入口：
 
@@ -71,8 +87,8 @@
 - Prod/test/dev 均不得在 Console 内生成、保存或轮换 OIDC signing private key。
 - Platform runtime 服务端配置以运行期 env 优先，build-time `runtimeConfig` 只做兜底。
 - Console 是运行时授权事实源：`/api/auth/permissions`、`/api/v1/console/user/permissions`、`/api/auth/scoped-authorization`、`/api/v1/console/user/scoped-authorization`、`/api/auth/instance-conflict-explain` 和 `/api/v1/console/user/instance-conflict-explain` 负责输出业务应用消费的权限快照、scoped grants、实例级职责冲突解释、active role、authorization mode 和 bundle 指纹。
-- 权限计算使用本地已验签 policy bundle。`HZY_PLATFORM_BUNDLE_CACHE_BACKEND=runtime` 时经 Foundation/Data Runtime 存入 `hzy_console.policy_bundle_snapshots`，不直连数据库；Gateway 独立分钟调度受信同步，普通 cache-miss 不访问 Platform，无包或最近成功同步超过 5 分钟返回不可用。内存 TTL 上限 5 分钟且不越过同步截止或包自身到期时间。旧 memory 模式仍保留同步冷加载及同配置 in-flight 合并，供迁移回滚。明确要求 fresh-policy 的高风险接口不改语义。 持久化冷读取仅在同一请求内合并未完成 I/O；CAS 同步返回已验证的胜出记录并写入内存，避免整包回读，内存更新不得回退到更早同步版本。
-- `POST /api/v1/console/service/authorization/subject-eligibility` 是业务 producer 发布 actionable 通知前的服务端资格边界：仅接受已登记来源应用、固定 purpose 和专用 service scope，要求目标 Directory 用户 active，并以 fresh normal-merged policy 判断来源应用固定 `resource:view`。调用方不得提交 resource/action/tenant/deployment 覆盖；拒绝或依赖不可用时 producer 必须保持未 ack 状态重试。
+- 权限计算使用本地已验签 policy bundle。`HZY_PLATFORM_BUNDLE_CACHE_BACKEND=runtime` 时经 Foundation/Data Runtime 存入 `hzy_console.policy_bundle_snapshots`，不直连数据库；Gateway 受信调度同步，普通 cache-miss 不访问 Platform。默认及非 test 环境无包或最近成功同步超过 5 分钟返回不可用；测试环境可显式设置 `HZY_PLATFORM_BUNDLE_MAX_AGE_MS=93600000`，上限 26 小时并配合每日同步，其他环境忽略该覆盖。内存 TTL 取配置与 freshness 截止的较小值，且始终不越过包自身到期时间。旧 memory 模式仍保留同步冷加载及同配置 in-flight 合并，供迁移回滚。通知详情等原有 fresh-policy 接口保留强制刷新语义；角色持有人与 subject-eligibility 服务读取改用逐请求修订探测，缓存的已验签信封接收时间默认最多 20 分钟，`HZY_CONSOLE_SERVICE_POLICY_MAX_AGE_MS` 可调低到 1–20 分钟，越界配置失败关闭；信封必须仍为有效非宽限状态。修订改变时刷新并验签，探测失败返回 503。持久化冷读取仅在同一请求内合并未完成 I/O；CAS 同步返回已验证的胜出记录并写入内存，避免整包回读，内存更新不得回退到更早同步版本。
+- `POST /api/v1/console/service/authorization/subject-eligibility` 是业务 producer 发布 actionable 通知前的服务端资格边界：仅接受已登记来源应用、固定 purpose 和专用 service scope，要求目标 Directory 用户 active，并在修订探测通过后用已验签的 normal-merged policy 判断来源应用固定 `resource:view`（主体授权快照仍绕过缓存）。调用方不得提交 resource/action/tenant/deployment 覆盖；拒绝或依赖不可用时 producer 必须保持未 ack 状态重试。
 - People lifecycle 只接受 `aud=console`、精确 `console:directory-employment:sync` / `console:directory-offboarding:disable` 和完整签名 envelope。Directory 用户、People 来源唯一主部门、session/refresh token 回收、applied revision、succeeded receipt 与 Console-owned Platform operation 必须同事务；低 revision stale-skip，同 revision 异 hash 409。
 - People 钉钉人事事实源只接受固定 People service client、`aud=console`、精确 `console:hr-source-sync:view|execute|admin` 与 tenant/source deployment/target deployment/command hash/幂等键绑定；部门映射和缺失部门停用确认都必须使用 service-command actor 重签。初始 grant 见 `docs/sql/Console-SQL-Seed-v2.1-people-dingtalk-hr-source-grants.sql`。
 - Console→Platform 不再同步尽力调用。`HZY_CONSOLE_PLATFORM_LIFECYCLE_SYNC_ENABLED` 默认关闭的有界 drain 使用 lease/fencing/attempt 投递固定 operation；共享 Cloudflare Console 不配置单租户 Runtime URL/token，也不自带 cron，由 Tenant Gateway 逐租户签名唤醒 `/api/internal/integration-operations/drain` 并注入 Runtime binding。Platform 失败不得回滚 Directory/账号事实。receipt 重放必须实时返回 Platform operation status，使 pending 为 202、成功后同键恢复为 200。

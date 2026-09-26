@@ -1,7 +1,14 @@
 <script setup lang="ts">
-import { projectStatusConfig } from '~/config/project'
-import type { ProjectMember } from '~/types/aims'
+import { useAimsModule } from '../../layer/useAimsModule'
+import { projectStatusConfig } from '../config/project'
+import type { ProjectMember } from '../types/aims'
+import { getDefaultWeeklyReportWeek } from '../composables/useWeeklyReportDefaultWeek'
+import { useProjectStore } from '../stores/project'
+import CompanyWeeklySummaryPanel from '../components/CompanyWeeklySummaryPanel.vue'
 
+
+// 同一份代码供独立应用与企业宿主使用：非宿主模式下 moduleUrl 原样返回路径。
+const { moduleUrl } = useAimsModule()
 definePageMeta({
   layoutHeader: true,
   layoutHeaderTitle: '周报汇总',
@@ -275,7 +282,7 @@ const exportHref = computed(() => {
 async function loadReports() {
   loading.value = true
   try {
-    const res = await $fetch<{ code: number, data: ListPayload<WeeklyReportSummaryItem> }>('/api/v1/weekly-reports', {
+    const res = await $fetch<{ code: number, data: ListPayload<WeeklyReportSummaryItem> }>(moduleUrl('/api/v1/weekly-reports'), {
       query: {
         year: selectedYear.value,
         week: selectedWeek.value,
@@ -310,7 +317,7 @@ async function loadDirectorWorkbench() {
   directorWorkbenchLoading.value = true
   try {
     const res = await $fetch<{ code: number, data: { items?: DirectorWorkbenchItem[] } }>(
-      `/api/v1/weekly-reporting-periods/${periodKey.value}/director-workbench`
+      moduleUrl(`/api/v1/weekly-reporting-periods/${periodKey.value}/director-workbench`)
     )
     directorPeriodReady.value = true
     directorWorkbenchItems.value = res.data.items || []
@@ -333,7 +340,7 @@ async function generateReportingPeriod() {
   if (!canReviewWeeklyReports.value) return
   periodGenerating.value = true
   try {
-    await $fetch(`/api/v1/weekly-reporting-periods/${periodKey.value}:generate`, {
+    await $fetch(moduleUrl(`/api/v1/weekly-reporting-periods/${periodKey.value}:generate`), {
       method: 'POST'
     })
     directorPeriodReady.value = true
@@ -411,7 +418,7 @@ async function reviewEditing(action: 'approve' | 'return' | 'approve_with_correc
   }
   reviewingAction.value = action
   try {
-    const res = await $fetch<{ code: number }>(`/api/v1/weekly-reports/${editing.value.reportId}:review`, {
+    const res = await $fetch<{ code: number }>(moduleUrl(`/api/v1/weekly-reports/${editing.value.reportId}:review`), {
       method: 'POST',
       body: {
         action,
@@ -442,7 +449,7 @@ async function openCorrectionDraft() {
   if (!editing.value?.reportId || editing.value.status !== 'frozen' || !correctionReason.value.trim()) return
   correctionOpening.value = true
   try {
-    await $fetch(`/api/v1/weekly-reports/${editing.value.reportId}:open-correction`, {
+    await $fetch(moduleUrl(`/api/v1/weekly-reports/${editing.value.reportId}:open-correction`), {
       method: 'POST',
       body: { reason: correctionReason.value.trim() }
     })

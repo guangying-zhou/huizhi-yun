@@ -3,6 +3,7 @@ package config
 import (
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -20,14 +21,26 @@ const (
 	AuthJWT         AuthMode = "jwt"
 )
 
+// GatewayKeysetConfig is operator-pinned, separate from unsigned heartbeat overlays.
+// Disabled by default; enabling distribution does not enable token exchange.
+type GatewayKeysetConfig struct {
+	Enabled           bool   `json:"enabled"`
+	Environment       string `json:"environment"`
+	GatewayDeployment string `json:"gatewayDeployment"`
+	PlatformKeyID     string `json:"platformKeyId"`
+	PlatformPublicKey string `json:"platformPublicKey"`
+}
+
 type Config struct {
-	Server             ServerConfig      `json:"server"`
-	Tenant             string            `json:"tenant"`
-	Deployment         string            `json:"deployment"`
-	DeploymentBindings map[string]string `json:"deploymentBindings"`
-	Control            ControlConfig     `json:"control"`
-	Auth               AuthConfig        `json:"auth"`
-	Apps               AppsConfig        `json:"apps"`
+	GatewayKeyset      GatewayKeysetConfig `json:"gatewayKeyset"`
+	Enterprise         EnterpriseConfig    `json:"enterprise"`
+	Server             ServerConfig        `json:"server"`
+	Tenant             string              `json:"tenant"`
+	Deployment         string              `json:"deployment"`
+	DeploymentBindings map[string]string   `json:"deploymentBindings"`
+	Control            ControlConfig       `json:"control"`
+	Auth               AuthConfig          `json:"auth"`
+	Apps               AppsConfig          `json:"apps"`
 }
 
 type ControlConfig struct {
@@ -86,10 +99,20 @@ type AppsConfig struct {
 }
 
 type ConsoleConfig struct {
-	Enabled            bool     `json:"enabled"`
-	DB                 DBConfig `json:"db"`
-	VaultMasterKey     string   `json:"-"`
-	VaultMasterKeyFile string   `json:"-"`
+	GatewayExchangeEnabled bool                 `json:"gatewayExchangeEnabled"`
+	PolicyEnvelope         PolicyEnvelopeConfig `json:"policyEnvelope"`
+	Enabled                bool                 `json:"enabled"`
+	DB                     DBConfig             `json:"db"`
+	VaultMasterKey         string               `json:"-"`
+	VaultMasterKeyFile     string               `json:"-"`
+}
+
+// Local configuration only; never inferred from request headers or envelope data.
+type PolicyEnvelopeConfig struct {
+	EnterpriseReadEnabled bool   `json:"enterpriseReadEnabled"`
+	Enabled               bool   `json:"enabled"`
+	Environment           string `json:"environment"`
+	MaxAgeMS              int64  `json:"maxAgeMs"`
 }
 
 type DirectoryConfig struct {
@@ -135,6 +158,13 @@ type AimsConfig struct {
 type CodocsConfig struct {
 	Enabled bool     `json:"enabled"`
 	DB      DBConfig `json:"db"`
+	// SnapshotV2Enabled registers the trusted v2 snapshot routes. Default
+	// false: enable only after the snapshot tables, grants and storage
+	// retention are verified for the environment.
+	SnapshotV2Enabled bool `json:"snapshotV2Enabled"`
+	// CollaborationV2Enabled registers the stage B collaboration session
+	// routes (default false; requires SnapshotV2Enabled and the sessions table).
+	CollaborationV2Enabled bool `json:"collaborationV2Enabled"`
 }
 
 type DBConfig struct {
@@ -246,6 +276,33 @@ func Load() (Config, error) {
 	if cfg.Control.ConfigDir == "" {
 		cfg.Control.ConfigDir = configDir
 	}
+	// The control-plane heartbeat persists the current bindings separately from
+	// config.json. Apply that overlay after the static file so a restart actually
+	// observes the bindings that caused it.
+	if content, err := os.ReadFile(filepath.Join(cfg.Control.ConfigDir, "deployment-bindings.json")); err == nil {
+		bindings := map[string]string{}
+		if err := json.Unmarshal(content, &bindings); err != nil {
+			return cfg, fmt.Errorf("decode deployment bindings overlay: %w", err)
+		}
+		if len(bindings) == 0 {
+			return cfg, fmt.Errorf("deployment bindings overlay is empty")
+		}
+		cfg.DeploymentBindings = bindings
+	} else if !os.IsNotExist(err) {
+		return cfg, fmt.Errorf("read deployment bindings overlay: %w", err)
+	}
+	// A local-only Workflow test receiver may have no Platform deployment row.
+	// Keep the Platform overlay authoritative for every other binding; this
+	// exact opt-in is never read by a cloud Runtime.
+	if local := strings.TrimSpace(os.Getenv("HZY_LOCAL_WORKFLOW_DEPLOYMENT")); local != "" {
+		if local != "C000001-test-workflow-local" || cfg.Tenant != "C000001" ||
+			cfg.Deployment != "c000001-test-tenant-runtime" || cfg.Server.Host != "127.0.0.1" ||
+			cfg.Server.Port != 18084 || !cfg.Apps.Workflow.Enabled ||
+			(cfg.DeploymentBindings["workflow"] != "" && cfg.DeploymentBindings["workflow"] != local) {
+			return cfg, fmt.Errorf("local Workflow deployment binding is invalid")
+		}
+		cfg.DeploymentBindings["workflow"] = local
+	}
 
 	if overlay, ok, err := loadPlatformSigningKeyOverlay(
 		filepath.Join(cfg.Control.ConfigDir, "platform-signing-key.json"),
@@ -299,9 +356,20 @@ func Load() (Config, error) {
 	normalizeDBConfig(&cfg.Apps.Altoc.DB)
 	normalizeDBConfig(&cfg.Apps.Aims.DB)
 	normalizeDBConfig(&cfg.Apps.Codocs.DB)
+	if _, err := cfg.EnterpriseBinding(); err != nil {
+		return Config{}, err
+	}
 	return cfg, nil
 }
 
+// ErrJWTTrustAlreadyInitialized reports an attempt to point this Runtime at a
+// different authentication trust root after one was already established.
+var ErrJWTTrustAlreadyInitialized = errors.New("JWT trust overlay is already initialized with different values")
+
+// PersistJWTTrustOverlay writes the trust root once. A one-time bootstrap must
+// not double as a standing facility for swapping issuer or JWKS: re-running it
+// with identical values is an idempotent confirmation, and any difference is
+// refused so that changing the trust root stays a separate, audited operation.
 func PersistJWTTrustOverlay(configDir string, trust JWTConfig) error {
 	dir := strings.TrimSpace(configDir)
 	if dir == "" {
@@ -315,6 +383,16 @@ func PersistJWTTrustOverlay(configDir string, trust JWTConfig) error {
 	}
 	if overlay.Issuer == "" || overlay.Audience == "" || overlay.JWKSURL == "" {
 		return fmt.Errorf("JWT trust overlay is incomplete")
+	}
+	existing, initialized, err := loadJWTTrustOverlay(filepath.Join(dir, "auth-jwt-trust.json"))
+	if err != nil {
+		return err
+	}
+	if initialized {
+		if existing != overlay {
+			return ErrJWTTrustAlreadyInitialized
+		}
+		return nil
 	}
 	content, err := json.Marshal(overlay)
 	if err != nil {

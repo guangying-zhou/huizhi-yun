@@ -1,9 +1,7 @@
 <script setup lang="ts">
 import { h, resolveComponent } from 'vue'
-
-definePageMeta({
-  layout: 'default'
-})
+import { useDocumentDownload } from '../../composables/useDocumentDownload'
+import { useCodocsModule } from '../../../layer/useCodocsModule'
 
 interface FavoriteDocument {
   uuid: string
@@ -32,13 +30,14 @@ usePageTitle('个人收藏')
 const UButton = resolveComponent('UButton')
 const toast = useToast()
 const apiFetch = useRequestFetch()
+const { moduleUrl, documentUrl, cacheKey } = useCodocsModule()
 const { user } = useAuth()
 const { downloadDocument } = useDocumentDownload()
 const uid = computed(() => user.value || 'user1')
 
 // Fetch starred documents
 const fetchFavorites = async () => {
-  const response = await apiFetch<DocumentsListResponse>('/api/documents', {
+  const response = await apiFetch<DocumentsListResponse>(moduleUrl('/api/documents'), {
     query: {
       owner: uid.value,
       starred: true
@@ -48,7 +47,7 @@ const fetchFavorites = async () => {
 }
 
 const { data: documents, pending, refresh } = await useAsyncData(
-  'my-favorites',
+  cacheKey('my-favorites'),
   fetchFavorites,
   {
     getCachedData: () => undefined, // Always fetch fresh data on navigation
@@ -116,7 +115,7 @@ const toggleStar = async (doc: FavoriteDocument) => {
   // Better to just call API and refresh.
 
   try {
-    await $fetch(`/api/documents/${doc.uuid}`, {
+    await $fetch(moduleUrl(`/api/documents/${doc.uuid}`), {
       method: 'PATCH',
       body: { star_flag: newStatus }
     })
@@ -129,7 +128,7 @@ const toggleStar = async (doc: FavoriteDocument) => {
 
 const handleRowSelect = (_e: Event, row: { original?: FavoriteDocument }) => {
   if (row.original?.uuid) {
-    navigateTo(`/documents/${row.original.uuid}`)
+    navigateTo(documentUrl(row.original.uuid))
   }
 }
 </script>
@@ -175,7 +174,7 @@ const handleRowSelect = (_e: Event, row: { original?: FavoriteDocument }) => {
                 <UIcon name="i-lucide-file-text" class="w-4 h-4 text-gray-500" />
                 <span
                   class="font-medium text-gray-900 dark:text-gray-100 cursor-pointer hover:underline"
-                  @click.stop="row?.original?.uuid && navigateTo(`/documents/${row.original.uuid}`)"
+                  @click.stop="row?.original?.uuid && navigateTo(documentUrl(row.original.uuid))"
                 >
                   {{ row.original.title }}
                 </span>
@@ -197,7 +196,7 @@ const handleRowSelect = (_e: Event, row: { original?: FavoriteDocument }) => {
                 color="neutral"
                 variant="ghost"
                 icon="i-lucide-edit"
-                @click.stop="navigateTo(`/documents/${row.original.uuid}`)"
+                @click.stop="navigateTo(documentUrl(row.original.uuid))"
               />
               <UDropdownMenu
                 :items="[

@@ -1,6 +1,8 @@
 import { $fetch } from 'ofetch'
 import { createHmac } from 'node:crypto'
 import { requestServiceAccessToken } from '@hzy/foundation/server/utils/serviceOidc'
+import { isPositiveUint64Decimal } from '@hzy/foundation/shared/utils/unsignedDecimal'
+import { unifiedIntegrationOperationRoute } from './unifiedIntegrationOperationRoute'
 
 interface RuntimeEnvelope<T> {
   code?: number
@@ -13,6 +15,8 @@ interface ScheduledRuntimeOptions {
   method?: 'GET' | 'POST'
   body?: Record<string, unknown>
   requestId?: string
+  requireServiceToken?: boolean
+  schedulerGeneration?: string
 }
 
 type AimsDueNotificationRuntimePath
@@ -123,6 +127,7 @@ export function requireAimsScheduledRuntimeBinding() {
   const financeTargetDeployment = envValue(['HZY_FINANCE_TARGET_DEPLOYMENT'])
   const altocTargetDeployment = envValue(['HZY_ALTOC_TARGET_DEPLOYMENT'])
   const codocsTargetDeployment = envValue(['HZY_CODOCS_TARGET_DEPLOYMENT'])
+  const workflowTargetDeployment = envValue(['HZY_WORKFLOW_TARGET_DEPLOYMENT'])
   if (!endpoint || !tenant || !deployment) {
     throw new Error('Aims scheduled runtime requires an explicit tenant-runtime endpoint, tenant and deployment binding.')
   }
@@ -135,7 +140,7 @@ export function requireAimsScheduledRuntimeBinding() {
       throw new Error('Aims managed Cloudflare drain requires a dedicated Console service client.')
     }
   }
-  return { endpoint, tenant, deployment, codocsTargetDeployment, altocTargetDeployment, financeTargetDeployment }
+  return { endpoint, tenant, deployment, codocsTargetDeployment, altocTargetDeployment, financeTargetDeployment, workflowTargetDeployment }
 }
 
 export function requireAimsDueNotificationRuntimeBinding() {
@@ -166,9 +171,10 @@ function tenantRuntimeTokenScope(audience: string, scope: string): string {
   return `${normalizedAudience}:${appCode}:${action}`
 }
 
-async function scheduledRuntimeBearerToken(config: Record<string, unknown>, scope: string) {
+async function scheduledRuntimeBearerToken(config: Record<string, unknown>, scope: string, requireServiceToken = false) {
   const staticToken = scheduledRuntimeStaticToken(config)
   if (staticToken) {
+    if (requireServiceToken) throw new Error('This scheduled operation requires a short-lived service token.')
     if (isManagedCloud(config)) throw new Error('Aims managed Cloudflare scheduled tasks must not use a static runtime token.')
     return staticToken
   }
@@ -195,9 +201,10 @@ export async function callAimsScheduledRuntime<T>(
   const data = await $fetch<RuntimeEnvelope<T>>(url.toString(), {
     method,
     headers: {
-      authorization: `Bearer ${await scheduledRuntimeBearerToken(config, options.scope)}`,
+      authorization: `Bearer ${await scheduledRuntimeBearerToken(config, options.scope, options.requireServiceToken)}`,
       ...(method === 'GET' ? {} : { 'content-type': 'application/json' }),
       ...(stringValue(options.requestId) ? { 'x-request-id': stringValue(options.requestId) } : {}),
+      ...(options.schedulerGeneration ? { 'x-hzy-scheduler-generation': options.schedulerGeneration } : {}),
       ...scheduledRuntimeContextHeaders(config)
     },
     ...(method === 'GET' ? {} : { body: options.body ?? {} }),
@@ -207,6 +214,29 @@ export async function callAimsScheduledRuntime<T>(
     throw new Error(data.message || 'Aims tenant-runtime returned an error.')
   }
   return data.data as T
+}
+
+// Selected by a migrated worker only after its complete task ownership and
+// notification paths have been verified. This does not enable a cron.
+export async function callAimsUnifiedIntegrationOperationRuntime<T>(path: string, body: Record<string, unknown>, requestId: string, generation: string): Promise<T> {
+  const config = useRuntimeConfig() as unknown as Record<string, unknown>
+  const clientId = getConfigValue(config, ['hzy.serviceClient.clientId', 'serviceClient.clientId'])
+    || envValue(['HZY_AIMS_SERVICE_CLIENT_ID', 'HZY_SERVICE_CLIENT_ID'])
+  if (clientId !== 'aims.runtime' || !/^[A-Za-z0-9][A-Za-z0-9._:@/-]{0,221}$/.test(requestId)) {
+    throw new Error('Unified scheduler requires aims.runtime and a stable request identity.')
+  }
+  if (!isPositiveUint64Decimal(generation)) {
+    throw new Error('Unified scheduler requires an explicit uint64 generation.')
+  }
+  requireAimsScheduledRuntimeBinding()
+  const routed = unifiedIntegrationOperationRoute(path, body)
+  return await callAimsScheduledRuntime<T>(routed.path, {
+    scope: 'aims:integration_operation:execute',
+    body: routed.body,
+    requestId,
+    schedulerGeneration: generation,
+    requireServiceToken: true
+  })
 }
 
 // Due checkpoint scans and acknowledgements are a closed worker contract, not

@@ -8,7 +8,7 @@ const authorizationSource = readFileSync(
 )
 
 describe('authorization SSR request context', () => {
-  test('forwards the incoming request context when loading the local permissions API', () => {
+  test('forwards the incoming request context and uses the Host-local permissions path', () => {
     assert.match(
       authorizationSource,
       /if \(import\.meta\.server\) \{[\s\S]*useRequestFetch\(\)[\s\S]*\} else \{[\s\S]*\$fetch/
@@ -17,6 +17,10 @@ describe('authorization SSR request context', () => {
       authorizationSource,
       /type AuthorizationSnapshotResponse = \{/
     )
-    assert.match(authorizationSource, /const response = await requestFetch\('\/api\/auth\/permissions'\)/)
+    assert.match(
+      authorizationSource,
+      /const authPrefix = publicConfig\.appCode === 'enterprise' && publicConfig\.authApiPrefix === '\/enterprise' \? '\/enterprise' : ''/
+    )
+    assert.match(authorizationSource, /const response = await requestFetch\(`\$\{authPrefix\}\/api\/auth\/permissions`\)/)
   })
 })

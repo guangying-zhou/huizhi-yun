@@ -2,9 +2,13 @@ package assets
 
 import (
 	"context"
+	"database/sql"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
+
+	"github.com/huizhi-yun/data-runtime/internal/httperror"
 )
 
 func (a *Adapter) handleCatalogRoutes(ctx context.Context, method string, path string, query url.Values, body map[string]any) (bool, any, string, error) {
@@ -229,123 +233,47 @@ func (a *Adapter) handleProductRoutes(ctx context.Context, method string, path s
 }
 
 func (a *Adapter) listProducts(ctx context.Context, query url.Values) (map[string]any, error) {
-	access, actor, err := assetsObjectAccess(query)
+	if query.Has("page") || query.Has("pageSize") {
+		if _, _, err := productMasterPageBounds(query); err != nil {
+			return nil, err
+		}
+	}
+	if err := validateProductMasterReadScope(query); err != nil {
+		return nil, err
+	}
+	tx, err := a.DB().BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelRepeatableRead, ReadOnly: true})
 	if err != nil {
 		return nil, err
 	}
-	where, args := "1=1", []any{}
-	if access != "all" {
-		units, err := assetsScopeUnits(query)
-		if err != nil {
-			return nil, err
-		}
-		where, args = productObjectScopeWhere("p", actor, units)
+	defer tx.Rollback()
+	result, err := (productMasterReader{tx: tx}).listProducts(ctx, query)
+	if err != nil {
+		return nil, err
 	}
-	return a.listProductsWithScope(ctx, query, where, args)
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+	return result, nil
 }
 
-// Only the exact-capability service router may call this unscoped directory read.
 func (a *Adapter) listServiceProducts(ctx context.Context, query url.Values) (map[string]any, error) {
 	return a.listProductsWithScope(ctx, query, "1=1", nil)
 }
 
 func (a *Adapter) listProductsWithScope(ctx context.Context, query url.Values, scopeWhere string, scopeArgs []any) (map[string]any, error) {
-	status := statusFilter(query)
-	search := likeSearch(query)
-	productCodes := uniqueCSVValues(firstText(query.Get("product_codes"), query.Get("productCodes"), query.Get("product_code"), query.Get("productCode")))
-	productCodeFilter := ""
-	args := []any{status, status, search, search, search, search, search, search, search, search, search, search, search, search, search}
-	if len(productCodes) > 0 {
-		productCodeFilter = "\n\t\t  AND p.product_code IN (" + strings.TrimRight(strings.Repeat("?,", len(productCodes)), ",") + ")"
-		for _, code := range productCodes {
-			args = append(args, code)
-		}
-	}
-	productCodeFilter += " AND " + scopeWhere
-	args = append(args, scopeArgs...)
-	if category := strings.TrimSpace(query.Get("product_line")); category != "" && category != "all" {
-		productCodeFilter += " AND p.product_line = ?"
-		args = append(args, category)
-	}
-	order := productListOrder(query)
-	statement := `
-		SELECT
-		  p.id,
-		  p.product_code,
-		  p.product_name,
-		  p.product_line,
-		  COALESCE(product_line_group.category_label, p.product_line) AS product_line_label,
-		  product_line_group.sort_order AS product_line_sort_order,
-		  CAST(p.customer_domain AS CHAR) AS customer_domain,
-		  p.business_domain,
-		  p.product_level,
-		  p.asset_level,
-		  p.status,
-		  p.build_stage,
-		  p.current_version,
-		  p.target_version,
-		  p.productization_value_level,
-		  CAST(p.supported_terminals AS CHAR) AS supported_terminals,
-		  CAST(p.covered_legacy_systems AS CHAR) AS covered_legacy_systems,
-		  p.summary,
-		  DATE_FORMAT(p.built_at, '%Y-%m-%d') AS built_at,
-		  p.business_owner_uid,
-		  p.technical_owner_uid,
-		  p.project_code,
-		  p.notes,
-		  COUNT(DISTINCT pr.asset_id) AS asset_count,
-		  COUNT(DISTINCT pb.technology_base_id) AS base_count
-		FROM product_assets p
-		LEFT JOIN asset_category_groups product_line_group
-		  ON product_line_group.category_scope = 'product'
-		 AND product_line_group.category_value = p.product_line
-		LEFT JOIN product_asset_resources pr ON pr.product_asset_id = p.id
-		LEFT JOIN product_asset_bases pb ON pb.product_asset_id = p.id
-		WHERE (? IS NULL OR p.status = ?)
-		  AND (
-		    ? IS NULL
-		    OR p.product_code LIKE ?
-		    OR p.product_name LIKE ?
-		    OR p.product_line LIKE ?
-		    OR CAST(p.customer_domain AS CHAR) LIKE ?
-		    OR p.business_domain LIKE ?
-		    OR p.current_version LIKE ?
-		    OR p.target_version LIKE ?
-		    OR CAST(p.supported_terminals AS CHAR) LIKE ?
-		    OR CAST(p.covered_legacy_systems AS CHAR) LIKE ?
-		    OR p.project_code LIKE ?
-		    OR p.business_owner_uid LIKE ?
-		    OR p.technical_owner_uid LIKE ?
-		  )
-		` + productCodeFilter + `
-		GROUP BY p.id
-		ORDER BY ` + order
-	if query.Has("page") || query.Has("pageSize") {
-		return a.productListPage(ctx, query, statement, args)
-	}
-	items, err := a.queryMaps(ctx, statement, args...)
+	tx, err := a.DB().BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelRepeatableRead, ReadOnly: true})
 	if err != nil {
 		return nil, err
 	}
-	active := int64(0)
-	assetCount := float64(0)
-	for _, item := range items {
-		normalizeProductMap(item)
-		switch cleanAnyString(item["status"]) {
-		case "mvp", "mmp", "pmf", "iterating":
-			active++
-		}
-		assetCount += rowNumber(item, "asset_count")
+	defer tx.Rollback()
+	result, err := (productMasterReader{tx: tx}).listProductsWithScope(ctx, query, scopeWhere, scopeArgs)
+	if err != nil {
+		return nil, err
 	}
-	return map[string]any{
-		"summary": []summaryMetric{
-			metric("产品主档", len(items), "平台产品家底", "primary"),
-			metric("活跃产品", active, "MVP/MMP/PMF 生命周期", "success"),
-			metric("关联资源", assetCount, "运行与交付资源", "info"),
-		},
-		"total": len(items),
-		"items": items,
-	}, nil
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+	return result, nil
 }
 
 func uniqueCSVValues(raw string) []string {
@@ -366,112 +294,22 @@ func uniqueCSVValues(raw string) []string {
 }
 
 func (a *Adapter) getProduct(ctx context.Context, id int64, query url.Values) (map[string]any, error) {
-	access, actor, err := assetsObjectAccess(query)
+	if err := validateProductMasterReadScope(query); err != nil {
+		return nil, err
+	}
+	tx, err := a.DB().BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelRepeatableRead, ReadOnly: true})
 	if err != nil {
 		return nil, err
 	}
-	where, args := "1=1", []any{id}
-	if access != "all" {
-		units, err := assetsScopeUnits(query)
-		if err != nil {
-			return nil, err
-		}
-		var scopeArgs []any
-		where, scopeArgs = productObjectScopeWhere("p", actor, units)
-		args = append(args, scopeArgs...)
-	}
-
-	row, err := a.queryRowMap(ctx, `
-		SELECT
-		  p.id,
-		  p.product_code,
-		  p.product_name,
-		  p.product_line,
-		  COALESCE(product_line_group.category_label, p.product_line) AS product_line_label,
-		  product_line_group.sort_order AS product_line_sort_order,
-		  CAST(p.customer_domain AS CHAR) AS customer_domain,
-		  p.business_domain,
-		  p.product_level,
-		  p.asset_level,
-		  p.status,
-		  p.build_stage,
-		  p.current_version,
-		  p.target_version,
-		  p.productization_value_level,
-		  CAST(p.supported_terminals AS CHAR) AS supported_terminals,
-		  CAST(p.covered_legacy_systems AS CHAR) AS covered_legacy_systems,
-		  p.summary,
-		  DATE_FORMAT(p.built_at, '%Y-%m-%d') AS built_at,
-		  p.business_owner_uid,
-		  p.technical_owner_uid,
-		  p.project_code,
-		  p.notes,
-		  COUNT(DISTINCT pr.asset_id) AS asset_count,
-		  COUNT(DISTINCT pb.technology_base_id) AS base_count
-		FROM product_assets p
-		LEFT JOIN asset_category_groups product_line_group
-		  ON product_line_group.category_scope = 'product'
-		 AND product_line_group.category_value = p.product_line
-		LEFT JOIN product_asset_resources pr ON pr.product_asset_id = p.id
-		LEFT JOIN product_asset_bases pb ON pb.product_asset_id = p.id
-		WHERE p.id = ? AND `+where+`
-		GROUP BY p.id`, args...)
+	defer tx.Rollback()
+	result, err := (productMasterReader{tx: tx}).getProduct(ctx, id, query)
 	if err != nil {
 		return nil, err
 	}
-	if row == nil {
-		return nil, notFound("产品主档不存在")
-	}
-	normalizeProductMap(row)
-	linkedBases, err := a.queryMaps(ctx, `
-		SELECT tb.id, tb.base_code, tb.base_name, tb.base_type, tb.status
-		FROM product_asset_bases pb
-		INNER JOIN technology_bases tb ON tb.id = pb.technology_base_id
-		WHERE pb.product_asset_id = ?
-		ORDER BY tb.id DESC`, id)
-	if err != nil {
+	if err := tx.Commit(); err != nil {
 		return nil, err
 	}
-	linkedAssets, err := a.queryMaps(ctx, `
-		SELECT ai.id, ai.asset_code, ai.asset_name, ai.asset_category, ai.asset_subtype, pr.relation_type, ai.status, pr.is_primary
-		FROM product_asset_resources pr
-		INNER JOIN asset_items ai ON ai.id = pr.asset_id
-		WHERE pr.product_asset_id = ?
-		ORDER BY pr.is_primary DESC, ai.id DESC`, id)
-	if err != nil {
-		return nil, err
-	}
-	for _, item := range linkedAssets {
-		normalizeBoolField(item, "is_primary")
-	}
-	documents, err := a.documentsFor(ctx, "product_asset", id)
-	if err != nil {
-		return nil, err
-	}
-	deliveryInstances, err := a.queryMaps(ctx, `
-		SELECT
-		  dv.id,
-		  dv.delivery_code,
-		  dv.delivery_name,
-		  dv.customer_code,
-		  dv.contract_code,
-		  dv.project_code,
-		  dv.status,
-		  dp.relation_type,
-		  DATE_FORMAT(dv.go_live_at, '%Y-%m-%d') AS go_live_at,
-		  DATE_FORMAT(dv.accepted_at, '%Y-%m-%d') AS accepted_at
-		FROM asset_delivery_products dp
-		INNER JOIN asset_delivery_views dv ON dv.id = dp.delivery_view_id
-		WHERE dp.product_asset_id = ?
-		ORDER BY dv.id DESC`, id)
-	if err != nil {
-		return nil, err
-	}
-	row["linked_bases"] = linkedBases
-	row["linked_assets"] = linkedAssets
-	row["documents"] = documents
-	row["delivery_instances"] = deliveryInstances
-	return row, nil
+	return result, nil
 }
 
 func (a *Adapter) handleTechnologyBaseRoutes(ctx context.Context, method string, path string, query url.Values, body map[string]any) (bool, any, string, error) {
@@ -691,6 +529,147 @@ func (a *Adapter) listIpAssets(ctx context.Context, query url.Values) (map[strin
 	}, nil
 }
 
+// EnterpriseIPAssetsList keeps the list/count/page reads behind the Registry
+// generation fence. The scope predicate is the owning IP relation predicate;
+// project and direct-relation constraints remain conjunctive.
+func (a *Adapter) EnterpriseIPAssetsList(ctx context.Context, query url.Values) (map[string]any, error) {
+	if a.enterpriseReads == nil || a.enterpriseReads.registry == nil {
+		return nil, httperror.New(503, "enterprise_ip_assets_reader_unavailable", "IP-assets unified reader unavailable")
+	}
+	tx, _, err := a.enterpriseReads.registry.BeginSnapshotReadTransaction(ctx, a.enterpriseReads.request)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+	access, actor, err := assetsObjectAccess(query)
+	if err != nil {
+		return nil, err
+	}
+	where, args := "1=1", []any{}
+	if access != "all" {
+		units, e := assetsScopeUnits(query)
+		if e != nil {
+			return nil, e
+		}
+		where, args = ipAssetScopeWhere("ip", actor, units)
+	}
+	status, search := statusFilter(query), likeSearch(query)
+	where += " AND (? IS NULL OR ip.status=?) AND (? IS NULL OR ip.ip_code LIKE ? OR ip.ip_name LIKE ? OR ip.ip_type LIKE ? OR ip.registration_no LIKE ? OR ip.right_holder LIKE ? OR ip.owner_uid LIKE ?)"
+	args = append(args, status, status, search, search, search, search, search, search, search)
+	page, size, err := enterpriseIPAssetPagination(query)
+	if err != nil {
+		return nil, err
+	}
+	if page > 1000000 || size > 100 {
+		return nil, httperror.New(400, "invalid_ip_asset_pagination", "IP-assets pagination invalid")
+	}
+	var total, active int
+	if err = tx.QueryRowContext(ctx, "SELECT COUNT(*),COALESCE(SUM(CASE WHEN ip.status='active' THEN 1 ELSE 0 END),0) FROM ip_assets ip WHERE "+where, args...).Scan(&total, &active); err != nil {
+		return nil, err
+	}
+	// Product relations have their own object scope. Do not aggregate or invent a
+	// count here: an IP grant alone neither discloses nor proves associations.
+	rows, err := queryMaps(ctx, tx, "SELECT ip.* FROM ip_assets ip WHERE "+where+" ORDER BY ip.id DESC LIMIT ? OFFSET ?", append(args, size, (page-1)*size)...)
+	if err != nil {
+		return nil, err
+	}
+	if err = tx.Commit(); err != nil {
+		return nil, err
+	}
+	return map[string]any{"items": rows, "total": total, "page": page, "pageSize": size, "summary": []summaryMetric{metric("知识产权资产", total, "软著 / 商标 / 专利 / 资质证照", "primary"), metric("有效资产", active, "当前有效权利", "success")}}, nil
+}
+
+// enterpriseIPAssetPagination rejects malformed values instead of silently
+// falling back: a trusted request must not turn an invalid offset into page 1.
+// The bounds also make (page-1)*size safe on every supported platform.
+func enterpriseIPAssetPagination(query url.Values) (int, int, error) {
+	parse := func(name string, fallback, maximum int) (int, error) {
+		raw := strings.TrimSpace(query.Get(name))
+		if raw == "" {
+			return fallback, nil
+		}
+		value, err := strconv.Atoi(raw)
+		if err != nil || value < 1 || value > maximum {
+			return 0, httperror.New(400, "invalid_ip_asset_pagination", "IP-assets pagination invalid")
+		}
+		return value, nil
+	}
+	page, err := parse("page", 1, 1000000)
+	if err != nil {
+		return 0, 0, err
+	}
+	size, err := parse("pageSize", 20, 100)
+	if err != nil {
+		return 0, 0, err
+	}
+	return page, size, nil
+}
+
+func (a *Adapter) EnterpriseIPAssetView(ctx context.Context, query url.Values, id int64) (map[string]any, error) {
+	return a.enterpriseIPAssetView(ctx, query, nil, id)
+}
+
+func (a *Adapter) EnterpriseIPAssetProductsView(ctx context.Context, source, target url.Values, id int64) (map[string]any, error) {
+	row, err := a.enterpriseIPAssetView(ctx, source, target, id)
+	if err != nil {
+		return nil, err
+	}
+	items, ok := row["linked_products"].([]map[string]any)
+	if !ok {
+		return nil, httperror.New(503, "enterprise_ip_asset_products_invalid", "IP product relation result invalid")
+	}
+	return map[string]any{"id": id, "items": items, "total": len(items)}, nil
+}
+
+func (a *Adapter) enterpriseIPAssetView(ctx context.Context, query, target url.Values, id int64) (map[string]any, error) {
+	if a.enterpriseReads == nil || a.enterpriseReads.registry == nil {
+		return nil, httperror.New(503, "enterprise_ip_assets_reader_unavailable", "IP-assets unified reader unavailable")
+	}
+	tx, _, err := a.enterpriseReads.registry.BeginSnapshotReadTransaction(ctx, a.enterpriseReads.request)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+	access, actor, err := assetsObjectAccess(query)
+	if err != nil {
+		return nil, err
+	}
+	where, args := "1=1", []any{id}
+	if access != "all" {
+		units, e := assetsScopeUnits(query)
+		if e != nil {
+			return nil, e
+		}
+		scope, scopeArgs := ipAssetScopeWhere("ip", actor, units)
+		where = scope
+		args = append(args, scopeArgs...)
+	}
+	row, err := queryMaps(ctx, tx, "SELECT ip.* FROM ip_assets ip WHERE ip.id=? AND "+where, args...)
+	if err != nil {
+		return nil, err
+	}
+	if len(row) == 0 {
+		return nil, notFound("知识产权资产不存在")
+	}
+	if target != nil {
+		predicate, predicateArgs, err := EnterpriseProductReadPredicate(target, actor)
+		if err != nil {
+			return nil, err
+		}
+		products, err := queryMaps(ctx, tx, `SELECT p.id,p.product_code,p.product_name,p.status
+			FROM ip_asset_products ipr INNER JOIN product_assets p ON p.id=ipr.product_asset_id
+			WHERE ipr.ip_asset_id=? AND `+predicate+` ORDER BY p.id DESC`, append([]any{id}, predicateArgs...)...)
+		if err != nil {
+			return nil, err
+		}
+		row[0]["linked_products"] = products
+	}
+	if err = tx.Commit(); err != nil {
+		return nil, err
+	}
+	return row[0], nil
+}
+
 func (a *Adapter) getIpAsset(ctx context.Context, id int64) (map[string]any, error) {
 	row, err := a.queryRowMap(ctx, `
 		SELECT
@@ -778,9 +757,82 @@ func (a *Adapter) handleDigitalAssetRoutes(ctx context.Context, method string, p
 }
 
 func (a *Adapter) listDigitalAssets(ctx context.Context, query url.Values) (map[string]any, error) {
+	return a.listDigitalAssetsWithScope(ctx, query, "", nil)
+}
+
+// EnterpriseDigitalAssetsList is the bounded Host entrypoint.  It reuses the
+// owning digital-assets query and requires the trusted object scope compiled
+// by the Enterprise BFF; it never accepts a caller-selected predicate.
+func (a *Adapter) EnterpriseDigitalAssetsList(ctx context.Context, query url.Values) (map[string]any, error) {
+	access, actor, err := assetsObjectAccess(query)
+	if err != nil {
+		return nil, err
+	}
+	if a.enterpriseReads == nil || a.enterpriseReads.registry == nil {
+		return nil, httperror.New(http.StatusServiceUnavailable, "enterprise_digital_assets_reader_unavailable", "Digital asset unified reader unavailable")
+	}
+	tx, _, err := a.enterpriseReads.registry.BeginSnapshotReadTransaction(ctx, a.enterpriseReads.request)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+	where, args := "", []any(nil)
+	if access != "all" {
+		units, scopeErr := assetsScopeUnits(query)
+		if scopeErr != nil {
+			return nil, scopeErr
+		}
+		where, args = digitalAssetScopeWhere("da", actor, units)
+	}
+	data, err := a.listDigitalAssetsWithScopeRunner(ctx, tx, query, where, args)
+	if err != nil {
+		return nil, err
+	}
+	if err = tx.Commit(); err != nil {
+		return nil, err
+	}
+	return data, nil
+}
+
+func (a *Adapter) listDigitalAssetsWithScope(ctx context.Context, query url.Values, scopeWhere string, scopeArgs []any) (map[string]any, error) {
+	return a.listDigitalAssetsWithScopeRunner(ctx, a.DB(), query, scopeWhere, scopeArgs)
+}
+
+func (a *Adapter) listDigitalAssetsWithScopeRunner(ctx context.Context, runner interface {
+	queryMapRunner
+	QueryRowContext(context.Context, string, ...any) *sql.Row
+}, query url.Values, scopeWhere string, scopeArgs []any) (map[string]any, error) {
 	status := statusFilter(query)
 	search := likeSearch(query)
-	items, err := a.queryMaps(ctx, `
+	page := positiveQueryInt(query.Get("page"), 1)
+	pageSize := positiveQueryInt(query.Get("pageSize"), 20)
+	if page > 1000000 || pageSize > 100 {
+		return nil, httperror.New(http.StatusBadRequest, "invalid_digital_asset_pagination", "数字资产分页参数无效")
+	}
+	where := `(? IS NULL OR da.status = ?)
+		  AND (
+		    ? IS NULL
+		    OR da.digital_code LIKE ?
+		    OR da.digital_name LIKE ?
+		    OR da.digital_type LIKE ?
+		    OR da.storage_location LIKE ?
+		    OR da.project_code LIKE ?
+			OR da.owner_uid LIKE ?
+		  )`
+	args := []any{status, status, search, search, search, search, search, search, search}
+	if scopeWhere != "" {
+		where += " AND " + scopeWhere
+		args = append(args, scopeArgs...)
+	}
+	var total, active int
+	if err := runner.QueryRowContext(ctx, "SELECT COUNT(*), COALESCE(SUM(CASE WHEN da.status='active' THEN 1 ELSE 0 END), 0) FROM digital_assets da WHERE "+where, args...).Scan(&total, &active); err != nil {
+		return nil, err
+	}
+	var productCount float64
+	if err := runner.QueryRowContext(ctx, "SELECT COUNT(dap.product_asset_id) FROM digital_assets da LEFT JOIN digital_asset_products dap ON dap.digital_asset_id=da.id WHERE "+where, args...).Scan(&productCount); err != nil {
+		return nil, err
+	}
+	queryText := `
 		SELECT
 		  da.id,
 		  da.digital_code,
@@ -798,44 +850,49 @@ func (a *Adapter) listDigitalAssets(ctx context.Context, query url.Values) (map[
 		FROM digital_assets da
 		LEFT JOIN asset_environments env ON env.id = da.environment_id
 		LEFT JOIN digital_asset_products dap ON dap.digital_asset_id = da.id
-		WHERE (? IS NULL OR da.status = ?)
-		  AND (
-		    ? IS NULL
-		    OR da.digital_code LIKE ?
-		    OR da.digital_name LIKE ?
-		    OR da.digital_type LIKE ?
-		    OR da.storage_location LIKE ?
-		    OR da.project_code LIKE ?
-		    OR da.owner_uid LIKE ?
-		  )
-		GROUP BY da.id
-		ORDER BY da.id DESC`,
-		status, status, search, search, search, search, search, search, search,
-	)
+		WHERE ` + where + ` GROUP BY da.id ORDER BY da.id DESC LIMIT ? OFFSET ?`
+	pageArgs := append(append([]any{}, args...), pageSize, (page-1)*pageSize)
+	items, err := queryMaps(ctx, runner, queryText, pageArgs...)
 	if err != nil {
 		return nil, err
 	}
-	active := int64(0)
-	productCount := float64(0)
-	for _, item := range items {
-		if cleanAnyString(item["status"]) == "active" {
-			active++
-		}
-		productCount += rowNumber(item, "product_count")
-	}
 	return map[string]any{
 		"summary": []summaryMetric{
-			metric("数字资产", len(items), "代码 / 文档 / 数据 / 模型 / 交付物", "primary"),
+			metric("数字资产", total, "代码 / 文档 / 数据 / 模型 / 交付物", "primary"),
 			metric("活跃资产", active, "当前仍在复用", "success"),
 			metric("关联产品", productCount, "已挂接产品主档", "info"),
 		},
-		"total": len(items),
-		"items": items,
+		"total":    total,
+		"page":     page,
+		"pageSize": pageSize,
+		"items":    items,
 	}, nil
 }
 
 func (a *Adapter) getDigitalAsset(ctx context.Context, id int64) (map[string]any, error) {
-	row, err := a.queryRowMap(ctx, `
+	return a.getDigitalAssetWithScope(ctx, id, "", nil)
+}
+
+// EnterpriseDigitalAssetView is the exact object read entrypoint for the
+// digital_assets:view user grant.
+func (a *Adapter) EnterpriseDigitalAssetView(ctx context.Context, query url.Values, id int64) (map[string]any, error) {
+	access, actor, err := assetsObjectAccess(query)
+	if err != nil {
+		return nil, err
+	}
+	if access == "all" {
+		return a.getDigitalAsset(ctx, id)
+	}
+	units, err := assetsScopeUnits(query)
+	if err != nil {
+		return nil, err
+	}
+	where, args := digitalAssetScopeWhere("da", actor, units)
+	return a.getDigitalAssetWithScope(ctx, id, where, args)
+}
+
+func (a *Adapter) getDigitalAssetWithScope(ctx context.Context, id int64, scopeWhere string, scopeArgs []any) (map[string]any, error) {
+	queryText := `
 		SELECT
 		  da.id,
 		  da.digital_code,
@@ -854,7 +911,14 @@ func (a *Adapter) getDigitalAsset(ctx context.Context, id int64) (map[string]any
 		LEFT JOIN asset_environments env ON env.id = da.environment_id
 		LEFT JOIN digital_asset_products dap ON dap.digital_asset_id = da.id
 		WHERE da.id = ?
-		GROUP BY da.id`, id)
+	`
+	args := []any{id}
+	if scopeWhere != "" {
+		queryText += " AND " + scopeWhere
+		args = append(args, scopeArgs...)
+	}
+	queryText += " GROUP BY da.id"
+	row, err := a.queryRowMap(ctx, queryText, args...)
 	if err != nil {
 		return nil, err
 	}

@@ -1,11 +1,15 @@
 <script setup lang="ts">
+import { useAimsModule } from '../../../layer/useAimsModule'
+import { useProductWorkspace } from '../../composables/useProductWorkspace'
 import {
   getProductPerspectives,
   productNavTo,
   resolveProductPerspective,
   productNavItemMatches,
   type ProductNavItem
-} from '~/config/productNavigation'
+} from '../../../layer/productNavigation'
+
+const { moduleUrl } = useAimsModule()
 
 const props = defineProps<{ productCode: string }>()
 
@@ -54,7 +58,7 @@ async function loadSwitcher() {
   switcherLoading.value = true
   switcherFailed.value = false
   try {
-    const response = await $fetch<{ code: number, data: { items: SwitcherProduct[], total: number } }>('/api/v1/products', {
+    const response = await $fetch<{ code: number, data: { items: SwitcherProduct[], total: number } }>(moduleUrl('/api/v1/products'), {
       query: { page: 1, pageSize: 20, status: 'active', ...(keyword ? { keyword } : {}) }, timeout: 15000
     })
     if (current !== switcherGeneration) return
@@ -188,7 +192,7 @@ async function switchProduct(target: string) {
                     color="neutral"
                     variant="ghost"
                     trailing-icon="i-lucide-arrow-right"
-                    to="/products"
+                    :to="moduleUrl('/products')"
                     @click="switcherOpen = false"
                   />
                 </div>

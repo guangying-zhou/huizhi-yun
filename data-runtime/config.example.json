@@ -5,6 +5,10 @@
   },
   "tenant": "demo",
   "deployment": "demo-agent",
+  "enterprise": {
+    "enabled": false,
+    "enableMilestoneReceivable": false
+  },
   "auth": {
     "mode": "static_token",
     "staticToken": "change-me",

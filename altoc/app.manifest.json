@@ -57,7 +57,7 @@
       "code": "contract",
       "name": "合同管理",
       "description": "合同主数据、里程碑、履约状态和合同文档",
-      "actions": ["view", "edit", "approve", "finance-summary:sync", "admin"],
+      "actions": ["view", "edit", "approve", "activate-delivery", "finance-summary:sync", "admin"],
       "sortOrder": 50
     },
     {

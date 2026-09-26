@@ -8,8 +8,11 @@
  * - 以上部门的所有下属部门
  */
 import type { Department } from '@hzy/foundation/app/types/account'
+import { useAimsModule } from '../../layer/useAimsModule'
 
 export function useAccessibleDepartments() {
+  // 同一份 composable 供独立应用与企业宿主使用。
+  const { moduleUrl } = useAimsModule()
   const departments = ref<Department[]>([])
   const loading = ref(false)
 
@@ -17,7 +20,7 @@ export function useAccessibleDepartments() {
     loading.value = true
     try {
       const res = await $fetch<{ code: number, data: Department[] }>(
-        '/api/account/accessible-departments'
+        moduleUrl('/api/account/accessible-departments')
       )
       if (res.code === 0 && res.data) {
         departments.value = res.data

@@ -88,7 +88,9 @@
 </template>
 
 <script setup lang="ts">
-import type { AccountUsersResponse } from '~/types/account'
+import { createCreationAttempt } from '../../../layer/creationAttempt.mjs'
+import { useCodocsModule } from '../../../layer/useCodocsModule'
+import type { AccountUsersResponse } from '../../types/account'
 
 interface ApiErrorLike {
   data?: {
@@ -122,6 +124,8 @@ const isOpen = computed({
 
 const { user } = useAuth()
 const toast = useToast()
+const { moduleUrl, cacheKey } = useCodocsModule()
+const sendAttempt = createCreationAttempt()
 const submitting = ref(false)
 const senderOptions = ref<SenderOption[]>([])
 const senderUid = ref('')
@@ -294,18 +298,31 @@ const handleConfirm = async () => {
 
   submitting.value = true
   try {
-    await $fetch(`/api/reviews/${props.reviewId}/send`, {
+    const payload = {
+      reviewId: props.reviewId,
+      senderUid: senderUid.value.trim(),
+      receiverName: receiverName.value.trim(),
+      receiverPhone: receiverPhone.value.trim(),
+      channel: channel.value,
+      sentDate: sentDate.value,
+      targetAccount: requiresTargetAccount.value ? targetAccount.value.trim() : null,
+      remark: remark.value.trim() || null
+    }
+    const attemptKey = sendAttempt.keyFor(cacheKey(`review-send:${props.reviewId}`), payload)
+    await $fetch(moduleUrl(`/api/reviews/${props.reviewId}/send`), {
       method: 'POST',
+      headers: { 'Idempotency-Key': attemptKey },
       body: {
-        senderUid: senderUid.value,
-        receiverName: receiverName.value.trim(),
-        receiverPhone: receiverPhone.value.trim(),
-        channel: channel.value,
-        sentDate: sentDate.value,
-        targetAccount: requiresTargetAccount.value ? targetAccount.value.trim() : null,
-        remark: remark.value.trim() || null
+        senderUid: payload.senderUid,
+        receiverName: payload.receiverName,
+        receiverPhone: payload.receiverPhone,
+        channel: payload.channel,
+        sentDate: payload.sentDate,
+        targetAccount: payload.targetAccount,
+        remark: payload.remark
       }
     })
+    sendAttempt.complete(attemptKey)
 
     toast.add({
       title: '发送已确认',

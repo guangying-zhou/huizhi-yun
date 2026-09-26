@@ -139,6 +139,12 @@ function isLocalDevHost(hostname: string) {
   return hostname === 'localhost' || /^\d+\.\d+\.\d+\.\d+$/.test(hostname)
 }
 
+// Console may be mounted under a prefix (hzy0: /console); a root-relative
+// '/login' would leave the Console and 404 at the gateway.
+function consoleLoginUrl(event: H3Event, query: URLSearchParams) {
+  return `${resolveCurrentAppUrl(event, '/login')}?${query.toString()}`
+}
+
 function sanitizeRedirect(event: H3Event, raw: unknown) {
   const redirect = stringValue(raw)
   if (!redirect) return '/'
@@ -224,7 +230,7 @@ export async function getUpstreamOidcLogoutUrl(event: H3Event, finalRedirect: st
   setCookie(
     event,
     sessionCookies.postLogoutRedirect,
-    sanitizeRedirect(event, finalRedirect) || '/login?logged_out=1',
+    sanitizeRedirect(event, finalRedirect) || consoleLoginUrl(event, new URLSearchParams({ logged_out: '1' })),
     getCookieOptions(event)
   )
 
@@ -242,7 +248,7 @@ export async function getUpstreamOidcLogoutUrl(event: H3Event, finalRedirect: st
 export async function handleUpstreamOidcPostLogout(event: H3Event) {
   const redirect = sanitizeRedirect(event, getCookie(event, sessionCookies.postLogoutRedirect))
   deleteCookie(event, sessionCookies.postLogoutRedirect, getCookieOptions(event, 0))
-  return sendRedirect(event, redirect || '/login?logged_out=1')
+  return sendRedirect(event, redirect || consoleLoginUrl(event, new URLSearchParams({ logged_out: '1' })))
 }
 
 function requireUsableConfig(config: UpstreamOidcConfig) {
@@ -266,7 +272,7 @@ export async function startUpstreamOidcLogin(event: H3Event) {
   if (hasConsoleLogoutMarker(event) && !forceLogin) {
     const loginQuery = new URLSearchParams({ logged_out: '1' })
     if (redirect) loginQuery.set('redirect', redirect)
-    return sendRedirect(event, `/login?${loginQuery.toString()}`)
+    return sendRedirect(event, consoleLoginUrl(event, loginQuery))
   }
 
   const state = randomToken()

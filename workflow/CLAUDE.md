@@ -53,6 +53,8 @@ Phase 1 需要统一的动作定义：
 ## 运行时通知目标资格
 
 - Workflow 只按受信事件映射固定目的：task actionable 使用 `workflow_tasks:view`，instance actionable/status 使用 `workflow_instances:view`；未知事件、矛盾 identity 或 actionable 事件无目标任务时失败关闭。
+- 待办生命周期同步与收件人资格查询通过 Foundation Console Service Binding helper 调用 Console；生命周期同步保留受信 Workflow tenant/deployment/app 上下文，避免后台 drain 经公网 WAF 或丢失租户绑定。
+- 待办生命周期 outbox 首次立即投递；失败后按 10、20、40、最多 60 分钟的持久退避筛选到期记录。失败项仍保持 pending，新记录不被旧失败项占满每轮的 100 条扫描额度；退避不代表 Console 投影已修复。
 - 发布前必须对去重后的全部收件人执行 Console subject eligibility；任一用户拒绝、inactive 或资格服务不可用时整条通知不发送，并保留 lifecycle/outbox 重试。
 - 单任务通知使用 Workflow canonical task URL；并行多任务和 instance 通知使用 Workflow canonical instance URL。业务 payload 中的目标应用或 URL 仅保留为业务上下文，不得决定 permission 或实际 action URL。
 

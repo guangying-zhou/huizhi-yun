@@ -1,4 +1,5 @@
 import { defineStore } from 'pinia'
+import { useAimsModule } from '../../layer/useAimsModule'
 import type {
   AimsProject,
   AimsProjectDetail,
@@ -14,10 +15,12 @@ import type {
   ProjectRole,
   ProjectConfidentialityLevel,
   ProjectSecurityLevel
-} from '~/types/aims'
-import { normalizeProjectModuleConfig, toPersistedProjectModuleConfig } from '~/utils/projectModuleConfig'
+} from '../types/aims'
+import { normalizeProjectModuleConfig, toPersistedProjectModuleConfig } from '../utils/projectModuleConfig'
 
 export const useProjectStore = defineStore('project', () => {
+  // 同一份 store 供独立应用与企业宿主使用：非宿主模式下 moduleUrl 原样返回路径。
+  const { moduleUrl } = useAimsModule()
   type RawAimsProject = Partial<AimsProject> & {
     project_code?: string
     short_name?: string
@@ -309,7 +312,7 @@ export const useProjectStore = defineStore('project', () => {
     if (query?.pageSize) params.set('pageSize', String(query.pageSize))
 
     return await $fetch<{ code: number, data: PaginatedList<RawAimsProject> }>(
-      `/api/v1/projects?${params.toString()}`
+      moduleUrl(`/api/v1/projects?${params.toString()}`)
     )
   }
 
@@ -317,7 +320,7 @@ export const useProjectStore = defineStore('project', () => {
     loading.value = true
     try {
       const res = await $fetch<{ code: number, data: RawAimsProject & Partial<AimsProjectDetail> }>(
-        `/api/v1/projects/${id}`
+        moduleUrl(`/api/v1/projects/${id}`)
       )
       if (res.code === 0) {
         const project = {
@@ -344,7 +347,7 @@ export const useProjectStore = defineStore('project', () => {
       ...data,
       moduleConfig: toPersistedProjectModuleConfig(data.moduleConfig, data.category || 'custom_dev')
     }
-    const res = await $fetch<{ code: number, data: RawAimsProject }>('/api/v1/projects', {
+    const res = await $fetch<{ code: number, data: RawAimsProject }>(moduleUrl('/api/v1/projects'), {
       method: 'POST',
       body: normalizedData
     })
@@ -365,7 +368,7 @@ export const useProjectStore = defineStore('project', () => {
           )
         }
       : data
-    const res = await $fetch<{ code: number, data: AimsProject | null }>(`/api/v1/projects/${id}`, {
+    const res = await $fetch<{ code: number, data: AimsProject | null }>(moduleUrl(`/api/v1/projects/${id}`), {
       method: 'PUT',
       body: normalizedData
     })
@@ -383,7 +386,7 @@ export const useProjectStore = defineStore('project', () => {
   }
 
   async function deleteProject(id: number) {
-    await $fetch(`/api/v1/projects/${id}`, { method: 'DELETE' })
+    await $fetch(moduleUrl(`/api/v1/projects/${id}`), { method: 'DELETE' })
     projects.value = projects.value.filter(p => p.id !== id)
     total.value--
     if (currentProject.value?.id === id) {
@@ -395,7 +398,7 @@ export const useProjectStore = defineStore('project', () => {
   async function fetchFavorites() {
     try {
       const res = await $fetch<FavoriteProjectResponse>(
-        '/api/v1/favorites'
+        moduleUrl('/api/v1/favorites')
       )
       if (res.code === 0) {
         const favorites = normalizeFavoriteProjects(res.data)
@@ -413,14 +416,14 @@ export const useProjectStore = defineStore('project', () => {
 
   async function toggleFavorite(projectId: number) {
     if (isFavorite(projectId)) {
-      await $fetch('/api/v1/favorites', {
+      await $fetch(moduleUrl('/api/v1/favorites'), {
         method: 'DELETE',
         params: { projectId }
       })
       favoriteProjectIds.value.delete(projectId)
       favoriteProjects.value = favoriteProjects.value.filter(f => f.projectId !== projectId)
     } else {
-      await $fetch('/api/v1/favorites', {
+      await $fetch(moduleUrl('/api/v1/favorites'), {
         method: 'POST',
         body: { projectId }
       })
@@ -441,7 +444,7 @@ export const useProjectStore = defineStore('project', () => {
   // ---- Members ----
   async function fetchMembers(projectId: number) {
     const res = await $fetch<{ code: number, data: ListPayload<RawProjectMember> }>(
-      `/api/v1/projects/${projectId}/members`
+      moduleUrl(`/api/v1/projects/${projectId}/members`)
     )
     const members = res.code === 0
       ? normalizeListPayload(res.data).map(normalizeProjectMember)
@@ -454,7 +457,7 @@ export const useProjectStore = defineStore('project', () => {
 
   async function addMember(projectId: number, uid: string, role: string = 'member') {
     await $fetch<{ code: number }>(
-      `/api/v1/projects/${projectId}/members`,
+      moduleUrl(`/api/v1/projects/${projectId}/members`),
       { method: 'POST', body: { uid, role } }
     )
     // 刷新成员列表
@@ -463,7 +466,7 @@ export const useProjectStore = defineStore('project', () => {
 
   async function removeMember(projectId: number, targetUid: string, action: 'remove' | 'suspend' = 'remove') {
     const res = await $fetch<{ code: number, message?: string, data: { action?: string, workItemCount?: number } }>(
-      `/api/v1/projects/${projectId}/members?uid=${targetUid}&action=${action}`,
+      moduleUrl(`/api/v1/projects/${projectId}/members?uid=${targetUid}&action=${action}`),
       { method: 'DELETE' }
     )
     if (res.code === 1) {
@@ -478,7 +481,7 @@ export const useProjectStore = defineStore('project', () => {
   // ---- Repos ----
   async function fetchRepos(projectId: number) {
     const res = await $fetch<{ code: number, data: ListPayload<RawProjectRepo> }>(
-      `/api/v1/projects/${projectId}/repos`
+      moduleUrl(`/api/v1/projects/${projectId}/repos`)
     )
     const repos = res.code === 0
       ? normalizeListPayload(res.data).map(normalizeProjectRepo)
@@ -491,7 +494,7 @@ export const useProjectStore = defineStore('project', () => {
 
   async function linkRepo(projectId: number, repoProjectCode: string) {
     const res = await $fetch<{ code: number, data: unknown }>(
-      `/api/v1/projects/${projectId}/repos`,
+      moduleUrl(`/api/v1/projects/${projectId}/repos`),
       { method: 'POST', body: { repoProjectCode } }
     )
     if (res.code === 0) {
@@ -501,7 +504,7 @@ export const useProjectStore = defineStore('project', () => {
 
   async function unlinkRepo(projectId: number, repoProjectCode: string) {
     await $fetch(
-      `/api/v1/projects/${projectId}/repos?repoProjectCode=${encodeURIComponent(repoProjectCode)}`,
+      moduleUrl(`/api/v1/projects/${projectId}/repos?repoProjectCode=${encodeURIComponent(repoProjectCode)}`),
       { method: 'DELETE' }
     )
     if (currentProject.value?.id === projectId) {

@@ -1,5 +1,10 @@
 <script setup lang="ts">
-import type { ApiResponse, AssetListItem, ListPayload, ProductAssetItem } from '~/types'
+import { useAssetsModule } from '../../../layer/useAssetsModule'
+import { useAssetDictionaries } from '../../composables/useAssetDictionaries'
+import type { ApiResponse, AssetListItem, ListPayload, ProductAssetItem } from '../../types'
+
+const { moduleUrl, hosted } = useAssetsModule()
+const commandKey = ref(crypto.randomUUID())
 
 const props = defineProps<{
   open: boolean
@@ -34,7 +39,7 @@ async function loadAssets() {
   loadingAssets.value = true
 
   try {
-    const response = await $fetch<ApiResponse<ListPayload<AssetListItem>>>('/api/v1/assets')
+    const response = await $fetch<ApiResponse<ListPayload<AssetListItem>>>(moduleUrl(hosted ? '/api/v1/products/link-candidates/assets' : '/api/v1/assets'))
     const linkedIds = new Set((props.product?.linked_assets || []).map(item => item.id))
     assetOptions.value = (response.data.items || [])
       .filter(item => !linkedIds.has(item.id))
@@ -47,8 +52,13 @@ async function loadAssets() {
   }
 }
 
+watch(state, () => {
+  commandKey.value = crypto.randomUUID()
+}, { deep: true, flush: 'sync' })
+
 watch(() => props.open, async (open) => {
   if (open) {
+    commandKey.value = crypto.randomUUID()
     state.asset_id = undefined
     state.relation_type = 'runtime'
     state.is_primary = false
@@ -69,8 +79,9 @@ async function handleSubmit() {
   submitting.value = true
 
   try {
-    await $fetch<ApiResponse<{ id: number }>>(`/api/v1/products/${props.product.id}/assets`, {
+    await $fetch<ApiResponse<{ id: number }>>(moduleUrl(`/api/v1/products/${props.product.id}/assets`), {
       method: 'POST',
+      headers: { 'Idempotency-Key': commandKey.value },
       body: {
         asset_id: state.asset_id,
         relation_type: state.relation_type,

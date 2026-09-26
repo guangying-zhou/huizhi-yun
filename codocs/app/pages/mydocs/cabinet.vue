@@ -1,7 +1,8 @@
 <script setup lang="ts">
-definePageMeta({
-  layout: 'default'
-})
+import { useDocumentPreviewBootstrap } from '../../composables/useDocumentPreviewBootstrap'
+import { useResizablePanel } from '../../composables/useResizablePanel'
+import { useCodocsModule } from '../../../layer/useCodocsModule'
+import { createCreationAttempt, fingerprintUploadFiles } from '../../../layer/creationAttempt.mjs'
 
 usePageTitle('文件柜')
 
@@ -22,13 +23,13 @@ interface CabinetFile {
 
 interface CabinetListResponse {
   success: boolean
-  data: { items: CabinetFile[] }
+  data: { items: CabinetFile[], total: number, page: number, pageSize: number }
 }
 
 interface UploadResult {
   success: number
   failed: number
-  items: { filename: string, status: string, message?: string }[]
+  items: { filename: string, status: string, message?: string, uuid?: string }[]
 }
 
 interface PreviewResponse {
@@ -65,9 +66,10 @@ interface ConvertedInfoResponse {
 }
 
 const toast = useToast()
-const { user } = useAuth()
+const { user, tenant } = useAuth()
+const { moduleUrl, documentUrl, cacheKey } = useCodocsModule()
 const { setPayload: setDocumentPreviewBootstrap } = useDocumentPreviewBootstrap()
-const uid = computed(() => user.value || 'user1')
+const uid = computed(() => user.value || '')
 
 // Resizable panel
 const { panelWidth, panelCollapsed, onResizeStart, showPanel } = useResizablePanel(260)
@@ -79,12 +81,18 @@ const showMobileSidebar = ref(false)
 const fileInput = ref<HTMLInputElement | null>(null)
 const isUploading = ref(false)
 const uploadProgress = ref('')
+let pendingUploadBatch: {
+  uid: string
+  fingerprint: string
+  attempts: ReturnType<typeof createCreationAttempt>[]
+} | null = null
 
 // Selection & Preview state
 const selectedFileUuid = ref<string | null>(null)
 const previewFile = ref<CabinetFile | null>(null)
 const previewData = ref<PreviewResponse['data'] | null>(null)
 const previewLoading = ref(false)
+let previewRequestId = 0
 const showingPreview = ref(false) // 是否正在展示预览内容
 const convertedInfo = ref<ConvertedInfoResponse['data']>(null) // 转存信息
 
@@ -100,23 +108,45 @@ const deleteTarget = ref<CabinetFile | null>(null)
 const isDeleting = ref(false)
 
 // Fetch files
+const page = ref(1)
+const pageSize = 20
+const cabinetSessionScope = computed(() => JSON.stringify([cacheKey('my-cabinet-files'), uid.value, toValue(tenant)]))
+
 const fetchFiles = async () => {
-  if (!user.value) return []
-  const response = await $fetch<CabinetListResponse>('/api/cabinet', {
-    query: { owner_uid: uid.value }
+  if (!user.value) return { success: true, data: { items: [], total: 0, page: 1, pageSize } }
+  const response = await $fetch<CabinetListResponse>(moduleUrl('/api/cabinet'), {
+    query: { owner_uid: uid.value, page: page.value, pageSize }
   })
-  return response?.data?.items || []
+  if (response?.success !== true || !Array.isArray(response.data?.items) || !Number.isSafeInteger(response.data.total) || response.data.total < 0) {
+    throw new Error('文件列表响应无效')
+  }
+  return response
 }
 
-const { data: files, pending, refresh } = await useAsyncData(
-  'my-cabinet-files',
+const { data: cabinetResponse, pending, error, refresh } = await useAsyncData(
+  () => cabinetSessionScope.value,
   fetchFiles,
   {
-    watch: [user],
+    watch: [cabinetSessionScope, page],
     immediate: true,
     getCachedData: () => undefined
   }
 )
+const files = computed(() => cabinetResponse.value?.data?.items || [])
+const total = computed(() => cabinetResponse.value?.data?.total ?? 0)
+
+watch(cabinetSessionScope, () => {
+  page.value = 1
+  deselectFile()
+  pendingUploadBatch = null
+  showDeleteConfirm.value = false
+  deleteTarget.value = null
+}, { flush: 'sync' })
+
+watch(total, (nextTotal) => {
+  const lastPage = Math.max(1, Math.ceil(nextTotal / pageSize))
+  if (page.value > lastPage) page.value = lastPage
+})
 
 // File icon mapping
 const getFileIcon = (ext: string): string => {
@@ -189,6 +219,7 @@ const isImageExt = (ext: string): boolean => {
 // Select file — 只加载文件信息，不立即预览
 const selectFile = async (file: CabinetFile) => {
   if (selectedFileUuid.value === file.uuid && previewFile.value) return
+  const requestId = ++previewRequestId
 
   selectedFileUuid.value = file.uuid
   previewFile.value = file
@@ -200,25 +231,28 @@ const selectFile = async (file: CabinetFile) => {
   showMobileSidebar.value = false
 
   try {
-    const response = await $fetch<PreviewResponse>(`/api/cabinet/${file.uuid}/preview`)
+    const response = await $fetch<PreviewResponse>(moduleUrl(`/api/cabinet/${file.uuid}/preview`))
+    if (requestId !== previewRequestId) return
     if (response.success) {
       previewData.value = response.data
     }
   } catch {
+    if (requestId !== previewRequestId) return
     toast.add({ title: '获取文件信息失败', color: 'error' })
   } finally {
-    previewLoading.value = false
+    if (requestId === previewRequestId) previewLoading.value = false
   }
 
   // 如果已转存，加载转存信息
   if (file.converted_doc_uuid) {
     try {
-      const info = await $fetch<ConvertedInfoResponse>(`/api/cabinet/${file.uuid}/converted-info`)
+      const info = await $fetch<ConvertedInfoResponse>(moduleUrl(`/api/cabinet/${file.uuid}/converted-info`))
+      if (requestId !== previewRequestId) return
       if (info.success && info.data) {
         convertedInfo.value = info.data
       }
     } catch {
-      // 忽略
+      if (requestId === previewRequestId) toast.add({ title: '转存文档信息暂不可用', color: 'error' })
     }
   }
 }
@@ -252,7 +286,7 @@ const openConvertedDoc = async () => {
   viewingDocContent.value = ''
 
   try {
-    const response = await $fetch<{ success: boolean, data: { content?: string } }>(`/api/documents/${convertedInfo.value.doc_uuid}`)
+    const response = await $fetch<{ success: boolean, data: { content?: string } }>(moduleUrl(`/api/documents/${convertedInfo.value.doc_uuid}`))
     if (requestId !== viewingDocRequestId) return
 
     if (response.success && response.data) {
@@ -279,11 +313,13 @@ const navigateToConvertedDoc = () => {
     })
   }
 
-  navigateTo(`/documents/${convertedInfo.value.doc_uuid}`)
+  navigateTo(documentUrl(convertedInfo.value.doc_uuid))
 }
 
 // Deselect (back to empty state)
 const deselectFile = () => {
+  previewRequestId += 1
+  previewLoading.value = false
   selectedFileUuid.value = null
   previewFile.value = null
   previewData.value = null
@@ -298,6 +334,7 @@ const triggerUpload = () => {
 }
 
 const handleFileUpload = async (event: Event) => {
+  if (isUploading.value || !uid.value) return
   const input = event.target as HTMLInputElement
   if (!input.files || input.files.length === 0) return
 
@@ -327,27 +364,64 @@ const handleFileUpload = async (event: Event) => {
     return
   }
 
+  const sessionUid = uid.value
+  const sessionScope = cacheKey('cabinet-upload')
+  const sameSession = () => uid.value === sessionUid && cacheKey('cabinet-upload') === sessionScope
   isUploading.value = true
   uploadProgress.value = `正在上传 ${validFiles.length} 个文件...`
-
-  const formData = new FormData()
-  formData.append('owner_uid', uid.value)
-  validFiles.forEach(file => formData.append('files', file))
-
+  let successCount = 0
+  const failedItems: UploadResult['items'] = []
   try {
-    const result = await $fetch<UploadResult>('/api/cabinet/upload', {
-      method: 'POST',
-      body: formData
-    })
-
-    if (result.success > 0) {
-      toast.add({ title: `成功上传 ${result.success} 个文件`, color: 'success' })
-      await refresh()
+    const fingerprints = await fingerprintUploadFiles(validFiles)
+    if (!sameSession()) return
+    const batchFingerprint = JSON.stringify([sessionUid, sessionScope, null, fingerprints])
+    if (!pendingUploadBatch || pendingUploadBatch.uid !== sessionUid || pendingUploadBatch.fingerprint !== batchFingerprint) {
+      pendingUploadBatch = {
+        uid: sessionUid,
+        fingerprint: batchFingerprint,
+        attempts: validFiles.map(() => createCreationAttempt())
+      }
     }
-    if (result.failed > 0) {
-      const failedItems = result.items.filter(i => i.status === 'error')
-      const msg = failedItems.map(i => `${i.filename}: ${i.message}`).join('; ')
-      toast.add({ title: `${result.failed} 个文件上传失败`, description: msg, color: 'error' })
+    const batch = pendingUploadBatch
+    for (const [index, file] of validFiles.entries()) {
+      if (!sameSession()) break
+      const key = batch.attempts[index]!.keyFor(sessionScope, {
+        owner_uid: sessionUid,
+        folder_id: null,
+        file: fingerprints[index]
+      })
+      const formData = new FormData()
+      formData.append('owner_uid', sessionUid)
+      formData.append('files', file)
+      uploadProgress.value = `正在上传 ${index + 1}/${validFiles.length} 个文件...`
+      const result = await $fetch<UploadResult>(moduleUrl('/api/cabinet/upload'), {
+        method: 'POST',
+        headers: { 'Idempotency-Key': key },
+        body: formData
+      })
+      if (result.success !== 1 || result.failed !== 0 || result.items?.length !== 1 || result.items[0]?.status !== 'success') {
+        failedItems.push(result.items?.[0] || { filename: file.name, status: 'error', message: '上传失败' })
+      } else {
+        successCount += 1
+      }
+    }
+
+    if (!sameSession()) {
+      toast.add({ title: '登录会话已切换，已停止后续上传', color: 'warning' })
+    } else if (failedItems.length === 0 && successCount === validFiles.length) {
+      toast.add({ title: `成功上传 ${successCount} 个文件`, color: 'success' })
+      pendingUploadBatch = null
+    } else {
+      const msg = failedItems.map(item => `${item.filename}: ${item.message || '上传失败'}`).join('; ')
+      toast.add({ title: `${failedItems.length} 个文件上传失败，请重试同一批文件`, description: msg, color: 'error' })
+    }
+
+    if (successCount > 0 && sameSession()) {
+      try {
+        await refresh()
+      } catch {
+        // 列表刷新失败不改变已经完成的上传结果
+      }
     }
   } catch (err: unknown) {
     const statusCode = typeof err === 'object' && err !== null && 'statusCode' in err
@@ -372,7 +446,7 @@ const handleFileUpload = async (event: Event) => {
 // Download
 const downloadFile = (uuid: string) => {
   const link = document.createElement('a')
-  link.href = `/api/cabinet/${uuid}/download`
+  link.href = moduleUrl(`/api/cabinet/${uuid}/download`)
   link.download = ''
   document.body.appendChild(link)
   link.click()
@@ -385,26 +459,36 @@ const confirmDelete = (file: CabinetFile) => {
   showDeleteConfirm.value = true
 }
 
+const deleteAttempt = createCreationAttempt()
 const executeDelete = async () => {
-  if (!deleteTarget.value) return
+  if (isDeleting.value || !uid.value || !deleteTarget.value) return
+  const target = deleteTarget.value
+  const scope = cabinetSessionScope.value
+  const sameSession = () => cabinetSessionScope.value === scope
+  const key = deleteAttempt.keyFor(scope, { uuid: target.uuid })
   isDeleting.value = true
 
   try {
-    await $fetch(`/api/cabinet/${deleteTarget.value.uuid}`, { method: 'DELETE' })
+    await $fetch(moduleUrl(`/api/cabinet/${target.uuid}`), { method: 'DELETE', headers: { 'Idempotency-Key': key } })
+    deleteAttempt.complete(key)
+    if (!sameSession()) return
     toast.add({ title: '文件已删除', color: 'success' })
 
-    if (previewFile.value?.uuid === deleteTarget.value.uuid) {
+    if (previewFile.value?.uuid === target.uuid) {
       deselectFile()
     }
 
-    await refresh()
+    try { await refresh() } catch { /* 删除已完成，列表刷新失败不改变删除结果。 */ }
   } catch (err: unknown) {
+    if (!sameSession()) return
     const message = err instanceof Error ? err.message : '删除失败'
     toast.add({ title: message, color: 'error' })
   } finally {
     isDeleting.value = false
-    showDeleteConfirm.value = false
-    deleteTarget.value = null
+    if (sameSession() && deleteTarget.value?.uuid === target.uuid) {
+      showDeleteConfirm.value = false
+      deleteTarget.value = null
+    }
   }
 }
 
@@ -416,6 +500,7 @@ const convertFolderId = ref<number | null>(null)
 const convertTargetFile = ref<CabinetFile | null>(null)
 const convertError = ref('')
 const convertNameInput = ref<{ inputRef?: { el?: HTMLInputElement } } | null>(null)
+const convertAttempt = createCreationAttempt()
 
 interface FolderRecord {
   id: number
@@ -423,70 +508,122 @@ interface FolderRecord {
   parent_id: number | null
 }
 
+interface FolderPageResponse {
+  success: boolean
+  data: { items: FolderRecord[], total: number, page: number, pageSize: number }
+}
+const folderPage = ref(1)
+const folderPageSize = 20
+const selectedFolderName = ref('根目录（我的文档）')
+const folderSessionScope = computed(() => JSON.stringify([cacheKey('cabinet-user-folders'), uid.value, toValue(tenant)]))
+
 // 获取用户的文件夹列表（用于转存时选择目录）
 const apiFetch = useRequestFetch()
-const { data: userFolders, refresh: refreshFolders } = await useAsyncData(
-  'cabinet-user-folders',
+const { data: folderResponse, pending: foldersLoading, error: foldersError, refresh: refreshFolders } = await useAsyncData(
+  () => folderSessionScope.value,
   async () => {
-    if (!user.value) return []
-    const response = await apiFetch<{ data: { items: FolderRecord[] } }>('/api/folders', {
-      query: { folder_type: 'private', owner_uid: uid.value }
+    if (!uid.value) return { success: true, data: { items: [], total: 0, page: 1, pageSize: folderPageSize } }
+    const response = await apiFetch<FolderPageResponse>(moduleUrl('/api/folders'), {
+      query: { folder_type: 'private', owner_uid: uid.value, page: folderPage.value, pageSize: folderPageSize }
     })
-    return response?.data?.items || []
+    if (response?.success !== true || !Array.isArray(response.data?.items) || !Number.isSafeInteger(response.data.total) || response.data.total < 0
+      || response.data.items.some(folder => !Number.isSafeInteger(folder.id) || folder.id < 1 || typeof folder.name !== 'string')) throw new Error('目录列表响应无效')
+    return response
   },
-  { watch: [user], immediate: true, getCachedData: () => undefined }
+  { watch: [folderSessionScope, folderPage], immediate: true, getCachedData: () => undefined }
 )
+const userFolders = computed(() => folderResponse.value?.data.items || [])
+const foldersTotal = computed(() => folderResponse.value?.data.total ?? 0)
+watch(folderSessionScope, () => {
+  folderPage.value = 1
+  convertFolderId.value = null
+  selectedFolderName.value = '根目录（我的文档）'
+  showConvertModal.value = false
+}, { flush: 'sync' })
+watch(foldersTotal, total => {
+  const lastPage = Math.max(1, Math.ceil(total / folderPageSize))
+  if (folderPage.value > lastPage) folderPage.value = lastPage
+})
+
+const selectConvertFolder = (folder: FolderRecord | null) => {
+  convertFolderId.value = folder?.id ?? null
+  selectedFolderName.value = folder?.name || '根目录（我的文档）'
+}
 
 const openConvertModal = (file: CabinetFile) => {
   convertTargetFile.value = file
   convertDocName.value = file.original_name.replace(/\.[^.]+$/, '')
-  convertFolderId.value = null
+  selectConvertFolder(null)
+  folderPage.value = 1
   convertError.value = ''
   showConvertModal.value = true
   refreshFolders()
 }
 
 const executeConvert = async () => {
-  if (!convertTargetFile.value || !convertDocName.value.trim()) return
+  if (isConverting.value || !uid.value || !convertTargetFile.value || !convertDocName.value.trim()) return
+
+  const target = convertTargetFile.value
+  const title = convertDocName.value.trim()
+  const folderId = convertFolderId.value
+  const sessionUid = uid.value
+  const sessionTenant = String(toValue(tenant) || '')
+  const scope = cacheKey('cabinet-to-document')
+  const sameSession = () => uid.value === sessionUid && String(toValue(tenant) || '') === sessionTenant && cacheKey('cabinet-to-document') === scope
+  const sameDialog = () => sameSession() && convertTargetFile.value?.uuid === target.uuid
+  const sameTarget = () => sameDialog() && previewFile.value?.uuid === target.uuid
+  const key = convertAttempt.keyFor(scope, {
+    uid: sessionUid,
+    tenant: sessionTenant,
+    source_uuid: target.uuid,
+    title,
+    folder_id: folderId
+  })
 
   isConverting.value = true
   try {
-    const result = await $fetch<ToDocumentResponse>(`/api/cabinet/${convertTargetFile.value.uuid}/to-document`, {
+    const result = await $fetch<ToDocumentResponse>(moduleUrl(`/api/cabinet/${target.uuid}/to-document`), {
       method: 'POST',
+      headers: { 'Idempotency-Key': key },
       body: {
-        title: convertDocName.value.trim(),
-        folder_id: convertFolderId.value
+        title,
+        folder_id: folderId
       }
     })
-    if (result.success && result.data) {
+    if (result.success && result.data?.uuid && result.data.title) {
+      convertAttempt.complete(key)
+      if (!sameSession()) return
       toast.add({
         title: `已转存为文档「${result.data.title}」`,
         color: 'success'
       })
-      showConvertModal.value = false
+      if (sameDialog()) showConvertModal.value = false
 
       // 更新当前文件的转存状态
-      if (previewFile.value) {
+      if (sameTarget() && previewFile.value) {
         previewFile.value.converted_doc_uuid = result.data.uuid
+        convertedInfo.value = { doc_uuid: result.data.uuid, doc_title: result.data.title, doc_path: '' }
       }
       // 加载转存信息
       try {
-        const info = await $fetch<ConvertedInfoResponse>(`/api/cabinet/${convertTargetFile.value!.uuid}/converted-info`)
-        if (info.success && info.data) {
+        const info = sameTarget() ? await $fetch<ConvertedInfoResponse>(moduleUrl(`/api/cabinet/${target.uuid}/converted-info`)) : null
+        if (sameTarget() && info?.success && info.data?.doc_uuid === result.data.uuid) {
           convertedInfo.value = info.data
         }
       } catch {
-        // 降级：直接用返回的数据
-        convertedInfo.value = {
-          doc_uuid: result.data.uuid,
-          doc_title: result.data.title,
-          doc_path: '我的文档/' + result.data.title + '.md'
-        }
+        if (sameTarget()) toast.add({ title: '转存已完成，但文档信息刷新失败', color: 'warning' })
       }
       // 刷新列表
-      await refresh()
-    }
+      if (sameSession()) {
+        try {
+          await refresh()
+        } catch {
+          // 转存已完成，列表刷新失败不改变成功结果
+        }
+      }
+    } else { throw new Error('转换响应无效，请重试') }
   } catch (err: unknown) {
+    if (!sameDialog()) return
     const error = err as { data?: { message?: string, statusCode?: number }, message?: string }
     const message = error.data?.message || error.message || '转存失败'
     // 同名文档错误：在模态窗口内提示并聚焦输入框
@@ -621,6 +758,16 @@ const handleDrop = async (e: DragEvent) => {
             加载中...
           </div>
 
+          <!-- Load error -->
+          <div v-else-if="error" class="px-4 py-8 text-sm text-center">
+            <p class="text-error mb-3">
+              文件列表加载失败，请重试。
+            </p>
+            <UButton size="sm" variant="soft" @click="refresh()">
+              重试
+            </UButton>
+          </div>
+
           <!-- Upload progress -->
           <div v-else-if="isUploading" class="px-2 py-8 text-sm text-muted text-center">
             <UIcon name="i-lucide-loader-2" class="w-5 h-5 text-primary animate-spin mx-auto mb-2" />
@@ -646,7 +793,7 @@ const handleDrop = async (e: DragEvent) => {
           <!-- File list -->
           <div v-else class="p-1">
             <div class="px-2 py-1.5 text-xs text-muted">
-              共 {{ files.length }} 个文件
+              共 {{ total }} 个文件
             </div>
             <button
               v-for="file in files"
@@ -687,6 +834,13 @@ const handleDrop = async (e: DragEvent) => {
                 @click.stop="confirmDelete(file)"
               />
             </button>
+            <div v-if="total > pageSize" class="flex justify-center border-t border-default mt-1 pt-2 pb-1">
+              <UPagination
+                v-model:page="page"
+                :items-per-page="pageSize"
+                :total="total"
+              />
+            </div>
           </div>
         </div>
       </aside>
@@ -930,7 +1084,7 @@ const handleDrop = async (e: DragEvent) => {
                 <div v-if="convertedInfo" class="mt-4 pt-4 border-t border-default">
                   <div class="flex items-center gap-2 text-sm text-success mb-3">
                     <UIcon name="i-lucide-check-circle" class="w-4 h-4 shrink-0" />
-                    <span>本文件已转存为「{{ convertedInfo.doc_path }}」</span>
+                    <span>本文件已转存为「{{ convertedInfo.doc_path || convertedInfo.doc_title }}」</span>
                   </div>
                   <UButton
                     icon="i-lucide-file-text"
@@ -1113,24 +1267,35 @@ const handleDrop = async (e: DragEvent) => {
                 <button
                   class="w-full flex items-center gap-2 px-3 py-2 text-left text-sm transition-colors"
                   :class="convertFolderId === null ? 'bg-primary/10 text-primary font-medium' : 'hover:bg-elevated'"
-                  @click="convertFolderId = null"
+                  @click="selectConvertFolder(null)"
                 >
                   <UIcon name="i-lucide-home" class="w-4 h-4 shrink-0" />
                   <span>根目录（我的文档）</span>
                 </button>
                 <!-- 文件夹列表 -->
                 <button
-                  v-for="folder in (userFolders || [])"
+                  v-for="folder in (foldersError || foldersLoading ? [] : userFolders)"
                   :key="folder.id"
                   class="w-full flex items-center gap-2 px-3 py-2 text-left text-sm transition-colors"
                   :class="convertFolderId === folder.id ? 'bg-primary/10 text-primary font-medium' : 'hover:bg-elevated'"
                   :style="{ paddingLeft: (folder.parent_id ? 36 : 12) + 'px' }"
-                  @click="convertFolderId = folder.id"
+                  @click="selectConvertFolder(folder)"
                 >
                   <UIcon name="i-lucide-folder" class="w-4 h-4 shrink-0" />
                   <span class="truncate">{{ folder.name }}</span>
                 </button>
+                <p v-if="foldersLoading" role="status" class="px-3 py-2 text-sm text-muted">正在加载目录…</p>
+                <div v-else-if="foldersError" role="alert" class="px-3 py-2 text-sm text-error">
+                  目录加载失败
+                  <UButton variant="link" color="neutral" @click="refreshFolders()">重试</UButton>
+                </div>
+                <p v-else-if="!userFolders.length" class="px-3 py-2 text-sm text-muted">暂无文件夹，可保存到根目录</p>
               </div>
+              <div class="mt-2 flex flex-wrap items-center justify-between gap-2">
+                <span class="text-xs text-muted">共 {{ foldersTotal }} 个文件夹</span>
+                <UPagination v-if="foldersTotal > folderPageSize" v-model:page="folderPage" :items-per-page="folderPageSize" :total="foldersTotal" />
+              </div>
+              <p class="mt-2 text-xs text-muted break-all">已选择：{{ selectedFolderName }}</p>
             </UFormField>
           </div>
 

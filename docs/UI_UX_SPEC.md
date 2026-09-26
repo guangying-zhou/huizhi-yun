@@ -203,6 +203,7 @@ setRefresh(() => refresh())
 - 图表配色只用语义色 + `neutral` 梯度，不引入第三方配色。
 - 每个卡片能下钻到对应列表页，并带上对应筛选参数。
 - 空数据显示 `CommonEmptyState` 而非空白图表。
+- 企业工作台（个人首页）的具体版式与区块契约见 [企业工作台设计与实现规范](./Enterprise-Workbench-Design-Spec.md)。
 
 ---
 

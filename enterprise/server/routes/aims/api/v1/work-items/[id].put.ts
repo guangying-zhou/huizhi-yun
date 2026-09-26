@@ -1,0 +1,1 @@
+import{defineEventHandler}from'h3';import{enterpriseAimsWorkItemWrite}from'../../../../../utils/enterpriseAimsWorkItemWrite';export default defineEventHandler(e=>enterpriseAimsWorkItemWrite(e,'edit'))

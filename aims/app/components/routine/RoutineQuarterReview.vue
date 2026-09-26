@@ -1,4 +1,8 @@
 <script setup lang="ts">
+import { useAimsModule } from '../../../layer/useAimsModule'
+
+// 同一份代码供独立应用与企业宿主使用：非宿主模式下 moduleUrl 原样返回路径。
+const { moduleUrl } = useAimsModule()
 interface RoutineFlow {
   beneficiaryDeptCode: string
   workItemCount: number
@@ -25,7 +29,7 @@ async function loadReview() {
   loading.value = true
   try {
     const response = await $fetch<{ code: number, data: RoutineReview }>(
-      `/api/v1/projects/${props.projectId}/routine-review`
+      moduleUrl(`/api/v1/projects/${props.projectId}/routine-review`)
     )
     review.value = response.code === 0 ? response.data : null
   } catch {

@@ -7,8 +7,15 @@
 import type { Extension, onAuthenticatePayload } from '@hocuspocus/server'
 import { createHookError, resolveDocumentContext } from '../utils/document-context.js'
 import { verifyCollaborationToken } from '../utils/collaboration-auth.js'
+import { isV2Ticket, type V2Snapshots } from '../utils/v2-snapshots.js'
 
 export class AuthenticationExtension implements Extension {
+  private v2: V2Snapshots | null = null
+
+  useV2(v2: V2Snapshots | null) {
+    this.v2 = v2
+  }
+
   /**
    * 用户认证回调
    * 在 WebSocket 连接建立时调用
@@ -24,7 +31,31 @@ export class AuthenticationExtension implements Extension {
     actorName: string
     sharePermission: 'read' | 'write' | null
     readonly: boolean
+  } | {
+    user: { id: string, name: string, color: string }
+    mode: 'v2'
+    sessionId: string
+    docUuid: string
+    actorUid: string
+    readonly: boolean
   }> {
+    const token = String(data.token || '').trim()
+    if (isV2Ticket(token)) {
+      // v2: redeem the one-time ticket before any document state is loaded.
+      if (!this.v2) throw createHookError('authentication-required')
+      const admission = await this.v2.admit(token, data.documentName).catch(() => {
+        throw createHookError('authentication-required')
+      })
+      data.connectionConfig.readOnly = admission.access !== 'write'
+      return {
+        user: { id: admission.userUid, name: admission.userUid, color: this.generateUserColor(admission.userUid) },
+        mode: 'v2',
+        sessionId: admission.sessionId,
+        docUuid: admission.documentUuid,
+        actorUid: admission.userUid,
+        readonly: admission.access !== 'write'
+      }
+    }
     const identity = await this.resolveIdentity(data)
     const documentContext = identity.documentContext || await resolveDocumentContext({
       documentName: data.documentName,

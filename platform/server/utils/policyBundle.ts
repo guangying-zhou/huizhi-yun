@@ -20,19 +20,14 @@ import {
 } from '~~/server/utils/tenantDeploymentSettings'
 import { collectConfiguredBaselinePermissions } from '~~/server/utils/policyBundleBaseline'
 import { STATIC_ROLE_CONFLICT_RULES, type StaticRoleConflictRule } from '~~/server/utils/staticRoleConflicts'
+import { loadEnterpriseHostModuleRoutes, applyEnterpriseHostModuleRoutes, enterpriseHostRoutesMatch } from './enterpriseModuleRoutes'
+import { loadBundleEnterpriseEntitlement, enterpriseModuleAvailability, bundleEnterpriseEntitlementMatches, ENTERPRISE_MODULE_CATALOG_SQL } from '~~/server/utils/enterpriseEntitlementBundle'
+import { cachedCurrentPolicyPayload, stableStringifyPolicyPayload } from './policyEnvelopeDelivery'
 
 const POLICY_BUNDLE_SCHEMA_VERSION = POLICY_BUNDLE_V2_SCHEMA_VERSION
 const POLICY_BUNDLE_SIGNATURE_ALG = 'Ed25519'
 const LEGACY_CONSOLE_VIEWER_ROLE_CODES = ['console.viewer', 'tenant_console_view', 'tenant_console_viewer']
 const LEGACY_CONSOLE_VIEWER_ROLE_SQL = LEGACY_CONSOLE_VIEWER_ROLE_CODES.map(roleCode => `'${roleCode}'`).join(', ')
-
-type JsonValue
-  = | string
-    | number
-    | boolean
-    | null
-    | JsonValue[]
-    | { [key: string]: JsonValue }
 
 interface TenantRow extends RowDataPacket {
   tenantCode: string
@@ -128,40 +123,6 @@ export interface GeneratedPolicyBundle {
   }>
 }
 
-function normalizeJson(value: unknown): JsonValue {
-  if (value === null || value === undefined) {
-    return null
-  }
-
-  if (Array.isArray(value)) {
-    return value.map(item => normalizeJson(item))
-  }
-
-  if (typeof value === 'object') {
-    const record = value as Record<string, unknown>
-    const normalized: Record<string, JsonValue> = {}
-
-    for (const key of Object.keys(record).sort()) {
-      const normalizedValue = normalizeJson(record[key])
-      if (normalizedValue !== undefined) {
-        normalized[key] = normalizedValue
-      }
-    }
-
-    return normalized
-  }
-
-  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
-    return value
-  }
-
-  return String(value)
-}
-
-function stableStringify(value: unknown) {
-  return JSON.stringify(normalizeJson(value))
-}
-
 function hashBundlePayload(payloadJson: string) {
   return `sha256_${createHash('sha256').update(payloadJson).digest('hex')}`
 }
@@ -170,7 +131,7 @@ function hashPolicyBundleFactsForRevision(payload: Record<string, unknown>) {
   const facts = { ...payload }
   delete facts.generatedAt
   delete facts.policyRevision
-  return hashBundlePayload(stableStringify(facts))
+  return hashBundlePayload(stableStringifyPolicyPayload(facts))
 }
 
 function toSqlDateTime(date: Date) {
@@ -1030,9 +991,15 @@ export async function buildPolicyBundlePayload(input: string | {
   const deploymentSite = await findDeploymentSiteProjection(tenantCode, environment)
   const tenantSettings = parseTenantSettings(tenant.settingsJson)
   const consoleLogin = consoleLoginSettings(tenantSettings, environment)
-  const appCodes = await collectTenantAppCodes(tenantCode, environment, deployments)
-  const baselinePermissions = await collectConfiguredBaselinePermissions(appCodes)
   const generatedAt = new Date().toISOString()
+  const enterpriseEntitlement = await loadBundleEnterpriseEntitlement(queryRow, tenantCode, tenant.status, generatedAt)
+  const legacyAppCodes = await collectTenantAppCodes(tenantCode, environment, deployments)
+  const appCodes = enterpriseEntitlement
+    ? (await queryRows<Array<RowDataPacket & { appCode: string }>>(ENTERPRISE_MODULE_CATALOG_SQL)).map(row => row.appCode)
+    : legacyAppCodes
+  // Full product qualification must not expand baseline grants or system-role app mappings.
+  // Explicit tenant role grants remain authoritative and use the full resource catalog.
+  const baselinePermissions = await collectConfiguredBaselinePermissions(legacyAppCodes)
 
   const [
     applications,
@@ -1081,10 +1048,13 @@ export async function buildPolicyBundlePayload(input: string | {
     collectAppRolePermissions(appCodes),
     collectAppRoleScopes(appCodes),
     collectSystemRoles(),
-    collectSystemAppRoleMaps(appCodes),
+    collectSystemAppRoleMaps(legacyAppCodes),
     collectCapabilities(tenantCode, environment),
     collectRoleConflictRules(tenantCode)
   ])
+
+  const enterpriseHostRoutes = enterpriseEntitlement ? await loadEnterpriseHostModuleRoutes(queryRow, tenantCode, environment) : []
+  const routedApplications = enterpriseEntitlement ? applyEnterpriseHostModuleRoutes(applications, enterpriseHostRoutes) : applications
 
   const v2Compat = buildPolicyBundleV2CompatFields({
     tenantCode,
@@ -1103,6 +1073,7 @@ export async function buildPolicyBundlePayload(input: string | {
     schemaVersion: POLICY_BUNDLE_SCHEMA_VERSION,
     ...v2Compat,
     generatedAt,
+    ...(enterpriseEntitlement ? { enterpriseEntitlement, enterpriseHostRoutes, moduleAvailability: enterpriseModuleAvailability(applications, deployments, enterpriseHostRoutes) } : {}),
     environment,
     tenant: {
       tenantCode: tenant.tenantCode,
@@ -1135,7 +1106,7 @@ export async function buildPolicyBundlePayload(input: string | {
       routeSource: item.routeSource,
       status: item.status
     })),
-    applications,
+    applications: routedApplications,
     manifestResources,
     manifestActions,
     subjects,
@@ -1246,7 +1217,7 @@ export async function generatePolicyBundle(input: {
       ...draftPayload,
       policyRevision
     }
-    const payloadJson = stableStringify(payload)
+    const payloadJson = stableStringifyPolicyPayload(payload)
     const bundleHash = hashBundlePayload(payloadJson)
     const signed = await sign(payloadJson)
 
@@ -1392,10 +1363,8 @@ export async function findOrGeneratePolicyBundleForDeployment(input: {
     version
   })
 
-  if (existing || version) {
-    return existing
-  }
-
+  const tenant = await findTenant(input.tenantCode)
+  if (!tenant) throw createError({ statusCode: 404, message: 'Tenant not found' })
   const deployment = await queryRow<DeploymentEnvironmentRow>(
     `SELECT environment
      FROM deployments
@@ -1404,19 +1373,98 @@ export async function findOrGeneratePolicyBundleForDeployment(input: {
      LIMIT 1`,
     [input.deploymentId, input.tenantCode]
   )
+  if (!deployment) throw createError({ statusCode: 404, message: 'Deployment not found for tenant' })
+  const environment = deployment.environment
+  const currentEntitlement = await loadBundleEnterpriseEntitlement(queryRow, input.tenantCode, tenant.status, new Date().toISOString())
+  const hostRoutes = currentEntitlement ? await loadEnterpriseHostModuleRoutes(queryRow, input.tenantCode, environment) : []
+  if (existing && enterpriseHostRoutesMatch(parsePolicyBundlePayload(existing.bundle_payload_json), hostRoutes) && bundleEnterpriseEntitlementMatches(parsePolicyBundlePayload(existing.bundle_payload_json), currentEntitlement)) return existing
+  if (version) {
+    if (existing) throw createError({ statusCode: 409, message: 'Requested policy bundle has stale enterprise entitlement' })
+    return null
+  }
 
   await generatePolicyBundle({
     tenantCode: input.tenantCode,
     environment: deployment?.environment || DEFAULT_DEPLOYMENT_ENVIRONMENT
   })
 
-  return findPolicyBundleForDeployment({
-    deploymentId: input.deploymentId
-  })
+  const generated = await findPolicyBundleForDeployment({ deploymentId: input.deploymentId })
+  const latestTenant = await findTenant(input.tenantCode)
+  const latestEntitlement = await loadBundleEnterpriseEntitlement(queryRow, input.tenantCode, latestTenant?.status || 'suspended', new Date().toISOString())
+  const latestHostRoutes = latestEntitlement ? await loadEnterpriseHostModuleRoutes(queryRow, input.tenantCode, environment) : []
+  if (generated && (!enterpriseHostRoutesMatch(parsePolicyBundlePayload(generated.bundle_payload_json), latestHostRoutes) || !bundleEnterpriseEntitlementMatches(parsePolicyBundlePayload(generated.bundle_payload_json), latestEntitlement))) {
+    throw createError({ statusCode: 503, message: 'Enterprise entitlement changed during bundle generation; retry required' })
+  }
+  return generated
 }
 
 export function parsePolicyBundlePayload(value: unknown) {
   return parseJsonColumn<Record<string, unknown>>(value, {})
+}
+
+// The newest row is selected regardless of status/expiry. Never fall back to
+// an older active policy when a newer policy was revoked, expired or untargeted.
+export async function findCurrentPolicyEnvelopeRow(deployment: {
+  id: number
+  tenant_code: string
+  deployment_code: string
+  environment: string
+}) {
+  // Tenant and deployment lifecycle are returned, not filtered: a suspended
+  // tenant must receive a signed inactive envelope, never an outage-like 503.
+  const row = await queryRow<RowDataPacket & {
+    id: number
+    tenant_code: string
+    environment: string
+    bundle_version: string
+    bundle_hash: string
+    policy_revision: number
+    status: string
+    expires_at: string | Date | null
+    tenant_status: string
+    deployment_status: string
+    storage_hash: string | null
+  }>(
+    `SELECT pb.id, pb.tenant_code, pb.environment, pb.bundle_version, pb.bundle_hash,
+            pb.policy_revision, pb.status, pb.expires_at,
+            SHA2(CAST(pb.bundle_payload_json AS CHAR), 256) AS storage_hash,
+            t.status AS tenant_status, d.status AS deployment_status FROM policy_bundles pb
+     INNER JOIN tenant_policy_revisions rev ON rev.tenant_code=pb.tenant_code AND rev.policy_revision=pb.policy_revision
+     INNER JOIN policy_bundle_targets pbt ON pbt.bundle_id=pb.id AND pbt.deployment_id=?
+     INNER JOIN tenants t ON t.tenant_code=pb.tenant_code
+     INNER JOIN deployments d ON d.id=pbt.deployment_id AND d.tenant_code=pb.tenant_code
+       AND d.environment=pb.environment
+     WHERE pb.tenant_code=? AND pb.environment=?
+       AND pb.id=(SELECT MAX(latest.id) FROM policy_bundles latest WHERE latest.tenant_code=? AND latest.environment=?)
+     LIMIT 1`,
+    [deployment.id, deployment.tenant_code, deployment.environment, deployment.tenant_code, deployment.environment]
+  )
+  if (!row) return null
+  const payload = await cachedCurrentPolicyPayload({
+    bundleId: row.id,
+    bundleHash: row.bundle_hash,
+    storageHash: row.storage_hash,
+    load: async () => {
+      const full = await queryRow<RowDataPacket & { bundle_payload_json: unknown, storage_hash: string | null }>(
+        `SELECT bundle_payload_json, SHA2(CAST(bundle_payload_json AS CHAR), 256) AS storage_hash
+         FROM policy_bundles WHERE id = ? LIMIT 1`,
+        [row.id]
+      )
+      return full ? { value: parsePolicyBundlePayload(full.bundle_payload_json), storageHash: full.storage_hash } : null
+    }
+  })
+  const rawExpiry = row.expires_at as string | Date | null
+  const expiry = rawExpiry === null
+    ? null
+    : rawExpiry instanceof Date
+      ? rawExpiry.getTime()
+      : Date.parse(/(?:Z|[+-]\d\d:\d\d)$/.test(rawExpiry) ? rawExpiry : `${rawExpiry.replace(' ', 'T')}Z`)
+  return {
+    tenant: row.tenant_code, environment: row.environment, deployment: deployment.deployment_code,
+    bundleVersion: row.bundle_version, policyRevision: Number(row.policy_revision), status: row.status,
+    payload, payloadHash: row.bundle_hash,
+    policyExpiresAt: expiry, tenantStatus: String(row.tenant_status), deploymentStatus: String(row.deployment_status)
+  }
 }
 
 export function formatPolicyBundleSignature(bundle: {

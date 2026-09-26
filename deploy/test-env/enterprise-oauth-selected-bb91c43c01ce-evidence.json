@@ -1,0 +1,125 @@
+{
+  "schema": "enterprise-oauth-live.v1",
+  "verifiedAt": "2026-09-16T21:26:28.257Z",
+  "tenant": "C000001",
+  "deployment": "C000001-test-enterprise",
+  "audience": "data-runtime",
+  "registrySha256": "0a5f499b4b1a6828b72c05bf06ff0855afb40fd87b0cfe7d5e96fd8dc61824ad",
+  "results": [
+    {
+      "scope": "aims:work-item-comments:view",
+      "verifiedAt": "2026-09-16T21:26:17.886Z",
+      "oauthIssued": true,
+      "tokenVerified": true,
+      "cfRayPresent": true,
+      "testGatewayMarker": true
+    },
+    {
+      "scope": "aims:work-item-comments:edit",
+      "verifiedAt": "2026-09-16T21:26:18.644Z",
+      "oauthIssued": true,
+      "tokenVerified": true,
+      "cfRayPresent": true,
+      "testGatewayMarker": true
+    },
+    {
+      "scope": "aims:work-item-commits:view",
+      "verifiedAt": "2026-09-16T21:26:19.164Z",
+      "oauthIssued": true,
+      "tokenVerified": true,
+      "cfRayPresent": true,
+      "testGatewayMarker": true
+    },
+    {
+      "scope": "aims:work-item-commits:edit",
+      "verifiedAt": "2026-09-16T21:26:19.729Z",
+      "oauthIssued": true,
+      "tokenVerified": true,
+      "cfRayPresent": true,
+      "testGatewayMarker": true
+    },
+    {
+      "scope": "aims:work-item-documents:view",
+      "verifiedAt": "2026-09-16T21:26:20.262Z",
+      "oauthIssued": true,
+      "tokenVerified": true,
+      "cfRayPresent": true,
+      "testGatewayMarker": true
+    },
+    {
+      "scope": "aims:work-item-documents:edit",
+      "verifiedAt": "2026-09-16T21:26:20.838Z",
+      "oauthIssued": true,
+      "tokenVerified": true,
+      "cfRayPresent": true,
+      "testGatewayMarker": true
+    },
+    {
+      "scope": "aims:work-item-time-entries:view",
+      "verifiedAt": "2026-09-16T21:26:21.379Z",
+      "oauthIssued": true,
+      "tokenVerified": true,
+      "cfRayPresent": true,
+      "testGatewayMarker": true
+    },
+    {
+      "scope": "aims:work-item-time-entries:edit",
+      "verifiedAt": "2026-09-16T21:26:21.922Z",
+      "oauthIssued": true,
+      "tokenVerified": true,
+      "cfRayPresent": true,
+      "testGatewayMarker": true
+    },
+    {
+      "scope": "aims:work-item-execution:view",
+      "verifiedAt": "2026-09-16T21:26:22.479Z",
+      "oauthIssued": true,
+      "tokenVerified": true,
+      "cfRayPresent": true,
+      "testGatewayMarker": true
+    },
+    {
+      "scope": "aims:work-item-decomposition:edit",
+      "verifiedAt": "2026-09-16T21:26:23.008Z",
+      "oauthIssued": true,
+      "tokenVerified": true,
+      "cfRayPresent": true,
+      "testGatewayMarker": true
+    },
+    {
+      "scope": "aims:work-item-deliverables:edit",
+      "verifiedAt": "2026-09-16T21:26:23.564Z",
+      "oauthIssued": true,
+      "tokenVerified": true,
+      "cfRayPresent": true,
+      "testGatewayMarker": true
+    },
+    {
+      "scope": "aims:work-item-batch:edit",
+      "verifiedAt": "2026-09-16T21:26:24.095Z",
+      "oauthIssued": true,
+      "tokenVerified": true,
+      "cfRayPresent": true,
+      "testGatewayMarker": true
+    }
+  ],
+  "negatives": [
+    {
+      "scope": "aims:products:view",
+      "audience": "tenant-runtime",
+      "rejected": true,
+      "status": 400
+    },
+    {
+      "scope": "aims:unregistered:probe",
+      "audience": "data-runtime",
+      "rejected": true,
+      "status": 400
+    }
+  ],
+  "actualCombinedScopes": [],
+  "combinationReason": "Foundation callEnterpriseRuntime uses scope: route.capability; no combined-scope calls",
+  "configurationMutated": false,
+  "localSigning": false,
+  "browserAcceptance": false
+}

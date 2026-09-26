@@ -1,8 +1,7 @@
 import { getHeader, type H3Event } from 'h3'
 import { getConsoleRuntimeConfig } from './consoleRuntime'
-import { requestWithServiceAccessToken } from './serviceOidc'
+import { fetchConsoleServiceJson, requestWithServiceAccessToken } from './serviceOidc'
 import { resolveTrustedTenantGatewayContext } from './tenantGatewayTrust'
-import { fetchExternal } from './externalFetch'
 
 export interface SubjectEligibilityResult {
   active: boolean
@@ -47,7 +46,8 @@ export async function checkSubjectEligibility(input: {
     audience: 'console',
     scope: 'console:authorization:subject-eligibility',
     event: input.event,
-    request: async token => await fetchExternal<Partial<SubjectEligibilityResult>>(
+    request: async token => await fetchConsoleServiceJson<Partial<SubjectEligibilityResult>>(
+      input.event,
       `${baseUrl}/api/v1/console/service/authorization/subject-eligibility`,
       {
         method: 'POST',

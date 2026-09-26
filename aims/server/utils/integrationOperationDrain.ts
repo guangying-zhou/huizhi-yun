@@ -1,9 +1,13 @@
-import type { H3Event } from 'h3'
+import { createError, type H3Event } from 'h3'
+import { requireTenantGatewaySchedulerRequest } from '@hzy/foundation/server/utils/tenantGatewayTrust'
 import { drainIntegrationOperationDeadLetterNotifications } from '@hzy/foundation/server/utils/integrationOperationDeadLetterDrain'
 import { publishIntegrationOperationDeadLetter } from '@hzy/foundation/server/utils/notifications'
 import { callAimsScheduledRuntime, requireAimsScheduledRuntimeBinding } from '~~/server/utils/scheduledRuntime'
+import { callAimsUnifiedDueNotification, callAimsUnifiedMilestoneRollover } from '~~/server/utils/unifiedSchedulerRuntime'
+import { drainAimsDueNotifications } from '~~/server/utils/dueNotificationDrain'
 import {
   createRequestServiceTicketDeliveryOperationIO,
+  createUnifiedRequestServiceTicketDeliveryOperationIO,
   createScheduledServiceTicketDeliveryOperationIO
 } from '~~/server/utils/serviceTicketDeliveryOperation'
 import type { ClaimedDeliveryOperation } from '~~/server/utils/serviceTicketDeliveryOperationExecutor'
@@ -12,6 +16,7 @@ import { executeClaimedAimsOperation } from '~~/server/utils/claimedAimsOperatio
 type RuntimeRow = Record<string, unknown>
 
 export interface IntegrationOperationDrainOptions {
+  taskContext?: import('./workItemCompletionTransport').CompletionScheduledContext
   maxClaims: number
   maxWallTimeMs: number
   claimReserveMs?: number
@@ -25,6 +30,8 @@ export interface IntegrationOperationDrainResult {
   stoppedBy: 'empty' | 'max_claims' | 'max_wall_time'
   notificationsPublished: number
   notificationFailures: number
+  milestoneRollover?: Record<string, unknown>
+  dueNotifications?: Record<string, unknown>
 }
 
 const maxAllowedClaims = 25
@@ -45,6 +52,8 @@ function validateDrainOptions(options: IntegrationOperationDrainOptions) {
 }
 
 interface DrainBinding {
+  schedulerStorage?: string
+  schedulerGeneration?: string
   tenant: string
   deployment: string
 }
@@ -120,7 +129,47 @@ export async function drainIntegrationOperationsForEvent(
   options: IntegrationOperationDrainOptions
 ) {
   validateDrainOptions(options)
-  return await drainWithIO(options, binding, createRequestServiceTicketDeliveryOperationIO(event), event)
+  const verified = await requireTenantGatewaySchedulerRequest(event, 'aims')
+  if (binding.tenant !== verified.tenant || binding.deployment !== verified.deployment
+    || (binding.schedulerStorage || '') !== verified.schedulerStorage
+    || (binding.schedulerGeneration || '') !== verified.schedulerGeneration) {
+    throw createError({ statusCode: 403, message: 'Scheduler binding does not match the signed wake.' })
+  }
+  if (verified.schedulerStorage && !['unified', 'recovered'].includes(verified.schedulerStorage)) {
+    throw createError({ statusCode: 503, message: 'Registered scheduler storage is disabled.' })
+  }
+  const unified = ['unified', 'recovered'].includes(verified.schedulerStorage)
+  const io = unified
+    ? createUnifiedRequestServiceTicketDeliveryOperationIO(event, verified.schedulerGeneration)
+    : createRequestServiceTicketDeliveryOperationIO(event)
+  const result = await drainWithIO(options, verified, io, event)
+  if (!unified) return result
+  // On the unified scheduler the signed wake is the only rollover owner; the
+  // local daily cron is refused by the Runtime. A rollover failure must not
+  // turn an already checkpointed drain into a failed wake.
+  let milestoneRollover: Record<string, unknown>
+  try {
+    milestoneRollover = await callAimsUnifiedMilestoneRollover<Record<string, unknown>>(event, verified.schedulerGeneration)
+  } catch (error) {
+    console.warn('[aims] unified milestone rollover failed; next signed wake retries', { requestId: verified.requestId, error: String((error as Error)?.message || error) })
+    milestoneRollover = { failed: true }
+  }
+  // Due notifications follow the same owner. The drain keeps its own feature
+  // flag, and a small budget leaves the wake inside its Gateway timeout.
+  let dueNotifications: Record<string, unknown>
+  try {
+    dueNotifications = await drainAimsDueNotifications({
+      event,
+      pageSize: 50,
+      maxPagesPerStream: 2,
+      maxWallTimeMs: 10_000,
+      runtime: (path, body) => callAimsUnifiedDueNotification(event, path, body, verified.schedulerGeneration)
+    })
+  } catch (error) {
+    console.warn('[aims] unified due notifications failed; next signed wake retries', { requestId: verified.requestId, error: String((error as Error)?.message || error) })
+    dueNotifications = { failed: true }
+  }
+  return { ...result, milestoneRollover, dueNotifications }
 }
 
 export async function drainIntegrationOperations(
@@ -139,7 +188,8 @@ export async function drainIntegrationOperations(
   const io = createScheduledServiceTicketDeliveryOperationIO(callRuntime, {
     codocs: binding.codocsTargetDeployment,
     altoc: binding.altocTargetDeployment,
-    finance: binding.financeTargetDeployment
-  })
+    finance: binding.financeTargetDeployment,
+    workflow: binding.workflowTargetDeployment
+  }, options.taskContext)
   return await drainWithIO(options, binding, io)
 }

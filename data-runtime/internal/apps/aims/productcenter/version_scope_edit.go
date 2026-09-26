@@ -13,6 +13,18 @@ type ProductVersionScopeEdit struct {
 }
 
 func EditProductVersionScope(ctx context.Context, db *sql.DB, identity CommandIdentity, versionPermit, planningPermit AuthorizationPermit, input ProductVersionScopeEdit) (CommandResult, error) {
+	return editProductVersionScope(ctx, identity, versionPermit, planningPermit, input, func(payload any, authorize AuthorizeCommand, apply ApplyCommand) (CommandResult, error) {
+		return ExecuteCommand(ctx, db, identity, payload, authorize, apply)
+	})
+}
+
+func EditProductVersionScopeInTransaction(ctx context.Context, tx *sql.Tx, identity CommandIdentity, versionPermit, planningPermit AuthorizationPermit, input ProductVersionScopeEdit) (CommandResult, error) {
+	return editProductVersionScope(ctx, identity, versionPermit, planningPermit, input, func(payload any, authorize AuthorizeCommand, apply ApplyCommand) (CommandResult, error) {
+		return ExecuteCommandInTransaction(ctx, tx, identity, payload, authorize, apply)
+	})
+}
+
+func editProductVersionScope(ctx context.Context, identity CommandIdentity, versionPermit, planningPermit AuthorizationPermit, input ProductVersionScopeEdit, execute func(any, AuthorizeCommand, ApplyCommand) (CommandResult, error)) (CommandResult, error) {
 	if identity.Action != "product_versions:scope-edit" {
 		return CommandResult{}, invalid("product_command_identity_invalid", "版本范围编辑命令不匹配")
 	}
@@ -25,7 +37,7 @@ func EditProductVersionScope(ctx context.Context, db *sql.DB, identity CommandId
 	if err := ValidateProductVersionScopeDraft(input.ProductVersionScopeDraft); err != nil {
 		return CommandResult{}, err
 	}
-	return ExecuteCommand(ctx, db, identity, input, func(ctx context.Context, tx *sql.Tx) error {
+	return execute(input, func(ctx context.Context, tx *sql.Tx) error {
 		if err := AuthorizeWorkspaceTransaction(ctx, tx, identity.ProductCode, identity.ActorUID, "product_versions", "edit", versionPermit); err != nil {
 			return err
 		}

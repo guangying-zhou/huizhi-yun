@@ -66,6 +66,30 @@ const launchComment = ref('')
 const historyItems = ref<WorkflowHistoryItem[]>([])
 const historyLoading = ref(false)
 const expandedHistoryId = ref<number | null>(null)
+const auth = useAuth()
+
+const volatileWorkflowKeys = new Map<string, string>()
+
+function pendingWorkflowKey(kind: string, target: string) {
+  const account = `${String(auth.tenant.value || '')}:${String(auth.user.value || '')}`
+  const storageKey = `hzy:workflow-pending:${account}:${kind}:${target}`
+  try {
+    const existing = sessionStorage.getItem(storageKey)
+    if (existing) {
+      volatileWorkflowKeys.set(storageKey, existing)
+      return { key: existing, storageKey }
+    }
+  } catch { /* Storage may be unavailable. */ }
+  const key = volatileWorkflowKeys.get(storageKey) || crypto.randomUUID()
+  volatileWorkflowKeys.set(storageKey, key)
+  try { sessionStorage.setItem(storageKey, key) } catch { /* Current attempt still has its key. */ }
+  return { key, storageKey }
+}
+
+function clearWorkflowKey(storageKey: string) {
+  volatileWorkflowKeys.delete(storageKey)
+  try { sessionStorage.removeItem(storageKey) } catch { /* No persisted key to clear. */ }
+}
 
 interface WorkflowCreateResultData {
   id?: number | string | null
@@ -326,10 +350,12 @@ async function handleApprove() {
   }
   submitting.value = true
   try {
+    const retry = pendingWorkflowKey('approve', String(task.value.id))
     const res = await approveTask(task.value.id, {
       comment: decisionComment.value || undefined
-    })
+    }, retry.key)
     if (res.code === 0) {
+      clearWorkflowKey(retry.storageKey)
       emit('approved', {
         taskId: task.value.id,
         instanceId: task.value.instance_id,
@@ -340,6 +366,7 @@ async function handleApprove() {
     }
   } catch (err: unknown) {
     emit('error', { message: extractErrorMessage(err, '审批失败') })
+    if ((err as { statusCode?: number })?.statusCode === 409) await loadData()
   } finally {
     submitting.value = false
   }
@@ -349,16 +376,19 @@ async function handleReject() {
   if (!task.value || !decisionComment.value.trim()) return
   submitting.value = true
   try {
+    const retry = pendingWorkflowKey('reject', String(task.value.id))
     const res = await rejectTask(task.value.id, {
       comment: decisionComment.value
-    })
+    }, retry.key)
     if (res.code === 0) {
+      clearWorkflowKey(retry.storageKey)
       emit('rejected', { taskId: task.value.id, instanceId: task.value.instance_id })
       decisionComment.value = ''
       await loadData()
     }
   } catch (err: unknown) {
     emit('error', { message: extractErrorMessage(err, '驳回失败') })
+    if ((err as { statusCode?: number })?.statusCode === 409) await loadData()
   } finally {
     submitting.value = false
   }

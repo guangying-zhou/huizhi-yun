@@ -1,0 +1,20 @@
+{
+  "schemaVersion": "test-runtime-observation.v1",
+  "observedAt": "2026-09-14T06:22:37.675568+00:00",
+  "tenant": "C000001",
+  "environment": "test",
+  "binarySha256": "c0d8a54fd9114b46b7cbe7110ad0f24c0c05f1115ba4a97decb3c2b9d35a71fd",
+  "configSha256": "38f0eb42a619e30024296a8a9c87b62304eb966dcfa2048b9ec3c430c1c84409",
+  "candidate5DeploymentVerified": false,
+  "localHealth": {
+    "status": "ok",
+    "version": "0.3.219-test.adr018-candidate.4",
+    "commit": "801b402ef6a0-dirty",
+    "httpStatus": 200
+  },
+  "publicHealth": {
+    "httpStatus": 403,
+    "cloudflareError1010": true,
+    "probeClient": "Python urllib default"
+  }
+}

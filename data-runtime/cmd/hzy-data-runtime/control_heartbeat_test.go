@@ -1,17 +1,36 @@
 package main
 
 import (
+	"context"
 	"crypto/ed25519"
 	"crypto/rand"
 	"crypto/x509"
 	"encoding/json"
 	"encoding/pem"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/huizhi-yun/data-runtime/internal/config"
 )
+
+func TestControlHeartbeatToleratesUnknownResponseFields(t *testing.T) {
+	platform := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"futureEnvelope":{"version":1},"data":{"desiredVersion":"test-version","deploymentBindings":{"aims":"test-aims"},"futureKeyset":{"revision":3}}}`))
+	}))
+	defer platform.Close()
+	cfg := config.Config{}
+	cfg.Control.PlatformURL = platform.URL
+	cfg.Control.RuntimeCode = "test-runtime"
+	cfg.Control.Token = "hzy_ctl_test_fixture"
+	response, err := sendControlHeartbeat(context.Background(), cfg, func(context.Context) map[string]any { return nil })
+	if err != nil || response.DesiredVersion != "test-version" || response.DeploymentBindings["aims"] != "test-aims" {
+		t.Fatalf("known heartbeat fields were not preserved: %v", err)
+	}
+}
 
 func TestWriteDeploymentBindingsPersistsProtectedControlPlaneOverlay(t *testing.T) {
 	configDir := t.TempDir()
@@ -45,14 +64,32 @@ func TestWriteDeploymentBindingsPersistsProtectedControlPlaneOverlay(t *testing.
 }
 
 func TestBindingsChangedFailsClosedOnEmptyPlatformResponse(t *testing.T) {
-	if bindingsChanged(map[string]string{"finance": "finance-prod"}, nil) {
+	if bindingsChanged(map[string]string{"finance": "finance-prod"}, nil, "") {
 		t.Fatal("empty Platform response must not erase enrolled bindings")
 	}
 	if !bindingsChanged(
 		map[string]string{"finance": "finance-prod"},
 		map[string]string{"finance": "finance-prod", "console": "console-prod"},
+		"",
 	) {
 		t.Fatal("new Console binding must require a protected overlay restart")
+	}
+}
+
+func TestBindingsChangedIgnoresOnlyExactLocalWorkflowOverlay(t *testing.T) {
+	current := map[string]string{"aims": "C000001-test-aims", "workflow": "C000001-test-workflow-local"}
+	platform := map[string]string{"aims": "C000001-test-aims"}
+	if bindingsChanged(current, platform, "C000001-test-workflow-local") {
+		t.Fatal("local Workflow overlay must not restart on every Platform heartbeat")
+	}
+	if !bindingsChanged(current, platform, "") || !bindingsChanged(current, platform, "other") {
+		t.Fatal("Workflow difference without exact local opt-in must trigger restart")
+	}
+	if !bindingsChanged(current, map[string]string{"aims": "changed"}, "C000001-test-workflow-local") {
+		t.Fatal("unrelated Platform binding change must trigger restart")
+	}
+	if !bindingsChanged(current, map[string]string{"aims": "C000001-test-aims", "workflow": "platform-workflow"}, "C000001-test-workflow-local") {
+		t.Fatal("Platform Workflow binding conflict must trigger restart")
 	}
 }
 

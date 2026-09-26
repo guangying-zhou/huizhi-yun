@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { ProjectDocsTreeItem } from '~/types'
+import type { ProjectDocsTreeItem } from '../types'
 
 /**
  * 文件树项组件 - 递归显示文件夹和文档

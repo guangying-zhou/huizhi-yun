@@ -1,5 +1,9 @@
 <script setup lang="ts">
-import { getProductPerspectives, productNavTo, type ProductPerspectiveKey } from '~/config/productNavigation'
+import { useAimsModule } from '../../../../layer/useAimsModule'
+import { useProductWorkspace } from '../../../composables/useProductWorkspace'
+import { getProductPerspectives, productNavTo, type ProductPerspectiveKey } from '../../../../layer/productNavigation'
+
+const { moduleUrl, cacheKey, hosted } = useAimsModule()
 
 definePageMeta({ layoutHeader: true, layoutHeaderTitle: '产品概览', layoutHeaderProjectSwitcher: false })
 const route = useRoute()
@@ -13,10 +17,10 @@ const canEdit = computed(() => permissionStatus.value === 'success' && permissio
  * 概览指标只做计数：每个入口取列表接口的第一页 total。
  * 单个入口无权限或读取失败时按「—」呈现，不阻塞整页，也不用 0 冒充未知。
  */
-const { data: metrics, status: metricsStatus, refresh: refreshMetrics } = await useAsyncData(() => `product-overview-metrics:${code.value}`, async () => {
+const { data: metrics, status: metricsStatus, refresh: refreshMetrics } = await useAsyncData(() => cacheKey(`product-overview-metrics:${code.value}`), async () => {
   const productCode = code.value
-  if (!productCode) return null
-  const base = `/api/v1/products/${encodeURIComponent(productCode)}`
+  if (!productCode || !product.value) return null
+  const base = moduleUrl(`/api/v1/products/${encodeURIComponent(productCode)}`)
   async function readCount(path: string, query: Record<string, unknown>, pick: (data: Record<string, unknown>) => unknown) {
     try {
       const response = await $fetch<{ code: number, data: Record<string, unknown> }>(`${base}${path}`, { query, timeout: 15000 })
@@ -31,11 +35,11 @@ const { data: metrics, status: metricsStatus, refresh: refreshMetrics } = await 
     readCount('/features', { page: 1, pageSize: 1 }, data => data.total),
     readCount('/versions', { page: 1, pageSize: 1 }, data => data.total),
     readCount('/requests', { page: 1, pageSize: 1, decisionStatus: 'submitted' }, data => data.total),
-    readCount('/objectives', { page: 1, pageSize: 1 }, data => data.total),
-    readCount('/roadmaps/adoption', { page: 1, pageSize: 1 }, data => (data.summary as { customers?: unknown } | undefined)?.customers)
+    hosted ? Promise.resolve(null) : readCount('/objectives', { page: 1, pageSize: 1 }, data => data.total),
+    hosted ? Promise.resolve(null) : readCount('/roadmaps/adoption', { page: 1, pageSize: 1 }, data => (data.summary as { customers?: unknown } | undefined)?.customers)
   ])
   return { features, versions, pendingRequests, objectives, customers }
-}, { server: false, watch: [code] })
+}, { server: false, watch: [code, product] })
 
 function metricText(value: number | null | undefined) {
   return typeof value === 'number' ? String(value) : '—'
@@ -65,7 +69,7 @@ const summaryCards = computed(() => [
   { label: '需求待评估', value: metricText(metrics.value?.pendingRequests), hint: '等待产品评审' },
   { label: '版本计划', value: metricText(metrics.value?.versions), hint: '含规划与已发布' },
   { label: '产品功能', value: metricText(metrics.value?.features), hint: '按模块维护的长期能力' },
-  { label: '采用客户', value: metricText(metrics.value?.customers), hint: '已登记部署客户' }
+  ...(!hosted ? [{ label: '采用客户', value: metricText(metrics.value?.customers), hint: '已登记部署客户' }] : [])
 ])
 
 const positioningFields = [
@@ -199,8 +203,8 @@ onBeforeUnmount(clearRefresh)
             产品定位
           </h2>
           <UButton
-            v-if="canEdit"
-            :to="`/products/${encodeURIComponent(code)}/settings`"
+            v-if="canEdit && !hosted"
+            :to="moduleUrl(`/products/${encodeURIComponent(code)}/settings`)"
             icon="i-lucide-pencil"
             color="neutral"
             variant="outline"

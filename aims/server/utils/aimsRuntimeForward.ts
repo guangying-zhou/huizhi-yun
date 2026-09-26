@@ -70,6 +70,32 @@ export async function forwardAimsRuntimePost<T>(
   return envelope.data as T
 }
 
+/**
+ * AA-04's opt-in Workflow subtype requires the legacy Aims callback ingress
+ * scope and one fixed cross-domain capability on the same Runtime token.
+ * Keep this separate from the normal forwarder so no caller can supply an
+ * arbitrary raw scope combination.
+ */
+export async function forwardAimsMilestoneReceivableWorkflowCallback<T>(
+  event: H3Event,
+  options: { uid: string, body?: Record<string, unknown>, query?: Record<string, unknown> }
+): Promise<T> {
+  const runtime = await maybeCallTenantRuntime<RuntimeEnvelope<T>>(event, '/v1/aims/service/workflow/callback', {
+    appCode: 'aims',
+    scope: 'aims.write altoc:receivable:mark-billable',
+    capabilityFormat: 'aims-milestone-receivable',
+    method: 'POST',
+    query: { ...(options.query || {}), current_user: options.uid },
+    body: sanitizeRuntimeBody(options.body)
+  })
+
+  if (!runtime.handled) {
+    throw createError({ statusCode: 503, message: 'Aims tenant-runtime is required for this operation.' })
+  }
+  if (runtime.data.code !== undefined && runtime.data.code !== 0) throw runtimeEnvelopeError(runtime.data)
+  return runtime.data.data as T
+}
+
 /** GET 形式的 runtime 转发（语义同 forwardAimsRuntimePost）。 */
 export async function forwardAimsRuntimeGet<T>(
   event: H3Event,

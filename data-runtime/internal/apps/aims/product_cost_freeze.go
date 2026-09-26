@@ -44,7 +44,7 @@ func freezeProductCostRules(ctx context.Context, tx *sql.Tx, trusted integration
 	if err != nil {
 		return "", err
 	}
-	_, err = tx.ExecContext(ctx, `INSERT INTO integration_operation(operation_id,operation_key,correlation_key,tenant_code,deployment_code,source_app,target_app,operation_code,required_capability,source_biz_type,source_biz_code,idempotency_key,command_schema_version,command_json,command_sha256,status,next_attempt_at,original_actor_uid) VALUES(?,?,?,?,?,'aims','finance',?,'finance:product-cost:replace-rules','product_cost_rules_request',?,?,'product-cost-rules.v1',?,?,'pending',UTC_TIMESTAMP(3),?) ON DUPLICATE KEY UPDATE operation_id=operation_id`,
+	_, err = tx.ExecContext(ctx, trusted.SQL(`INSERT INTO integration_operation(operation_id,operation_key,correlation_key,tenant_code,deployment_code,source_app,target_app,operation_code,required_capability,source_biz_type,source_biz_code,idempotency_key,command_schema_version,command_json,command_sha256,status,next_attempt_at,original_actor_uid) VALUES(?,?,?,?,?,'aims','finance',?,'finance:product-cost:replace-rules','product_cost_rules_request',?,?,'product-cost-rules.v1',?,?,'pending',UTC_TIMESTAMP(3),?) ON DUPLICATE KEY UPDATE operation_id=operation_id`),
 		requestID, key, key, trusted.TenantCode, trusted.DeploymentCode, productCostRulesOperationCode, requestID, key, string(payload), hash, actorUID)
 	if err != nil {
 		return "", err
@@ -55,7 +55,7 @@ func freezeProductCostRules(ctx context.Context, tx *sql.Tx, trusted integration
 	// every frozen identity field rather than trusting a colliding request key.
 	var existing integrationoperation.Identity
 	var existingID, existingKey, capability, schema, actor string
-	err = tx.QueryRowContext(ctx, `SELECT operation_id,operation_key,tenant_code,deployment_code,source_app,target_app,operation_code,source_biz_type,source_biz_code,idempotency_key,command_sha256,required_capability,command_schema_version,original_actor_uid FROM integration_operation WHERE operation_id=? FOR UPDATE`, requestID).Scan(
+	err = tx.QueryRowContext(ctx, trusted.SQL(`SELECT operation_id,operation_key,tenant_code,deployment_code,source_app,target_app,operation_code,source_biz_type,source_biz_code,idempotency_key,command_sha256,required_capability,command_schema_version,original_actor_uid FROM integration_operation WHERE operation_id=? FOR UPDATE`), requestID).Scan(
 		&existingID, &existingKey, &existing.TenantCode, &existing.DeploymentCode,
 		&existing.SourceApp, &existing.TargetApp, &existing.OperationCode,
 		&existing.SourceBizType, &existing.SourceBizCode, &existing.IdempotencyKey,

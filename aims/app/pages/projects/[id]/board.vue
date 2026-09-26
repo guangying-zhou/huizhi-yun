@@ -1,9 +1,19 @@
 <script setup lang="ts">
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
-import type { WorkItem } from '~/types/aims'
-import { typeConfig, priorityConfig, severityConfig, getStatusLabel } from '~/config/work-item'
+import { useAimsModule } from '../../../../layer/useAimsModule'
+import type { WorkItem } from '../../../types/aims'
+import { typeConfig, priorityConfig, severityConfig, getStatusLabel } from '../../../config/work-item'
+import { useProjectStore } from '../../../stores/project'
+import { useWorkItemStore } from '../../../stores/workItem'
+import MarkdownContent from '../../../components/MarkdownContent.vue'
+import ProjectNavbar from '../../../components/project/ProjectNavbar.vue'
+import RoutineQuarterReview from '../../../components/routine/RoutineQuarterReview.vue'
+import RoutineTaskCreateModal from '../../../components/routine/RoutineTaskCreateModal.vue'
 
+
+// 同一份代码供独立应用与企业宿主使用：非宿主模式下 moduleUrl 原样返回路径。
+const { moduleUrl, hosted } = useAimsModule()
 definePageMeta({
   layoutHeader: true,
   layoutHeaderTitle: '看板',
@@ -51,7 +61,10 @@ const quickFilterOptions = [
 const showDetail = ref(false)
 const selectedItem = ref<WorkItem | null>(null)
 const availableTransitions = ref<{ toStatus: string, transitionKey: string }[]>([])
+const hostedDetail = ref<{ editVersion: string, stateActions: string[] } | null>(null)
+const canStartSelectedItem = computed(() => !hosted || hostedDetail.value?.stateActions.includes('start') === true)
 const transitioning = ref(false)
+const startKey = ref('')
 
 // 重新指派
 const showReassign = ref(false)
@@ -294,7 +307,7 @@ async function prefetchDropValidation(item: WorkItem, fromColKey: string) {
 
   try {
     const res = await $fetch<{ code: number, data: { toStatus: string, transitionKey: string }[] }>(
-      `/api/v1/work-items/${item.id}/transitions`
+      moduleUrl(`/api/v1/work-items/${item.id}/transitions`)
     )
     if (token !== dragValidationToken || !dragState.value || dragState.value.item.id !== item.id) return
 
@@ -481,21 +494,25 @@ watch(childRouteActive, async (active, wasActive) => {
 async function openDetail(item: WorkItem) {
   // 执行中的任务、确认中任务、已完成任务统一跳转到执行页面
   if (item.status === 'in_progress' || item.status === 'in_review' || item.status === 'completed') {
-    navigateTo(`/projects/${projectId.value}/board/${item.id}/execution`)
+    navigateTo(moduleUrl(`/projects/${projectId.value}/board/${item.id}/execution`))
     return
   }
   selectedItem.value = item
+  hostedDetail.value = null
+  availableTransitions.value = []
+  startKey.value = ''
   showDetail.value = true
   showTimeEntry.value = false
   showLinkDoc.value = false
   timeEntries.value = []
   linkedDocs.value = []
   try {
-    const res = await $fetch<{ code: number, data: { toStatus: string, transitionKey: string }[] }>(
-      `/api/v1/work-items/${item.id}/transitions`
-    )
-    if (res.code === 0) {
-      availableTransitions.value = res.data
+    if (hosted) {
+      const res = await $fetch<{ code: number, data: { id: number, editVersion: string, stateActions: string[] } }>(moduleUrl(`/api/v1/work-items/${item.id}`))
+      if (selectedItem.value?.id === item.id && res.code === 0 && res.data?.id === item.id && res.data.editVersion && Array.isArray(res.data.stateActions)) hostedDetail.value = res.data
+    } else {
+      const res = await $fetch<{ code: number, data: { toStatus: string, transitionKey: string }[] }>(moduleUrl(`/api/v1/work-items/${item.id}/transitions`))
+      if (res.code === 0) availableTransitions.value = res.data
     }
   } catch {
     availableTransitions.value = []
@@ -505,15 +522,21 @@ async function openDetail(item: WorkItem) {
 }
 
 async function handleStartExecution() {
-  if (!selectedItem.value) return
+  if (!selectedItem.value || !canStartSelectedItem.value) return
   transitioning.value = true
   try {
     const itemId = selectedItem.value.id
-    await workItemStore.updateItem(itemId, { status: 'in_progress' })
+    if (hosted) {
+      startKey.value ||= crypto.randomUUID()
+      await $fetch(moduleUrl(`/api/v1/work-items/${itemId}/start`), { method: 'POST', headers: { 'Idempotency-Key': startKey.value }, body: { projectId: projectId.value, expectedVersion: hostedDetail.value!.editVersion } })
+      startKey.value = ''
+    } else {
+      await workItemStore.updateItem(itemId, { status: 'in_progress' })
+    }
     toast.add({ title: '已开始执行', color: 'success' })
     showDetail.value = false
     selectedItem.value = null
-    await navigateTo(`/projects/${projectId.value}/board/${itemId}/execution`)
+    await navigateTo(moduleUrl(`/projects/${projectId.value}/board/${itemId}/execution`))
   } catch (err: unknown) {
     const msg = (err as { data?: { message?: string } })?.data?.message || '操作失败'
     toast.add({ title: '开始执行失败', description: msg, color: 'error' })
@@ -524,6 +547,10 @@ async function handleStartExecution() {
 
 function openReassign() {
   if (!selectedItem.value) return
+  if (hosted) {
+    void navigateTo(moduleUrl(`/work-items/${selectedItem.value.id}/edit`))
+    return
+  }
   reassignUid.value = selectedItem.value.assigneeUid || ''
   showReassign.value = true
 }
@@ -552,7 +579,7 @@ const timeEntries = ref<{ id: number, entryDate: string, uid: string, hours: num
 
 async function loadTimeEntries(itemId: number) {
   try {
-    const res = await $fetch<{ code: number, data: any[] }>(`/api/v1/work-items/${itemId}/time-entries`)
+    const res = await $fetch<{ code: number, data: any[] }>(moduleUrl(`/api/v1/work-items/${itemId}/time-entries`))
     if (res.code === 0) {
       timeEntries.value = res.data
     }
@@ -567,7 +594,7 @@ const linkedDocs = ref<{ id: number, documentId: string }[]>([])
 
 async function loadLinkedDocs(itemId: number) {
   try {
-    const res = await $fetch<{ code: number, data: any[] }>(`/api/v1/work-items/${itemId}/documents`)
+    const res = await $fetch<{ code: number, data: any[] }>(moduleUrl(`/api/v1/work-items/${itemId}/documents`))
     if (res.code === 0) {
       linkedDocs.value = res.data
     }
@@ -915,7 +942,7 @@ const swimlaneOptions = [
                   </div>
                   <div v-else class="flex flex-wrap justify-end gap-2">
                     <UButton
-                      v-if="isAssignee"
+                      v-if="isAssignee && canStartSelectedItem"
                       label="开始执行"
                       icon="i-lucide-play"
                       color="primary"
@@ -925,7 +952,7 @@ const swimlaneOptions = [
                     />
                     <UButton
                       v-if="isManager"
-                      label="重新指派"
+                      :label="hosted ? '编辑负责人' : '重新指派'"
                       icon="i-lucide-user-round-pen"
                       color="primary"
                       variant="soft"

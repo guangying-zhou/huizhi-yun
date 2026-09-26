@@ -1,0 +1,42 @@
+{
+  "schemaVersion": "test-console-policy-intermittent-cpu-failure.v1",
+  "observedAt": "2026-09-14T21:19:22.630Z",
+  "scope": {
+    "tenantCode": "C000001",
+    "environment": "test",
+    "deploymentCode": "wiztek-test-console",
+    "worker": "hzy-test-console",
+    "activeVersionId": "fdcbeddf-6e6f-4322-b92b-1aa80fdb4558"
+  },
+  "observation": {
+    "source": "Cloudflare Worker tail; Console scheduled policy-sync request",
+    "schedulerIssuedAtMs": 1789420730090,
+    "schedulerIssuedAt": "2026-09-14T21:18:50.090Z",
+    "requestPath": "/api/internal/policy-bundle/sync",
+    "outcome": "exceededCpu",
+    "cpuTimeMs": 10,
+    "wallTimeMs": 32544,
+    "error": "Worker exceeded CPU time limit."
+  },
+  "persistentSnapshot": {
+    "lastSuccessfulSyncAtMs": 1789420556705,
+    "lastSuccessfulSyncAt": "2026-09-14T21:15:56.705Z",
+    "readbackAt": "2026-09-14T21:20:50.892Z",
+    "ageMsAtReadback": 294187,
+    "freshAtReadback": true,
+    "bundleVersion": "pv_test_20260914161219_0014",
+    "sealedEnvelopeChars": 580115
+  },
+  "conclusion": "The scheduled Console sync can still hit the current Free-plan 10ms CPU limit after a prior successful renewal. The failure occurs inside Console after the Gateway dispatches the signed scheduled request; it is not evidence of a Gateway waitUntil, bootstrap-token, Console request-timeout, signature, or Runtime-store failure.",
+  "nonActions": {
+    "manualSync": false,
+    "deployment": false,
+    "productionChange": false,
+    "paidPlanChange": false,
+    "policyTtlOrSignatureChange": false
+  },
+  "limitations": [
+    "The snapshot remained below the 300000ms freshness boundary at this readback, but this failed renewal would make it stale if a later renewal does not succeed.",
+    "Earlier successful cycles do not establish reliable continuous renewal under the current CPU limit."
+  ]
+}

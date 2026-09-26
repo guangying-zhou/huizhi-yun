@@ -696,9 +696,13 @@ func TestUpdateWorkItemDeliverableRequiresProjectMemberOrScopedAdmin(t *testing.
 	mock.ExpectQuery("(?s)SELECT COALESCE\\(d\\.milestone_owner_id, matter\\.milestone_id, target\\.milestone_id\\).*FROM deliverables d").
 		WithArgs(int64(77)).
 		WillReturnRows(sqlmock.NewRows([]string{"milestone_id"}).AddRow(nil))
+	mock.ExpectBegin()
+	mock.ExpectQuery("SELECT id FROM aims_projects WHERE id = \\? FOR UPDATE").WithArgs(int64(42)).WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(int64(42)))
+	mock.ExpectQuery("SELECT target_id,matter_id FROM deliverables WHERE id=\\? AND project_id=\\?").WithArgs(int64(77), int64(42)).WillReturnRows(sqlmock.NewRows([]string{"target_id", "matter_id"}).AddRow(int64(10), nil))
 	mock.ExpectExec("UPDATE deliverables SET status = \\?, submitted_by = \\?, submitted_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = \\?").
 		WithArgs("submitted", "u1", int64(77)).
 		WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectCommit()
 	mock.ExpectQuery("(?s)SELECT id, target_id, matter_id, name, description, acceptance_criteria, deliverable_type,.*FROM deliverables").
 		WithArgs("10", "10").
 		WillReturnRows(sqlmock.NewRows([]string{

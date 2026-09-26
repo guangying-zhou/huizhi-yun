@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useAi } from '../../composables/useAi'
 /**
  * AI 下拉菜单 + 结果预览面板
  * 由 Crepe 工具栏中的 AI 按钮触发，显示为下拉菜单

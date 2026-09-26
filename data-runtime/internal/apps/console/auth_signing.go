@@ -94,6 +94,9 @@ func (a *Adapter) SignOIDCToken(
 	if err != nil {
 		return nil, err
 	}
+	if err := a.authorizeOIDCSigningClaims(ctx, normalizedClaims); err != nil {
+		return nil, err
+	}
 	key, err := a.ensureOIDCSigningKey(ctx, meta.ActorID)
 	if err != nil {
 		return nil, err
@@ -112,6 +115,75 @@ func (a *Adapter) SignOIDCToken(
 		"token": signed, "kid": key.Kid, "alg": key.Alg,
 		"expiresAt": now.Add(time.Duration(ttlSeconds) * time.Second).Format(time.RFC3339),
 	}, nil
+}
+
+// authorizeOIDCSigningClaims turns a well-formed signing request into an
+// authorized one. Shape validation cannot establish who a token may speak for,
+// so every issuance is justified by a fact this Runtime owns: a live session for
+// a user token, or an active credential and grant for a service token. Holding
+// the signing capability lets a workload ask for a token; it must not let that
+// workload assert a subject, session or scope the Runtime cannot confirm.
+func (a *Adapter) authorizeOIDCSigningClaims(ctx context.Context, claims map[string]any) error {
+	hzy, ok := claims["hzy"].(map[string]any)
+	if !ok {
+		return httperror.New(http.StatusBadRequest, "oidc_signing_hzy_claim_invalid", "hzy claim must be an object")
+	}
+	if stringField(claims["token_use"]) == "service" {
+		return a.authorizeServiceSigningClaims(ctx, claims, hzy)
+	}
+	return a.authorizeUserSigningClaims(ctx, claims, hzy)
+}
+
+// The credential and grant state that guards service-token consumption must also
+// guard issuance, so a revoked credential or an ungranted scope cannot be minted
+// in the first place.
+func (a *Adapter) authorizeServiceSigningClaims(ctx context.Context, claims, hzy map[string]any) error {
+	credentialID, _ := integerField(hzy["credentialId"])
+	state, err := a.VerifyOIDCServiceTokenState(ctx, map[string]any{
+		"clientId":     stringField(claims["client_id"]),
+		"credentialId": credentialID,
+		"scope":        stringField(claims["scope"]),
+	})
+	if err != nil {
+		return err
+	}
+	if state["active"] != true {
+		return httperror.New(http.StatusForbidden, "oidc_signing_service_state_inactive",
+			"service credential or requested scope is not active")
+	}
+	if subject := stringField(claims["sub"]); subject != "client:"+strings.TrimSpace(stringField(hzy["clientCode"])) {
+		return httperror.New(http.StatusForbidden, "oidc_signing_service_subject_mismatch",
+			"service token subject does not match the authorized client")
+	}
+	return nil
+}
+
+// A user token speaks for whoever the session says it speaks for. Resolving the
+// session here keeps a revoked, expired or simply invented sid from becoming a
+// signed identity, and keeps sub, hzy.uid and the session from disagreeing:
+// consumers read the subject from either field.
+func (a *Adapter) authorizeUserSigningClaims(ctx context.Context, claims, hzy map[string]any) error {
+	var uid string
+	err := a.db.QueryRowContext(ctx, `
+		SELECT ls.uid
+		FROM local_sessions ls
+		INNER JOIN directory_users u ON u.uid=ls.uid AND u.status='active'
+		WHERE ls.session_id=? AND ls.status='active' AND ls.revoked_at IS NULL
+			AND ls.expires_at>UTC_TIMESTAMP()
+		LIMIT 1
+	`, strings.TrimSpace(stringField(claims["sid"]))).Scan(&uid)
+	if errors.Is(err, sql.ErrNoRows) {
+		return httperror.New(http.StatusForbidden, "oidc_signing_session_not_active",
+			"user token session is missing, revoked or expired")
+	}
+	if err != nil {
+		return err
+	}
+	if strings.TrimSpace(stringField(hzy["uid"])) != uid || stringField(claims["sub"]) != "user:"+uid {
+		return httperror.New(http.StatusForbidden, "oidc_signing_session_subject_mismatch",
+			"user token subject does not match the authenticated session")
+	}
+	return nil
 }
 
 func (a *Adapter) VerifyOIDCServiceTokenState(ctx context.Context, body map[string]any) (map[string]any, error) {

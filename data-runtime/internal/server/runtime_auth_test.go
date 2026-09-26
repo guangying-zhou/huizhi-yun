@@ -2234,3 +2234,39 @@ func TestRuntimeTrustedContextUsesVerifiedClientIDRatherThanJWTSubject(t *testin
 		t.Fatalf("body client identity = %v", got)
 	}
 }
+
+func TestAssetsProductDocumentMetadataReadTransport(t *testing.T) {
+	path := "/v1/codocs/service/assets-product-documents/00000000-0000-4000-8000-000000000001/metadata"
+	if got := readOnlyAppRuntimeScope("codocs", http.MethodPost, path); got != "codocs.read" {
+		t.Fatalf("metadata scope %q", got)
+	}
+	for _, invalid := range []string{path + "/write", strings.Replace(path, "/metadata", "/content", 1), strings.Replace(path, "/metadata", "/nested/metadata", 1), "/v1/codocs/service/assets-product-documents//metadata"} {
+		if got := readOnlyAppRuntimeScope("codocs", http.MethodPost, invalid); got != "" {
+			t.Fatalf("unexpected read route %s: %s", invalid, got)
+		}
+	}
+	if got := readOnlyAppRuntimeScope("codocs", http.MethodDelete, path); got != "" {
+		t.Fatal("delete classified read")
+	}
+}
+
+// Exercise the actual auth/router classification; the downstream adapter is a
+// capture fixture here. Document ACL and signed envelope tests run separately.
+func TestAssetsMetadataRouterAcceptsReadJWT(t *testing.T) {
+	cfg, privateKey := testRuntimeJWTConfig(t)
+	server := &Server{cfg: cfg, auth: auth.New(cfg)}
+	request := func(scope string) *http.Request {
+		req := httptest.NewRequest(http.MethodPost, "/v1/codocs/service/assets-product-documents/00000000-0000-4000-8000-000000000001/metadata", strings.NewReader(`{}`))
+		req.Header.Set("Authorization", "Bearer "+signTestRuntimeJWTForApp(t, privateKey, "codocs", scope))
+		return req
+	}
+	result, err := server.routeAppRuntime(request("codocs.read"), "codocs", &captureRuntimeHandler{})
+	if err != nil || result.Operation != "test.runtime" {
+		t.Fatalf("read JWT blocked: %v", err)
+	}
+	_, err = server.routeAppRuntime(request("codocs.write"), "codocs", &captureRuntimeHandler{})
+	var denied httperror.Error
+	if !errors.As(err, &denied) || denied.Code != "insufficient_scope" {
+		t.Fatalf("write-only JWT admitted: %v", err)
+	}
+}

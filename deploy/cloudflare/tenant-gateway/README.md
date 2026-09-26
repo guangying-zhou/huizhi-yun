@@ -1,6 +1,6 @@
 # Tenant Gateway Worker
 
-Policy bundle sync: configure `HZY_POLICY_SYNC_HOSTS` with exact tenant hosts for the independent minute cron. Empty means disabled. The existing five-minute integration drain remains separate. Console must have the Runtime policy store schema and exact grants ready and a first successful sync before serving traffic. See [policy storage runbook](../../../console/deploy/cloudflare/POLICY_BUNDLE_STORAGE.md). Public HTTP cannot invoke `/api/internal/policy-bundle/sync`.
+Policy bundle sync: configure `HZY_POLICY_SYNC_HOSTS` with exact tenant hosts for the independent minute cron (`* * * * *`, currently not in `wrangler.jsonc`). Empty means disabled. **Do not re-enable** without the capacity acceptance in `docs/Policy-Sync-Cadence-Assessment-20260922.md` §4 阶段 E: the 2026-09-07 production run exceeded the Workers Free 10 ms CPU limit, and a verified-runtime renewal verifies a ~727 KB signed envelope several times. The Console sync endpoint now runs the revision-probe check mode, which avoids the full envelope on most minutes but not on the 15-minute renewal. The existing five-minute integration drain remains separate. Console must have the Runtime policy store schema and exact grants ready and a first successful sync before serving traffic. See [policy storage runbook](../../../console/deploy/cloudflare/POLICY_BUNDLE_STORAGE.md). Public HTTP cannot invoke `/api/internal/policy-bundle/sync`.
 
 This Worker is the first Cloudflare-side routing layer for the SaaS tenant
 domain shape:
@@ -145,8 +145,9 @@ calls the internal Platform endpoint
 `/api/platform/internal/tenant-gateway/scheduler-page`, derived from the normal
 resolve URL unless `HZY_TENANT_GATEWAY_SCHEDULER_REGISTRY_URL` is set. The page
 contains only tenant host, tenant code, environment, the Console target
-deployment, and enabled `aims`/`altoc`/`console`/`finance`/`people`/`workflow`
-app codes. It uses a
+deployment, and enabled `aims`/`altoc`/`assets`/`console`/`finance`/`people`/`workflow`
+app codes. Assets is woken only when its persisted scheduler selection is
+`unified` or `recovered`. The page uses a
 time-rotated bounded window, stable shard and opaque cursor; it never returns a
 runtime token or login secret.
 
@@ -172,7 +173,7 @@ Production routing uses same-account Cloudflare Service Bindings for bound
 Console and business applications, as well as Platform registry reads and scheduled drain
 wakes. Keep
 `HZY_PLATFORM_SERVICE`, `HZY_CONSOLE_SERVICE`, `HZY_AIMS_SERVICE`,
-`HZY_ALTOC_SERVICE` and `HZY_PEOPLE_SERVICE` bound to the corresponding Workers in `wrangler.jsonc`
+`HZY_ASSETS_SERVICE`, `HZY_ALTOC_SERVICE` and `HZY_PEOPLE_SERVICE` bound to the corresponding Workers in `wrangler.jsonc`
 (and keep the Workflow binding when Workflow is enabled). A tenant route such
 as `/aims/**` must dispatch through its binding when present instead of fetching
 the application's reserved public hostname: that hostname is also covered by
@@ -420,3 +421,9 @@ ON DUPLICATE KEY UPDATE source = 'local', status = 'active', updated_at = UTC_TI
 Repeat for `post_logout` using `/api/auth/oidc-post-logout`, and for each
 business app path. In the target product this should come from Platform tenant
 deployment settings and the generated policy bundle rather than manual SQL.
+
+## Gateway service assertion (default off)
+
+The reviewed exchange uses an ops-registered Ed25519 Gateway key. The Worker signs only an authenticated source whose tenant/environment/deployment exactly matches the resolved registry. It strips incoming proof and Gateway headers, forwards a narrow trusted-header allowlist through the Console Service Binding, and uses the single Foundation fallback contract.
+
+Do not enable the Gateway lane before Runtime keyset sync, Runtime exchange, and the Console flag. Disable the Gateway lane first during rollback. All selected grants need exact tenant/deployment bindings; report gaps rather than repair them implicitly. Provision private JWK material only as a test Worker secret after environment review. See [the code contract and staged rollout](../../../docs/Gateway-Service-Assertion-Rollout.md); no environment was changed by the code batch.

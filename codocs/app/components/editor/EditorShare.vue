@@ -4,6 +4,8 @@
  * 管理文档的共享设置
  */
 import { ref, computed } from 'vue'
+import { useAccountStore } from '@hzy/foundation/app/stores/account'
+import { useCodocsModule } from '../../../layer/useCodocsModule'
 
 interface ShareUser {
   id: number
@@ -37,6 +39,11 @@ interface AccountUserOption {
   email?: string | null
 }
 
+interface ShareListResponse {
+  code: number
+  data?: RawShareUser[]
+}
+
 interface Props {
   documentId?: string
   loading?: boolean
@@ -64,6 +71,7 @@ const emit = defineEmits<{
 
 // 使用 Account Store
 const accountStore = useAccountStore()
+const { moduleUrl } = useCodocsModule()
 
 // 共享用户列表
 const sharedUsers = ref<ShareUser[]>([])
@@ -144,7 +152,7 @@ const loadShares = async () => {
 
   loadingShares.value = true
   try {
-    const response = await $fetch(`/api/documents/${props.documentId}/shares`)
+    const response = await $fetch<ShareListResponse>(moduleUrl(`/api/documents/${props.documentId}/shares`))
     if (response.code === 0) {
       const rows = Array.isArray(response.data) ? response.data as RawShareUser[] : []
       sharedUsers.value = rows.map(row => ({

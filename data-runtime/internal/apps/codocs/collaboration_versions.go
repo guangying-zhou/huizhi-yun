@@ -66,6 +66,10 @@ func (a *Adapter) createCollaborationVersion(ctx context.Context, body map[strin
 	if status == 2 || readonlyFlag == 1 {
 		return nil, httperror.New(http.StatusForbidden, "document_readonly", "Document is readonly")
 	}
+	// Checked under the document row lock that v2 publish also takes.
+	if err := refuseSnapshotV2Document(ctx, tx, lockedDocumentUUID); err != nil {
+		return nil, err
+	}
 	if actorUID != ownerUID {
 		var permission string
 		err := tx.QueryRowContext(ctx, `

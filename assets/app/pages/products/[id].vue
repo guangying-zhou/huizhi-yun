@@ -1,18 +1,29 @@
 <script setup lang="ts">
-import { productCenterLink } from '~/utils/productCenterLink'
-import type { ApiResponse, ProductAssetItem } from '~/types'
-import { normalizeCustomerDomains, normalizeStringList, normalizeSupportedTerminals } from '~/utils/productAssets'
+import { useAssetsModule } from '../../../layer/useAssetsModule'
+import { useAssetLabels } from '../../composables/useAssetLabels'
+import AssetsProductAssetEditModal from '../../components/assets/ProductAssetEditModal.vue'
+import AssetsProductBaseLinkModal from '../../components/assets/ProductBaseLinkModal.vue'
+import AssetsProductResourceLinkModal from '../../components/assets/ProductResourceLinkModal.vue'
+import AssetsProductDocumentLinkModal from '../../components/assets/ProductDocumentLinkModal.vue'
+
+import { productCenterLink } from '../../utils/productCenterLink'
+import type { ApiResponse, ProductAssetItem } from '../../types'
+import { normalizeCustomerDomains, normalizeStringList, normalizeSupportedTerminals } from '../../utils/productAssets'
+
+const { moduleUrl, cacheKey, hosted } = useAssetsModule()
 
 const { apps, loadApps } = useUserApplications()
 const { embedded } = useApplicationShell()
 const clientOrigin = ref('')
 onMounted(async () => {
   clientOrigin.value = window.location.origin
-  await loadApps()
+  if (!hosted) await loadApps()
 })
-const centerLink = computed(() => clientOrigin.value && product.value?.product_code
-  ? productCenterLink(apps.value, product.value.product_code, clientOrigin.value)
-  : '')
+const centerLink = computed(() => hosted
+  ? '/aims/products'
+  : clientOrigin.value && product.value?.product_code
+    ? productCenterLink(apps.value, product.value.product_code, clientOrigin.value)
+    : '')
 
 interface ProductVersionItem {
   feature_count: number
@@ -33,13 +44,13 @@ const linkAssetOpen = ref(false)
 const documentOpen = ref(false)
 const { loadDictionaries, getLabel } = useAssetLabels()
 await loadDictionaries()
-const { data: response, refresh, error } = await useFetch<ApiResponse<ProductAssetItem>>(() => `/api/v1/products/${productId.value}`)
+const { data: response, refresh, error } = await useFetch<ApiResponse<ProductAssetItem>>(() => moduleUrl(`/api/v1/products/${productId.value}`), { key: cacheKey(`product:${productId.value}`) })
 const {
   data: versionResponse,
   refresh: refreshVersions,
   pending: versionsPending,
   error: versionsError
-} = await useFetch<ApiResponse<{ productCode: string, items: ProductVersionItem[] }>>(() => `/api/v1/products/${productId.value}/versions`)
+} = await useFetch<ApiResponse<{ productCode: string, items: ProductVersionItem[] }>>(() => moduleUrl(`/api/v1/products/${productId.value}/versions`), { key: cacheKey(`product-versions:${productId.value}`), immediate: !hosted, watch: hosted ? false : undefined })
 
 if (error.value?.statusCode === 404) {
   throw createError({ statusCode: 404, message: '产品主档不存在' })
@@ -189,6 +200,12 @@ const handleUpdated = async () => {
   <UDashboardPanel id="product-detail" grow>
     <template #body>
       <div class="p-4 space-y-4">
+        <UAlert
+          v-if="error"
+          color="error"
+          title="无法加载产品主档"
+          :description="error.message"
+        />
         <UCard v-if="product">
           <template #header>
             <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
@@ -203,7 +220,7 @@ const handleUpdated = async () => {
                   icon="i-lucide-arrow-left"
                   color="neutral"
                   variant="ghost"
-                  to="/products"
+                  :to="moduleUrl('/products')"
                 >
                   返回
                 </UButton>
@@ -301,7 +318,8 @@ const handleUpdated = async () => {
             </div>
           </template>
 
-          <div v-if="versionsPending" class="flex items-center justify-center py-8 text-muted">
+          <UAlert v-if="hosted" title="版本计划请在产品中心查看" description="接入产品后，在产品中心管理需求与版本。" />
+          <div v-else-if="versionsPending" class="flex items-center justify-center py-8 text-muted">
             <UIcon name="i-lucide-loader-2" class="size-5 animate-spin" />
           </div>
           <UAlert

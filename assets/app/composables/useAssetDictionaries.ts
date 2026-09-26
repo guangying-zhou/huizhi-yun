@@ -1,8 +1,9 @@
-import type { AssetDictionaryDefinition } from '~~/shared/assetsDictionaries'
-import { assetCategoryScopeDefinitions } from '~~/shared/assetCategoryDefaults'
-import { assetDictionaryDefinitions, assetDictionaryMap } from '~~/shared/assetsDictionaries'
-import type { AssetCategoryGroup } from '~/types'
-import { normalizeAssetCategoryGroups } from '~/utils/assetCategories'
+import { useAssetsModule } from '../../layer/useAssetsModule'
+import type { AssetDictionaryDefinition } from '../../shared/assetsDictionaries'
+import { assetCategoryScopeDefinitions } from '../../shared/assetCategoryDefaults'
+import { assetDictionaryDefinitions, assetDictionaryMap } from '../../shared/assetsDictionaries'
+import type { AssetCategoryGroup } from '../types'
+import { normalizeAssetCategoryGroups } from '../utils/assetCategories'
 
 type DictionaryMap = Record<string, AssetDictionaryDefinition>
 
@@ -30,13 +31,13 @@ function buildDefinitionSignature() {
   })))
 }
 
-async function loadStoredDictionaries(target: DictionaryMap) {
+async function loadStoredDictionaries(target: DictionaryMap, moduleUrl: (path: string) => string, hostedAssetItems = false) {
   try {
     const response = await $fetch<{
       data?: {
         items?: AssetDictionaryDefinition[]
       }
-    }>('/api/v1/dictionaries')
+    }>(moduleUrl(hostedAssetItems ? '/api/v1/asset-dictionaries' : '/api/v1/dictionaries'))
 
     for (const item of response.data?.items || []) {
       if (!item.code) continue
@@ -52,17 +53,21 @@ async function loadStoredDictionaries(target: DictionaryMap) {
       }
     }
   } catch (error) {
+    // Hosted asset-item pages must not render their local defaults as though a
+    // denied dictionary BFF had supplied them.  Standalone and product pages
+    // retain their existing resilient local fallback.
+    if (hostedAssetItems) throw error
     console.warn('[Dictionaries] Failed to load stored dictionaries:', error)
   }
 }
 
-async function loadManagedCategoryDictionaries(target: DictionaryMap) {
-  const results = await Promise.allSettled(assetCategoryScopeDefinitions.map(async (scopeDefinition) => {
+async function loadManagedCategoryDictionaries(target: DictionaryMap, moduleUrl: (path: string) => string, hosted = false) {
+  const results = await Promise.allSettled(assetCategoryScopeDefinitions.filter(item => !hosted || item.scope === 'product').map(async (scopeDefinition) => {
     const response = await $fetch<{
       data?: {
         items?: AssetCategoryGroup[]
       }
-    }>('/api/v1/asset-categories', {
+    }>(moduleUrl('/api/v1/asset-categories'), {
       query: { scope: scopeDefinition.scope, pageSize: 500 }
     })
 
@@ -98,11 +103,12 @@ async function loadManagedCategoryDictionaries(target: DictionaryMap) {
   }
 }
 
-export function useAssetDictionaries() {
+export function useAssetDictionaries(scope: 'default' | 'asset-items' = 'default') {
+  const { moduleUrl, cacheKey, hosted } = useAssetsModule()
   const definitionSignature = buildDefinitionSignature()
-  const dictionaries = useState<DictionaryMap>('assets-dictionaries', () => cloneDefinitions())
-  const loaded = useState<boolean>('assets-dictionaries-loaded', () => false)
-  const version = useState<string>('assets-dictionaries-version', () => '')
+  const dictionaries = useState<DictionaryMap>(cacheKey('assets-dictionaries'), () => cloneDefinitions())
+  const loaded = useState<boolean>(cacheKey('assets-dictionaries-loaded'), () => false)
+  const version = useState<string>(cacheKey('assets-dictionaries-version'), () => '')
 
   if (version.value !== definitionSignature) {
     dictionaries.value = cloneDefinitions()
@@ -116,8 +122,8 @@ export function useAssetDictionaries() {
     }
 
     const nextDictionaries = cloneDefinitions()
-    await loadStoredDictionaries(nextDictionaries)
-    await loadManagedCategoryDictionaries(nextDictionaries)
+    await loadStoredDictionaries(nextDictionaries, moduleUrl, hosted && scope === 'asset-items')
+    await loadManagedCategoryDictionaries(nextDictionaries, moduleUrl, hosted)
     dictionaries.value = nextDictionaries
     loaded.value = true
   }

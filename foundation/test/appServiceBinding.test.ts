@@ -94,6 +94,21 @@ describe('binding url normalization', () => {
 })
 
 describe('service app fetch transport', () => {
+  test('preserves multipart files and lets Fetch set the boundary', async () => {
+    const form = new FormData()
+    form.append('project_code', 'PRJ-1')
+    form.append('file', new Blob(['document bytes']), 'sample.txt')
+    const binding = { async fetch(url: string, init: RequestInit) {
+      assert.equal(new Headers(init.headers).has('content-type'), false)
+      const received = await new Request(url, init).formData()
+      assert.equal(received.get('project_code'), 'PRJ-1')
+      const file = received.get('file') as File
+      assert.equal(file.name, 'sample.txt')
+      assert.equal(await file.text(), 'document bytes')
+      return Response.json({ ok: true })
+    } }
+    assert.deepEqual(await serviceAppFetch(eventWithEnv({ HZY_CODOCS_SERVICE: binding }), 'codocs', 'https://test.invalid/codocs/api/upload', { method: 'POST', body: form }), { ok: true })
+  })
   test('uses the matching binding and forwards request metadata and JSON body', async () => {
     let receivedUrl = ''
     let receivedInit: RequestInit | undefined

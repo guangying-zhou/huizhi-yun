@@ -1,0 +1,45 @@
+{
+  "schema": "enterprise-oauth-live.v1",
+  "verifiedAt": "2026-09-17T12:02:31.334Z",
+  "tenant": "C000001",
+  "deployment": "C000001-test-enterprise",
+  "audience": "codocs",
+  "registrySha256": "0fe7cb9823264f609d3656981e87ab1db70eb9375d25366a46392a04fb951a57",
+  "results": [
+    {
+      "scope": "codocs:product-document:read",
+      "verifiedAt": "2026-09-17T12:02:30.065Z",
+      "oauthIssued": true,
+      "tokenVerified": true,
+      "cfRayPresent": true,
+      "testGatewayMarker": true
+    },
+    {
+      "scope": "codocs:project-document:content:read",
+      "verifiedAt": "2026-09-17T12:02:30.641Z",
+      "oauthIssued": true,
+      "tokenVerified": true,
+      "cfRayPresent": true,
+      "testGatewayMarker": true
+    }
+  ],
+  "negatives": [
+    {
+      "scope": "codocs:product-document:read",
+      "audience": "data-runtime",
+      "rejected": true,
+      "status": 400
+    },
+    {
+      "scope": "codocs:product-document:create",
+      "audience": "codocs",
+      "rejected": true,
+      "status": 403
+    }
+  ],
+  "actualCombinedScopes": [],
+  "combinationReason": "Product document transport requests one exact Codocs capability",
+  "configurationMutated": false,
+  "localSigning": false,
+  "browserAcceptance": false
+}

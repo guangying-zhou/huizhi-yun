@@ -46,10 +46,52 @@ func executeSnapshotCommand(ctx context.Context, db *sql.DB, identity CommandIde
 }
 
 func executeCommandWithIsolation(ctx context.Context, db *sql.DB, identity CommandIdentity, payload any, authorize AuthorizeCommand, apply ApplyCommand, isolation sql.IsolationLevel) (CommandResult, error) {
-	var result CommandResult
 	if db == nil || authorize == nil || apply == nil {
-		return result, invalid("product_command_configuration", "产品命令缺少事务或授权处理器")
+		return CommandResult{}, invalid("product_command_configuration", "产品命令缺少事务或授权处理器")
 	}
+	hash, err := validateCommandPayload(identity, payload)
+	if err != nil {
+		return CommandResult{}, err
+	}
+	tx, err := db.BeginTx(ctx, &sql.TxOptions{Isolation: isolation})
+	if err != nil {
+		return CommandResult{}, err
+	}
+	defer tx.Rollback()
+	result, err := executeCommandTransaction(ctx, tx, identity, hash, authorize, apply)
+	if err != nil {
+		return CommandResult{}, err
+	}
+	if err := tx.Commit(); err != nil {
+		return CommandResult{}, err
+	}
+	return result, nil
+}
+
+// ExecuteCommandInTransaction shares the caller's domain transaction without
+// committing it. Identity, authorization, receipt and payload rules are exactly
+// those of ExecuteCommand. Any failure aborts the supplied transaction so a
+// caller cannot accidentally commit partial cross-domain facts after an error.
+func ExecuteCommandInTransaction(ctx context.Context, tx *sql.Tx, identity CommandIdentity, payload any, authorize AuthorizeCommand, apply ApplyCommand) (CommandResult, error) {
+	if tx == nil {
+		return CommandResult{}, invalid("product_command_configuration", "产品命令缺少事务")
+	}
+	abort := func(err error) (CommandResult, error) { _ = tx.Rollback(); return CommandResult{}, err }
+	if authorize == nil || apply == nil {
+		return abort(invalid("product_command_configuration", "产品命令缺少授权处理器"))
+	}
+	hash, err := validateCommandPayload(identity, payload)
+	if err != nil {
+		return abort(err)
+	}
+	result, err := executeCommandTransaction(ctx, tx, identity, hash, authorize, apply)
+	if err != nil {
+		return abort(err)
+	}
+	return result, nil
+}
+
+func validateCommandPayload(identity CommandIdentity, payload any) (string, error) {
 	for _, field := range []struct {
 		value string
 		max   int
@@ -57,33 +99,32 @@ func executeCommandWithIsolation(ctx context.Context, db *sql.DB, identity Comma
 		{identity.ProductCode, 64}, {identity.Action, 64}, {identity.ActorUID, 64}, {identity.IdempotencyKey, 191},
 	} {
 		if field.value == "" || strings.TrimSpace(field.value) != field.value || !utf8.ValidString(field.value) || utf8.RuneCountInString(field.value) > field.max {
-			return result, invalid("product_command_identity_invalid", "产品命令标识不完整或格式无效")
+			return "", invalid("product_command_identity_invalid", "产品命令标识不完整或格式无效")
 		}
 		for _, r := range field.value {
 			if r < 32 || r == 127 {
-				return result, invalid("product_command_identity_invalid", "命令标识不能包含控制字符")
+				return "", invalid("product_command_identity_invalid", "命令标识不能包含控制字符")
 			}
 		}
 	}
 	canonical, err := json.Marshal(payload)
 	if err != nil {
-		return result, invalid("product_command_payload_invalid", "产品命令内容无效")
+		return "", invalid("product_command_payload_invalid", "产品命令内容无效")
 	}
 	if len(canonical) > 256*1024 {
-		return result, invalid("product_command_payload_too_large", "单次产品命令内容过大")
+		return "", invalid("product_command_payload_too_large", "单次产品命令内容过大")
 	}
 	digest := sha256.Sum256(canonical)
-	hash := hex.EncodeToString(digest[:])
+	return hex.EncodeToString(digest[:]), nil
+}
+
+func executeCommandTransaction(ctx context.Context, tx *sql.Tx, identity CommandIdentity, hash string, authorize AuthorizeCommand, apply ApplyCommand) (CommandResult, error) {
+	var result CommandResult
 	executionID := uuid.NewString()
-	tx, err := db.BeginTx(ctx, &sql.TxOptions{Isolation: isolation})
-	if err != nil {
-		return result, err
-	}
-	defer tx.Rollback()
 	if err := authorize(ctx, tx); err != nil {
 		return result, err
 	}
-	_, err = tx.ExecContext(ctx, `INSERT INTO product_command_receipts
+	_, err := tx.ExecContext(ctx, `INSERT INTO product_command_receipts
 		(product_code,action,actor_uid,idempotency_key,execution_id,request_hash,status,created_at)
 		VALUES (?,?,?,?,?,?,'processing',UTC_TIMESTAMP(3))
 		ON DUPLICATE KEY UPDATE id=product_command_receipts.id`, identity.ProductCode, identity.Action, identity.ActorUID, identity.IdempotencyKey, executionID, hash)
@@ -106,7 +147,7 @@ func executeCommandWithIsolation(ctx context.Context, db *sql.DB, identity Comma
 			return CommandResult{}, fmt.Errorf("product receipt %d has invalid result", result.ReceiptID)
 		}
 		result.Replayed, result.Value = true, json.RawMessage(storedResult)
-		return result, tx.Commit()
+		return result, nil
 	}
 	if status != "processing" {
 		return CommandResult{}, fmt.Errorf("product receipt %d has unexpected status", result.ReceiptID)
@@ -124,9 +165,6 @@ func executeCommandWithIsolation(ctx context.Context, db *sql.DB, identity Comma
 	}
 	_, err = tx.ExecContext(ctx, `UPDATE product_command_receipts SET status='succeeded',result_json=?,completed_at=UTC_TIMESTAMP(3) WHERE id=? AND status='processing'`, []byte(result.Value), result.ReceiptID)
 	if err != nil {
-		return CommandResult{}, err
-	}
-	if err := tx.Commit(); err != nil {
 		return CommandResult{}, err
 	}
 	return result, nil

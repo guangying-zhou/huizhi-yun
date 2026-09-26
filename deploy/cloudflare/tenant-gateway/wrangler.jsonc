@@ -30,6 +30,10 @@
       "service": "hzy-aims"
     },
     {
+      "binding": "HZY_ASSETS_SERVICE",
+      "service": "hzy-assets"
+    },
+    {
       "binding": "HZY_ALTOC_SERVICE",
       "service": "hzy-altoc"
     },

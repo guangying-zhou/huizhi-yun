@@ -1,0 +1,37 @@
+{
+  "schemaVersion": "test-runtime-build-receipt.v1",
+  "environment": "test-candidate-only",
+  "tenant": "C000001",
+  "version": "0.3.219-test.adr018-candidate.5",
+  "platform": "darwin/arm64",
+  "sourceCommit": "090ba513e82c8b41af6cffda1e366b62418d6ade",
+  "sourceTree": "e0a32291e7c8762744c0314be76cfe36f7d02925",
+  "builtAt": "2026-09-14T06:08:29Z",
+  "binary": {
+    "path": "hzy-data-runtime_0.3.219-test.adr018-candidate.5_darwin_arm64",
+    "sha256": "2b720e3be9953410ed15ad871d359eb9d72320fe85d3cf3a84e5cab50de180e6",
+    "bytes": 21996450,
+    "fileType": "Mach-O 64-bit executable arm64"
+  },
+  "build": {
+    "command": "CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -trimpath -ldflags (version, commit, builtAt) ./cmd/hzy-data-runtime",
+    "raceSuite": "go test -race ./...",
+    "raceSuiteExitCode": 0
+  },
+  "runtime": {
+    "deployed": false,
+    "productionConfigUsed": false,
+    "releaseReady": false,
+    "healthCheck": {
+      "address": "127.0.0.1",
+      "allAppsDisabled": true,
+      "externalControlUnconfigured": true,
+      "existingConfigRead": false,
+      "passed": true,
+      "httpStatus": 200,
+      "version": "0.3.219-test.adr018-candidate.5",
+      "stopped": true
+    }
+  },
+  "protectedArtifactDirectory": "/Users/gavinzhou/Library/Application Support/HuizhiYun/test-runtime/runtime-pinned-090ba513"
+}

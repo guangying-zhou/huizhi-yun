@@ -18,7 +18,12 @@ export interface ActionableLifecycleDependencies {
     event: H3Event
     forceRefresh?: boolean
   }) => Promise<string>
-  request: (url: string, options: Record<string, unknown>) => Promise<unknown>
+  request: (url: string, options: {
+    method: 'POST'
+    headers: Record<string, string>
+    body: Record<string, unknown>
+    timeout: number
+  }) => Promise<unknown>
   resolveConsoleBaseUrl: (event: H3Event) => string
   checkpoint: (event: H3Event, effectId: number, outcome: 'ack' | 'fail') => Promise<unknown>
   publishNotifications: (event: H3Event, notifications: RuntimeNotification[]) => Promise<Array<{ status: string }>>

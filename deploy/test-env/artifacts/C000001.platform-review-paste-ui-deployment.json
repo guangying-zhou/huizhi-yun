@@ -1,0 +1,27 @@
+{
+  "deployedAt": "2026-09-14T14:20:02.757Z",
+  "environment": "test",
+  "process": "hzy-platform-dev",
+  "sourceCommit": "52ed822b03cce355d5516df4970d7da21322f347",
+  "entry": "/wiztek/hzy-test/platform-candidates/review-ui-paste-158c9b41/platform/.output/server/index.mjs",
+  "entrySha256": "eda69251613de61c0928bd181e61b2c9c087da2a3d9d55070b9aa8507cc9d00b",
+  "previousEntry": "/wiztek/hzy-test/platform-candidates/review-ui-50646ae3/platform/.output/server/index.mjs",
+  "previousCwd": "/wiztek/hzy-test/platform-candidates/review-ui-50646ae3/platform",
+  "database": {
+    "db": "hzy_platform_dev",
+    "uuid": "8a10b222-5108-11ef-8bb6-5600050b12e8"
+  },
+  "healthStatus": 200,
+  "unauthenticatedRoutes": {
+    "external-drain": 401,
+    "drain-activity": 401
+  },
+  "drainVerifierConfigured": true,
+  "otherEnvironmentPreserved": true,
+  "pid": 1583287,
+  "output": {
+    "files": 850,
+    "bytes": 7404514,
+    "manifestSha256": "212a2147a8754f5d58223d2c88480d024e61deca5c525edcbe078a3b87818108"
+  }
+}

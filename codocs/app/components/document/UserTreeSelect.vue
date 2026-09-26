@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { useAccountStore } from '~/stores/account'
 
 interface User {
   uid: string

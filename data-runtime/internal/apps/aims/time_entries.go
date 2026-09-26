@@ -55,6 +55,23 @@ func (a *Adapter) userTimeEntries(ctx context.Context, uid string, query url.Val
 	return a.listTimeEntries(ctx, where, args)
 }
 
+func (a *Adapter) userVisibleTimeEntries(ctx context.Context, uid string, query url.Values) (map[string]any, error) {
+	uid = strings.TrimSpace(uid)
+	currentUser := strings.TrimSpace(query.Get("current_user"))
+	if uid == "" || currentUser == "" {
+		return nil, httperror.New(http.StatusUnauthorized, "missing_current_user", "current_user is required")
+	}
+	if uid != currentUser {
+		return nil, httperror.New(http.StatusForbidden, "forbidden_user_timesheet", "only current user's timesheet can be queried")
+	}
+	visibility, visibilityArgs := projectVisibilityWhere(query, "p", currentUser)
+	where := []string{"t.uid = ?", "t.weekly_report_id IS NULL", "EXISTS (SELECT 1 FROM aims_projects p WHERE p.id = t.project_id AND " + visibility + ")"}
+	args := []any{uid}
+	args = append(args, visibilityArgs...)
+	appendTimeEntryDateRange(&where, &args, query)
+	return a.listTimeEntries(ctx, where, args)
+}
+
 func (a *Adapter) projectTimeEntries(ctx context.Context, projectID string, query url.Values) (map[string]any, error) {
 	projectID = strings.TrimSpace(projectID)
 	if projectID == "" {
@@ -76,6 +93,38 @@ func (a *Adapter) projectTimeEntries(ctx context.Context, projectID string, quer
 	appendTimeEntryDateRange(&where, &args, query)
 
 	return a.listTimeEntries(ctx, where, args)
+}
+
+func (a *Adapter) projectTimeEntryDetail(ctx context.Context, rawProjectID string, rawEntryID string, query url.Values) (timeEntryItem, error) {
+	projectID, err := parseID(strings.TrimSpace(rawProjectID), "project_id")
+	if err != nil {
+		return timeEntryItem{}, err
+	}
+	entryID, err := parseID(strings.TrimSpace(rawEntryID), "time_entry_id")
+	if err != nil {
+		return timeEntryItem{}, err
+	}
+	currentUser := strings.TrimSpace(query.Get("current_user"))
+	if currentUser == "" {
+		return timeEntryItem{}, httperror.New(http.StatusUnauthorized, "missing_current_user", "current_user is required")
+	}
+	var boundProjectID int64
+	err = a.DB().QueryRowContext(ctx, `
+		SELECT project_id
+		FROM time_entries
+		WHERE id = ? AND weekly_report_id IS NULL
+		LIMIT 1
+	`, entryID).Scan(&boundProjectID)
+	if err == sql.ErrNoRows || boundProjectID != projectID {
+		return timeEntryItem{}, httperror.New(http.StatusNotFound, "record_not_found", "time entry not found")
+	}
+	if err != nil {
+		return timeEntryItem{}, err
+	}
+	if err = a.requireProjectTimesheetReadAccess(ctx, rawProjectID, currentUser, query); err != nil {
+		return timeEntryItem{}, err
+	}
+	return a.getTimeEntry(ctx, entryID)
 }
 
 func (a *Adapter) workItemTimeEntries(ctx context.Context, rawWorkItemID string, query url.Values) ([]timeEntryItem, error) {

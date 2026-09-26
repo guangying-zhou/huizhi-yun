@@ -3,6 +3,7 @@ import { hasConsoleLogoutMarker } from '~~/server/utils/authSession'
 import { resolveConsoleLoginConfig } from '~~/server/utils/loginConfig'
 import { createWeComBrowserAuthorization, getWeComOAuthPublicConfig } from '~~/server/utils/wecom'
 import { issueExternalLoginTransaction } from '~~/server/utils/externalLoginState'
+import { resolveCurrentAppUrl } from '@hzy/foundation/server/utils/appUrls'
 
 export default defineEventHandler(async (event) => {
   const query = getQuery(event)
@@ -14,7 +15,7 @@ export default defineEventHandler(async (event) => {
   if (hasConsoleLogoutMarker(event) && !forceLogin) {
     const loginQuery = new URLSearchParams({ logged_out: '1' })
     if (typeof query.redirect === 'string' && query.redirect.trim()) loginQuery.set('redirect', query.redirect.trim())
-    return sendRedirect(event, `/login?${loginQuery.toString()}`)
+    return sendRedirect(event, `${resolveCurrentAppUrl(event, '/login')}?${loginQuery.toString()}`)
   }
 
   if (!loginConfig.wecom.enabled) {

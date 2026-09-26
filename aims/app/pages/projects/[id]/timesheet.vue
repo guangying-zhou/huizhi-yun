@@ -1,4 +1,10 @@
 <script setup lang="ts">
+import { useAimsModule } from '../../../../layer/useAimsModule'
+import { useProjectStore } from '../../../stores/project'
+import ProjectNavbar from '../../../components/project/ProjectNavbar.vue'
+
+// 同一份代码供独立应用与企业宿主使用：非宿主模式下 moduleUrl 原样返回路径。
+const { moduleUrl } = useAimsModule()
 definePageMeta({
   layoutHeader: true,
   layoutHeaderTitle: '工时统计',
@@ -216,7 +222,7 @@ async function loadReviewQueue() {
   reviewLoading.value = true
   try {
     const response = await $fetch<{ code: number, data: { items?: ReviewTimeEntry[] } }>(
-      `/api/v1/projects/${projectId.value}/time-entry-reviews?periodKey=${encodeURIComponent(reviewPeriodKey.value)}`
+      moduleUrl(`/api/v1/projects/${projectId.value}/time-entry-reviews?periodKey=${encodeURIComponent(reviewPeriodKey.value)}`)
     )
     reviewEntries.value = response.data.items || []
     selectedReviewEntryIds.value = selectedReviewEntryIds.value.filter(id =>
@@ -262,7 +268,7 @@ async function submitReviewDecision() {
   }
   reviewSubmitting.value = true
   try {
-    const url = `/api/v1/projects/${projectId.value}/time-entry-reviews` as string
+    const url = moduleUrl(`/api/v1/projects/${projectId.value}/time-entry-reviews`) as string
     await $fetch(url, {
       method: 'POST',
       body: {
@@ -297,7 +303,7 @@ async function loadEntries() {
       if (startDate.value) params.set('startDate', startDate.value)
       if (endDate.value) params.set('endDate', endDate.value)
       const { data } = await $fetch<{ code: number, data: ListPayload<RawTimeEntry> }>(
-        `/api/v1/projects/${projectId.value}/time-entries?${params.toString()}`
+        moduleUrl(`/api/v1/projects/${projectId.value}/time-entries?${params.toString()}`)
       )
       entries.value = normalizeTimeEntries(data)
     } else {
@@ -305,7 +311,7 @@ async function loadEntries() {
       if (startDate.value) params.set('startDate', startDate.value)
       if (endDate.value) params.set('endDate', endDate.value)
       const { data } = await $fetch<{ code: number, data: ListPayload<RawTimeEntry> }>(
-        `/api/v1/users/${currentUid.value}/time-entries?${params.toString()}`
+        moduleUrl(`/api/v1/users/${currentUid.value}/time-entries?${params.toString()}`)
       )
       // 筛选当前项目
       entries.value = normalizeTimeEntries(data).filter(e => e.projectId === projectId.value)
@@ -383,10 +389,10 @@ async function handleLogTime() {
     const keyword = logForm.value.itemKey.trim()
     const [targetRes, matterRes] = await Promise.all([
       $fetch<{ code: number, data: { items: Array<{ id: number, itemKey: string }> } }>(
-        `/api/v1/projects/${projectId.value}/work-items?search=${encodeURIComponent(keyword)}&pageSize=100&tier=target`
+        moduleUrl(`/api/v1/projects/${projectId.value}/work-items?search=${encodeURIComponent(keyword)}&pageSize=100&tier=target`)
       ),
       $fetch<{ code: number, data: { items: Array<{ id: number, itemKey: string }> } }>(
-        `/api/v1/projects/${projectId.value}/work-items?search=${encodeURIComponent(keyword)}&pageSize=100&tier=matter`
+        moduleUrl(`/api/v1/projects/${projectId.value}/work-items?search=${encodeURIComponent(keyword)}&pageSize=100&tier=matter`)
       )
     ])
     const candidates = [
@@ -399,7 +405,7 @@ async function handleLogTime() {
       return
     }
 
-    await $fetch(`/api/v1/work-items/${matchItem.id}/time-entries`, {
+    await $fetch(moduleUrl(`/api/v1/work-items/${matchItem.id}/time-entries`), {
       method: 'POST',
       body: {
         entryDate: logForm.value.entryDate,

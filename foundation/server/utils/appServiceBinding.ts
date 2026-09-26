@@ -104,6 +104,7 @@ export interface ServiceAppFetchOptions {
 
 function jsonBody(body: unknown) {
   if (body === undefined || body === null) return undefined
+  if (body instanceof FormData || body instanceof Blob || body instanceof ArrayBuffer || ArrayBuffer.isView(body)) return body as BodyInit
   if (typeof body === 'string') return body
   return JSON.stringify(body)
 }
@@ -131,7 +132,7 @@ export async function serviceAppFetch<T>(
   }
   applyTargetAppContext(headers, event, appCode)
   const payload = jsonBody(options.body)
-  if (payload !== undefined && !Object.keys(headers).some(key => key.toLowerCase() === 'content-type')) {
+  if (payload !== undefined && typeof payload === 'string' && !Object.keys(headers).some(key => key.toLowerCase() === 'content-type')) {
     headers['content-type'] = 'application/json'
   }
 

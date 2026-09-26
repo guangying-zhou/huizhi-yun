@@ -1,5 +1,5 @@
 import { createError, defineEventHandler, getQuery, getRequestURL, sendRedirect } from 'h3'
-import { getRequestOrigin } from '@hzy/foundation/server/utils/appUrls'
+import { getRequestOrigin, resolveCurrentAppUrl } from '@hzy/foundation/server/utils/appUrls'
 import {
   assertAuthorizePkce,
   assertAuthorizeRedirectUri,
@@ -8,6 +8,7 @@ import {
   requireAuthorizeOidcClient
 } from '~~/server/utils/oidcAuthorize'
 import { resolveOptionalConsoleSession } from '~~/server/utils/authSession'
+import { resolveLocalConsoleFacade } from '@hzy/foundation/server/utils/localConsoleFacade'
 
 function first(value: unknown) {
   return Array.isArray(value) ? value[0] : value
@@ -51,7 +52,10 @@ export default defineEventHandler(async (event) => {
   const session = await resolveOptionalConsoleSession(event)
   if (!session) {
     const requestUrl = buildPublicRequestUrl(event)
-    return sendRedirect(event, `/login?redirect=${encodeURIComponent(requestUrl)}`)
+    // The approved local facade has one fixed upstream SSO provider. Avoid
+    // loading the whole Console Dev SPA just to immediately enter that flow.
+    const loginPath = resolveLocalConsoleFacade(event) ? '/api/auth/oidc-login' : '/login'
+    return sendRedirect(event, `${resolveCurrentAppUrl(event, loginPath)}?redirect=${encodeURIComponent(requestUrl)}`)
   }
 
   const code = await createAuthorizeCodeRecord({

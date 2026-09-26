@@ -242,6 +242,7 @@ Console 服务端发布 API：
 - `通知运行时` 页面上的企业微信测试发送属于 Console 管理侧诊断事件，发送结果会以当前操作者为收件人写入站内消息，并在 `portal_notification_deliveries` 记录 `wecom` 投递状态。
 - `actionUrl` 应优先使用 Foundation URL helper 生成，避免统一域名、basePath 或未来部署形态变化后出现坏链。
 - 服务端发布必须校验 `sourceAppCode` 与 service token 来源应用一致，或使用明确白名单；不得接受前端直接伪造来源应用。
+- Enterprise Host 承载的 Codocs 普通业务通知由 `enterprise.runtime` 以 `sourceAppCode=enterprise` 发布，在 `metadata.moduleAppCode=codocs` 保留模块归属；`notificationKind=business_event`、Codocs 事件类型/幂等键和 `/codocs/…` 动作 URL 保持原值。该 metadata 不充当来源授权；Console 仍精确校验发布服务身份。收件人详情对已登记的三类 Codocs 通知只展示持久化的消息快照，不读取对象或提供动作跳转，并提示对象状态未核验；其他 Enterprise 模块/类型没有 verifier 时继续失败关闭。
 - 消息中心只保存入口级消息与阅读状态；业务对象详情仍由来源应用保存和渲染。
 
 Foundation 组件与接入：

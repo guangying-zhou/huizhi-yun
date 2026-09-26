@@ -1,5 +1,5 @@
 import { defineEventHandler, getQuery, sendRedirect } from 'h3'
-import { deriveDingTalkCallbackUrl } from '@hzy/foundation/server/utils/appUrls'
+import { deriveDingTalkCallbackUrl, resolveCurrentAppUrl } from '@hzy/foundation/server/utils/appUrls'
 import { hasConsoleLogoutMarker } from '~~/server/utils/authSession'
 import { getDingTalkOAuthPublicConfig } from '~~/server/utils/dingtalk'
 import { issueExternalLoginTransaction } from '~~/server/utils/externalLoginState'
@@ -11,7 +11,7 @@ export default defineEventHandler(async (event) => {
   const loginConfig = await resolveConsoleLoginConfig(event)
   const defaultApp = String(config.public?.appCode || config.public?.appName || 'console')
   if (hasConsoleLogoutMarker(event) && query.force !== '1') {
-    return sendRedirect(event, '/login?logged_out=1')
+    return sendRedirect(event, `${resolveCurrentAppUrl(event, '/login')}?logged_out=1`)
   }
   if (!loginConfig.dingtalk.enabled) {
     throw createError({ statusCode: 503, message: '钉钉登录未启用' })

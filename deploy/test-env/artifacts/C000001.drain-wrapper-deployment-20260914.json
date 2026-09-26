@@ -1,0 +1,74 @@
+{
+  "schemaVersion": "test-drain-wrapper-deployment-receipt.v1",
+  "environment": "test",
+  "tenant": "C000001",
+  "deployedAt": "2026-09-14",
+  "controlState": {
+    "signedSnapshot": true,
+    "mode": "open",
+    "revision": 2,
+    "workerCredentialConfigured": true,
+    "ingressDrained": false,
+    "externalReceiptsVerified": false
+  },
+  "registeredActors": [
+    {
+      "app": "aims",
+      "deployment": "C000001-test-aims",
+      "artifactSHA256": "150b6d536140414e29040eb076ea98ecfb9d4ce1f5af5d770a6b74412b3236ac"
+    },
+    {
+      "app": "assets",
+      "deployment": "C000001-test-assets",
+      "artifactSHA256": "c8be3bcddb02a60d28e678beb2ecdfc5b0d5cd160b613c1b2da709271fa2deb7"
+    }
+  ],
+  "wrappers": {
+    "aims": {
+      "rollbackVersion": "8d573b11-b6cf-4052-a4a0-d0d6bf7b5a41",
+      "version": "b4b4763b-57ac-4ad8-b4a8-67e042c31ad0",
+      "trafficPercentage": 100,
+      "originalModule": {
+        "bytes": 7862458,
+        "sha256": "8a984f385e32df993b6f042c1f97a59d13449922ca49e71eee7b3d5b0560e23a"
+      },
+      "normalEndpoint": "/aims/products",
+      "normalEndpointStatus": 200,
+      "settledActivityObserved": true
+    },
+    "assets": {
+      "rollbackVersion": "c6ae2f23-286f-4bb6-95a4-679d456f13b9",
+      "version": "7f090cc0-b98f-4cec-ab2f-2612591c46ce",
+      "trafficPercentage": 100,
+      "originalModule": {
+        "bytes": 6119924,
+        "sha256": "7ec2929d46532927277f3e6837404d88101dfb68dd751cbe2874eb9c397c3261"
+      },
+      "normalEndpoint": "/assets/products",
+      "normalEndpointStatus": 200,
+      "settledActivityObserved": true
+    }
+  },
+  "candidatePreservation": {
+    "exactOnlineOriginalModuleBytesVerified": true,
+    "registeredArtifactHashesRecomputed": true,
+    "workersDev": false,
+    "previewUrls": false,
+    "noBundle": true,
+    "secretBindingsAndAssetsPreserved": true
+  },
+  "activityVerification": {
+    "aimsSettled": 1,
+    "assetsSettled": 1,
+    "activeOrUncertain": 0,
+    "meaning": "control-boundary request records settled; this does not establish external provider drain completion"
+  },
+  "notPerformed": [
+    "close",
+    "seal",
+    "database migration",
+    "actor contract change",
+    "Gateway rollback"
+  ],
+  "sensitiveOperationalLogs": "stored only in protected local deployment directories"
+}

@@ -1,0 +1,121 @@
+{
+  "_status": "PROPOSED_SCHEMA_NOT_YET_IMPLEMENTED",
+  "_notice": "填充并通过 LET-00/02 预检后，交由待实现的 local-enterprise 配置读取器使用。不是现有 Nuxt/PM2 自动读取的配置。",
+  "profileId": "hzy0-local-enterprise",
+  "sourceBaseline": "559ac131e94d18bc6ef10a3dbe5ce2e8d1f6fe63",
+  "environment": "test",
+  "publicOrigin": "https://hzy0.isme.dev",
+  "hostEntryPath": "/enterprise",
+  "mode": "dev",
+  "repositoryRoot": null,
+  "runtime": {
+    "canonicalEndpoint": "https://hzy-test-runtime.isme.dev",
+    "transportMode": "public-https",
+    "dialEndpoint": null,
+    "expectedTenant": null,
+    "expectedRuntimeCode": null,
+    "expectedRuntimeDeployment": null,
+    "lifecycleManagedByThisStack": false,
+    "automaticFallback": false
+  },
+  "identity": {
+    "decisionStatus": "PENDING_APPROVAL",
+    "canonicalIssuer": null,
+    "canonicalJwksUri": null,
+    "consoleFacadeMode": "pending",
+    "enterpriseAppCode": "enterprise",
+    "enterpriseDeployment": null,
+    "enterpriseOidcClientId": null,
+    "enterpriseServiceClientId": null,
+    "consoleDeployment": null,
+    "enterpriseRedirectUri": "https://hzy0.isme.dev/enterprise/api/auth/oidc-callback",
+    "enterpriseLogoutRedirectUri": "https://hzy0.isme.dev/enterprise/login",
+    "upstreamConsoleCallback": null,
+    "credentialProviderRef": null,
+    "allowRuntimeEnrollment": false,
+    "allowIssuerMutation": false
+  },
+  "listeners": {
+    "caddy": {
+      "host": "127.0.0.1",
+      "port": 23180
+    },
+    "gatewayIngress": {
+      "host": "127.0.0.1",
+      "port": 23120
+    },
+    "gatewayInternal": {
+      "host": "127.0.0.1",
+      "port": 23121
+    },
+    "enterprise": {
+      "host": "127.0.0.1",
+      "port": 23110
+    },
+    "console": {
+      "host": "127.0.0.1",
+      "port": 23100
+    }
+  },
+  "optionalServices": {
+    "codocsEditor": {
+      "enabled": false,
+      "origin": null,
+      "localPort": 23101
+    },
+    "workflow": {
+      "enabled": false,
+      "origin": null,
+      "localPort": 23105
+    },
+    "collab": {
+      "enabled": false,
+      "origin": null,
+      "localPort": 23107
+    }
+  },
+  "security": {
+    "effectiveRuntimeBypass": false,
+    "requiredOuterAccessProtection": true,
+    "outerAccessProtectionVerified": false,
+    "publicInternalOperations": false,
+    "gatewayCredentialRef": null,
+    "allowBrowserRuntimeOverride": false,
+    "forwardRawEnvironment": false
+  },
+  "scheduler": {
+    "registerBusinessCron": false,
+    "consumeBusinessOutbox": false,
+    "sharedPolicyRefreshOwner": "VERIFY_EXISTING_OWNER",
+    "registerAdditionalSharedRefreshWriter": false
+  },
+  "processManagement": {
+    "processPrefix": "hzy0-",
+    "pm2Home": null,
+    "runtimeAndDatabaseExcluded": true,
+    "instances": 1,
+    "watch": false,
+    "execMode": "fork"
+  },
+  "hmr": {
+    "publicProtocol": "wss",
+    "publicHost": "hzy0.isme.dev",
+    "publicPort": 443,
+    "allowedHosts": [
+      "hzy0.isme.dev"
+    ],
+    "resolvedModuleRoutes": [],
+    "note": "实际 Nuxt/Vite 配置与 WS 路径由锁文件版本、模块 base path 和构建产物冻结，不据此自动升级。"
+  },
+  "database": {
+    "credentialsInFrontend": false,
+    "manageLifecycle": false,
+    "runMigrations": false
+  },
+  "readiness": {
+    "routeDigest": null,
+    "capabilityDigest": null,
+    "approvedScopeRef": null,
+    "cloudNonRegressionRecorded": false
+  }
+}

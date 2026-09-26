@@ -62,7 +62,9 @@ func documentReadVisibilityPredicate(actorUID string, trustedDepartmentReadDeptC
 // Folder metadata is visible only through its owning namespace. Generic user
 // reads do not infer project membership or publish visibility.
 func folderReadVisibilityPredicate(actorUID string, trustedDepartmentReadDeptCode string) (string, []any) {
-	predicate := "(folder_type = 'private' AND owner_uid = ?)"
+	// Slide folders are a personal namespace, just like private folders. They
+	// must never become visible through the department branch below.
+	predicate := "((folder_type = 'private' OR folder_type = 'slide') AND owner_uid = ?)"
 	args := []any{actorUID}
 	if trustedDepartmentReadDeptCode != "" {
 		predicate += " OR (folder_type = 'department' AND dept_code = ?)"
@@ -162,7 +164,7 @@ func (a *Adapter) createFolder(ctx context.Context, query url.Values, body map[s
 	folderType := strings.TrimSpace(stringValue(body["folder_type"]))
 	var ownerUID, deptCode, projectCode string
 	switch folderType {
-	case "private":
+	case "private", "slide":
 		ownerUID = actorUID
 	case "department":
 		deptCode = strings.TrimSpace(query.Get(codocsTrustedDepartmentManageQueryKey))
@@ -235,7 +237,7 @@ func (a *Adapter) validateFolderParent(
 	scopeMismatch := parentFolderType != folderType
 	if !scopeMismatch {
 		switch folderType {
-		case "private":
+		case "private", "slide":
 			scopeMismatch = strings.TrimSpace(parentOwnerUID.String) != ownerUID ||
 				strings.TrimSpace(parentDeptCode.String) != "" ||
 				strings.TrimSpace(parentProjectCode.String) != ""

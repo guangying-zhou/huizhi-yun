@@ -521,14 +521,29 @@ func (a *Adapter) HandleRuntime(ctx context.Context, method string, path string,
 			return map[string]any{"code": 0, "data": data}, "aims.users.time_entries.list", err
 		}
 
+		if uid, ok := pathParam(path, "/v1/aims/users/", "/visible-time-entries"); ok {
+			data, err := a.userVisibleTimeEntries(ctx, uid, query)
+			return map[string]any{"code": 0, "data": data}, "aims.users.visible_time_entries.list", err
+		}
+
 		if projectID, ok := pathParam(path, "/v1/aims/projects/", "/time-entries"); ok {
 			data, err := a.projectTimeEntries(ctx, projectID, query)
 			return map[string]any{"code": 0, "data": data}, "aims.projects.time_entries.list", err
 		}
 
+		if projectID, entryID, ok := nestedPathParam(path, "/v1/aims/projects/", "/time-entries/"); ok {
+			data, err := a.projectTimeEntryDetail(ctx, projectID, entryID, query)
+			return map[string]any{"code": 0, "data": data}, "aims.projects.time_entries.detail", err
+		}
+
 		if projectID, ok := pathParam(path, "/v1/aims/projects/", "/work-items"); ok {
 			data, err := a.projectWorkItems(ctx, projectID, query)
 			return map[string]any{"code": 0, "data": data}, "aims.projects.work_items.list", err
+		}
+
+		if projectID, ok := pathParam(path, "/v1/aims/projects/", "/board-data"); ok {
+			data, err := a.projectBoard(ctx, projectID, query)
+			return map[string]any{"code": 0, "data": data}, "aims.projects.board.read", err
 		}
 
 		if projectID, ok := pathParam(path, "/v1/aims/projects/", "/members"); ok {
@@ -574,6 +589,11 @@ func (a *Adapter) HandleRuntime(ctx context.Context, method string, path string,
 		if requirementID, ok := directPathParam(path, "/v1/aims/requirements/"); ok {
 			data, err := a.requirementDetail(ctx, requirementID, query)
 			return map[string]any{"code": 0, "data": data}, "aims.requirements.detail", err
+		}
+
+		if projectID, requirementID, ok := nestedPathParam(path, "/v1/aims/projects/", "/requirements/"); ok {
+			data, err := a.projectRequirementDetail(ctx, projectID, requirementID, query)
+			return map[string]any{"code": 0, "data": data}, "aims.projects.requirements.detail", err
 		}
 
 		if batchID, ok := directPathParam(path, "/v1/aims/requirement-reviews/"); ok {

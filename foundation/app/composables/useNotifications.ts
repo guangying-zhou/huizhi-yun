@@ -37,6 +37,7 @@ export interface NotificationDetail {
   bizId: string | null
   createdAt: string
   expiresAt: string | null
+  detailMode?: 'notification_snapshot'
 }
 
 export interface NotificationSummary {

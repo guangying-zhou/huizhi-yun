@@ -14,7 +14,7 @@
     "preview:cloudflare": "pnpm run cloudflare:config && pnpm run build:cloudflare && pnpm dlx wrangler@4 dev --config .wrangler.generated.jsonc",
     "postinstall": "nuxt prepare",
     "lint": "eslint .",
-    "test": "node --test --experimental-strip-types test/*.test.ts",
+    "test": "node --import ./test/registerTypescriptResolution.mjs --test --experimental-strip-types test/*.test.ts test/*.test.mjs",
     "typecheck": "nuxt typecheck"
   },
   "dependencies": {

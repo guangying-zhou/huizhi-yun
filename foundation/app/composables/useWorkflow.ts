@@ -126,7 +126,7 @@ export async function createInstance(body: {
 /**
  * 审批通过
  */
-export async function approveTask(taskId: number | string, body?: { comment?: string, attachments?: unknown[] }) {
+export async function approveTask(taskId: number | string, body?: { comment?: string, attachments?: unknown[] }, idempotencyKey?: string) {
   return $fetch<ApiResponse<{
     task_id: number
     instance_id: number
@@ -134,6 +134,7 @@ export async function approveTask(taskId: number | string, body?: { comment?: st
     next_node: { name: string, assignees: Array<{ uid: string, name: string }> } | null
   }>>(`${PROXY_BASE}/tasks/${taskId}/approve`, {
     method: 'POST',
+    ...(idempotencyKey ? { headers: { 'Idempotency-Key': idempotencyKey } } : {}),
     body: body || {}
   })
 }
@@ -141,13 +142,14 @@ export async function approveTask(taskId: number | string, body?: { comment?: st
 /**
  * 审批驳回
  */
-export async function rejectTask(taskId: number | string, body: { comment: string }) {
+export async function rejectTask(taskId: number | string, body: { comment: string }, idempotencyKey?: string) {
   return $fetch<ApiResponse<{
     task_id: number
     instance_id: number
     reject_strategy: string
   }>>(`${PROXY_BASE}/tasks/${taskId}/reject`, {
     method: 'POST',
+    ...(idempotencyKey ? { headers: { 'Idempotency-Key': idempotencyKey } } : {}),
     body
   })
 }

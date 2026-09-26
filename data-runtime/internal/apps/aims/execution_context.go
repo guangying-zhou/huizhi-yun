@@ -15,8 +15,8 @@ type executionItem struct {
 	ID                     int64    `json:"id"`
 	ProjectID              int64    `json:"projectId"`
 	ProjectCode            string   `json:"projectCode"`
-	MilestoneID            int64    `json:"milestoneId"`
-	MilestoneName          string   `json:"milestoneName"`
+	MilestoneID            *int64   `json:"milestoneId"`
+	MilestoneName          *string  `json:"milestoneName"`
 	ItemNumber             int64    `json:"itemNumber"`
 	ItemKey                string   `json:"itemKey"`
 	Tier                   string   `json:"tier"`
@@ -144,7 +144,7 @@ func (a *Adapter) executionItem(ctx context.Context, workItemID string) (*execut
 			ds.item_key AS decomposition_source_key
 		FROM work_items wi
 		JOIN aims_projects p ON p.id = wi.project_id
-		JOIN milestones m ON m.id = wi.milestone_id
+		LEFT JOIN milestones m ON m.id = wi.milestone_id
 		LEFT JOIN work_items pw ON pw.id = wi.parent_id
 		LEFT JOIN work_items ds ON ds.id = wi.decomposition_source_id
 		WHERE wi.id = ?
@@ -153,14 +153,16 @@ func (a *Adapter) executionItem(ctx context.Context, workItemID string) (*execut
 	var item executionItem
 	var description, startDate, dueDate, severity, assigneeUID, reporterUID sql.NullString
 	var estimatedHours sql.NullFloat64
+	var milestoneID sql.NullInt64
+	var milestoneName sql.NullString
 	var parentID, decompositionSourceID sql.NullInt64
 	var approvalStatus, parentItemKey, parentTitle, templateKey, requirementCategory, decompositionSourceKey sql.NullString
 	if err := row.Scan(
 		&item.ID,
 		&item.ProjectID,
 		&item.ProjectCode,
-		&item.MilestoneID,
-		&item.MilestoneName,
+		&milestoneID,
+		&milestoneName,
 		&item.ItemNumber,
 		&item.ItemKey,
 		&item.Tier,
@@ -192,6 +194,8 @@ func (a *Adapter) executionItem(ctx context.Context, workItemID string) (*execut
 		return nil, fmt.Errorf("query execution work item: %w", err)
 	}
 
+	item.MilestoneID = nullableInt64(milestoneID)
+	item.MilestoneName = nullableString(milestoneName)
 	item.Description = nullableString(description)
 	item.StartDate = nullableString(startDate)
 	item.DueDate = nullableString(dueDate)

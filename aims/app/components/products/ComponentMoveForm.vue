@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import { useAimsModule } from '../../../layer/useAimsModule'
+
+const { moduleUrl, hosted, cacheKey } = useAimsModule()
 const props = defineProps<{ productCode: string, componentId: number, name: string, parentId: number | null, componentRevision: number, workspaceRevision: number }>()
 const emit = defineEmits<{ saved: [], cancel: [], busy: [boolean] }>()
 interface Target { id: number, name: string, product_code: string, parent_id: number | null }
@@ -6,9 +9,9 @@ const trail = ref<{ id: number, name: string }[]>([])
 const parent = computed(() => trail.value.at(-1)?.id ?? null)
 const page = ref(1), pageSize = 10, saving = ref(false), reason = ref('')
 const selection = ref<{ id: number | null, name: string } | null>(null)
-const base = computed(() => `/api/v1/products/${encodeURIComponent(props.productCode)}/components`)
+const base = computed(() => moduleUrl(`/api/v1/products/${encodeURIComponent(props.productCode)}/components`))
 const query = computed(() => ({ parentId: parent.value ?? undefined, page: page.value, pageSize }))
-const { data, status, error, refresh } = await useFetch(base, { server: false, query, transform: (r: { code: number, data: { items: Target[], total: number, parent_id: number | null, page: number, pageSize: number, workspace_revision: number } }) => {
+const { data, status, error, refresh } = await useFetch(base, { ...(hosted ? { key: computed(() => cacheKey('ComponentMoveForm:1' + ':' + String(props.productCode))) } : {}), server: false, query, transform: (r: { code: number, data: { items: Target[], total: number, parent_id: number | null, page: number, pageSize: number, workspace_revision: number } }) => {
   const v = r.data
   if (r.code !== 0 || !v || !Array.isArray(v.items) || v.parent_id !== parent.value || v.page !== page.value || v.pageSize !== pageSize || !Number.isSafeInteger(v.total) || v.total < 0 || v.items.length > pageSize || v.items.length > v.total || v.workspace_revision !== props.workspaceRevision || v.items.some(item => !item || !Number.isSafeInteger(item.id) || item.id < 1 || item.product_code !== props.productCode || item.parent_id !== parent.value || typeof item.name !== 'string' || !item.name.trim())) throw new Error('目标列表已变化或响应不完整，请关闭表单并刷新模块列表')
   return v

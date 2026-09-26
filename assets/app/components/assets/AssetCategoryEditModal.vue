@@ -1,6 +1,10 @@
 <script setup lang="ts">
-import { assetCategoryScopeMap, type AssetCategoryScope } from '~~/shared/assetCategoryDefaults'
-import type { ApiResponse, AssetCategoryGroup } from '~/types'
+import { useAssetsModule } from '../../../layer/useAssetsModule'
+import { assetCategoryScopeMap, type AssetCategoryScope } from '../../../shared/assetCategoryDefaults'
+import type { ApiResponse, AssetCategoryGroup } from '../../types'
+
+const { moduleUrl } = useAssetsModule()
+const submissionKey = ref('')
 
 const props = defineProps<{
   open: boolean
@@ -69,6 +73,10 @@ const state = reactive({
   sortOrder: 1,
   items: [] as EditableItem[]
 })
+
+watch(state, () => {
+  submissionKey.value = ''
+}, { deep: true, flush: 'sync' })
 
 function hydrate() {
   state.label = props.category?.label || ''
@@ -168,13 +176,15 @@ async function handleSubmit() {
     }
 
     if (!isCreateMode.value && props.category?.id) {
-      await $fetch<ApiResponse<AssetCategoryGroup>>(`/api/v1/admin/asset-categories/${props.category.id}`, {
+      await $fetch<ApiResponse<AssetCategoryGroup>>(moduleUrl(`/api/v1/admin/asset-categories/${props.category.id}`), {
         method: 'PUT',
+        headers: { 'Idempotency-Key': submissionKey.value ||= crypto.randomUUID() },
         body
       })
     } else {
-      await $fetch<ApiResponse<AssetCategoryGroup>>('/api/v1/admin/asset-categories', {
+      await $fetch<ApiResponse<AssetCategoryGroup>>(moduleUrl('/api/v1/admin/asset-categories'), {
         method: 'POST',
+        headers: { 'Idempotency-Key': submissionKey.value ||= crypto.randomUUID() },
         body
       })
     }

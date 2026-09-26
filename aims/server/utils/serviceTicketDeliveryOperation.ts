@@ -1,6 +1,8 @@
+import { unifiedIntegrationOperationRoute } from './unifiedIntegrationOperationRoute'
 import { sendProductFeedbackProgress } from './productFeedbackProgressTransport'
 import { sendProductCostRules } from './productCostRulesTransport'
 import { sendProductFeedbackStatus } from './productFeedbackStatusTransport'
+import { sendWorkItemCompletion } from './workItemCompletionTransport'
 import { createError, getHeader, type H3Event } from 'h3'
 import { serviceAppFetch } from '@hzy/foundation/server/utils/appServiceBinding'
 import {
@@ -257,6 +259,7 @@ async function callCodocsOperationService(
 
 export function createRequestServiceTicketDeliveryOperationIO(event: H3Event): ServiceTicketDeliveryOperationIO {
   return {
+    callWorkflowWorkItemCompletion: (command, operation) => sendWorkItemCompletion(event, operation, command),
     callRuntime: <T>(path: string, body: RuntimeRow) => callAimsOperationRuntime<T>(event, path, body),
     callAltoc: (command, idempotencyKey) => callAltocDeliveryService(event, command, idempotencyKey),
     callAltocReceivable: (command, idempotencyKey) => callAltocReceivableService(event, command, idempotencyKey),
@@ -270,12 +273,33 @@ export function createRequestServiceTicketDeliveryOperationIO(event: H3Event): S
   }
 }
 
+// All persistence calls (including notification checkpoints) share the same
+// signed selection. External transports retain the real Aims event identity.
+export function createUnifiedRequestServiceTicketDeliveryOperationIO(event: H3Event, generation: string): ServiceTicketDeliveryOperationIO {
+  const io = createRequestServiceTicketDeliveryOperationIO(event)
+  return { ...io, callRuntime: async <T>(path: string, body: RuntimeRow) => {
+    const routed = unifiedIntegrationOperationRoute(path, body)
+    const runtime = await maybeCallTenantRuntime<RuntimeEnvelope<T>>(event, routed.path, {
+      appCode: 'aims', scope: 'aims:integration_operation:execute', capabilityFormat: 'business',
+      serviceTokenSourceBinding: 'service-client-policy', enterpriseScheduler: { generation },
+      method: 'POST', query: {}, body: routed.body
+    })
+    if (!runtime.handled) throw createError({ statusCode: 503, message: 'Unified Aims scheduler Runtime is unavailable.' })
+    if (runtime.data.code !== undefined && String(runtime.data.code) !== '0') {
+      throw createError({ statusCode: 502, message: runtime.data.message || 'Unified Aims integration operation failed.' })
+    }
+    return runtime.data.data as T
+  } }
+}
+
 export function createScheduledServiceTicketDeliveryOperationIO(
   callRuntime: ServiceTicketDeliveryOperationIO['callRuntime'],
-  targetDeployments: { codocs: string, altoc?: string, finance?: string }
+  targetDeployments: { codocs: string, altoc?: string, finance?: string, workflow?: string },
+  taskContext?: import('./workItemCompletionTransport').CompletionScheduledContext
 ): ServiceTicketDeliveryOperationIO {
   return {
     callRuntime,
+    callWorkflowWorkItemCompletion: (command, operation) => sendWorkItemCompletion(null, operation, command, targetDeployments.workflow || '', taskContext),
     callAltoc: (command, idempotencyKey) => callAltocDeliveryService(null, command, idempotencyKey),
     callAltocReceivable: (command, idempotencyKey) => callAltocReceivableService(null, command, idempotencyKey),
     callPeople: (command, idempotencyKey) => callPeopleContributionService(null, command, idempotencyKey),

@@ -189,6 +189,26 @@ CREATE TABLE `flow_actionable_outbox` (
     CONSTRAINT `fk_actionable_outbox_instance` FOREIGN KEY (`instance_id`) REFERENCES `flow_instances`(`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Workflow 到 Console 待办生命周期事务 outbox';
 
+DROP TABLE IF EXISTS `flow_notification_outbox`;
+CREATE TABLE `flow_notification_outbox` (
+    `id` BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    `instance_id` BIGINT UNSIGNED NOT NULL,
+    `action_id` BIGINT UNSIGNED NULL,
+    `actionable_key` VARCHAR(191) NOT NULL,
+    `idempotency_key` VARCHAR(191) NOT NULL,
+    `notification` JSON NOT NULL,
+    `delivery_status` ENUM('pending','delivered') NOT NULL DEFAULT 'pending',
+    `attempt_count` INT UNSIGNED NOT NULL DEFAULT 0,
+    `last_attempt_at` DATETIME NULL,
+    `delivered_at` DATETIME NULL,
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY `uk_notification_outbox_idempotency` (`idempotency_key`),
+    INDEX `idx_notification_outbox_delivery` (`delivery_status`, `id`),
+    INDEX `idx_notification_outbox_actionable` (`actionable_key`, `delivery_status`),
+    CONSTRAINT `fk_notification_outbox_instance` FOREIGN KEY (`instance_id`) REFERENCES `flow_instances`(`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Workflow 待办创建通知事务 outbox';
+
 -- -----------------------------------------------------------
 -- 7. 操作记录表
 -- -----------------------------------------------------------

@@ -93,6 +93,7 @@ Assets 是正式客户交付资产、正式环境和二者部署关系的事实�
 - 用户工作台使用 `/offboarding-recoveries` 列表和 `/offboarding-recoveries/{caseCode}` 详情；对应 API 的列表/详情要求 `offboarding_recoveries:view`，责任人分配或清除要求 `offboarding_recoveries:edit`。PATCH 只提交 `recovery_responsible_uid`，不能修改离职事实或资产清单。
 - People 同步入口固定为 `POST /api/v1/service/offboarding-recoveries:upsert`，要求 exact capability `assets:offboarding-recovery:sync`；case code、回收期限和初始空责任由 Assets runtime 派生，People 不得传入责任人或资产清单。
 - 该流复用现有 scheduled due drain、checkpoint、ack-loss recovery 和 lifecycle closure；`HZY_ASSETS_DUE_NOTIFICATIONS_ENABLED` 默认 `false`，Cloudflare cron 只在指令部署时显式开启并绑定 tenant-runtime 与专用 Console service client。
+- ADR-018 统一调度（Runtime Assets scheduler 为 `unified` 且 Platform 持久化 Assets scheduler 选择）下，到期通知只由 Tenant Gateway 签名唤醒 `/api/internal/integration-operations/drain` 执行，使用精确 `assets:notifications-due:execute` 与 scheduler generation；legacy 入口返回 409 owner 拒绝，本地 cron 记 skipped。合同见根 `docs/MODULE_CONTRACTS.md`。
 
 ## 到期通知收件人切换 CAS 契约
 
@@ -143,3 +144,7 @@ Assets 应用自身不得直连 MySQL，也不再配置 `DB_*` / `runtimeConfig.
 产品创建同样要求 edit 对象范围，并在创建事务内对新行校验负责人／项目归属，越界回滚、不产生创建事件；关联写入口仍待完成。
 
 产品主档列表支持 page/pageSize（默认 20、上限 100）、product_line、status、search，以及白名单 sortBy/sortOrder；分页结果与过滤范围汇总在同一只读快照中读取。产品页面已接入，底座标签分页仍待完成；未传分页参数的存量服务目录保持兼容。
+
+## ADR-018 IP 写入候选
+
+Enterprise IP create/edit 由 Assets owning receipt 与 Registry generation 写事务执行，业务、写入前后范围检查和审计原子提交。20260916 receipt migration 追加 IP allowlist，保留已有产品/关联/数字资产 CHECK；旧 schema 失败关闭。编辑不修改 ip_code，nullable 省略保留、null 清空，必填字段不接受 null。Host 产品/文档关联仍未迁入，不能恢复独立 API 直连数据库路径。详见根 MODULE_CONTRACTS 与 Enterprise API；候选尚未环境启用。

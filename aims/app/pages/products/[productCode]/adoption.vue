@@ -1,17 +1,20 @@
 <script setup lang="ts">
 import type { TableColumn } from '@nuxt/ui'
 import type { ProductAdoptionInstance, ProductAdoptionPage } from '~/types/productAdoption'
+import { productAdoptionRoles, productAdoptionStates } from '~/utils/productReadLabels'
+import { useAimsModule } from '../../../../layer/useAimsModule'
 
 definePageMeta({ layoutHeader: true, layoutHeaderTitle: '产品采用', layoutHeaderProjectSwitcher: false })
 const route = useRoute()
+const { moduleUrl, cacheKey } = useAimsModule()
 const code = computed(() => String(route.params.productCode || ''))
 const page = ref(1)
 watch(code, () => {
   page.value = 1
 })
-const { data, status, error, refresh } = await useAsyncData(() => `product-adoption:${code.value}:${page.value}`, async () => {
+const { data, status, error, refresh } = await useAsyncData(() => cacheKey(`product-adoption:${code.value}:${page.value}`), async () => {
   const product = code.value, requestedPage = page.value
-  const response = await $fetch<{ code: number, data: ProductAdoptionPage }, string>(`/api/v1/products/${encodeURIComponent(product)}/roadmaps/adoption`, { query: { page: requestedPage, pageSize: 20 }, retry: 0, timeout: 30000 })
+  const response = await $fetch<{ code: number, data: ProductAdoptionPage }, string>(moduleUrl(`/api/v1/products/${encodeURIComponent(product)}/roadmaps/adoption`), { query: { page: requestedPage, pageSize: 20 }, retry: 0, timeout: 30000 })
   if (response.code !== 0 || response.data?.productCode !== product || response.data.page !== requestedPage) throw new Error('采用查询响应不一致')
   return response.data
 }, { server: false })
@@ -33,8 +36,6 @@ const metrics = computed(() => current.value
       { label: '版本冲突', value: current.value.summary.conflictingVersionInstances }
     ]
   : [])
-const roles: Record<string, string> = { primary: '主环境', test: '测试', production: '生产', backup: '备份', disaster_recovery: '容灾', training: '培训', other: '其他' }
-const states: Record<string, string> = { planned: '规划中', provisioning: '准备中', deployed: '已部署', online: '已上线', accepted: '已验收', suspended: '已暂停', removed: '已移除' }
 const columns: TableColumn<ProductAdoptionInstance>[] = [{ id: 'instance', header: '交付资产 / 环境' }, { id: 'customer', header: '客户编码' }, { id: 'roles', header: '环境角色' }, { id: 'status', header: '部署状态' }, { id: 'version', header: '实际部署版本' }]
 </script>
 
@@ -117,13 +118,22 @@ const columns: TableColumn<ProductAdoptionInstance>[] = [{ id: 'instance', heade
               color="neutral"
               variant="subtle"
             >
-              {{ roles[role] || role }}
+              {{ productAdoptionRoles[role] || role }}
             </UBadge>
           </div>
         </template>
         <template #status-cell="{ row }">
           <div class="max-w-40 space-y-1 whitespace-normal">
-            <p>{{ row.original.deploymentStatuses.map(value => states[value] || value).join('、') }}</p><UBadge :color="row.original.adopted ? 'success' : 'neutral'" variant="subtle">
+            <div class="flex flex-wrap gap-1">
+              <UBadge
+                v-for="value in row.original.deploymentStatuses"
+                :key="value"
+                :color="productAdoptionStates[value]?.color || 'neutral'"
+                variant="subtle"
+              >
+                {{ productAdoptionStates[value]?.label || value }}
+              </UBadge>
+            </div><UBadge :color="row.original.adopted ? 'success' : 'neutral'" variant="subtle">
               {{ row.original.adopted ? '计入采用' : '未计入采用' }}
             </UBadge>
           </div>

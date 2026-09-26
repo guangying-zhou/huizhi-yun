@@ -1,5 +1,9 @@
 <script setup lang="ts">
-import type { ApiResponse, ProductAssetItem } from '~/types'
+import { useAssetsModule } from '../../../layer/useAssetsModule'
+import type { ApiResponse, ProductAssetItem } from '../../types'
+
+const { moduleUrl } = useAssetsModule()
+const commandKey = ref(crypto.randomUUID())
 
 const props = defineProps<{
   open: boolean
@@ -37,8 +41,13 @@ const state = reactive({
   remark: ''
 })
 
+watch(state, () => {
+  commandKey.value = crypto.randomUUID()
+}, { deep: true, flush: 'sync' })
+
 watch(() => props.open, (open) => {
   if (open) {
+    commandKey.value = crypto.randomUUID()
     submitError.value = ''
     state.document_id = ''
     state.document_type = 'other'
@@ -62,8 +71,9 @@ async function handleSubmit() {
   const productId = props.product.id
 
   try {
-    const response = await $fetch<ApiResponse<{ id: number }>>(`/api/v1/products/${productId}/documents`, {
+    const response = await $fetch<ApiResponse<{ id: number }>>(moduleUrl(`/api/v1/products/${productId}/documents`), {
       method: 'POST',
+      headers: { 'Idempotency-Key': commandKey.value },
       body: {
         document_id: documentUuid,
         document_type: state.document_type,

@@ -280,6 +280,7 @@ export async function buildTemporaryMySqlPlan(input = {}) {
     randomPort: true,
     initializeInsecure: true,
     readsDefaultFiles: false,
+    performanceSchema: input.performanceSchema === true,
     freshDatadirPerRun: true,
     sqlFilesAppliedOnceInInputOrder: true,
     repeatedImportIdempotencyClaimed: false,
@@ -389,7 +390,7 @@ export async function withTemporaryMySql(plan, callback, options = {}) {
       `--secure-file-priv=${context.secureFileDir}`,
       `--tmpdir=${join(rootDir, 'tmp')}`,
       '--max-connections=32',
-      '--performance-schema=OFF'
+      plan.performanceSchema ? '--performance-schema=ON' : '--performance-schema=OFF'
     ], {
       cwd: rootDir,
       env: environment,

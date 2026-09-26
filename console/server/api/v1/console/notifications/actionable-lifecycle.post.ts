@@ -1,13 +1,14 @@
+import { createError } from 'h3'
 import { requireConsoleServiceActor } from '~~/server/utils/vault'
 import { advancePortalActionableLifecycleForService } from '~~/server/utils/notifications'
 import { assertNotificationPublisherIdentity } from '~~/server/utils/consoleServiceActor'
-import { resolveConsoleRuntimeBinding } from '~~/server/utils/consoleRuntimeBinding'
+import { resolveNotificationPublisherBinding } from '~~/server/utils/localWorkflowNotificationBinding'
 
 export default defineEventHandler(async (event) => {
-  const actor = assertNotificationPublisherIdentity(
-    await requireConsoleServiceActor(event, 'notifications', 'notifications:publish'),
-    resolveConsoleRuntimeBinding(event)
-  )
+  const serviceActor = await requireConsoleServiceActor(event, 'notifications', 'notifications:publish')
+  const binding = resolveNotificationPublisherBinding(event, serviceActor)
+  if (!binding) throw createError({ statusCode: 403, message: 'notification_publisher_runtime_binding_mismatch' })
+  const actor = assertNotificationPublisherIdentity(serviceActor, binding)
   const body = await readBody(event)
   return {
     code: 0,

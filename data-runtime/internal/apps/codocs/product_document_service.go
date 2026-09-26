@@ -59,6 +59,12 @@ func (a *Adapter) authorizeProductDocumentService(ctx context.Context, uuid stri
 	sourceApp := "aims"
 	if operation == assetsProductDocumentReadOperation && action == "metadata:read" {
 		sourceApp = "assets"
+		// Only this fixed Assets metadata contract permits the physical Host.
+		// The Codocs BFF authenticates the source; Runtime verifies the
+		// target-signed delegation and the exact source client below.
+		if firstTextValue(body, integrationoperation.TrustedServiceCommandSourceAppKey) == "enterprise" {
+			sourceApp = "enterprise"
+		}
 	}
 	_, _, err := scopedDocumentServiceCommand(body, uuid, query, documentServiceContract{SourceApp: sourceApp, ContextField: "productCode", Capability: aimsProductDocumentReadCapability, Operation: operation, Schema: operation, Action: action})
 	if err != nil {

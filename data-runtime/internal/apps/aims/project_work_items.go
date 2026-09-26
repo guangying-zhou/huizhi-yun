@@ -117,6 +117,35 @@ func (a *Adapter) projectWorkItems(ctx context.Context, rawProjectID string, que
 	}, nil
 }
 
+func (a *Adapter) projectBoard(ctx context.Context, rawProjectID string, query url.Values) (any, error) {
+	if err := a.requireProjectReadAccess(ctx, rawProjectID, query); err != nil {
+		return nil, err
+	}
+	projectID, err := parseID(rawProjectID, "project_id")
+	if err != nil {
+		return nil, err
+	}
+	project, err := a.projectWorkItemProject(ctx, projectID)
+	if err != nil {
+		return nil, err
+	}
+	boardQuery := cloneURLValues(query)
+	boardQuery.Set("view", "board")
+	boardQuery.Set("tier", "matter")
+	if project.Category == "routine" {
+		boardQuery.Set("type", "task")
+	}
+	return a.projectWorkItems(ctx, rawProjectID, boardQuery)
+}
+
+func cloneURLValues(source url.Values) url.Values {
+	target := url.Values{}
+	for key, values := range source {
+		target[key] = append([]string(nil), values...)
+	}
+	return target
+}
+
 func (a *Adapter) directWorkItems(ctx context.Context, query url.Values) (any, error) {
 	uid := strings.TrimSpace(query.Get("current_user"))
 	if uid == "" {
@@ -175,6 +204,10 @@ func (a *Adapter) directWorkItems(ctx context.Context, query url.Values) (any, e
 }
 
 func (a *Adapter) createProjectWorkItem(ctx context.Context, rawProjectID string, query url.Values, body map[string]any) (map[string]any, error) {
+	return a.createProjectWorkItemWithExternalTx(ctx, nil, rawProjectID, query, body)
+}
+
+func (a *Adapter) createProjectWorkItemWithExternalTx(ctx context.Context, externalTx *sql.Tx, rawProjectID string, query url.Values, body map[string]any) (map[string]any, error) {
 	uid := strings.TrimSpace(query.Get("current_user"))
 	if uid == "" {
 		uid = strings.TrimSpace(query.Get("operator_uid"))
@@ -235,11 +268,14 @@ func (a *Adapter) createProjectWorkItem(ctx context.Context, rawProjectID string
 		}
 	}
 
-	tx, err := a.DB().BeginTx(ctx, nil)
-	if err != nil {
-		return nil, err
+	tx := externalTx
+	if tx == nil {
+		tx, err = a.DB().BeginTx(ctx, nil)
+		if err != nil {
+			return nil, err
+		}
+		defer tx.Rollback()
 	}
-	defer tx.Rollback()
 
 	itemNumber, err := nextDecomposeItemNumber(ctx, tx, projectID)
 	if err != nil {
@@ -307,8 +343,10 @@ func (a *Adapter) createProjectWorkItem(ctx context.Context, rawProjectID string
 	`, workItemID, itemKey, uid); err != nil {
 		return nil, err
 	}
-	if err := tx.Commit(); err != nil {
-		return nil, err
+	if externalTx == nil {
+		if err := tx.Commit(); err != nil {
+			return nil, err
+		}
 	}
 
 	return map[string]any{

@@ -13,8 +13,9 @@ describe('Codocs document download URLs', () => {
     assert.match(helper, /const \{ resolveCurrentAppUrl \} = useAppUrls\(\)/)
     assert.match(
       helper,
-      /resolveCurrentAppUrl\(`\/api\/documents\/\$\{encodeURIComponent\(normalizedUuid\)\}\/download`\)/
+      /resolveCurrentAppUrl\(moduleUrl\(`\/api\/documents\/\$\{encodeURIComponent\(normalizedUuid\)\}\/download`\)\)/
     )
+    assert.match(helper, /const \{ moduleUrl \} = useCodocsModule\(\)/)
     assert.match(helper, /link\.href = href/)
   })
 

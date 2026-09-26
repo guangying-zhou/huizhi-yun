@@ -1,4 +1,4 @@
-import { isEnterpriseRole, resolveAuthorizationMode, selectEffectiveRoleCodes, type AuthorizationMode, type ResourceActionPolicy } from '@hzy/authz-core'
+import { isEnterpriseRole, isRecordActiveAt, resolveAuthorizationMode, selectEffectiveRoleCodes, type AuthorizationMode, type ResourceActionPolicy } from '@hzy/authz-core'
 import {
   evaluateFoundationScopedAuthorization,
   type FoundationObjectContext,
@@ -121,8 +121,7 @@ function rolePermissionGrantRecords(payload: Record<string, unknown>) {
 }
 
 function isActive(record: BundleRecord) {
-  const status = stringValue(record.status)
-  return !status || status === 'active'
+  return isRecordActiveAt(record)
 }
 
 function stringArray(value: unknown) {
@@ -422,6 +421,7 @@ const KNOWN_SCOPE_PREDICATES = new Set([
   'tree',
   'code',
   'member',
+  'manager',
   'owner',
   'team',
   'assigned'

@@ -101,13 +101,28 @@ func (a *Adapter) updateWorkItemDeliverable(ctx context.Context, rawWorkItemID s
 
 	sets = append(sets, "updated_at = CURRENT_TIMESTAMP")
 	args = append(args, deliverableID)
-	result, err := a.DB().ExecContext(ctx, "UPDATE deliverables SET "+strings.Join(sets, ", ")+" WHERE id = ?", args...)
+	tx, err := a.DB().BeginTx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+	var lockedProjectID int64
+	if err := tx.QueryRowContext(ctx, "SELECT id FROM aims_projects WHERE id = ? FOR UPDATE", projectID).Scan(&lockedProjectID); err != nil {
+		return nil, err
+	}
+	if err := lockExistingMatterDeliverableWriteTx(ctx, tx, projectID, deliverableID); err != nil {
+		return nil, err
+	}
+	result, err := tx.ExecContext(ctx, "UPDATE deliverables SET "+strings.Join(sets, ", ")+" WHERE id = ?", args...)
 	if err != nil {
 		return nil, fmt.Errorf("update work item deliverable: %w", err)
 	}
 	affected, _ := result.RowsAffected()
 	if affected == 0 {
 		return nil, httperror.New(http.StatusNotFound, "deliverable_not_found", "deliverable not found")
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, err
 	}
 
 	deliverables, err := a.executionDeliverables(ctx, strconv.FormatInt(workItemID, 10))

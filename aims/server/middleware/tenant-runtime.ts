@@ -3,6 +3,12 @@ import { handleProductCostRulesRead } from '../utils/productCostRulesRead'
 import { handleProductCostRulesStatus } from '../utils/productCostRulesStatus'
 import { handleProductCostRulesSave } from '../utils/productCostRulesSave'
 import { handleProductFeedbackService } from '../utils/productFeedbackService'
+import { handleEnterpriseProjectDocumentsService } from '../utils/enterpriseProjectDocumentsService'
+import { handleEnterpriseProjectDocumentFilesService } from '../utils/enterpriseProjectDocumentFilesService'
+import { handleEnterpriseProjectDocumentSourcesService } from '../utils/enterpriseProjectDocumentSourcesService'
+import { handleEnterpriseProjectDocumentWritesService } from '../utils/enterpriseProjectDocumentWritesService'
+import { handleEnterpriseProjectDocumentAccessService } from '../utils/enterpriseProjectDocumentAccessService'
+import { handleEnterpriseAccessibleProjectDocumentsService } from '../utils/enterpriseAccessibleProjectDocumentsService'
 import { createError, getRequestURL, type H3Event } from 'h3'
 import { maybeProxyCurrentApiToTenantRuntime, type TenantRuntimeProxyContext } from '@hzy/foundation/server/utils/tenantRuntimeProxy'
 import { resolveConsoleAuthWithSessionBridge } from '@hzy/foundation/server/utils/consoleSessionBridge'
@@ -78,6 +84,7 @@ const RUNTIME_NESTED_ITEM_RESOURCES = [
 ]
 const DIRECT_PROJECT_SCOPED_ADMIN_OBJECT_PATTERN = /^\/(?:deliverables|documents|milestones|requirements|requirement-contents|requirement-reviews|work-items)\/[^/]+$/
 const NUXT_ONLY_MARKERS = [
+  '/service/work-item-completion/workflow-callback',
   '/check-duplicate',
   '/requirements/spec',
   '/requirements/import',
@@ -151,7 +158,8 @@ const NUXT_ONLY_PATTERNS = [
   /^\/api\/v1\/milestones\/[^/]+\/completion-requests$/,
   /^\/api\/v1\/milestone-completion-requests\/[^/]+\/bind-workflow$/,
   /^\/api\/v1\/company-weekly-summaries\/[^/]+:(?:publish|retry)$/,
-  /^\/api\/v1\/service\/workflow\/callback$/
+  /^\/api\/v1\/service\/workflow\/callback$/,
+  /^\/api\/v1\/service\/work-item-completion\/workflow-callback$/
 ]
 
 const NUXT_ONLY_MARKER_ROUTE_PATTERNS = [
@@ -222,6 +230,12 @@ export default defineEventHandler(async (event) => {
     ? await handleProductCostRulesRead(event, costRulesPath[1]!)
     : await handleProductCostRulesSave(event, costRulesPath[1])
   if (pathname === '/api/v1/service/product-requests/from-feedback') return await handleProductFeedbackService(event)
+  if (normalizedApiV1Path(pathname) === '/api/v1/service/enterprise/project-documents/read') return await handleEnterpriseProjectDocumentsService(event)
+  if (normalizedApiV1Path(pathname) === '/api/v1/service/enterprise/project-document-files/read') return await handleEnterpriseProjectDocumentFilesService(event)
+  if (normalizedApiV1Path(pathname) === '/api/v1/service/enterprise/project-document-sources/read') return await handleEnterpriseProjectDocumentSourcesService(event)
+  if (normalizedApiV1Path(pathname) === '/api/v1/service/enterprise/project-document-writes/execute') return await handleEnterpriseProjectDocumentWritesService(event)
+  if (normalizedApiV1Path(pathname) === '/api/v1/service/enterprise/project-document-access/execute') return await handleEnterpriseProjectDocumentAccessService(event)
+  if (normalizedApiV1Path(pathname) === '/api/v1/service/enterprise/accessible-project-documents/read') return await handleEnterpriseAccessibleProjectDocumentsService(event)
   requireForwardedServiceCapability(event)
   await enforceAimsAdminApiAccess(event, pathname)
   await enforceProjectCreateApiAccess(event, pathname)
@@ -429,7 +443,7 @@ function serviceCapabilityRequirement(suffix: string, method: string): ServiceCa
   if (suffix === '/service/notification-details/authorize' || suffix === '/service/notification-details/authorize/finalize') {
     return { scope: 'aims:notification-details:authorize', allowedApps: ['console'] }
   }
-  if (suffix === '/service/workflow/callback') {
+  if (suffix === '/service/workflow/callback' || suffix === '/service/work-item-completion/workflow-callback') {
     return { scope: 'workflow:callback', allowedApps: ['workflow'] }
   }
 

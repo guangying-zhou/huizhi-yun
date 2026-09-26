@@ -1,6 +1,10 @@
 <script setup lang="ts">
-import type { ProductPlanningDetail } from '~/types/productPlanning'
-import type { ProductPlanningCycle } from '~/types/productPlanningCycle'
+import { useAimsModule } from '../../../../../../layer/useAimsModule'
+import ProductsHandoffProjectPicker from '../../../../../components/products/HandoffProjectPicker.vue'
+import type { ProductPlanningDetail } from '../../../../../types/productPlanning'
+import type { ProductPlanningCycle } from '../../../../../types/productPlanningCycle'
+
+const { moduleUrl, cacheKey, hosted } = useAimsModule()
 
 definePageMeta({ layoutHeader: true, layoutHeaderTitle: '转交项目需求', layoutHeaderProjectSwitcher: false })
 const route = useRoute()
@@ -9,17 +13,17 @@ const itemId = computed(() => String(route.params.itemId || ''))
 const plannedVersionId = computed(() => /^\d+$/.test(String(route.query.versionId || '')) ? Number(route.query.versionId) : null)
 const plannedVersionFeatureId = computed(() => /^\d+$/.test(String(route.query.scopeId || '')) ? Number(route.query.scopeId) : null)
 const lightweightHandoff = computed(() => plannedVersionId.value !== null && plannedVersionFeatureId.value !== null)
-const base = computed(() => `/api/v1/products/${encodeURIComponent(code.value)}`)
-const { data: detail, status, error, refresh } = await useFetch(() => `${base.value}/planning-items/${itemId.value}`, { server: false, transform: (response: { code: number, data: ProductPlanningDetail }) => {
+const base = computed(() => moduleUrl(`/api/v1/products/${encodeURIComponent(code.value)}`))
+const { data: detail, status, error, refresh } = await useFetch(() => `${base.value}/planning-items/${itemId.value}`, { server: false, key: computed(() => cacheKey('handoff-1:' + code.value + ':' + itemId.value)), transform: (response: { code: number, data: ProductPlanningDetail }) => {
   if (response.code !== 0 || response.data?.biz_id !== itemId.value || response.data.product_code !== code.value || !Array.isArray(response.data.requests)) throw new Error('规划详情响应不完整')
   return response.data
 } })
-const { data: permission, error: permissionError, refresh: refreshPermission } = await useFetch<{ code: number, data: { handoff: boolean, status: string } }>(() => `${base.value}/planning-items/permissions`, { server: false })
-const { data: cycles, error: cycleError, refresh: refreshCycles } = await useFetch(() => `${base.value}/planning-cycles`, { server: false, immediate: !lightweightHandoff.value, query: { status: 'open', page: 1, pageSize: 1 }, transform: (response: { code: number, data: { items: ProductPlanningCycle[], total: number } }) => {
+const { data: permission, error: permissionError, refresh: refreshPermission } = await useFetch<{ code: number, data: { handoff: boolean, status: string } }>(() => `${base.value}/planning-items/permissions`, { server: false, key: computed(() => cacheKey('handoff-permissions:' + code.value)) })
+const { data: cycles, error: cycleError, refresh: refreshCycles } = await useFetch(() => `${base.value}/planning-cycles`, { server: false, key: computed(() => cacheKey('handoff-2:' + code.value + ':' + itemId.value)), immediate: !lightweightHandoff.value, query: { status: 'open', page: 1, pageSize: 1 }, transform: (response: { code: number, data: { items: ProductPlanningCycle[], total: number } }) => {
   if (response.code !== 0 || !Array.isArray(response.data?.items) || response.data.total > 1 || response.data.items.some(c => c.product_code !== code.value || c.status !== 'open')) throw new Error('当前规划周期响应无效')
   return response.data.items[0] || null
 } })
-const { data: sources, error: sourceError, refresh: refreshSources } = await useAsyncData(() => `handoff-sources:${code.value}:${itemId.value}`, async () => {
+const { data: sources, error: sourceError, refresh: refreshSources } = await useAsyncData(() => cacheKey(`handoff-sources:${code.value}:${itemId.value}`), async () => {
   if (!detail.value) return []
   return await Promise.all(detail.value.requests.map(async (ref) => {
     const response = await $fetch<{ code: number, data: { biz_id: string, product_code: string, title: string, revision: number } }>(`${base.value}/requests/${ref.biz_id}`)
@@ -45,10 +49,10 @@ const { search, debounced, flush } = useDebouncedSearch({
     page.value = 1
   }
 })
-const { data: requirements, status: requirementStatus, error: requirementError } = await useAsyncData(() => `handoff-requirements:${code.value}:${itemId.value}`, async () => {
+const { data: requirements, status: requirementStatus, error: requirementError } = await useAsyncData(() => cacheKey(`handoff-requirements:${code.value}:${itemId.value}`), async () => {
   if (operation.value !== 'link' || !project.value) return null
   const selectedId = project.value.id
-  const response = await $fetch<{ code: number, data: { items: { id: number, project_id: number, title: string, status: string }[], total: number } }>('/api/v1/requirements', { query: { project_id: selectedId, search: debounced.value || undefined, page: page.value, pageSize } })
+  const response = await $fetch<{ code: number, data: { items: { id: number, project_id: number, title: string, status: string }[], total: number } }>(hosted ? `${base.value}/handoff/requirements` : '/api/v1/requirements', { query: { ...(hosted ? { projectCode: project.value.project_code } : { project_id: selectedId }), search: debounced.value || undefined, page: page.value, pageSize } })
   if (response.code !== 0 || !Array.isArray(response.data?.items) || !Number.isSafeInteger(response.data.total) || response.data.items.some(r => Number(r.project_id) !== selectedId || !Number.isSafeInteger(Number(r.id)))) throw new Error('项目需求响应无效')
   return { ...response.data, projectId: selectedId, items: response.data.items.map(r => ({ ...r, id: Number(r.id) })) }
 }, { server: false, watch: [project, operation, debounced, page] })
@@ -107,7 +111,7 @@ onBeforeRouteUpdate(() => !busy.value)
 <template>
   <div class="mx-auto min-w-0 max-w-4xl space-y-4 p-4 sm:p-6">
     <UButton
-      :to="lightweightHandoff ? `/products/${encodeURIComponent(code)}/versions/${encodeURIComponent(plannedVersionId || '')}/features#delivery-scope` : `/products/${encodeURIComponent(code)}/planning`"
+      :to="lightweightHandoff ? moduleUrl(`/products/${encodeURIComponent(code)}/versions/${encodeURIComponent(plannedVersionId || '')}/${hosted ? 'plan#version-scope' : 'features#delivery-scope'}`) : moduleUrl(`/products/${encodeURIComponent(code)}/planning`)"
       color="neutral"
       variant="ghost"
       :disabled="busy"

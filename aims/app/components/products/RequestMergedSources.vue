@@ -1,10 +1,13 @@
 <script setup lang="ts">
-import type { ProductRequestRecord } from '~/types/productRequest'
+import { useAimsModule } from '../../../layer/useAimsModule'
+import type { ProductRequestRecord } from '../../types/productRequest'
+
+const { moduleUrl, hosted, cacheKey } = useAimsModule()
 
 const props = defineProps<{ productCode: string, requestId: string, disabled?: boolean }>()
 const emit = defineEmits<{ select: [request: ProductRequestRecord] }>()
 const page = ref(1)
-const { data, status, error, refresh } = await useFetch(() => `/api/v1/products/${encodeURIComponent(props.productCode)}/requests`, {
+const { data, status, error, refresh } = await useFetch(() => moduleUrl(`/api/v1/products/${encodeURIComponent(props.productCode)}/requests`), { ...(hosted ? { key: computed(() => cacheKey('aims/app/components/products/RequestMergedSources.vue:0' + ':' + String(toValue(() => moduleUrl(`/api/v1/products/${encodeURIComponent(props.productCode)}/requests`))))) } : {}),
   server: false,
   query: computed(() => ({ mergedInto: props.requestId, page: page.value, pageSize: 10 })),
   transform: (response: { code: number, data: { items: ProductRequestRecord[], total: number } }) => {

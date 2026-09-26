@@ -78,8 +78,101 @@ CREATE TABLE `folders` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='文件夹表';
 
 -- -----------------------------------------------------------
--- 4. 文档表
+-- 4a. 文档快照候选（未启用）
 -- -----------------------------------------------------------
+-- Dormant v2 storage publication primitives. Do not install/activate until all
+-- readers/writers, trusted storage verification and epoch management are wired.
+-- Tenant runtime owns application DB binding. No migration of legacy objects.
+CREATE TABLE document_snapshot_heads (
+  tenant_code VARCHAR(200) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,
+  deployment_code VARCHAR(200) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,
+  document_uuid CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  generation BIGINT NOT NULL DEFAULT 0,
+  collaboration_epoch BIGINT NOT NULL DEFAULT 0,
+  published_candidate CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NULL,
+  objects_json JSON NULL,
+  PRIMARY KEY (tenant_code, deployment_code, document_uuid),
+  CONSTRAINT snapshot_head_generation CHECK (generation >= 0 AND collaboration_epoch >= 0),
+  CONSTRAINT snapshot_head_publication CHECK (
+    (generation = 0 AND published_candidate IS NULL AND objects_json IS NULL) OR
+    (generation > 0 AND published_candidate IS NOT NULL AND objects_json IS NOT NULL))
+) ENGINE=InnoDB;
+
+CREATE TABLE document_snapshot_candidates (
+  tenant_code VARCHAR(200) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,
+  deployment_code VARCHAR(200) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,
+  candidate_key CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  document_uuid CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  actor_uid VARCHAR(200) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,
+  command_sha256 CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  command_json JSON NOT NULL,
+  expected_generation BIGINT NOT NULL,
+  expected_epoch BIGINT NOT NULL,
+  state ENUM('prepared', 'published') NOT NULL DEFAULT 'prepared',
+  published_generation BIGINT NULL,
+  objects_json JSON NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  published_at DATETIME NULL,
+  PRIMARY KEY (tenant_code, deployment_code, candidate_key),
+  INDEX snapshot_document_history (tenant_code, deployment_code, document_uuid),
+  CONSTRAINT snapshot_candidate_generation CHECK (expected_generation >= 0 AND expected_epoch >= 0),
+  CONSTRAINT snapshot_candidate_publication CHECK (
+    (state = 'prepared' AND published_generation IS NULL AND objects_json IS NULL AND published_at IS NULL) OR
+    (state = 'published' AND published_generation = expected_generation + 1 AND published_generation IS NOT NULL AND objects_json IS NOT NULL AND published_at IS NOT NULL))
+) ENGINE=InnoDB;
+
+CREATE TABLE document_collaboration_sessions (
+  tenant_code VARCHAR(200) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,
+  deployment_code VARCHAR(200) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,
+  session_id CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  document_uuid CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  epoch BIGINT NOT NULL,
+  opened_by VARCHAR(200) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,
+  status ENUM('active', 'closed', 'revoked') NOT NULL DEFAULT 'active',
+  expires_at DATETIME NOT NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (tenant_code, deployment_code, session_id),
+  INDEX collaboration_session_document (tenant_code, deployment_code, document_uuid, status),
+  CONSTRAINT collaboration_session_epoch CHECK (epoch >= 0)
+) ENGINE=InnoDB;
+
+CREATE TABLE document_collaboration_tickets (
+  tenant_code VARCHAR(200) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,
+  deployment_code VARCHAR(200) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,
+  ticket_sha256 CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  session_id CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  user_uid VARCHAR(200) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,
+  access ENUM('read', 'write') NOT NULL,
+  expires_at DATETIME NOT NULL,
+  redeemed_at DATETIME NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (tenant_code, deployment_code, ticket_sha256),
+  INDEX collaboration_ticket_session (tenant_code, deployment_code, session_id)
+) ENGINE=InnoDB;
+
+CREATE TABLE document_collaboration_participants (
+  tenant_code VARCHAR(200) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,
+  deployment_code VARCHAR(200) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,
+  session_id CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  user_uid VARCHAR(200) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,
+  access ENUM('read', 'write') NOT NULL,
+  first_admitted_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  last_admitted_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (tenant_code, deployment_code, session_id, user_uid)
+) ENGINE=InnoDB;
+
+CREATE TABLE document_collaboration_publications (
+  tenant_code VARCHAR(200) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,
+  deployment_code VARCHAR(200) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,
+  candidate_key CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  session_id CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  participants_json JSON NOT NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (tenant_code, deployment_code, candidate_key)
+) ENGINE=InnoDB;
+
+-- 4b. 既有文档表
 DROP TABLE IF EXISTS `documents`;
 CREATE TABLE `documents` (
     `id` BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY COMMENT '文档ID',
@@ -195,6 +288,7 @@ CREATE TABLE `document_versions` (
     `document_id` BIGINT UNSIGNED NOT NULL COMMENT '文档ID',
     `version_num` INT NOT NULL COMMENT '版本号',
     `oss_version_id` VARCHAR(100) NOT NULL COMMENT 'OSS版本ID',
+    `object_key` VARCHAR(512) NULL COMMENT 'v2 快照正文对象 key；为空表示正文位于 documents.oss_path',
     `editor_uid` VARCHAR(64) NOT NULL COMMENT '编辑者用户名(Account)',
     `change_summary` VARCHAR(255) NULL COMMENT '变更摘要',
     `content_size` INT UNSIGNED DEFAULT 0 COMMENT '内容大小(字节)',
@@ -887,7 +981,22 @@ CREATE TABLE IF NOT EXISTS service_command_receipt (
   INDEX idx_scr_status_lock (status, locked_until),
   INDEX idx_scr_target_biz (tenant_code, deployment_code, target_app, target_biz_type, target_biz_code),
   INDEX idx_scr_received (received_at),
-  CONSTRAINT chk_scr_cross_app CHECK (source_app <> target_app),
+  -- Owned Codocs commands: see migrations/20260922_codocs_owned_command_receipts.sql.
+  CONSTRAINT chk_scr_cross_app CHECK (source_app <> target_app OR (
+      source_app = 'codocs' AND target_app = 'codocs'
+      AND source_deployment_code = deployment_code
+      AND original_actor_uid IS NOT NULL AND CHAR_LENGTH(TRIM(original_actor_uid)) > 0
+      AND (
+        (operation_code = 'codocs.personal-documents.update.v1' AND required_capability = 'codocs:personal-documents:edit' AND command_schema_version = 'codocs-document-update.v1')
+        OR (operation_code = 'codocs.personal-documents.recycle.v1' AND required_capability = 'codocs:personal-documents:delete' AND command_schema_version = 'codocs-personal-recycle.v1')
+        OR (operation_code = 'codocs.personal-documents.restore.v1' AND required_capability = 'codocs:personal-documents:edit' AND command_schema_version = 'codocs-personal-restore.v1')
+        OR (operation_code = 'codocs.personal-folders.create.v1' AND required_capability = 'codocs:personal-folders:create' AND command_schema_version = 'codocs-personal-folder.v1')
+        OR (operation_code = 'codocs.personal-cabinet.delete.v1' AND required_capability = 'codocs:personal-cabinet:delete' AND command_schema_version = 'codocs-cabinet-delete.v1')
+        OR (operation_code = 'codocs.personal-documents.department-transfer.v1' AND required_capability = 'codocs:document-transfer:department' AND command_schema_version = 'codocs-dept-transfer.v1')
+        OR (operation_code = 'codocs.personal-documents.project-transfer.v1' AND required_capability = 'codocs:document-transfer:project' AND command_schema_version = 'codocs-project-transfer.v1')
+        OR (operation_code = 'codocs.document-annotations.mutate.v1' AND required_capability IN ('codocs:document-annotations:create', 'codocs:document-annotations:edit') AND command_schema_version = 'codocs-annotation-mutation.v1')
+      )
+    )),
   CONSTRAINT chk_scr_status CHECK (status IN ('processing', 'succeeded', 'rejected'))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='目标服务命令 Inbox 回执；业务 mutation 与 succeeded 必须同事务';
 

@@ -80,11 +80,11 @@ func (a *Adapter) enqueueAltocDeliveryAssetStatusOperationTx(ctx context.Context
 	if createdBy == "" {
 		createdBy = trusted.ServiceClientID
 	}
-	result, err := tx.ExecContext(ctx, `INSERT IGNORE INTO integration_operation (
+	result, err := tx.ExecContext(ctx, trusted.SQL(`INSERT IGNORE INTO integration_operation (
 		operation_id,operation_key,correlation_key,sequence_no,tenant_code,deployment_code,source_app,target_app,
 		operation_code,required_capability,source_biz_type,source_biz_code,idempotency_key,command_schema_version,
 		command_json,command_sha256,status,original_request_id,original_actor_uid,service_client_id,created_by,updated_by
-	) VALUES (?,?,?,1,?,?,'assets','altoc',?,?,'customer_delivery_asset',?,?,'v1',?,?,'pending',?,?,?,?,?)`,
+	) VALUES (?,?,?,1,?,?,'assets','altoc',?,?,'customer_delivery_asset',?,?,'v1',?,?,'pending',?,?,?,?,?)`),
 		operationID, operationKey, operationKey, trusted.TenantCode, trusted.DeploymentCode,
 		assetsAltocStatusOperationCode, assetsAltocStatusCapability, assetCode, operationKey, string(commandJSON), commandSHA,
 		nullableAssetsText(trusted.RequestID), nullableAssetsText(actor), nullableAssetsText(trusted.ServiceClientID), nullableAssetsText(createdBy), nullableAssetsText(createdBy))
@@ -93,7 +93,7 @@ func (a *Adapter) enqueueAltocDeliveryAssetStatusOperationTx(ctx context.Context
 	}
 	created, _ := result.RowsAffected()
 	var storedID, storedSHA, storedStatus string
-	if err := tx.QueryRowContext(ctx, `SELECT operation_id,command_sha256,status FROM integration_operation WHERE tenant_code=? AND deployment_code=? AND source_app='assets' AND operation_key=? LIMIT 1`, trusted.TenantCode, trusted.DeploymentCode, operationKey).Scan(&storedID, &storedSHA, &storedStatus); err != nil {
+	if err := tx.QueryRowContext(ctx, trusted.SQL(`SELECT operation_id,command_sha256,status FROM integration_operation WHERE tenant_code=? AND deployment_code=? AND source_app='assets' AND operation_key=? LIMIT 1`), trusted.TenantCode, trusted.DeploymentCode, operationKey).Scan(&storedID, &storedSHA, &storedStatus); err != nil {
 		return nil, err
 	}
 	if storedSHA != commandSHA {
@@ -340,7 +340,7 @@ func (a *Adapter) assetsCompletionIdentity(body map[string]any) (integrationoper
 func (a *Adapter) validateLeasedAssetsStatusOperation(ctx context.Context, trusted integrationoperation.TrustedContext, worker, operationID, operationKey string, fencing uint64) (map[string]any, error) {
 	var targetApp, operationCode string
 	var commandJSON []byte
-	err := a.DB().QueryRowContext(ctx, `SELECT target_app,operation_code,command_json FROM integration_operation WHERE operation_id=? AND operation_key=? AND tenant_code=? AND deployment_code=? AND source_app='assets' AND status='processing' AND locked_by=? AND fencing_token=? LIMIT 1`, operationID, operationKey, trusted.TenantCode, trusted.DeploymentCode, worker, fencing).Scan(&targetApp, &operationCode, &commandJSON)
+	err := a.DB().QueryRowContext(ctx, trusted.SQL(`SELECT target_app,operation_code,command_json FROM integration_operation WHERE operation_id=? AND operation_key=? AND tenant_code=? AND deployment_code=? AND source_app='assets' AND status='processing' AND locked_by=? AND fencing_token=? LIMIT 1`), operationID, operationKey, trusted.TenantCode, trusted.DeploymentCode, worker, fencing).Scan(&targetApp, &operationCode, &commandJSON)
 	if err != nil || targetApp != "altoc" || operationCode != assetsAltocStatusOperationCode {
 		return nil, httperror.New(http.StatusConflict, "integration_operation_lease_stale", "Assets status operation lease is stale")
 	}

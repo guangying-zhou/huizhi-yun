@@ -2,7 +2,23 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import test from 'node:test'
 import type { H3Event } from 'h3'
-import { consoleServiceFetch } from '../server/utils/consoleServiceBinding'
+import { consoleServiceFetch, consoleServiceBinding } from '../server/utils/consoleServiceBinding'
+
+test('server-installed local transport is opt-in and ignores browser header substitutes', () => {
+  const previous = process.env.HZY0_LOCAL_ENTERPRISE
+  const transport = { fetch: async () => Response.json({}) }
+  try {
+    delete process.env.HZY0_LOCAL_ENTERPRISE
+    const event = { context: { hzyConsoleTransport: transport } } as unknown as H3Event
+    assert.equal(consoleServiceBinding(event), null)
+    process.env.HZY0_LOCAL_ENTERPRISE = 'true'
+    assert.equal(consoleServiceBinding(event), transport)
+    assert.equal(consoleServiceBinding({ context: {}, headers: { hzyConsoleTransport: transport } } as unknown as H3Event), null)
+  } finally {
+    if (previous === undefined) delete process.env.HZY0_LOCAL_ENTERPRISE
+    else process.env.HZY0_LOCAL_ENTERPRISE = previous
+  }
+})
 
 test('OIDC binding preserves form and caller context without public transport', async () => {
   let calls = 0

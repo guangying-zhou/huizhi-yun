@@ -18,6 +18,7 @@ func TestCollaborationContextAllowsTrustedDepartmentReadonly(t *testing.T) {
 	defer db.Close()
 
 	adapter := &Adapter{db: db}
+	expectSnapshotV2Absent(mock, "doc-dept")
 	mock.ExpectQuery("(?s)SELECT id, uuid, doc_type, oss_path, owner_uid, dept_code, readonly_flag, status\\s+FROM documents\\s+WHERE uuid = \\? AND status <> 0\\s+LIMIT 1").
 		WithArgs("doc-dept").
 		WillReturnRows(sqlmock.NewRows([]string{
@@ -71,6 +72,7 @@ func TestHandleRuntimeCollaborationDocumentContextPreservesRouteAndProjection(t 
 	defer db.Close()
 
 	adapter := &Adapter{db: db}
+	expectSnapshotV2Absent(mock, "doc-route")
 	mock.ExpectQuery("(?s)SELECT id, uuid, doc_type, oss_path, owner_uid, dept_code, readonly_flag, status\\s+FROM documents\\s+WHERE uuid = \\? AND status <> 0\\s+LIMIT 1").
 		WithArgs("doc-route").
 		WillReturnRows(sqlmock.NewRows([]string{

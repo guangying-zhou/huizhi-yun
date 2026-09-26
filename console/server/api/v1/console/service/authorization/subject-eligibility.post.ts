@@ -1,6 +1,8 @@
 import { createError, readBody, setHeader } from 'h3'
 import { requireConsoleServiceActor } from '~~/server/utils/vault'
 import { resolveConsoleRuntimeBinding } from '~~/server/utils/consoleRuntimeBinding'
+import { isTrustedTenantGatewayRequest, loadConsoleRuntimeMode } from '~~/server/utils/platformRuntime'
+import { localWorkflowEligibilityBinding } from '~~/server/utils/localWorkflowEligibilityBinding'
 import { evaluateSubjectEligibility } from '~~/server/utils/subjectEligibility'
 import {
   parseSubjectEligibilityRequest,
@@ -15,7 +17,17 @@ export default defineEventHandler(async (event) => {
     'console:authorization:subject-eligibility',
     { requireBoundTargetApp: true }
   )
-  const binding = resolveConsoleRuntimeBinding(event)
+  const binding = localWorkflowEligibilityBinding({
+    binding: resolveConsoleRuntimeBinding(event),
+    actorAppCode: actor.appCode,
+    actorDeploymentCode: actor.deploymentCode,
+    managed: loadConsoleRuntimeMode(event).activationMode === 'managed-cloud-multitenant',
+    trustedGateway: isTrustedTenantGatewayRequest(event),
+    localFacade: process.env.HZY0_LOCAL_CONSOLE_FACADE === 'true',
+    localWorkflow: process.env.HZY0_WORKFLOW_LOCAL_ONLY === 'true',
+    overrideDeployment: process.env.HZY_CONSOLE_LOCAL_WORKFLOW_DEPLOYMENT
+  })
+  if (!binding) throw createError({ statusCode: 403, message: 'subject_eligibility_runtime_binding_mismatch' })
   setHeader(event, 'Cache-Control', 'no-store')
   try {
     const request = resolveBoundSubjectEligibilityRequest(

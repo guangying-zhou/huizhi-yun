@@ -1,0 +1,77 @@
+{
+  "_notice": "Copy outside the repository, fill approved non-secret values, and keep credentials in the approved provider.",
+  "profileId": "hzy0-local-enterprise",
+  "environment": "test",
+  "publicOrigin": "https://hzy0.isme.dev",
+  "hostEntryPath": "/enterprise",
+  "mode": "dev",
+  "features": { "codocsSnapshotV2": false, "codocsCollaborationV2": false, "notificationsInAppOnly": false, "workflowLocal": false },
+  "runtime": {
+    "canonicalEndpoint": "https://hzy-test-runtime.isme.dev",
+    "transportMode": "public-https",
+    "dialEndpoint": null,
+    "expectedTenant": "REQUIRED",
+    "expectedRuntimeCode": "REQUIRED",
+    "expectedRuntimeDeployment": "REQUIRED",
+    "lifecycleManagedByThisStack": false,
+    "automaticFallback": false
+  },
+  "identity": {
+    "decisionStatus": "PENDING_APPROVAL",
+    "canonicalIssuer": "REQUIRED",
+    "canonicalJwksUri": "REQUIRED",
+    "consoleFacadeMode": "existing-canonical-console",
+    "policyBackend": "runtime",
+    "enterpriseAppCode": "enterprise",
+    "enterpriseDeployment": "REQUIRED",
+    "enterpriseOidcClientId": "REQUIRED",
+    "enterpriseServiceClientId": "REQUIRED",
+    "consoleDeployment": "REQUIRED",
+    "enterpriseRedirectUri": "https://hzy0.isme.dev/enterprise/api/auth/oidc-callback",
+    "enterpriseLogoutRedirectUri": "https://hzy0.isme.dev/enterprise/login",
+    "credentialProviderRef": "REQUIRED",
+    "allowRuntimeEnrollment": false,
+    "allowIssuerMutation": false
+  },
+  "listeners": {
+    "caddy": { "host": "127.0.0.1", "port": 23180 },
+    "gatewayIngress": { "host": "127.0.0.1", "port": 23120 },
+    "gatewayInternal": { "host": "127.0.0.1", "port": 23121 },
+    "enterprise": { "host": "127.0.0.1", "port": 23110 },
+    "codocsEditor": { "host": "127.0.0.1", "port": 23130 },
+    "console": { "host": "127.0.0.1", "port": 23100 }
+  },
+  "security": {
+    "effectiveRuntimeBypass": false,
+    "requiredOuterAccessProtection": true,
+    "outerAccessProtectionVerified": false,
+    "publicInternalOperations": false,
+    "gatewayCredentialRef": "REQUIRED",
+    "allowBrowserRuntimeOverride": false,
+    "forwardRawEnvironment": false
+  },
+  "scheduler": {
+    "registerBusinessCron": false,
+    "consumeBusinessOutbox": false,
+    "registerAdditionalSharedRefreshWriter": false
+  },
+  "processManagement": {
+    "processPrefix": "hzy0-",
+    "pm2Home": "REQUIRED_ABSOLUTE_PATH",
+    "runtimeAndDatabaseExcluded": true,
+    "instances": 1,
+    "watch": false,
+    "execMode": "fork"
+  },
+  "hmr": {
+    "publicProtocol": "wss",
+    "publicHost": "hzy0.isme.dev",
+    "publicPort": 443,
+    "allowedHosts": ["hzy0.isme.dev"]
+  },
+  "database": {
+    "credentialsInFrontend": false,
+    "manageLifecycle": false,
+    "runMigrations": false
+  }
+}

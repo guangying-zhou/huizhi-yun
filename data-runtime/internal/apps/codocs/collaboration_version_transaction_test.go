@@ -34,6 +34,15 @@ func expectCollaborationVersionDocumentLock(mock sqlmock.Sqlmock) {
 	mock.ExpectQuery(`(?s)SELECT id, uuid, owner_uid, readonly_flag, status.*FROM documents.*WHERE id = \? AND status <> 0.*LIMIT 1.*FOR UPDATE`).
 		WithArgs(collaborationVersionDocumentID).
 		WillReturnRows(sqlmock.NewRows([]string{"id", "uuid", "owner_uid", "readonly_flag", "status"}).AddRow(collaborationVersionDocumentID, "doc-41", "editor-uid", 0, 1))
+	expectSnapshotV2Absent(mock, "doc-41")
+}
+
+// expectSnapshotV2Absent scripts the v2 guard for a document without a
+// published snapshot (see document_snapshot_guard.go).
+func expectSnapshotV2Absent(mock sqlmock.Sqlmock, uuid string) {
+	mock.ExpectQuery(`SELECT MAX\(generation\) FROM document_snapshot_heads WHERE document_uuid = \?`).
+		WithArgs(uuid).
+		WillReturnRows(sqlmock.NewRows([]string{"generation"}).AddRow(nil))
 }
 
 func expectCollaborationVersionMax(mock sqlmock.Sqlmock, maxVersion any) {
@@ -128,6 +137,7 @@ func TestCreateCollaborationVersionRejectsReadOnlyShareBeforeVersionQuery(t *tes
 	mock.ExpectQuery(`(?s)SELECT id, uuid, owner_uid, readonly_flag, status.*FROM documents.*WHERE id = \? AND status <> 0.*LIMIT 1.*FOR UPDATE`).
 		WithArgs(collaborationVersionDocumentID).
 		WillReturnRows(sqlmock.NewRows([]string{"id", "uuid", "owner_uid", "readonly_flag", "status"}).AddRow(collaborationVersionDocumentID, "doc-41", "owner-uid", 0, 1))
+	expectSnapshotV2Absent(mock, "doc-41")
 	mock.ExpectQuery(`(?s)SELECT permission.*FROM document_shares.*WHERE document_id = \? AND shared_to_uid = \?.*LIMIT 1`).
 		WithArgs(collaborationVersionDocumentID, "reader-uid").
 		WillReturnRows(sqlmock.NewRows([]string{"permission"}).AddRow("read"))
@@ -153,6 +163,7 @@ func TestCreateCollaborationVersionAcceptsUUIDWithSameOwnerAuthorization(t *test
 	mock.ExpectQuery(`(?s)SELECT id, uuid, owner_uid, readonly_flag, status.*FROM documents.*WHERE uuid = \? AND status <> 0.*LIMIT 1.*FOR UPDATE`).
 		WithArgs("doc-uuid-41").
 		WillReturnRows(sqlmock.NewRows([]string{"id", "uuid", "owner_uid", "readonly_flag", "status"}).AddRow(collaborationVersionDocumentID, "doc-uuid-41", "editor-uid", 0, 1))
+	expectSnapshotV2Absent(mock, "doc-uuid-41")
 	expectCollaborationVersionMax(mock, int64(0))
 	expectCollaborationVersionInsert(mock, 1).WillReturnResult(sqlmock.NewResult(74, 1))
 	mock.ExpectCommit()

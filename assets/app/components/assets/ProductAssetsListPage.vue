@@ -1,5 +1,11 @@
 <script setup lang="ts">
-import type { ApiResponse, ListPayload, ProductAssetItem, SummaryMetric, TechnologyBaseItem } from '~/types'
+import { useAssetLabels } from '../../composables/useAssetLabels'
+import { useAssetDictionaries } from '../../composables/useAssetDictionaries'
+import AssetsSummaryMetricGrid from './SummaryMetricGrid.vue'
+import AssetsProductAssetCreateModal from './ProductAssetCreateModal.vue'
+import AssetsTechnologyBaseCreateModal from './TechnologyBaseCreateModal.vue'
+import { useAssetsModule } from '../../../layer/useAssetsModule'
+import type { ApiResponse, ListPayload, ProductAssetItem, SummaryMetric, TechnologyBaseItem } from '../../types'
 import type { DropdownMenuItem, TableColumn } from '@nuxt/ui'
 import type { Column } from '@tanstack/vue-table'
 import { h, resolveComponent } from 'vue'
@@ -8,7 +14,9 @@ import {
   preferDictionaryOptions,
   productLifecycleStatusOptions,
   productLineFallbackOptions
-} from '~/utils/productAssets'
+} from '../../utils/productAssets'
+
+const { moduleUrl, cacheKey, hosted } = useAssetsModule()
 
 usePageTitle('产品资产')
 
@@ -62,13 +70,15 @@ const productQuery = computed(() => ({
   sortOrder: productSorting.value[0]?.desc ? 'desc' : 'asc'
 }))
 
-const baseQuery = computed(() => ({
-  search: debouncedSearch.value.trim() || undefined
-}))
-
 const [{ data: productResponse, refresh: refreshProducts, status: productStatus, error: productError }, { data: baseResponse, refresh: refreshBases, status: baseStatus, error: baseError }] = await Promise.all([
-  useFetch<ApiResponse<ListPayload<ProductAssetItem>>>('/api/v1/products', { query: productQuery }),
-  useFetch<ApiResponse<ListPayload<TechnologyBaseItem>>>('/api/v1/technology-bases', { query: baseQuery })
+  useFetch<ApiResponse<ListPayload<ProductAssetItem>>>(moduleUrl('/api/v1/products'), { key: cacheKey('products'), query: productQuery }),
+  // The Host has a purpose-specific, scope-checked candidate projection.  It
+  // is intentionally distinct from the standalone technology-base catalogue:
+  // only fields needed to read/link a product base cross this boundary.
+  useFetch<ApiResponse<ListPayload<TechnologyBaseItem>>>(moduleUrl(hosted ? '/api/v1/products/link-candidates/bases' : '/api/v1/technology-bases'), {
+    key: cacheKey('technology-bases'),
+    ...(hosted ? {} : { query: computed(() => ({ search: debouncedSearch.value.trim() || undefined })) })
+  })
 ])
 
 const loading = computed(() => activeTab.value === 'product' ? productStatus.value === 'pending' : baseStatus.value === 'pending')
@@ -206,7 +216,8 @@ const baseRows = computed<ProductAssetDisplayItem[]>(() => baseItems.value
     raw: item
   }))
   .filter(item => selectedBaseCategory.value === 'all' || item.category_value === selectedBaseCategory.value)
-  .filter(item => selectedBaseStatus.value === 'all' || item.status_value === selectedBaseStatus.value))
+  .filter(item => selectedBaseStatus.value === 'all' || item.status_value === selectedBaseStatus.value)
+  .filter(item => !hosted || !debouncedSearch.value.trim() || [item.code, item.name, item.domain].some(value => value.toLowerCase().includes(debouncedSearch.value.trim().toLowerCase()))))
 
 const displayItems = computed(() => activeTab.value === 'product' ? productRows.value : baseRows.value)
 
@@ -250,6 +261,7 @@ const columns = computed<TableColumn<ProductAssetDisplayItem>[]>(() => {
 })
 
 const createItems = computed<DropdownMenuItem[]>(() => ([
+  ...(hosted ? [{ label: '产品线管理', icon: 'i-lucide-settings-2', onSelect: () => navigateTo(moduleUrl('/admin/asset-categories')) }] : []),
   {
     label: '新增产品主档',
     icon: 'i-lucide-package-2',
@@ -258,7 +270,8 @@ const createItems = computed<DropdownMenuItem[]>(() => ([
     }
   },
   {
-    label: '新增技术底座',
+    label: hosted ? '新增技术底座（待迁移）' : '新增技术底座',
+    disabled: hosted,
     icon: 'i-lucide-blocks',
     onSelect: () => {
       createBaseOpen.value = true
@@ -268,11 +281,13 @@ const createItems = computed<DropdownMenuItem[]>(() => ([
 
 const handleRowSelect = (_event: Event, row: { original: { item_type: 'product' | 'technology_base', id: number } }) => {
   if (row.original.item_type === 'product') {
-    navigateTo(`/products/${row.original.id}`)
+    navigateTo(moduleUrl(`/products/${row.original.id}`))
     return
   }
 
-  navigateTo(`/technology-bases/${row.original.id}`)
+  // The composed Host currently exposes the scoped list/link projection only;
+  // the standalone detail BFF is deliberately not registered yet.
+  if (!hosted) navigateTo(moduleUrl(`/technology-bases/${row.original.id}`))
 }
 
 const handleRefresh = async () => {
@@ -284,12 +299,12 @@ onBeforeUnmount(clearRefresh)
 
 const handleProductCreated = async (id: number) => {
   await handleRefresh()
-  navigateTo(`/products/${id}`)
+  navigateTo(moduleUrl(`/products/${id}`))
 }
 
 const handleBaseCreated = async (id: number) => {
   await handleRefresh()
-  navigateTo(`/technology-bases/${id}`)
+  navigateTo(moduleUrl(`/technology-bases/${id}`))
 }
 </script>
 
@@ -405,6 +420,7 @@ const handleBaseCreated = async (id: number) => {
   />
 
   <AssetsTechnologyBaseCreateModal
+    v-if="!hosted"
     :open="createBaseOpen"
     @update:open="createBaseOpen = $event"
     @created="handleBaseCreated"

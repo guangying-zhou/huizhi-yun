@@ -34,6 +34,8 @@
 </template>
 
 <script setup lang="ts">
+import { createCreationAttempt } from '../../../layer/creationAttempt.mjs'
+import { useCodocsModule } from '../../../layer/useCodocsModule'
 interface ApiErrorLike {
   data?: {
     message?: string
@@ -58,6 +60,8 @@ const isOpen = computed({
 })
 
 const toast = useToast()
+const { moduleUrl, cacheKey } = useCodocsModule()
+const receiveAttempt = createCreationAttempt()
 const submitting = ref(false)
 const receiveDate = ref('')
 
@@ -105,12 +109,17 @@ const handleConfirm = async () => {
 
   submitting.value = true
   try {
-    await $fetch(`/api/reviews/${props.reviewId}/receive`, {
+    const payload = {
+      reviewId: props.reviewId,
+      receiveDate: receiveDate.value
+    }
+    const attemptKey = receiveAttempt.keyFor(cacheKey(`review-receive:${props.reviewId}`), payload)
+    await $fetch(moduleUrl(`/api/reviews/${props.reviewId}/receive`), {
       method: 'POST',
-      body: {
-        receiveDate: receiveDate.value
-      }
+      headers: { 'Idempotency-Key': attemptKey },
+      body: { receiveDate: payload.receiveDate }
     })
+    receiveAttempt.complete(attemptKey)
 
     toast.add({
       title: '接收已确认',

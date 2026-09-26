@@ -1005,3 +1005,14 @@ v2 把 schema 从"一个超级租户的数据库"改成"平台 + 租户"的清�
 - 客户侧目录服务的受管接入（平台治理契约、版本、健康；目录明细仍留在客户侧）
 
 配套 DDL 见 `platform/docs/sql/HZY-Platform-SQL-DDL-Draft-v2.sql`。
+
+## 16. 可选 Gateway 断言公钥登记（2026-09-26，尚未应用环境）
+
+`platform_gateway_keysets` 按实际 deployment_sites.id（site_id）保存单调修订；
+`platform_gateway_service_keys` 保存其公钥、next/active/revoked、两轮换槽位、
+90 天有效期上限和员工登记/撤销元数据，不存私钥。管理命令须按精确
+site_code 查 active deployment site，再冻结 code/tenant/environment，不由请求自报；
+后续签名还须与当前 deployment site 完全相等，环境变更不得自动迁移旧 key。
+这两表属于 Platform 域，FK 到 boundary deployment_sites；删除 site 被 RESTRICT。
+迁移不 seed、不启用身份，状态迁移与签名下发另批实现。
+详见 [迁移与验证合同](../../docs/Gateway-Service-Assertion-Registry-Migration.md)。

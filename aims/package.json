@@ -14,7 +14,7 @@
     "preview": "nuxt preview",
     "preview:cloudflare": "pnpm run cloudflare:config && pnpm run build:cloudflare && pnpm exec wrangler dev --config .wrangler.generated.jsonc",
     "postinstall": "nuxt prepare",
-    "test": "node --test --experimental-strip-types \"test/**/*.test.ts\"",
+    "test": "tsx --test \"test/**/*.test.ts\"",
     "lint": "eslint .",
     "typecheck": "nuxt typecheck",
     "seed:product-center-demo": "node scripts/seed_product_center_demo.mjs",

@@ -25,6 +25,8 @@ export interface UseCollaborationOptions {
   wsUrl?: MaybeRefOrGetter<string>
   /** 用户认证 Token */
   token?: MaybeRefOrGetter<string>
+  /** 由宿主提供连接 token（如 Enterprise 的 v2 一次性票据）；提供时不调用 /api/collaboration/token */
+  resolveToken?: (documentName: string) => Promise<string>
   /** 当前用户信息 */
   user?: MaybeRefOrGetter<{
     id: string
@@ -125,6 +127,11 @@ export function useCollaboration(options: UseCollaborationOptions) {
     if (explicitToken) {
       return explicitToken
     }
+    if (options.resolveToken) {
+      const hostToken = String(await options.resolveToken(currentDocumentName) || '').trim()
+      if (!hostToken) throw new Error('协同认证令牌获取失败')
+      return hostToken
+    }
 
     const query: Record<string, string> = {
       documentName: currentDocumentName
@@ -163,14 +170,18 @@ export function useCollaboration(options: UseCollaborationOptions) {
     scope.value = null
 
     try {
-      const currentToken = await resolveToken(currentDocumentName)
+      // A Host v2 admission ticket is single-use. Resolve it for each socket,
+      // including automatic reconnects, rather than at provider creation.
+      const providerToken = options.resolveToken && !String(toValue(token) || '').trim()
+        ? () => resolveToken(currentDocumentName)
+        : await resolveToken(currentDocumentName)
 
       // 创建 Hocuspocus Provider
       provider = new HocuspocusCollaborationProvider({
         url: currentWsUrl,
         documentName: currentDocumentName,
         document: ydoc,
-        token: currentToken,
+        token: providerToken,
         params: {
           app: 'codocs',
           doc: currentDocumentName.replace(/^doc:/, ''),

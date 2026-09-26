@@ -220,16 +220,17 @@ describe('Codocs sensitive route permissions', () => {
 
   test('v1 service document APIs verify service token before delegated writes', () => {
     const documentCreate = source('server/api/v1/documents/index.post.ts')
+    const creation = source('server/utils/projectDocumentCreation.ts')
     const previewAccess = source('server/api/v1/documents/[uuid]/preview-access.post.ts')
 
     assert.match(documentCreate, /verifyInternalApi\(event,\s*\{\s*scopes:\s*\['codocs:documents:write'\]\s*\}\)/)
-    assert.match(documentCreate, /if \(!body\.ownerUid\)/)
-    assert.match(documentCreate, /ownerUid:\s*body\.ownerUid/)
-    assert.match(documentCreate, /operatorUid:\s*body\.ownerUid/)
+    assert.match(creation, /if \(!body\.ownerUid\)/)
+    assert.match(creation, /ownerUid:\s*String\(body\.ownerUid\)/)
+    assert.match(creation, /operatorUid:\s*String\(body\.ownerUid\)/)
     assert.doesNotMatch(documentCreate, /requireRequestUid\(event/)
     assertBefore(documentCreate, 'verifyInternalApi(event', 'readBody(event)')
-    assertBefore(documentCreate, 'verifyInternalApi(event', 'createCodocsDocumentMetadata(event')
-    assertBefore(documentCreate, 'verifyInternalApi(event', 'uploadDocument(doc.oss_path')
+    assertBefore(documentCreate, 'verifyInternalApi(event', 'return await createProjectDocumentContent(event')
+    assertBefore(creation, 'createCodocsDocumentMetadata(event', 'client.put(doc.oss_path')
 
     assert.match(previewAccess, /requireCodocsServiceAuth\(auth, AIMS_DOCUMENT_PREVIEW_GRANT_SERVICE_AUTH\)/)
     assert.match(previewAccess, /preview_access_service_command_required/)

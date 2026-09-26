@@ -19,7 +19,20 @@ test('Workflow callback delivery uses the tenant gateway route and event-bound s
   assert.doesNotMatch(sender, /\$fetch\(url/)
   assert.doesNotMatch(sender, /new URL\(url/)
   assert.doesNotMatch(sender, /directTarget: true/)
-  assert.doesNotMatch(sender, /trustedServiceRequestHeaders/)
+  assert.match(sender, /localOnly \? localWorkflowCallbackHeaders\(event, appCode\) : \{\}/)
+})
+
+test('hzy0 Workflow callback cannot fall through to a remote Aims worker', () => {
+  const source = readFileSync(new URL('../server/utils/dataRuntime.ts', import.meta.url), 'utf8')
+  const sender = source.slice(source.indexOf('async function sendRuntimeCallbacks'))
+  assert.match(sender, /HZY0_WORKFLOW_LOCAL_ONLY/)
+  assert.match(sender, /HZY0_LOCAL_AIMS_URL/)
+  assert.match(sender, /127\\\.0\\\.0\\\.1:23141/)
+  assert.match(sender, /local_callback_target_unavailable/)
+  assert.ok(sender.indexOf('local_callback_target_unavailable') < sender.indexOf('requestServiceAccessToken({'))
+  assert.match(source, /resolveTrustedTenantGatewayContext\(event\)/)
+  assert.match(source, /trustedServiceRequestHeaders\(event, 'aims'\)/)
+  assert.match(source, /verifiedLocalWorkflowCallbackHeaders\(\{/)
 })
 
 test('Workflow Cloudflare deployment binds the tenant gateway for background callbacks', () => {

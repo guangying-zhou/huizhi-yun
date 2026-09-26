@@ -12,6 +12,7 @@ test('Foundation resolves integration secrets by integration code, not a browser
 
   assert.match(body, /service\/integrations\/\$\{encodeURIComponent\(input\.integrationCode\)\}\/resolve/)
   assert.match(source, /serviceTokenSourceBinding: 'service-client-policy'/)
+  assert.match(source, /capabilityFormat: 'console-integration'/)
   assert.doesNotMatch(body, /secretRef: credential\.secretRef/)
   assert.doesNotMatch(body, /purpose: input\.purpose/)
   assert.doesNotMatch(body, /\/api\/v1\/console\/vault\/resolve/)

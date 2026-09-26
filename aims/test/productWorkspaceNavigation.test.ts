@@ -7,6 +7,7 @@ import { effectScope, nextTick, reactive, ref, watch } from 'vue'
 import {
   canonicalProductPerspective,
   getProductPerspectives,
+  hostProductPerspectives,
   normalizeProductRequestQuery,
   productNavTo,
   productNavItemMatches,
@@ -15,6 +16,18 @@ import {
 
 const perspectives = getProductPerspectives('P-001')
 const base = '/products/P-001'
+
+test('Enterprise Host product navigation contains only registered page families', () => {
+  const hosted = hostProductPerspectives(perspectives)
+  assert.deepEqual(hosted.map(item => item.key), ['overview', 'rd', 'gtm'])
+  const paths = hosted.flatMap(item => [item.path, ...item.items.flatMap(child => [child.path, ...(child.extraPaths || [])])])
+  for (const unavailable of ['/objectives', '/settings', '/feature-version-matrix', '/release-comparison', '/views']) {
+    assert.equal(paths.some(path => path.includes(unavailable)), false, unavailable)
+  }
+  for (const available of ['/requests', '/versions', '/structure', '/features', '/components', '/adoption', '/cycles', '/execution-coordination', '/planning']) {
+    assert.equal(paths.some(path => path.endsWith(available)), true, available)
+  }
+})
 
 describe('product workspace navigation', () => {
   test('组织为三个工作视角，而不是平铺的功能页签', () => {

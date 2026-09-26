@@ -133,6 +133,9 @@ func persistActionableLifecycleEffects(ctx context.Context, tx *sql.Tx, instance
 	if effects == nil {
 		return nil
 	}
+	if err := persistWorkflowNotificationEffects(ctx, tx, instanceID, actionID, effects); err != nil {
+		return err
+	}
 	for index := range effects.ActionableLifecycles {
 		effect := &effects.ActionableLifecycles[index]
 		if effect.ActionableKey == "" || effect.ExpectedVersion == "" || effect.NextVersion == "" || effect.ExpectedVersion == effect.NextVersion || len(effect.Recipients) == 0 {
@@ -183,8 +186,20 @@ func (a *Adapter) pendingActionableLifecycleOutbox(ctx context.Context, limit in
 	}
 	rows, err := queryMaps(ctx, a.db, `
 		SELECT id, actionable_key, expected_version, next_version, next_state, recipients, prerequisite_notifications
-		FROM flow_actionable_outbox
+		FROM flow_actionable_outbox o
 		WHERE delivery_status = 'pending'
+		  -- A lifecycle CAS needs the projection its creating notification makes.
+		  AND NOT EXISTS (
+		    SELECT 1 FROM flow_notification_outbox n
+		    WHERE n.actionable_key = o.actionable_key AND n.delivery_status <> 'delivered'
+		  )
+		  AND (attempt_count = 0 OR last_attempt_at IS NULL OR
+		       TIMESTAMPDIFF(SECOND, last_attempt_at, NOW()) >= CASE
+		         WHEN attempt_count = 1 THEN 600
+		         WHEN attempt_count = 2 THEN 1200
+		         WHEN attempt_count = 3 THEN 2400
+		         ELSE 3600
+		       END)
 		ORDER BY id
 		LIMIT ?
 	`, limit)

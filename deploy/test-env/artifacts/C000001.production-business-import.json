@@ -1,0 +1,29 @@
+{
+  "version": "production-business-import.v1",
+  "executedAt": "2026-09-16T20:07:20Z",
+  "source": { "host": "oa.wiztek.cn", "tenant": "C000001", "databases": ["hzy_aims", "hzy_assets"], "access": "只读 SELECT，凭据取自运行进程环境，未落盘" },
+  "target": { "host": "127.0.0.1", "database": "hzy_enterprise_shadow_review_20260913", "generation": 1, "note": "统一企业库，aims/assets 物理表前缀 <domain>_<logical>" },
+  "backup": "database-backup/unified-before-prod-import-20260916T195836Z.sql.gz (运行目录，不入 Git)",
+  "tool": "deploy/test-env/import-production-business.mjs",
+  "result": { "tables": 48, "rows": 5999, "countsMatch": true },
+  "skipped": {
+    "aims": {
+      "migration_backup_20260520221011_*": "2026-05 迁移备份表，非业务数据",
+      "workflow_status_catalog / workflow_transitions / work_item_status_catalog": "生产为 matter/target 旧分类，目标库已是新分类模型",
+      "product_versions / product_version_features / product_version_logs": "与测试环境产品线版本冲突，保留测试库",
+      "integration_operation* / service_command_receipt / aims_notification_checkpoint": "Runtime 投递与回执基础设施，不跨环境复制"
+    },
+    "assets": {
+      "product_assets": "两侧 53 行 id+product_code 指纹一致",
+      "integration_operation* / service_command_receipt / assets_notification_checkpoint": "Runtime 基础设施"
+    }
+  },
+  "replaced": ["assets_asset_category_groups (8->30)", "assets_technology_bases (1->6)", "assets_product_asset_bases (1->1)"],
+  "droppedColumns": { "aims_requirement_contents": "requirement_id（目标库已移除该列，源侧 63 行全为 NULL）" },
+  "verification": {
+    "perTableCounts": "48/48 源与目标一致",
+    "compatibilityViews": "aims_projects=142, project_weekly_reports=362, work_items=30, milestones=16, asset_items=9 经逻辑名视图读取正常",
+    "runtimeHealth": "aims/assets/console/directory/finance/people db=ok",
+    "browser": "未完成——测试站点 SSO 会话已过期，需登录后复验页面"
+  }
+}

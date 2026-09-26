@@ -515,6 +515,10 @@ func (a *Adapter) HandleRuntime(ctx context.Context, method string, path string,
 		result, err := a.createFolder(ctx, query, body)
 		return map[string]any{"success": true, "data": result}, "codocs.folders.create", err
 	}
+	if strings.HasPrefix(suffix, "folders/") && len(pathSegments(suffix)) == 2 && (method == http.MethodGet || method == http.MethodPatch || method == http.MethodDelete) {
+		result, err := a.scopedFolderOperation(ctx, method, strings.TrimPrefix(suffix, "folders/"), query, body)
+		return map[string]any{"success": err == nil, "data": result}, "codocs.folders.scoped", err
+	}
 	if method == http.MethodGet && suffix == "collaboration/context" {
 		result, err := a.collaborationContext(ctx, query)
 		return map[string]any{"success": true, "data": result}, "codocs.collaboration.context", err
@@ -569,6 +573,11 @@ func (a *Adapter) HandleRuntime(ctx context.Context, method string, path string,
 		uuid := pathMiddle(suffix, "documents/", "/versions")
 		result, err := a.documentVersions(ctx, uuid, query)
 		return map[string]any{"success": true, "data": result}, "codocs.documents.versions.list", err
+	}
+	if method == http.MethodGet && strings.HasPrefix(suffix, "documents/") && strings.Contains(suffix, "/versions/") {
+		uuid, versionID := documentNestedID(suffix, "versions")
+		result, err := a.documentVersion(ctx, uuid, versionID, query)
+		return map[string]any{"success": true, "data": result}, "codocs.documents.versions.view", err
 	}
 	if method == http.MethodDelete && strings.HasPrefix(suffix, "documents/") && strings.Contains(suffix, "/versions/") {
 		uuid, versionID := documentNestedID(suffix, "versions")

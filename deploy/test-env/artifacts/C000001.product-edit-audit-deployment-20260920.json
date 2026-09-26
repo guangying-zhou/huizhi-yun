@@ -1,0 +1,50 @@
+{
+  "schema": "test-runtime-product-edit-audit.v1",
+  "date": "2026-09-20",
+  "tenant": "C000001",
+  "runtimeDeployment": "c000001-test-tenant-runtime",
+  "approvedSourceCommit": "7d42abd12f0499a9e42dadddfd40e3ddd2f12e0a",
+  "sourcePatchSha256": "11d0b3252fe0c6886b3bd4e76b7f3aaf04179192c1a893c8cf875e5e0f63460e",
+  "patchFiles": [
+    "data-runtime/internal/apps/assets/product_master_commands.go",
+    "data-runtime/internal/apps/assets/runtime_catalog_test.go",
+    "data-runtime/internal/server/enterprise_assets_products_mysql_test.go"
+  ],
+  "uncommittedCodocsIncluded": false,
+  "version": "0.3.219-test.product-edit-audit.1",
+  "commitLabel": "7d42abd12f04-audit",
+  "builtAt": "2026-09-20T19:40:40Z",
+  "platform": "darwin/arm64",
+  "binarySha256": "dd054a05c5335035f8a488b68fdab93bd3b016c80f2de68e05731d8454fb50a0",
+  "previousBinarySha256": "e308530f9f396f0828de52ff7d29e5d4142112df08847bedeea9629e26c67a62",
+  "backupRelativeToRuntimeDirectory": "deployments/product-edit-audit-20260920/hzy-data-runtime.before",
+  "checks": {
+    "goTestAll": true,
+    "isolatedMySqlWithRace": true,
+    "fullLaunchAgentEnvironmentStartupProbe": true,
+    "configurationFileUnchanged": true,
+    "localAndPublicHealthNewVersion": true,
+    "localAndPublicAnonymousAndForgedToken401": true,
+    "exactProductEditOAuthIssuedAndVerified": true,
+    "oauthNegativeCases": 2,
+    "localIngressSmokePassed": 7
+  },
+  "browserEvidence": {
+    "origin": "https://hzy0.isme.dev",
+    "productId": 53,
+    "firstPatchStatusBeforeResponseLoss": 200,
+    "fault": "ConnectionClosed at Fetch response stage for exact product API",
+    "retryStatus": 200,
+    "sameNonemptyIdempotencyKey": true,
+    "samePayload": true,
+    "receiptId": "03d2dfca-1b56-4578-95b4-c9e2faa0e478",
+    "receiptCountBeforeAndAfterRetry": [1, 1],
+    "newUpdatedEventIdsBeforeAndAfterRetry": [[82], [82]],
+    "auditActorMatchesReceipt": true,
+    "restorationEventId": 83,
+    "originalEmptyNotesRestored": true,
+    "interceptionCleared": true
+  },
+  "g1Released": false,
+  "remaining": ["full role and revocation matrix", "cloud business non-regression", "rollback exercise", "fixed Host/Gateway/Runtime/schema/permission release evidence"]
+}

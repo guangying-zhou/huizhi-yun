@@ -1,0 +1,25 @@
+{
+  "environment": "test",
+  "checkedAt": "2026-09-14T18:01:26.656125+00:00",
+  "branch": "feat/adr018-enterprise-integration",
+  "mainRevert": "1cc1ca3d28dd662ebea99cc5fdd20580514fc7e7",
+  "mainTreeMatches": "8cfb6a52",
+  "productionMutated": false,
+  "verification": {
+    "method": "existing Chrome session, visible UI",
+    "beforePolicyRecovery": "version page opened authenticated; business reads displayed bundle_unavailable",
+    "afterPolicyRecovery": {
+      "versionPath": "/aims/products/HZ-TY-S-002/versions",
+      "versions": 4,
+      "assetsProducts": 53,
+      "assetsCategories": 8,
+      "aimsProductLines": 6,
+      "navigation": "Aims versions → Assets products → Aims products",
+      "additionalLoginRequired": false
+    }
+  },
+  "limits": [
+    "Original screenshot with old outer shell was not reproduced; its exact historical cause is unproven.",
+    "Read navigation only; this run does not claim full write workflow or AA03/AA04 acceptance."
+  ]
+}

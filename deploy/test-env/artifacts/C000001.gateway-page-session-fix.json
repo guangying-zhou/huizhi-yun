@@ -1,0 +1,19 @@
+{
+  "schemaVersion": "enterprise-gateway-page-session-fix.v1",
+  "tenant": "C000001",
+  "environment": "test",
+  "worker": "hzy-test-gateway",
+  "versionId": "6c281245-1f1d-4b15-a6e8-ccc2c4f6fe29",
+  "trafficPercent": 100,
+  "previousVersionId": "01b2d883-cc5c-4523-8247-6a01b1d78068",
+  "sourceCommit": "611740ac",
+  "change": "Strip browser cookie and authorization on SPA pages as already done for assets; preserve authentication on API and auth routes.",
+  "registryDigest": "0a5f499b4b1a6828b72c05bf06ff0855afb40fd87b0cfe7d5e96fd8dc61824ad",
+  "exportedEntrySha256": "6f05a913dd181245f7f12d876846a2034586cf3ccffd3068291115a279b0fe94",
+  "validation": {
+    "topologyTests": 5,
+    "browserLoginCallback": "passed",
+    "browserProductPage": "rendered; downstream business identity fix in progress"
+  },
+  "recordedAt": "2026-09-14T16:14:23.842888+00:00"
+}

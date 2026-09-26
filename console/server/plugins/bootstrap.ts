@@ -1,4 +1,4 @@
-import { getCachedBundleInvalidReason, getRuntimeCacheDescriptor, patchActivationStatus, readCachedBundle } from '~~/server/utils/bundleCache'
+import { getCachedBundleInvalidReason, getRuntimeCacheDescriptor, patchActivationStatus, persistentPolicyStoreEnabled, readCachedBundle } from '~~/server/utils/bundleCache'
 import {
   isManagedCloudMultitenantActivation,
   loadConsoleRuntimeMode,
@@ -61,9 +61,9 @@ function startHeartbeatLoop(intervalMs: number) {
 function logRuntimeMode(cacheDir: string) {
   const mode = loadConsoleRuntimeMode()
   const cache = getRuntimeCacheDescriptor(cacheDir)
-  const cacheInfo = cache.backend === 'memory'
-    ? `cacheBackend=memory, cacheScope=${cache.scope || '<none>'}`
-    : `cacheBackend=file, cacheDir=${cache.cacheDir}`
+  const cacheInfo = cache.backend === 'file'
+    ? `cacheBackend=file, cacheDir=${cache.cacheDir}`
+    : `cacheBackend=${cache.backend}, cacheScope=${cache.scope || '<none>'}`
 
   console.info(
     `[console] runtime mode: activationMode=${mode.activationMode}, runMode=${mode.runMode}, platformRuntime=${mode.runtimeEnabled ? 'enabled' : 'disabled'}, heartbeat=${mode.heartbeatEnabled ? 'enabled' : 'disabled'}, bundleRefreshOnBoot=${mode.bundleRefreshOnBoot ? 'enabled' : 'disabled'}, authClientMaterialize=${mode.authClientMaterializeEnabled ? 'enabled' : 'disabled'}, backgroundJobs=${mode.backgroundJobsEnabled ? 'enabled' : 'disabled'}, tenantGatewayTrust=${mode.trustTenantGateway ? 'enabled' : 'disabled'}, ${cacheInfo}`
@@ -100,18 +100,22 @@ export default defineNitroPlugin(async () => {
   const managedCloudMultitenant = isManagedCloudMultitenantActivation()
 
   if (managedCloudMultitenant) {
-    await patchActivationStatus(config.bundleCacheDir, {
-      mode: 'pending',
-      activated: false,
-      envValid: true,
-      licenseValid: true,
-      bundleReady: false,
-      tenantCode: null,
-      deploymentCode: null,
-      lastCheckedAt: new Date().toISOString(),
-      lastError: null
-    }, 'managed-cloud-console:global')
-    console.info('[console] managed-cloud multitenant bootstrap ready; tenant policy bundles refresh on request through Tenant Gateway')
+    // Persistent readiness belongs to a verified tenant request, not process
+    // startup. Patching it would read a tenant snapshot without an H3 event.
+    if (!persistentPolicyStoreEnabled()) {
+      await patchActivationStatus(config.bundleCacheDir, {
+        mode: 'pending',
+        activated: false,
+        envValid: true,
+        licenseValid: true,
+        bundleReady: false,
+        tenantCode: null,
+        deploymentCode: null,
+        lastCheckedAt: new Date().toISOString(),
+        lastError: null
+      }, 'managed-cloud-console:global')
+    }
+    console.info('[console] managed-cloud multitenant bootstrap ready; tenant policy readiness requires trusted Tenant Gateway context')
     return
   }
 

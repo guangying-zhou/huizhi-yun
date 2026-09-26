@@ -115,6 +115,34 @@ func TestWorkItemDetailRequiresProjectMemberOrScopedAdminAndKeepsLegacyShape(t *
 	}
 }
 
+func TestWorkItemDetailItemAllowsRoutineWithoutMilestone(t *testing.T) {
+	adapter, mock, cleanup := newAimsSQLMockAdapter(t)
+	defer cleanup()
+	mock.ExpectQuery("(?s)SELECT\\s+wi\\.id,\\s+wi\\.project_id,.*FROM work_items wi").
+		WithArgs(int64(10)).
+		WillReturnRows(sqlmock.NewRows([]string{
+			"id", "project_id", "milestone_id", "item_number", "item_key", "type", "title", "description",
+			"start_date", "status", "priority", "severity", "weight", "assignee_uid", "reporter_uid",
+			"due_date", "estimated_hours", "parent_id", "sort_order", "approval_status",
+			"workflow_instance_id", "created_at", "updated_at", "milestone_name",
+		}).AddRow(
+			int64(10), int64(42), nil, int64(1), "TEST-1", "task", "Routine item", nil,
+			nil, "todo", "P2", nil, int64(1), nil, "u1",
+			nil, nil, nil, int64(1), "not_required",
+			nil, "2026-09-25 01:00:00", "2026-09-25 01:00:00", nil,
+		))
+	item, err := adapter.workItemDetailItem(context.Background(), 10)
+	if err != nil {
+		t.Fatalf("routine item detail: %v", err)
+	}
+	if milestone, ok := item["milestoneId"].(*int64); !ok || milestone != nil {
+		t.Fatalf("routine item should have no milestone: %#v", item)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("routine detail query: %v", err)
+	}
+}
+
 func TestWorkItemDetailRouteUsesSpecializedRuntimeBeforeGenericFallback(t *testing.T) {
 	contentBytes, err := os.ReadFile("workspace.go")
 	if err != nil {

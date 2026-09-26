@@ -305,7 +305,7 @@ CREATE TABLE IF NOT EXISTS `project_counters` (
 -- 5. 工作流状态目录与转换规则
 -- ============================================================
 CREATE TABLE IF NOT EXISTS `workflow_status_catalog` (
-  `entity_type` ENUM('project','milestone','requirement','task','bug') NOT NULL,
+  `entity_type` ENUM('project','milestone','requirement','task','bug','target','matter') NOT NULL,
   `status` VARCHAR(64) NOT NULL,
   `is_initial` TINYINT(1) NOT NULL DEFAULT 0,
   `is_terminal` TINYINT(1) NOT NULL DEFAULT 0,
@@ -328,7 +328,7 @@ CREATE TABLE IF NOT EXISTS `work_item_status_catalog` (
 CREATE TABLE IF NOT EXISTS `workflow_transitions` (
   `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   `project_id` BIGINT UNSIGNED DEFAULT NULL COMMENT 'NULL=系统默认',
-  `entity_type` ENUM('project','milestone','requirement','task','bug') NOT NULL,
+  `entity_type` ENUM('project','milestone','requirement','task','bug','target','matter') NOT NULL,
   `from_status` VARCHAR(64) NOT NULL,
   `to_status` VARCHAR(64) NOT NULL,
   `transition_key` VARCHAR(64) NOT NULL COMMENT '流转标识(如 start, pause)',
@@ -967,7 +967,16 @@ INSERT INTO `workflow_status_catalog` (`entity_type`, `status`, `is_initial`, `i
 ('bug', 'confirmed', 0, 0, 20),
 ('bug', 'fixing', 0, 0, 30),
 ('bug', 'verifying', 0, 0, 40),
-('bug', 'closed', 0, 1, 50)
+('bug', 'closed', 0, 1, 50),
+('target', 'planning', 1, 0, 10),
+('target', 'todo', 0, 0, 20),
+('target', 'in_progress', 0, 0, 30),
+('target', 'in_review', 0, 0, 40),
+('target', 'completed', 0, 1, 50),
+('matter', 'todo', 1, 0, 10),
+('matter', 'in_progress', 0, 0, 20),
+('matter', 'in_review', 0, 0, 30),
+('matter', 'completed', 0, 1, 40)
 ON DUPLICATE KEY UPDATE
   `is_initial` = VALUES(`is_initial`),
   `is_terminal` = VALUES(`is_terminal`),
@@ -1015,6 +1024,22 @@ INSERT INTO `workflow_transitions` (`project_id`, `entity_type`, `from_status`, 
 (NULL, 'bug', 'verifying', 'fixing', 'fail_verify'),
 (NULL, 'bug', 'verifying', 'closed', 'pass_verify'),
 (NULL, 'bug', 'closed', 'new', 'reopen');
+
+-- V2 target/matter 工作项流转；保留 legacy type 规则以兼容旧读写路径。
+INSERT INTO `workflow_transitions` (`project_id`, `entity_type`, `from_status`, `to_status`, `transition_key`) VALUES
+(NULL, 'target', 'planning', 'todo', 'decompose'),
+(NULL, 'target', 'todo', 'in_progress', 'start'),
+(NULL, 'target', 'in_progress', 'todo', 'reset'),
+(NULL, 'target', 'in_progress', 'in_review', 'submit'),
+(NULL, 'target', 'in_review', 'completed', 'approve'),
+(NULL, 'target', 'in_review', 'in_progress', 'reject'),
+(NULL, 'target', 'completed', 'in_progress', 'reopen'),
+(NULL, 'matter', 'todo', 'in_progress', 'start'),
+(NULL, 'matter', 'in_progress', 'todo', 'reset'),
+(NULL, 'matter', 'in_progress', 'in_review', 'submit'),
+(NULL, 'matter', 'in_review', 'completed', 'approve'),
+(NULL, 'matter', 'in_review', 'in_progress', 'reject'),
+(NULL, 'matter', 'completed', 'in_progress', 'reopen');
 
 -- ============================================================
 -- 17. 用户常用项目 (user_favorite_projects)
@@ -1636,6 +1661,45 @@ CREATE TABLE IF NOT EXISTS `project_lifecycle_events` (
   KEY `idx_project_lifecycle_status` (`to_status`, `effective_at`),
   CONSTRAINT `fk_project_lifecycle_project` FOREIGN KEY (`project_id`) REFERENCES `aims_projects` (`id`) ON DELETE RESTRICT
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='项目生命周期追加式事件';
+
+CREATE TABLE IF NOT EXISTS `project_activity_logs` (
+  `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `project_id` BIGINT UNSIGNED NOT NULL,
+  `object_type` VARCHAR(32) NOT NULL,
+  `object_code` VARCHAR(128) NOT NULL,
+  `action` VARCHAR(32) NOT NULL,
+  `actor_uid` VARCHAR(64) NOT NULL,
+  `changes` JSON NOT NULL,
+  `request_id` VARCHAR(191) NOT NULL,
+  `created_at` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+  PRIMARY KEY (`id`),
+  KEY `idx_project_activity` (`project_id`, `id`),
+  CONSTRAINT `fk_project_activity_project` FOREIGN KEY (`project_id`) REFERENCES `aims_projects` (`id`) ON DELETE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='项目及成员追加式业务审计';
+
+CREATE TABLE IF NOT EXISTS `work_item_completion_requests` (
+  `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `project_id` BIGINT UNSIGNED NOT NULL,
+  `work_item_id` BIGINT UNSIGNED NOT NULL,
+  `kind` ENUM('target','matter') NOT NULL DEFAULT 'target',
+  `requested_by` VARCHAR(64) NOT NULL,
+  `snapshot_json` JSON NOT NULL,
+  `snapshot_sha256` CHAR(64) NOT NULL,
+  `review_version` CHAR(64) NOT NULL,
+  `status` ENUM('queued','running','approved','rejected','cancelled') NOT NULL,
+  `workflow_instance_id` BIGINT UNSIGNED DEFAULT NULL,
+  `workflow_instance_no` VARCHAR(64) DEFAULT NULL,
+  `target_receipt_id` VARCHAR(64) DEFAULT NULL,
+  `operation_key` VARCHAR(191) NOT NULL,
+  `active_work_item_id` BIGINT UNSIGNED GENERATED ALWAYS AS (CASE WHEN `status` IN ('queued','running') THEN `work_item_id` ELSE NULL END) STORED,
+  `created_at` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+  `updated_at` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_completion_active_item` (`active_work_item_id`),
+  UNIQUE KEY `uk_completion_operation` (`operation_key`),
+  KEY `idx_completion_project` (`project_id`,`id`),
+  CONSTRAINT `fk_completion_work_item` FOREIGN KEY (`project_id`,`work_item_id`) REFERENCES `work_items` (`project_id`,`id`) ON DELETE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='冻结工作项完成审批请求及可靠回执';
 
 CREATE TABLE IF NOT EXISTS `project_manager_delegations` (
   `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,

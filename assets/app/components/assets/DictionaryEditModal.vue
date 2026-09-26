@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { ApiResponse } from '~/types'
-import type { AssetDictionaryDefinition } from '~~/shared/assetsDictionaries'
+import type { AssetDictionaryDefinition } from '../../../shared/assetsDictionaries'
 
 const props = defineProps<{
   open: boolean

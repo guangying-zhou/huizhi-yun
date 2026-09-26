@@ -2,6 +2,32 @@
 
 策略包存储 Runtime API：`GET/PUT /v1/console/policy-bundle`，精确 capability 为 `console:policy-bundle:read|write`。协议、幂等和安全边界见 [持久包说明](../deploy/cloudflare/POLICY_BUNDLE_STORAGE.md)。不增加浏览器可调用的存储管理入口。
 
+完整信封候选：`GET/PUT /v1/console/verified-policy` 复用上述精确 capability，
+仅接受绑定 Console deployment 的正式 JWT，并实时核验 credential/grant。
+通过 `apps.console.policyEnvelope` 显式启用，默认关闭；新表与旧封包隔离。
+PUT 为 `{envelope,expectedEtag}`，首次 ETag 为空，成功返回 Runtime Snapshot；
+相同内容重放不续鲜，CAS 失配 409。GET 返回含过期/撤销记录的当前状态以支持 CAS
+恢复；只有缺行返回 `404 policy_snapshot_missing`，缺表或存储失败仍 503。显式
+`verified-runtime` 后端已接同步/消费代码，默认及运行环境未切换。GET
+不是授权判定；消费方必须验签并检查当前有效期/状态。未注册 Enterprise
+跨安全域读取，也不提供浏览器管理入口。详见
+[完整合同与验证](../../docs/Console-Enterprise-Policy-Verification-Contract.md#7-runtime-持久化与接口批次代码验证完成环境未启用)。
+
+2026-09-22 续签状态（阶段 B，需先执行 `Console-SQL-Migration-verified-policy-renewal-state.sql`）：
+`PUT /v1/console/verified-policy/renewal` 请求体为 `{state,expectedEtag}`，`state` 取
+`ok|platform_unavailable|refused|invalid`（`refused/invalid` 对同一 ETag 粘性，只有接纳新信封才重置），要求精确 capability `console:policy-bundle:write` 和 Console 来源；
+`expectedEtag` 必须等于当前快照，否则返回 409；没有快照返回 `404 policy_snapshot_missing`；
+表未迁移返回 `503 policy_renewal_not_migrated`。尝试时间由 Runtime 取，只会向后推进，
+不接受调用方传入。成功写入信封会自动把状态置为 `ok`。
+`GET /v1/console/verified-policy` 和 `GET /v1/enterprise/console-policy` 的 `data` 新增
+`renewal: {state, attemptedAt} | null`；未迁移或没有状态时为 null。续签状态不属于签名回执，
+也不单独构成授权结论。判定规则见 docs/Console-Enterprise-Policy-Verification-Contract.md 第 14 节。
+
+后续候选：独立 `GET /v1/enterprise/console-policy` 以真实 Enterprise 服务身份读取
+同租户已登记 Console 行；要求精确 read grant、双部署签名覆盖和额外本地开关。
+只返回当前 active/未过期回执，不支持写。准备的 Enterprise read seed/verify 未执行；
+这不把旧 Console 路由开放给其他来源，详见上述合同 §8。
+
 状态：历史/目标设计参考（当前 service-token 主路径以 `docs/MODULE_CONTRACTS.md`、Console `CLAUDE.md` 与 OAuth/service-client 实现为准）
 最后事实核对：2026-07-11
 定位：目标设计，作为 `Console-Functional-Design-v1.md` 与 `console/docs/sql/Console-SQL-DDL-Draft-v1.sql` 的配套接口文档

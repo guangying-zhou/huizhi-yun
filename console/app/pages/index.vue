@@ -79,9 +79,12 @@ onMounted(() => {
   loadTodoSummary()
 })
 
-const visibleApps = computed(() => {
+const availableApps = computed(() => {
   return apps.value.filter(app => app.appCode !== 'console' && app.homeUrl)
 })
+const unavailableApps = computed(() => apps.value.filter(app => (
+  app.appCode !== 'console' && !app.homeUrl && app.availabilityMessage
+)))
 
 const quickEntries = computed(() => [
   {
@@ -100,7 +103,7 @@ const quickEntries = computed(() => [
   },
   {
     label: '最近访问',
-    value: visibleApps.value.length ? String(Math.min(visibleApps.value.length, 4)) : '0',
+    value: availableApps.value.length ? String(Math.min(availableApps.value.length, 4)) : '0',
     icon: 'i-lucide-history',
     color: 'neutral' as const,
     to: '/'
@@ -205,37 +208,47 @@ const commonLinks = [
               </div>
             </template>
 
-            <div v-if="visibleApps.length" class="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-              <NuxtLink
-                v-for="app in visibleApps"
+            <div v-if="availableApps.length || unavailableApps.length" class="space-y-3">
+              <div v-if="availableApps.length" class="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                <NuxtLink
+                  v-for="app in availableApps"
+                  :key="app.appCode"
+                  :to="app.homeUrl || '/'"
+                  external
+                  class="group flex min-h-24 items-start gap-3 rounded-md border border-default p-3 transition-colors hover:bg-elevated"
+                >
+                  <div class="flex size-10 shrink-0 items-center justify-center rounded-md bg-elevated">
+                    <UIcon
+                      v-if="isApplicationIconName(app.icon)"
+                      :name="app.icon!"
+                      class="size-5 text-muted"
+                    />
+                    <img
+                      v-else-if="app.icon"
+                      :src="app.icon"
+                      :alt="app.appName"
+                      class="size-5 rounded object-contain"
+                    >
+                    <UIcon v-else name="i-lucide-box" class="size-5 text-muted" />
+                  </div>
+                  <div class="min-w-0">
+                    <p class="truncate text-sm font-semibold group-hover:text-primary">
+                      {{ app.appName }}
+                    </p>
+                    <p class="mt-1 line-clamp-2 text-xs text-muted">
+                      {{ app.description || app.appCode }}
+                    </p>
+                  </div>
+                </NuxtLink>
+              </div>
+              <UAlert
+                v-for="app in unavailableApps"
                 :key="app.appCode"
-                :to="app.homeUrl || '/'"
-                external
-                class="group flex min-h-24 items-start gap-3 rounded-md border border-default p-3 transition-colors hover:bg-elevated"
-              >
-                <div class="flex size-10 shrink-0 items-center justify-center rounded-md bg-elevated">
-                  <UIcon
-                    v-if="isApplicationIconName(app.icon)"
-                    :name="app.icon!"
-                    class="size-5 text-muted"
-                  />
-                  <img
-                    v-else-if="app.icon"
-                    :src="app.icon"
-                    :alt="app.appName"
-                    class="size-5 rounded object-contain"
-                  >
-                  <UIcon v-else name="i-lucide-box" class="size-5 text-muted" />
-                </div>
-                <div class="min-w-0">
-                  <p class="truncate text-sm font-semibold group-hover:text-primary">
-                    {{ app.appName }}
-                  </p>
-                  <p class="mt-1 line-clamp-2 text-xs text-muted">
-                    {{ app.description || app.appCode }}
-                  </p>
-                </div>
-              </NuxtLink>
+                color="warning"
+                icon="i-lucide-triangle-alert"
+                :title="`${app.appName}：${app.availabilityReason || '暂不可用'}`"
+                :description="app.availabilityMessage || '该模块暂不能进入。'"
+              />
             </div>
 
             <div v-else class="flex min-h-32 items-center justify-center rounded-md border border-dashed border-default p-6 text-sm text-muted">

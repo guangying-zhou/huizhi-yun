@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useAi } from '../../composables/useAi'
 /**
  * 编辑器 AI 侧边栏面板
  * 提供 AI 摘要生成功能，支持加载已保存的摘要

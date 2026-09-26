@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { isTrustedCodocsEditorMessage, resolveCodocsEditorTarget } from '../utils/codocsEditorBoundary'
 /**
  * Codocs 文档编辑器（iframe 封装）
  *
@@ -16,42 +17,38 @@ const props = withDefaults(defineProps<{
   readonly?: boolean
   /** 是否显示标题栏 */
   showTitle?: boolean
+  /** 独立 Codocs 的可信 http(s) 来源；统一宿主应显式配置。 */
+  baseUrl?: string
 }>(), {
   readonly: false,
   showTitle: true
 })
 
 const config = useRuntimeConfig()
-const baseUrl = computed(() =>
-  ((config.public.codocsUrl as string) || 'http://localhost:3001').replace(/\/$/, '')
-)
-
-const src = computed(() => {
-  const params = new URLSearchParams()
-  if (props.readonly) params.set('readonly', '1')
-  if (!props.showTitle) params.set('title', '0')
-  const qs = params.toString()
-  return `${baseUrl.value}/embed/editor/${props.uuid}${qs ? '?' + qs : ''}`
-})
+const baseUrl = computed(() => String(props.baseUrl || config.public.codocsUrl || '').replace(/\/$/, ''))
+const target = computed(() => resolveCodocsEditorTarget(baseUrl.value, props.uuid, props))
+const editorOrigin = computed(() => target.value?.origin || '')
+const src = computed(() => target.value?.src || '')
 
 const iframeRef = ref<HTMLIFrameElement | null>(null)
 
 /** 触发文档保存 */
 const save = () => {
-  iframeRef.value?.contentWindow?.postMessage({ type: 'codocs:save' }, '*')
+  if (editorOrigin.value) iframeRef.value?.contentWindow?.postMessage({ type: 'codocs:save' }, editorOrigin.value)
 }
 
 /** 获取当前文档内容 */
 const getContent = (): Promise<string> => {
   return new Promise((resolve) => {
     const handler = (e: MessageEvent) => {
-      if (e.data?.type === 'codocs:content') {
+      if (isTrustedCodocsEditorMessage(e, editorOrigin.value, iframeRef.value?.contentWindow)) {
         window.removeEventListener('message', handler)
         resolve(e.data.content)
       }
     }
+    if (!editorOrigin.value) return resolve('')
     window.addEventListener('message', handler)
-    iframeRef.value?.contentWindow?.postMessage({ type: 'codocs:getContent' }, '*')
+    iframeRef.value?.contentWindow?.postMessage({ type: 'codocs:getContent' }, editorOrigin.value)
     setTimeout(() => {
       window.removeEventListener('message', handler)
       resolve('')
@@ -80,9 +77,12 @@ defineExpose({ save, getContent })
 
 <template>
   <iframe
+    v-if="src"
     ref="iframeRef"
     :src="src"
     class="w-full h-full border-0"
     allow="clipboard-read; clipboard-write"
+    referrerpolicy="strict-origin-when-cross-origin"
   />
+  <UAlert v-else color="warning" title="协作文档编辑器尚未配置" description="请配置当前环境的 Codocs 地址后重试。" />
 </template>

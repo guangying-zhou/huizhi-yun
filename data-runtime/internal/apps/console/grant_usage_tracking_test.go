@@ -27,7 +27,7 @@ func TestServiceTokenIssuanceTouchesGrantUsage(t *testing.T) {
 	}
 
 	// 必须在授权成功路径上被调用，而不是只定义不用。
-	start := strings.Index(source, "func (a *Adapter) authorizeServiceClientScopes")
+	start := strings.Index(source, "func (a *Adapter) authorizeServiceClientScopesUsing")
 	if start < 0 {
 		t.Fatal("authorizeServiceClientScopes not found")
 	}
@@ -35,7 +35,7 @@ func TestServiceTokenIssuanceTouchesGrantUsage(t *testing.T) {
 	if next := strings.Index(body[1:], "\nfunc "); next > 0 {
 		body = body[:next+1]
 	}
-	if !strings.Contains(body, "a.touchServiceClientGrantUsage(") {
+	if !strings.Contains(body, "a.touchServiceClientGrantUsageUsing(") {
 		t.Error("authorizeServiceClientScopes 必须在校验通过后打点")
 	}
 }

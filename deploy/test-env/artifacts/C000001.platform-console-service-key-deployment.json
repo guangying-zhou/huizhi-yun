@@ -1,0 +1,41 @@
+{
+  "deployedAt": "2026-09-23T02:55:21.668Z",
+  "target": "hzy-platform-dev",
+  "candidateEntry": "/wiztek/hzy-test/platform-candidates/console-service-key-20260923/platform/.output/server/index.mjs",
+  "candidateHash": "1885bbc624df90b7c8e55fa5e3f1d263dfc97a41d8b1d0b4bd8ff7d94e19ea84",
+  "artifactHash": "d2a6cdb6783630f9e547cfcd113ccf3d8e85ce294cfa22bc43b64a64be4fea9b",
+  "sourceHashes": {
+    "packages/authz-core/src/policy-envelope.ts": "60362f789e3377b28393523f172c1224c99ff470ae97f8d99c0c28a7e9d38a28",
+    "server/utils/policyEnvelopeDelivery.ts": "604a33ea119f76e7914bd92f03b6cdd781200b1cf986acd0895b29f2d052214e",
+    "server/utils/currentPolicyEnvelope.ts": "ac2880a192a48719ca3ccd728457524143948c768883e46193deb5b7ee884b25",
+    "server/utils/consoleServiceKeys.ts": "9f276f887f0bd7da2efb3f98669138d68383199fa50fc4bc2ba5960dc13d7484",
+    "server/api/platform/internal/console/tenants/[tenantCode]/service-keys.post.ts": "2a2cd1e9d5353636b2691e4b26167cf1b0ffdc5a821d3a227a716c60fb3bd4fd",
+    "test/consoleServiceKeys.test.ts": "185ce9f21a0c61ec1a1372ed25ee4a6a05c99750e2d911172df5ed4378d86f15"
+  },
+  "previousEntry": "/wiztek/hzy-test/platform-candidates/policy-renewal-20260922/platform/.output/server/index.mjs",
+  "previousHash": "6d6cbddb2bdba10fa3f493b7b65455fabe5dbe7a2449f808e566b14d24dae5a7",
+  "rollbackConfig": "/wiztek/hzy-test/platform-candidates/console-service-key-20260923/attempt-LTgzts/rollback.config.json",
+  "pid": 3761050,
+  "bundleVersion": "pv_test_20260914161219_0014",
+  "policyRevision": 14,
+  "lifetimeMs": 93600000,
+  "health": 200,
+  "anonymous": 403,
+  "revisionProbe": 200,
+  "missingDeploymentRefusal": 409,
+  "historicalFormat": 400,
+  "migration": {
+    "file": "docs/sql/migrations/20260923-console-service-keys.sql",
+    "sha256": "fb4170fb195c014d759284580da2dc6d297a0d5ef12ca2461358c84ac02dbfe1",
+    "tablePresent": true
+  },
+  "serviceKeysSigned": 0,
+  "serviceKeyEndpoint": {
+    "anonymous": 403,
+    "invalid": 400,
+    "inactiveDeployment": 403,
+    "rowsUnchanged": true
+  },
+  "policyRowsUnchanged": true,
+  "otherProcessesUnchanged": true
+}

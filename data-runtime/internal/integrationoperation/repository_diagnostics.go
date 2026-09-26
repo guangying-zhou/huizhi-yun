@@ -147,7 +147,7 @@ func (r *Repository) ListDiagnostics(ctx context.Context, input DiagnosticListIn
 	query += "\nORDER BY updated_at DESC, operation_id DESC\nLIMIT ?"
 	args = append(args, limit+1)
 
-	rows, err := r.db.QueryContext(ctx, query, args...)
+	rows, err := r.db.QueryContext(ctx, r.sql(query), args...)
 	if err != nil {
 		return DiagnosticPage{}, err
 	}

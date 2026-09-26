@@ -1,6 +1,10 @@
 <script setup lang="ts">
-import { typeConfig, priorityConfig } from '~/config/work-item'
+import { useAimsModule } from '../../layer/useAimsModule'
+import { typeConfig, priorityConfig } from '../config/work-item'
 
+
+// 同一份代码供独立应用与企业宿主使用：非宿主模式下 moduleUrl 原样返回路径。
+const { moduleUrl } = useAimsModule()
 definePageMeta({
   layoutHeader: true,
   layoutHeaderTitle: '任务看板',
@@ -233,10 +237,10 @@ function formatDueDate(dueDate: string | null) {
 
 function openItem(item: GlobalWorkItem) {
   if (['in_progress', 'in_review', 'completed'].includes(item.status)) {
-    navigateTo(`/projects/${item.projectId}/board/${item.id}/execution`)
+    navigateTo(moduleUrl(`/projects/${item.projectId}/board/${item.id}/execution`))
     return
   }
-  navigateTo(`/projects/${item.projectId}/board`)
+  navigateTo(moduleUrl(`/projects/${item.projectId}/board`))
 }
 
 async function loadItems() {
@@ -248,7 +252,7 @@ async function loadItems() {
     params.set('uid', authUser.value)
 
     const res = await $fetch<{ code: number, data: { items: GlobalWorkItem[] } }>(
-      `/api/v1/my-work-items?${params.toString()}`
+      moduleUrl(`/api/v1/my-work-items?${params.toString()}`)
     )
     items.value = res.code === 0 ? res.data.items : []
   } catch (err) {

@@ -1,16 +1,30 @@
 <script setup lang="ts">
 import type { ApiResponse, DigitalAssetItem } from '~/types'
+import { useAssetsModule } from '../../../layer/useAssetsModule'
+import { useAssetLabels } from '../../composables/useAssetLabels'
 
 const route = useRoute()
 const assetId = computed(() => String(route.params.id))
 const editOpen = ref(false)
 const linkProductOpen = ref(false)
 const documentOpen = ref(false)
+const { hosted, moduleUrl, cacheKey } = useAssetsModule()
+const { loadPermissions, hasPermission, loaded: permissionsLoaded } = usePermissions()
+const { data: writeAccess } = await useFetch<ApiResponse<{ digital_assets: boolean, ip_assets: boolean }>>(moduleUrl('/api/v1/write-access'), {
+  key: cacheKey('assets-write-access'),
+  immediate: hosted
+})
+if (!hosted) await loadPermissions()
+const canEditDigitalAsset = computed(() => hosted
+  ? writeAccess.value?.data?.digital_assets === true
+  : permissionsLoaded.value && hasPermission('digital_assets', 'edit'))
 const { loadDictionaries, getLabel } = useAssetLabels()
 await loadDictionaries()
-const { data: response, refresh, error } = await useFetch<ApiResponse<DigitalAssetItem>>(() => `/api/v1/digital-assets/${assetId.value}`)
+const { data: response, refresh, error } = await useFetch<ApiResponse<DigitalAssetItem>>(() => moduleUrl(`/api/v1/digital-assets/${assetId.value}`), {
+  key: computed(() => cacheKey(`digital-asset:${assetId.value}`))
+})
 
-if (error.value?.statusCode === 404) {
+if (!hosted && error.value?.statusCode === 404) {
   throw createError({ statusCode: 404, message: '数字资产不存在' })
 }
 
@@ -60,6 +74,24 @@ const handleUpdated = async () => {
   <UDashboardPanel id="digital-asset-detail" grow>
     <template #body>
       <div class="p-4 space-y-4">
+        <p v-if="hosted && !asset && !error" role="status" class="text-sm text-muted">
+          正在加载数字资产…
+        </p>
+        <UAlert
+          v-if="hosted && !asset && error"
+          color="error"
+          variant="soft"
+          :title="error.statusCode === 404 ? '数字资产不存在或无权查看' : '数字资产暂不可用'"
+          description="请返回台账或重试。"
+        />
+        <UButton
+          v-if="hosted && !asset && error"
+          color="neutral"
+          variant="outline"
+          @click="refresh()"
+        >
+          重试
+        </UButton>
         <UCard v-if="asset">
           <template #header>
             <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
@@ -74,11 +106,12 @@ const handleUpdated = async () => {
                   icon="i-lucide-arrow-left"
                   color="neutral"
                   variant="ghost"
-                  to="/digital-assets"
+                  :to="moduleUrl('/digital-assets')"
                 >
                   返回
                 </UButton>
                 <UButton
+                  v-if="!hosted || canEditDigitalAsset"
                   icon="i-lucide-pencil"
                   color="primary"
                   variant="soft"
@@ -87,6 +120,7 @@ const handleUpdated = async () => {
                   编辑
                 </UButton>
                 <UButton
+                  v-if="!hosted"
                   icon="i-lucide-link-2"
                   color="primary"
                   variant="soft"
@@ -95,6 +129,7 @@ const handleUpdated = async () => {
                   关联产品
                 </UButton>
                 <UButton
+                  v-if="!hosted"
                   icon="i-lucide-file-text"
                   color="primary"
                   variant="soft"
@@ -121,14 +156,14 @@ const handleUpdated = async () => {
           </p>
         </UCard>
 
-        <UCard>
+        <UCard v-if="asset">
           <template #header>
             <span class="font-semibold">关联产品</span>
           </template>
           <UTable :data="linkedProducts" :columns="productColumns" />
         </UCard>
 
-        <UCard>
+        <UCard v-if="asset">
           <template #header>
             <span class="font-semibold">关联文档</span>
           </template>
@@ -139,18 +174,21 @@ const handleUpdated = async () => {
   </UDashboardPanel>
 
   <AssetsDigitalAssetEditModal
+    v-if="!hosted || canEditDigitalAsset"
     :open="editOpen"
     :asset="asset || null"
     @update:open="editOpen = $event"
     @updated="handleUpdated"
   />
   <AssetsDigitalAssetProductLinkModal
+    v-if="!hosted"
     :open="linkProductOpen"
     :asset="asset || null"
     @update:open="linkProductOpen = $event"
     @created="handleUpdated"
   />
   <AssetsDigitalAssetDocumentLinkModal
+    v-if="!hosted"
     :open="documentOpen"
     :asset="asset || null"
     @update:open="documentOpen = $event"

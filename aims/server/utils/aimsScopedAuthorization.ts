@@ -2,11 +2,14 @@ import { createError, type H3Event } from 'h3'
 import { requireAimsProjectAuthorizationRecord } from './aimsProjectAuthorizationRecord'
 import { runtimeEnvelopeError } from './aimsRuntimeForward'
 import { loadScopedAuthorizationFromConsoleRuntime } from '@hzy/foundation/server/utils/platformBundleAuthorization'
+import { loadSubjectScopedAuthorizationByService } from '@hzy/foundation/server/utils/subjectScopedAuthorization'
+import { evaluateFoundationScopedAuthorization } from '@hzy/foundation/server/utils/scopeEvaluator'
+import { verifiedServiceCommandActor, maybeCallTenantRuntime } from '@hzy/foundation/server/utils/tenantRuntimeClient'
 import type {
   FoundationObjectContext
 } from '@hzy/foundation/server/utils/scopeEvaluator'
-import { maybeCallTenantRuntime } from '@hzy/foundation/server/utils/tenantRuntimeClient'
-import { appCode } from '~~/app/config/permissions'
+import { appCode } from '../../app/config/permissions'
+import { getRequestUid } from './authIdentity'
 import {
   aimsProjectListAdminScopeQueryFromGrants,
   type AimsProjectListScopeContext
@@ -27,6 +30,24 @@ interface AimsScopedPermissionOptions {
 }
 
 type RuntimeRecord = Record<string, unknown>
+
+// Multiple project fact queries within one signed document command share the
+// same freshly verified subject snapshot. Never share pending I/O across requests.
+const delegatedProjectAdminSnapshots = new WeakMap<H3Event, Map<string, ReturnType<typeof loadSubjectScopedAuthorizationByService>>>()
+
+function loadDelegatedProjectAdminSnapshot(event: H3Event, uid: string) {
+  let snapshots = delegatedProjectAdminSnapshots.get(event)
+  if (!snapshots) {
+    snapshots = new Map()
+    delegatedProjectAdminSnapshots.set(event, snapshots)
+  }
+  let snapshot = snapshots.get(uid)
+  if (!snapshot) {
+    snapshot = loadSubjectScopedAuthorizationByService({ event, timeoutMs: 100000, subjectUid: uid, purpose: 'enterprise_project_admin', resourceCode: 'projects', action: 'admin' })
+    snapshots.set(uid, snapshot)
+  }
+  return snapshot
+}
 
 function stringValue(value: unknown) {
   return String(value || '').trim()
@@ -77,6 +98,11 @@ export async function checkAimsScopedPermission(
   const object = options.object
     ? { ...options.object, actorUid: options.object.actorUid || uid }
     : { actorUid: uid }
+  if (verifiedServiceCommandActor(event, appCode)) {
+    if (options.resourceCode !== 'projects' || options.action !== 'admin') return false
+    const subject = await loadDelegatedProjectAdminSnapshot(event, uid)
+    return evaluateFoundationScopedAuthorization({ grants: subject.grants, required: { appCode, resourceCode: 'projects', action: 'admin' }, object, policyOf: () => subject.actionPolicy }).allowed
+  }
   const scoped = await loadScopedAuthorizationFromConsoleRuntime(event, uid, appCode, {
     resourceCode: options.resourceCode,
     action: options.action,
@@ -94,6 +120,10 @@ export async function resolveAimsProjectListAdminScopeQuery(
   if (!normalizedUid) return {}
 
   try {
+    if (verifiedServiceCommandActor(event, appCode)) {
+      const subject = await loadDelegatedProjectAdminSnapshot(event, normalizedUid)
+      return aimsProjectListAdminScopeQueryFromGrants(subject.grants, context)
+    }
     const scoped = await loadScopedAuthorizationFromConsoleRuntime(event, normalizedUid, appCode, {
       resourceCode: 'projects',
       action: 'admin'
@@ -152,7 +182,8 @@ export async function resolveAimsProjectAuthorizationObject(
     currentDeptCodes?: string[]
     managementDeptCodes?: string[]
     requireCompleteFacts?: boolean
-  }
+  },
+  authorizationSource?: (projectId: string) => Promise<unknown>
 ): Promise<FoundationObjectContext> {
   const query: Record<string, unknown> = {
     current_user: input.uid
@@ -164,8 +195,10 @@ export async function resolveAimsProjectAuthorizationObject(
     query.current_user_management_dept_codes = input.managementDeptCodes.join(',')
   }
 
-  const authorizationRecord = await loadRuntimeRecord(event, `/v1/aims/projects/${encodeURIComponent(input.projectId)}/authorization-object`, query, input.requireCompleteFacts)
-  const project = input.requireCompleteFacts
+  const authorizationRecord = authorizationSource
+    ? requireAimsProjectAuthorizationRecord(await authorizationSource(input.projectId), input.projectId)
+    : await loadRuntimeRecord(event, `/v1/aims/projects/${encodeURIComponent(input.projectId)}/authorization-object`, query, input.requireCompleteFacts)
+  const project = input.requireCompleteFacts || authorizationSource
     ? requireAimsProjectAuthorizationRecord(authorizationRecord, input.projectId)
     : authorizationRecord || await loadRuntimeRecord(event, `/v1/aims/projects/${encodeURIComponent(input.projectId)}`, query) || {}
   const embeddedMembers = (project as RuntimeRecord).members

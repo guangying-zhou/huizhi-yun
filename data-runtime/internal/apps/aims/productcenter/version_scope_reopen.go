@@ -31,13 +31,27 @@ func ValidateProductVersionScopeReopen(input ProductVersionScopeReopen) error {
 
 // Reopening preserves previous delivery evidence and invalidates acceptance by advancing scope revision.
 func ReopenProductVersionScope(ctx context.Context, db *sql.DB, identity CommandIdentity, permit AuthorizationPermit, input ProductVersionScopeReopen, sourceContext ...integrationoperation.TrustedContext) (CommandResult, error) {
+	return reopenProductVersionScope(ctx, identity, permit, input, func(payload any, authorize AuthorizeCommand, apply ApplyCommand) (CommandResult, error) {
+		return ExecuteCommand(ctx, db, identity, payload, authorize, apply)
+	}, sourceContext...)
+}
+
+// ReopenProductVersionScopeInTransaction shares the registry-fenced Enterprise write transaction while
+// retaining the owning-domain receipt, revision and release-lock checks.
+func ReopenProductVersionScopeInTransaction(ctx context.Context, tx *sql.Tx, identity CommandIdentity, permit AuthorizationPermit, input ProductVersionScopeReopen, sourceContext ...integrationoperation.TrustedContext) (CommandResult, error) {
+	return reopenProductVersionScope(ctx, identity, permit, input, func(payload any, authorize AuthorizeCommand, apply ApplyCommand) (CommandResult, error) {
+		return ExecuteCommandInTransaction(ctx, tx, identity, payload, authorize, apply)
+	}, sourceContext...)
+}
+
+func reopenProductVersionScope(ctx context.Context, identity CommandIdentity, permit AuthorizationPermit, input ProductVersionScopeReopen, execute func(any, AuthorizeCommand, ApplyCommand) (CommandResult, error), sourceContext ...integrationoperation.TrustedContext) (CommandResult, error) {
 	if identity.Action != "product_versions:scope-reopen" {
 		return CommandResult{}, invalid("product_command_identity_invalid", "范围交付撤回命令不匹配")
 	}
 	if err := ValidateProductVersionScopeReopen(input); err != nil {
 		return CommandResult{}, err
 	}
-	return ExecuteCommand(ctx, db, identity, input, func(ctx context.Context, tx *sql.Tx) error {
+	return execute(input, func(ctx context.Context, tx *sql.Tx) error {
 		return AuthorizeWorkspaceTransaction(ctx, tx, identity.ProductCode, identity.ActorUID, "product_versions", "accept", permit)
 	}, func(ctx context.Context, tx *sql.Tx) (any, error) {
 		root, err := loadWorkspace(ctx, tx, identity.ProductCode)

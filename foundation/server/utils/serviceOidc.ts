@@ -1,4 +1,5 @@
 import { getHeader, type H3Event } from 'h3'
+import { decodeJwt } from 'jose'
 import {
   getCachedConsoleRuntimeConfig,
   getConsoleRuntimeConfig,
@@ -52,6 +53,82 @@ type CloudflareRuntimeEvent = H3Event & {
 }
 
 const serviceTokenCache = new Map<string, ServiceTokenCacheEntry>()
+const serviceTokenFlights = new Map<string, Promise<string>>()
+const SERVICE_TOKEN_CACHE_LIMIT = 256
+const SERVICE_TOKEN_CACHE_MAX_AGE_MS = 5 * 60_000
+const LOCAL_SERVICE_TOKEN_CACHE_MAX_AGE_MS = 60_000
+const SERVICE_TOKEN_EXPIRY_MARGIN_MS = 30_000
+
+function normalizedServiceScope(scope: string) {
+  return [...new Set(scope.trim().split(/\s+/).filter(Boolean))].sort().join(' ')
+}
+
+function cachedServiceToken(key: string) {
+  const entry = serviceTokenCache.get(key)
+  if (!entry) return ''
+  if (entry.expiresAt <= Date.now() + SERVICE_TOKEN_EXPIRY_MARGIN_MS) {
+    serviceTokenCache.delete(key)
+    return ''
+  }
+  // Map insertion order is used as a bounded per-isolate LRU queue.
+  serviceTokenCache.delete(key)
+  serviceTokenCache.set(key, entry)
+  return entry.accessToken
+}
+
+function rememberServiceToken(key: string, accessToken: string, lifetimeMs: number) {
+  if (!Number.isFinite(lifetimeMs) || lifetimeMs <= SERVICE_TOKEN_EXPIRY_MARGIN_MS) return
+  for (const [candidate, entry] of serviceTokenCache) {
+    if (entry.expiresAt <= Date.now() + SERVICE_TOKEN_EXPIRY_MARGIN_MS) serviceTokenCache.delete(candidate)
+  }
+  serviceTokenCache.delete(key)
+  serviceTokenCache.set(key, {
+    accessToken,
+    expiresAt: Date.now() + Math.min(lifetimeMs, SERVICE_TOKEN_CACHE_MAX_AGE_MS)
+  })
+  while (serviceTokenCache.size > SERVICE_TOKEN_CACHE_LIMIT) {
+    const oldest = serviceTokenCache.keys().next().value
+    if (!oldest) break
+    serviceTokenCache.delete(oldest)
+  }
+}
+
+function localTokenLifetimeMs(token: string) {
+  try {
+    const exp = decodeJwt(token).exp
+    return typeof exp === 'number'
+      ? Math.min(exp * 1000 - Date.now(), LOCAL_SERVICE_TOKEN_CACHE_MAX_AGE_MS)
+      : 0
+  } catch {
+    // A local issuer fixture or malformed token must never be kept in cache.
+    return 0
+  }
+}
+
+async function coalesceServiceToken(
+  key: string,
+  forceRefresh: boolean,
+  issue: () => Promise<{ accessToken: string, lifetimeMs: number }>
+) {
+  if (forceRefresh) serviceTokenCache.delete(key)
+  else {
+    const cached = cachedServiceToken(key)
+    if (cached) return cached
+    const pending = serviceTokenFlights.get(key)
+    if (pending) return await pending
+  }
+
+  // A forced refresh replaces an older flight. The older flight may finish,
+  // but only the current flight may populate the cache or remove the slot.
+  const flight: Promise<string> = Promise.resolve().then(issue).then(({ accessToken, lifetimeMs }) => {
+    if (serviceTokenFlights.get(key) === flight) rememberServiceToken(key, accessToken, lifetimeMs)
+    return accessToken
+  }).finally(() => {
+    if (serviceTokenFlights.get(key) === flight) serviceTokenFlights.delete(key)
+  })
+  serviceTokenFlights.set(key, flight)
+  return await flight
+}
 
 // 可注入的本地 service token 签发器。Console 是 token 签发方（持有 signing key），
 // 无法 fetch 自己的 /oauth/token（CF Worker 不能自调，会 522），因此由 Console 模块
@@ -68,6 +145,8 @@ let localServiceTokenIssuer: LocalServiceTokenIssuer | null = null
 
 export function setLocalServiceTokenIssuer(issuer: LocalServiceTokenIssuer | null) {
   localServiceTokenIssuer = issuer
+  serviceTokenCache.clear()
+  serviceTokenFlights.clear()
 }
 
 function stringValue(value: unknown) {
@@ -103,6 +182,11 @@ function normalizeTokenUrl(value: string) {
 
   try {
     const url = new URL(normalized)
+    // Token endpoints never use query credentials. Neither URLs nor cache
+    // keys may retain userinfo, query parameters, or fragments.
+    if (url.username || url.password) return ''
+    url.search = ''
+    url.hash = ''
     const path = url.pathname.replace(/\/+$/, '')
     if (!path) {
       url.pathname = '/oauth/token'
@@ -120,7 +204,7 @@ function normalizeTokenUrl(value: string) {
 
     return url.toString()
   } catch {
-    return normalized
+    return ''
   }
 }
 
@@ -389,24 +473,51 @@ export async function requestServiceAccessToken(input: {
   sourceBinding?: 'trusted-gateway' | 'service-client-policy'
   event?: H3Event | null
 }) {
+  const config = useRuntimeConfig(input.event || undefined) as unknown as Record<string, unknown>
+  const scope = normalizedServiceScope(input.scope)
+  const sourceBinding = input.sourceBinding || 'trusted-gateway'
+  const gatewayContext = input.event
+    ? resolveTrustedTenantGatewayContext(input.event, config)
+    : null
+  const appCode = resolveAppCode(config, input.event)
+  const verifiedAuth = input.event?.context?.consoleAuth as {
+    authenticated?: boolean
+    tenant?: string
+    deployment?: string
+    uid?: string
+  } | undefined
+  const contextParts = [
+    input.audience,
+    scope,
+    sourceBinding,
+    input.deploymentCodeOverride || '',
+    gatewayContext?.tenant || (verifiedAuth?.authenticated ? verifiedAuth.tenant : '') || getConfigValue(config, ['hzy.tenantRuntime.tenant', 'hzy.dataRuntime.tenant']) || 'unbound',
+    gatewayContext?.deployment || (verifiedAuth?.authenticated ? verifiedAuth.deployment : '') || getConfigValue(config, ['hzy.tenantRuntime.deployment', 'hzy.dataRuntime.deployment']) || 'unbound',
+    gatewayContext?.environment || getConfigValue(config, ['hzy.environment', 'hzy.tenantRuntime.environment']) || 'unbound',
+    gatewayContext?.appCode || appCode || 'unbound',
+    gatewayContext?.forwardedHost || 'unbound',
+    verifiedAuth?.authenticated ? verifiedAuth.uid || '' : ''
+  ]
   // Console 自身：在 worker 内部直接签发，避免 self-fetch 自己的 /oauth/token（522）。
   if (localServiceTokenIssuer) {
-    const localToken = await localServiceTokenIssuer({
-      audience: input.audience,
-      scope: input.scope,
-      deploymentCodeOverride: input.deploymentCodeOverride,
-      sourceBinding: input.sourceBinding,
-      event: input.event
+    const localKey = JSON.stringify(['local', ...contextParts])
+    const localToken = await coalesceServiceToken(localKey, Boolean(input.forceRefresh), async () => {
+      const token = await localServiceTokenIssuer?.({
+        audience: input.audience,
+        scope,
+        deploymentCodeOverride: input.deploymentCodeOverride,
+        sourceBinding,
+        event: input.event
+      })
+      return { accessToken: token || '', lifetimeMs: token ? localTokenLifetimeMs(token) : 0 }
     })
     if (localToken) return localToken
   }
 
-  const config = useRuntimeConfig(input.event || undefined) as unknown as Record<string, unknown>
   const runtime = input.event
     ? await getConsoleRuntimeConfig({ event: input.event }).catch(() => null)
     : null
   const tokenUrl = resolveTokenUrl(config, runtime?.console.tokenUrl, input.event)
-  const appCode = resolveAppCode(config, input.event)
   const clientId = getConfigValue(config, [
     'hzy.serviceClient.clientId',
     'serviceClient.clientId'
@@ -415,10 +526,6 @@ export async function requestServiceAccessToken(input: {
     'hzy.serviceClient.clientSecret',
     'serviceClient.clientSecret'
   ]) || envValue(input.event, serviceClientEnvNames(appCode, 'clientSecret'))
-  const sourceBinding = input.sourceBinding || 'trusted-gateway'
-  const gatewayContext = input.event
-    ? resolveTrustedTenantGatewayContext(input.event, config)
-    : null
   // A verified Tenant Gateway app identity is authoritative during the
   // Console Runtime migration. Prefer it over any legacy Worker secret that
   // may still be configured, because the credential is tenant-owned now.
@@ -435,104 +542,93 @@ export async function requestServiceAccessToken(input: {
     })
   }
 
-  const cacheKey = [
+  const cacheKey = JSON.stringify([
+    'http',
     tokenUrl,
     clientId,
-    input.audience,
-    input.scope,
-    sourceBinding,
-    gatewayContext?.tenant || 'unbound',
-    gatewayContext?.deployment || 'unbound',
-    gatewayContext?.environment || 'unbound',
-    gatewayContext?.appCode || appCode || 'unbound'
-  ].join('|')
-  const cached = serviceTokenCache.get(cacheKey)
-  if (!input.forceRefresh && cached && cached.expiresAt > Date.now() + 30_000) {
-    return cached.accessToken
-  }
-  if (input.forceRefresh) serviceTokenCache.delete(cacheKey)
+    ...contextParts
+  ])
 
-  let response: ServiceTokenResponse
-  const requestHeaders = gatewayContext
-    ? forwardedTenantGatewayHeaders(input.event, config, {
-        includeRuntimeBootstrap: true
-      })
-    : {}
-  const requestBody = {
-    grant_type: 'client_credentials',
-    client_id: clientId,
-    ...(runtimeAppIdentity ? { app_code: appCode } : { client_secret: clientSecret }),
-    audience: input.audience,
-    scope: input.scope,
-    source_binding: sourceBinding
-  }
-  try {
-    const serviceBinding = consoleServiceBinding(input.event)
-    if (serviceBinding) {
-      const boundResponse = await serviceBinding.fetch(normalizeConsoleServiceBindingUrl(tokenUrl), {
-        method: 'POST',
-        headers: {
-          ...requestHeaders,
-          'accept': 'application/json',
-          'content-type': 'application/json'
-        },
-        body: JSON.stringify(requestBody)
-      })
-      const payload = await boundResponse.json().catch(() => ({})) as Record<string, unknown>
-      if (!boundResponse.ok) {
-        const error = new Error(
-          stringValue(payload.message || payload.statusMessage || payload.error)
-          || boundResponse.statusText
-          || 'Console service token request failed'
-        ) as Error & { statusCode?: number, data?: Record<string, unknown> }
-        error.statusCode = boundResponse.status
-        error.data = payload
-        throw error
-      }
-      response = payload as ServiceTokenResponse
-    } else {
-      type ServiceTokenFetch = (
-        url: string,
-        options: Record<string, unknown>
-      ) => Promise<ServiceTokenResponse>
-      const fetchServiceToken = $fetch as unknown as ServiceTokenFetch
-      response = await fetchServiceToken(tokenUrl, {
-        method: 'POST',
-        headers: requestHeaders,
-        body: requestBody,
-        timeout: 10000
-      })
-    }
-  } catch (error: unknown) {
-    const statusCode = responseStatusCode(error)
-    const message = responseMessage(error) || 'Console service token request failed'
-    console.error('[serviceOidc] Console service token request failed:', {
-      statusCode,
-      tokenHost: safeUrlHost(tokenUrl),
-      tokenPath: safeUrlPath(tokenUrl),
-      appCode,
+  const refresh = async (): Promise<{ accessToken: string, lifetimeMs: number }> => {
+    let response: ServiceTokenResponse
+    const requestHeaders = gatewayContext
+      ? forwardedTenantGatewayHeaders(input.event, config, {
+          includeRuntimeBootstrap: true
+        })
+      : {}
+    const requestBody = {
+      grant_type: 'client_credentials',
+      client_id: clientId,
+      ...(runtimeAppIdentity ? { app_code: appCode } : { client_secret: clientSecret }),
       audience: input.audience,
-      scope: input.scope,
-      message,
-      hasClientSecret: Boolean(clientSecret),
-      hasRuntimeAppIdentity: runtimeAppIdentity,
-      hasGatewayToken: Boolean(stringValue(input.event ? getHeader(input.event, 'x-hzy-gateway-token') : ''))
-    })
-    throw createError({ statusCode, message: `Console service token request failed: ${message}` })
+      scope,
+      source_binding: sourceBinding
+    }
+    try {
+      const serviceBinding = consoleServiceBinding(input.event)
+      if (serviceBinding) {
+        const boundResponse = await serviceBinding.fetch(normalizeConsoleServiceBindingUrl(tokenUrl), {
+          method: 'POST',
+          headers: {
+            ...requestHeaders,
+            'accept': 'application/json',
+            'content-type': 'application/json'
+          },
+          body: JSON.stringify(requestBody)
+        })
+        const payload = await boundResponse.json().catch(() => ({})) as Record<string, unknown>
+        if (!boundResponse.ok) {
+          const error = new Error(
+            stringValue(payload.message || payload.statusMessage || payload.error)
+            || boundResponse.statusText
+            || 'Console service token request failed'
+          ) as Error & { statusCode?: number, data?: Record<string, unknown> }
+          error.statusCode = boundResponse.status
+          error.data = payload
+          throw error
+        }
+        response = payload as ServiceTokenResponse
+      } else {
+        type ServiceTokenFetch = (
+          url: string,
+          options: Record<string, unknown>
+        ) => Promise<ServiceTokenResponse>
+        const fetchServiceToken = $fetch as unknown as ServiceTokenFetch
+        response = await fetchServiceToken(tokenUrl, {
+          method: 'POST',
+          headers: requestHeaders,
+          body: requestBody,
+          timeout: 10000
+        })
+      }
+    } catch (error: unknown) {
+      const statusCode = responseStatusCode(error)
+      const message = responseMessage(error) || 'Console service token request failed'
+      console.error('[serviceOidc] Console service token request failed:', {
+        statusCode,
+        tokenHost: safeUrlHost(tokenUrl),
+        tokenPath: safeUrlPath(tokenUrl),
+        appCode,
+        audience: input.audience,
+        scope: input.scope,
+        message,
+        hasClientSecret: Boolean(clientSecret),
+        hasRuntimeAppIdentity: runtimeAppIdentity,
+        hasGatewayToken: Boolean(stringValue(input.event ? getHeader(input.event, 'x-hzy-gateway-token') : ''))
+      })
+      throw createError({ statusCode, message: `Console service token request failed: ${message}` })
+    }
+
+    const accessToken = stringValue(response.access_token)
+    if (!accessToken || String(response.token_type || '').toLowerCase() !== 'bearer') {
+      throw createError({ statusCode: 502, message: 'Console did not return a Bearer access token' })
+    }
+
+    const expiresIn = Number(response.expires_in)
+    return { accessToken, lifetimeMs: expiresIn * 1000 }
   }
 
-  const accessToken = stringValue(response.access_token)
-  if (!accessToken || String(response.token_type || '').toLowerCase() !== 'bearer') {
-    throw createError({ statusCode: 502, message: 'Console did not return a Bearer access token' })
-  }
-
-  const expiresIn = Number(response.expires_in || 900)
-  serviceTokenCache.set(cacheKey, {
-    accessToken,
-    expiresAt: Date.now() + Math.max(60, expiresIn) * 1000
-  })
-
-  return accessToken
+  return await coalesceServiceToken(cacheKey, Boolean(input.forceRefresh), refresh)
 }
 
 export async function requestWithServiceAccessToken<T>(input: {

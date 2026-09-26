@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { useAimsModule } from '../../../layer/useAimsModule'
+const { moduleUrl } = useAimsModule()
 interface Candidate { product_code: string, product_name: string, product_line_label: string | null, onboardable: boolean, source_status: string }
 interface Catalog { items: Candidate[], total: number, watermark: string, nextPage: number | null }
 defineProps<{ hideTrigger?: boolean }>()
@@ -35,7 +37,7 @@ async function searchProducts(next = 1, fresh = false) {
   if (fresh) submittedSearch = search.value.trim()
   const watermark = fresh ? undefined : catalog.value?.watermark
   try {
-    const response = await $fetch<{ code: number, data: Catalog }>('/api/v1/product-candidates', {
+    const response = await $fetch<{ code: number, data: Catalog }>(moduleUrl('/api/v1/product-candidates'), {
       query: { keyword: submittedSearch || undefined, page: next, pageSize: 20, watermark }
     })
     if (response.code !== 0 || !Array.isArray(response.data?.items)) throw new Error('产品候选响应不完整')
@@ -56,7 +58,7 @@ async function onboard() {
   const payload = JSON.stringify(body)
   if (key?.payload !== payload) key = { payload, value: crypto.randomUUID() }
   try {
-    const response = await $fetch<{ code: number }>('/api/v1/products', { method: 'POST', body, headers: { 'Idempotency-Key': key.value } })
+    const response = await $fetch<{ code: number }>(moduleUrl('/api/v1/products'), { method: 'POST', body, headers: { 'Idempotency-Key': key.value } })
     if (response.code !== 0) throw new Error('接入结果不完整，请重试')
     toast.add({ title: '产品管理已启用', color: 'success' })
     open.value = false

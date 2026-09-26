@@ -1,3 +1,4 @@
+import { evaluateEnterpriseEntitlement } from './enterpriseEntitlement'
 import { createHash, createPublicKey, timingSafeEqual, verify as nodeVerify } from 'node:crypto'
 import { isAbsolute, resolve } from 'node:path'
 import { getHeader, type H3Event } from 'h3'
@@ -10,6 +11,7 @@ import {
   getCachedBundleInvalidReason,
   patchActivationStatus,
   persistentPolicyStoreEnabled,
+  verifiedPolicyStoreEnabled,
   readActivationStatus,
   readCachedBundle,
   writeCachedBundle
@@ -22,6 +24,7 @@ import {
   policyBundleDeploymentMatchesRuntime,
   policyBundleRequestQuery
 } from '~~/server/utils/platformRuntimePolicyContextCore'
+import { parsePolicyRevisionResponse } from '~~/server/utils/policyRevisionResponse'
 
 type JsonValue
   = | string
@@ -192,6 +195,9 @@ export interface RefreshBundleResult {
   bundle: CachedPolicyBundle | null
   authClientMaterialization?: AuthClientMaterializeResult | null
   error: string | null
+  // Failure only: the original error, kept for renewal classification. Never
+  // serialized to responses or logs.
+  cause?: unknown
 }
 
 function normalizeString(value: unknown) {
@@ -712,7 +718,7 @@ export const platformRuntimeFetch: PlatformRuntimeFetch = async (url, options) =
     ...((options.headers as Record<string, string> | undefined) || {}),
     'user-agent': PLATFORM_WORKER_USER_AGENT
   }
-  const binding = getCloudflareEnv().HZY_PLATFORM_SERVICE as Partial<CloudflareServiceBinding> | undefined
+  const binding = (getRuntimeEvent()?.context.hzyPlatformTransport || getCloudflareEnv().HZY_PLATFORM_SERVICE) as Partial<CloudflareServiceBinding> | undefined
   if (binding && typeof binding.fetch === 'function') {
     const target = new URL(url)
     const query = options.query as Record<string, unknown> | undefined
@@ -754,8 +760,28 @@ export const platformRuntimeFetch: PlatformRuntimeFetch = async (url, options) =
 }
 const POLICY_BUNDLE_FETCH_TIMEOUT_MS = 30_000
 
-export async function fetchAndVerifyPolicyBundle(config: PlatformRuntimeConfig): Promise<CachedPolicyBundle> {
+function policyBundleFetchTimeoutMs(event?: H3Event) {
+  const runtimeEvent = (event as (H3Event & CloudflareRuntimeEvent) | undefined) || getRuntimeEvent()
+  const requested = Number(runtimeEnvValueForEvent(runtimeEvent, 'HZY_PLATFORM_POLICY_BUNDLE_FETCH_TIMEOUT_MS'))
+  if (!Number.isSafeInteger(requested) || requested < 1_000 || requested > 90_000) return POLICY_BUNDLE_FETCH_TIMEOUT_MS
+  return requested
+}
+
+export type PolicyFetchStage = 'platform' | 'protocol'
+
+// Marks where a policy fetch failed, so the verified syncer only treats a
+// Platform transport/HTTP failure as outage evidence. A response that fails
+// format or signature checks is a protocol failure, never "unreachable".
+export function tagPolicyStage(error: unknown, stage: PolicyFetchStage) {
+  const tagged = (error instanceof Error ? error : new Error(String(error))) as Error & { policyStage?: PolicyFetchStage }
+  tagged.policyStage ??= stage
+  return tagged
+}
+
+export async function fetchAndVerifyPolicyBundle(config: PlatformRuntimeConfig, event?: H3Event): Promise<CachedPolicyBundle> {
+  const verifiedFormat = verifiedPolicyStoreEnabled(event)
   const syncStartedAt = new Date().toISOString()
+  const timeout = policyBundleFetchTimeoutMs(event)
   if (!config.tenantCode) {
     throw new Error('tenant context is required to fetch policy bundle')
   }
@@ -764,40 +790,60 @@ export async function fetchAndVerifyPolicyBundle(config: PlatformRuntimeConfig):
     throw new Error('deploymentCode is required to fetch policy bundle')
   }
 
-  const response = config.activationMode === 'managed-cloud-multitenant'
-    ? await platformRuntimeFetch<PlatformBundleEnvelope>(
-        `${config.baseUrl}/api/platform/internal/console/tenants/${encodeURIComponent(config.tenantCode)}/bundle`,
-        {
-          query: {
-            ...policyBundleRequestQuery({
-              activationMode: config.activationMode,
-              environment: config.environment,
-              deploymentCode: config.deploymentCode
-            })
-          },
-          headers: {
-            'Authorization': `Bearer ${config.platformServiceToken}`,
-            'x-hzy-internal-principal': 'console-managed-cloud-worker'
-          },
-          timeout: POLICY_BUNDLE_FETCH_TIMEOUT_MS
-        }
-      )
-    : await platformRuntimeFetch<PlatformBundleEnvelope>(
-        `${config.baseUrl}/api/v1/runtime/deployments/${encodeURIComponent(config.deploymentCode)}/bundle`,
-        {
-          query: {
-            tenantCode: config.tenantCode
-          },
-          headers: {
-            Authorization: `Bearer ${config.runtimeToken}`
-          },
-          timeout: POLICY_BUNDLE_FETCH_TIMEOUT_MS
-        }
-      )
+  let response: PlatformBundleEnvelope
+  try {
+    response = config.activationMode === 'managed-cloud-multitenant'
+      ? await platformRuntimeFetch<PlatformBundleEnvelope>(
+          `${config.baseUrl}/api/platform/internal/console/tenants/${encodeURIComponent(config.tenantCode)}/bundle`,
+          {
+            query: {
+              ...(verifiedFormat ? { format: 'hzy-policy-envelope.v1', deploymentCode: config.deploymentCode } : {}),
+              ...policyBundleRequestQuery({
+                activationMode: config.activationMode,
+                environment: config.environment,
+                deploymentCode: config.deploymentCode
+              })
+            },
+            headers: {
+              'Authorization': `Bearer ${config.platformServiceToken}`,
+              'x-hzy-internal-principal': 'console-managed-cloud-worker'
+            },
+            timeout
+          }
+        )
+      : await platformRuntimeFetch<PlatformBundleEnvelope>(
+          `${config.baseUrl}/api/v1/runtime/deployments/${encodeURIComponent(config.deploymentCode)}/bundle`,
+          {
+            query: {
+              ...(verifiedFormat ? { format: 'hzy-policy-envelope.v1' } : {}),
+              tenantCode: config.tenantCode
+            },
+            headers: {
+              Authorization: `Bearer ${config.runtimeToken}`
+            },
+            timeout
+          }
+        )
+  } catch (error) {
+    throw tagPolicyStage(error, 'platform')
+  }
   const data = response.data
 
   if (!isSuccessfulPlatformBundleEnvelope(response) || !data) {
-    throw new Error('platform bundle response is invalid')
+    throw tagPolicyStage(new Error('platform bundle response is invalid'), 'protocol')
+  }
+
+  if (verifiedFormat) {
+    const { verifiedPolicyTrust } = await import('./verifiedPolicyRuntime')
+    const { verifiedEnvelopeBundle } = await import('./verifiedPolicySync')
+    const { key, context } = verifiedPolicyTrust(config, event)
+    try {
+      // Format is explicitly requested and validated; legacy responses fail here.
+      // Signed suspension/revocation is stored so it stops reads immediately.
+      return verifiedEnvelopeBundle(data as unknown as import('@hzy/authz-core/policy-envelope').PolicyEnvelope, key, { ...context, now: Date.now() }, { allowInactive: true })
+    } catch (error) {
+      throw tagPolicyStage(error, 'protocol')
+    }
   }
 
   if (!data.signature || !data.kid || !data.alg) {
@@ -840,6 +886,9 @@ export async function fetchAndVerifyPolicyBundle(config: PlatformRuntimeConfig):
   if (!verified) {
     throw new Error('bundle signature verification failed')
   }
+
+  const enterprise = evaluateEnterpriseEntitlement(data.bundle, config.tenantCode)
+  if (enterprise.reason === 'enterprise_entitlement_invalid') throw new Error(enterprise.reason)
 
   return {
     tenantCode: data.tenantCode,
@@ -929,7 +978,7 @@ export async function fetchPlatformTenantProfile(config: PlatformRuntimeConfig):
 }
 
 export async function refreshPlatformBundle(reason: string, event?: H3Event): Promise<RefreshBundleResult> {
-  if (persistentPolicyStoreEnabled() && (reason.endsWith('cache-miss') || reason === 'status-auto-refresh')) {
+  if (persistentPolicyStoreEnabled(event) && (reason.endsWith('cache-miss') || reason === 'status-auto-refresh')) {
     throw new Error('policy bundle sync required; request-path refresh disabled')
   }
   const runtimeMode = loadConsoleRuntimeMode(event)
@@ -957,7 +1006,7 @@ export async function refreshPlatformBundle(reason: string, event?: H3Event): Pr
       deploymentCode: null,
       lastCheckedAt: new Date().toISOString(),
       lastError: 'tenant context is required; access Console through Tenant Gateway'
-    }, cacheScope)
+    }, cacheScope, event)
     return {
       ok: false,
       status,
@@ -971,13 +1020,16 @@ export async function refreshPlatformBundle(reason: string, event?: H3Event): Pr
     if (config.activationMode !== 'managed-cloud-multitenant') {
       await readAndVerifyLicense(config)
     }
-    const bundle = await fetchAndVerifyPolicyBundle(config)
+    let bundle = await fetchAndVerifyPolicyBundle(config, event)
     const effectiveCacheScope = resolvePlatformRuntimeCacheScope({
       ...config,
       tenantCode: bundle.tenantCode,
       environment: config.environment
     }, event)
-    await writeCachedBundle(config.bundleCacheDir, bundle, effectiveCacheScope)
+    const persisted = await writeCachedBundle(config.bundleCacheDir, bundle, effectiveCacheScope, event)
+    // Verified CAS can return a newer concurrent winner. Never report or
+    // materialize the losing input after persistence.
+    if (persisted) bundle = persisted
     const materialized = reason !== 'independent-sync' && config.authClientMaterializeEnabled
       ? await materializeAuthClientsFromBundle(bundle)
       : null
@@ -994,14 +1046,14 @@ export async function refreshPlatformBundle(reason: string, event?: H3Event): Pr
       lastCheckedAt: new Date().toISOString(),
       lastActivatedAt: new Date().toISOString(),
       lastError: null
-    }, effectiveCacheScope)
+    }, effectiveCacheScope, event)
 
     if (config.activationMode !== 'managed-cloud-multitenant' && config.heartbeatEnabled) {
       await postPlatformHeartbeat(config, bundle)
         .then(async () => {
           await patchActivationStatus(config.bundleCacheDir, {
             lastHeartbeatAt: new Date().toISOString()
-          }, effectiveCacheScope)
+          }, effectiveCacheScope, event)
         })
         .catch((error) => {
           const message = error instanceof Error ? error.message : String(error)
@@ -1028,16 +1080,90 @@ export async function refreshPlatformBundle(reason: string, event?: H3Event): Pr
       deploymentCode: config.deploymentCode,
       lastCheckedAt: new Date().toISOString(),
       lastError: message
-    }, cacheScope)
+    }, cacheScope, event)
 
     return {
       ok: false,
       status,
       bundle: null,
       authClientMaterialization: null,
-      error: message
+      error: message,
+      cause: error
     }
   }
+}
+
+export interface PlatformPolicyRevision {
+  policyRevision: number
+  payloadHash: string
+  status: 'active' | 'suspended' | 'revoked'
+}
+
+/**
+ * Lightweight change probe (`format=hzy-policy-revision.v1`): no signature and
+ * no payload, same authentication as the envelope request. It only decides
+ * whether a full envelope fetch is needed; it never authorizes anything.
+ */
+export async function fetchPlatformPolicyRevision(event: H3Event): Promise<PlatformPolicyRevision> {
+  const config = loadPlatformRuntimeConfig(event)
+  if (!config.tenantCode) throw new Error('tenant context is required to probe policy revision')
+  let response: { code?: number, success?: boolean, data?: Record<string, unknown> }
+  try {
+    response = config.activationMode === 'managed-cloud-multitenant'
+      ? await platformRuntimeFetch<{ code?: number, success?: boolean, data?: Record<string, unknown> }>(
+          `${config.baseUrl}/api/platform/internal/console/tenants/${encodeURIComponent(config.tenantCode)}/bundle`,
+          {
+            query: {
+              format: 'hzy-policy-revision.v1',
+              deploymentCode: config.deploymentCode,
+              ...policyBundleRequestQuery({ activationMode: config.activationMode, environment: config.environment, deploymentCode: config.deploymentCode })
+            },
+            headers: { 'Authorization': `Bearer ${config.platformServiceToken}`, 'x-hzy-internal-principal': 'console-managed-cloud-worker' },
+            timeout: policyBundleFetchTimeoutMs(event)
+          }
+        )
+      : await platformRuntimeFetch<{ code?: number, success?: boolean, data?: Record<string, unknown> }>(
+          `${config.baseUrl}/api/v1/runtime/deployments/${encodeURIComponent(config.deploymentCode)}/bundle`,
+          {
+            query: { format: 'hzy-policy-revision.v1', tenantCode: config.tenantCode },
+            headers: { Authorization: `Bearer ${config.runtimeToken}` },
+            timeout: policyBundleFetchTimeoutMs(event)
+          }
+        )
+  } catch (error) {
+    throw tagPolicyStage(error, 'platform')
+  }
+  const revision = parsePolicyRevisionResponse(response, {
+    managed: config.activationMode === 'managed-cloud-multitenant',
+    tenant: config.tenantCode,
+    environment: config.environment,
+    deployment: config.deploymentCode
+  })
+  if (!revision) {
+    throw tagPolicyStage(new Error('platform policy revision response is invalid'), 'protocol')
+  }
+  return revision
+}
+
+/**
+ * Registers this Console deployment's steady service key (R1). Platform signs
+ * it into the deployment's policy envelope; the next full sync delivers it to
+ * Runtime. Only the managed Console path has the registration endpoint.
+ */
+export async function registerPlatformConsoleServiceKey(event: H3Event, publicKey: string) {
+  const config = loadPlatformRuntimeConfig(event)
+  if (config.activationMode !== 'managed-cloud-multitenant' || !config.tenantCode || !config.deploymentCode) return false
+  const response = await platformRuntimeFetch<{ data?: { kid?: unknown } }>(
+    `${config.baseUrl}/api/platform/internal/console/tenants/${encodeURIComponent(config.tenantCode)}/service-keys`,
+    {
+      method: 'POST',
+      body: { environment: config.environment, deploymentCode: config.deploymentCode, publicKey },
+      headers: { 'Authorization': `Bearer ${config.platformServiceToken}`, 'x-hzy-internal-principal': 'console-managed-cloud-worker' },
+      timeout: policyBundleFetchTimeoutMs(event)
+    }
+  )
+  if (typeof response?.data?.kid !== 'string') throw new Error('platform service key response is invalid')
+  return true
 }
 
 export async function loadActivationStatus(event?: H3Event) {
@@ -1061,7 +1187,7 @@ export async function loadActivationStatus(event?: H3Event) {
 
   const cacheScope = resolvePlatformRuntimeCacheScope(config, event)
   if (config.activationMode === 'managed-cloud-multitenant' && !config.tenantCode) {
-    const status = await readActivationStatus(config.bundleCacheDir, cacheScope)
+    const status = await readActivationStatus(config.bundleCacheDir, cacheScope, event)
     return {
       ...status,
       mode: 'pending' as const,
@@ -1077,8 +1203,8 @@ export async function loadActivationStatus(event?: H3Event) {
   }
 
   const [status, bundle] = await Promise.all([
-    readActivationStatus(config.bundleCacheDir, cacheScope),
-    readCachedBundle(config.bundleCacheDir, cacheScope)
+    readActivationStatus(config.bundleCacheDir, cacheScope, event),
+    readCachedBundle(config.bundleCacheDir, cacheScope, event)
   ])
 
   if (bundle && status.activated) {
@@ -1107,7 +1233,11 @@ export async function loadActivationStatus(event?: H3Event) {
       tenantCode: bundle.tenantCode || config.tenantCode,
       deploymentCode: bundle.deploymentCode || config.deploymentCode,
       bundleVersion: bundle.bundleVersion,
-      bundleHash: bundle.bundleHash
+      bundleHash: bundle.bundleHash,
+      // Verified backend only: 'grace' means Platform is unreachable and the
+      // last authentic policy is served until policyValidUntil.
+      policyValidity: bundle.policyValidity ?? null,
+      policyValidUntil: bundle.policyValidity ? bundle.expiresAt ?? null : null
     }
   }
 

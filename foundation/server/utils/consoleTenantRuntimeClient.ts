@@ -868,6 +868,59 @@ export async function issueConsoleRuntimeServiceToken(
   )
 }
 
+export async function exchangeConsoleServiceClientToken(
+  event: H3Event,
+  body: {
+    clientId: string
+    clientSecret: string
+    audience: string
+    scope: string
+    issuer: string
+    ttlSeconds: number
+    sourceBinding: 'service-client-policy'
+    policyVersion: string
+    caps: string
+  }
+) {
+  return await callConsoleTenantRuntime<ConsoleTenantRuntimeEnvelope<{
+    accessToken: string
+    tokenType: 'Bearer'
+    expiresIn: number
+    scope: string
+  }>>(
+    event,
+    '/v1/console/auth/service-tokens/exchange',
+    {
+      scope: 'console:service-token:exchange',
+      method: 'POST',
+      body,
+      requireStaticRuntimeToken: true
+    }
+  )
+}
+
+// Only an already authenticated console.runtime identity may invoke this route.
+export async function exchangeConsoleGatewayToken(event: H3Event, body: {
+  assertion: string
+  clientId: string
+  audience: string
+  scope: string
+  issuer: string
+  ttlSeconds: number
+  policyVersion: string
+  caps: string
+}) {
+  return await callConsoleTenantRuntime<ConsoleTenantRuntimeEnvelope<{
+    accessToken: string
+    tokenType: 'Bearer'
+    expiresIn: number
+    scope: string
+  }>>(event, '/v1/console/auth/service-tokens/gateway-exchange', {
+    scope: 'console:service-token:gateway-exchange', method: 'POST', body,
+    requireStaticRuntimeToken: true
+  })
+}
+
 export interface ConsoleServiceClientTokenSubject {
   serviceClientId: number
   credentialId: number

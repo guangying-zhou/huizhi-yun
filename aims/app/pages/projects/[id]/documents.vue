@@ -1,6 +1,14 @@
 <script setup lang="ts">
-import type { DocumentNode } from '~/components/document/DocumentTree.vue'
+import { useAimsModule } from '../../../../layer/useAimsModule'
+import type { DocumentNode } from '../../../components/document/DocumentTree.vue'
+import { useMilestoneStore } from '../../../stores/milestone'
+import { useProjectStore } from '../../../stores/project'
+import AimsDocumentPreview from '../../../components/AimsDocumentPreview.vue'
+import DocumentTree from '../../../components/document/DocumentTree.vue'
+import ProjectNavbar from '../../../components/project/ProjectNavbar.vue'
 
+// 同一份代码供独立应用与企业宿主使用：非宿主模式下 moduleUrl 原样返回路径。
+const { moduleUrl, hosted } = useAimsModule()
 definePageMeta({
   layoutHeader: true,
   layoutHeaderTitle: '项目文档',
@@ -193,11 +201,13 @@ function ensureCanDeleteDocument(doc: ProjectDocument | null | undefined) {
 
 const documents = ref<ProjectDocument[]>([])
 const documentsLoading = ref(false)
+const documentsError = ref(false)
 const selectedLibrary = ref<DocumentLibrary>('standard')
 const selectedTargetKey = ref('project')
 const search = ref('')
 
 const showCreateModal = ref(false)
+const createDocumentUuid = ref('')
 const createKind = ref<'document' | 'folder'>('document')
 const createParentId = ref<number | null>(null)
 const createTargetKey = ref('project')
@@ -493,7 +503,7 @@ async function checkDocumentAccess(doc: ProjectDocument, action: 'view' | 'downl
       lifecycleStage: 'draft' | 'formal' | 'archived'
       confidentialityLevel: 'L0' | 'L1' | 'L2' | 'L3'
     }
-  }>(`/api/v1/projects/${projectId.value}/documents/${doc.id}/access-check`, {
+  }>(moduleUrl(`/api/v1/projects/${projectId.value}/documents/${doc.id}/access-check`), {
     method: 'POST',
     body: { action }
   })
@@ -631,7 +641,7 @@ async function loadAccessPolicy() {
           expiresAt: string | null
         }>
       }
-    }>(`/api/v1/projects/${projectId.value}/documents/${accessDoc.value.id}/access-policy`)
+    }>(moduleUrl(`/api/v1/projects/${projectId.value}/documents/${accessDoc.value.id}/access-policy`))
 
     accessPolicy.lifecycleStage = res.data.lifecycleStage
     accessPolicy.confidentialityLevel = res.data.confidentialityLevel
@@ -669,7 +679,7 @@ async function loadAccessAuditLogs(page = 1) {
         page: number
         pageSize: number
       }
-    }>(`/api/v1/projects/${projectId.value}/documents/${accessDoc.value.id}/access-audit`, {
+    }>(moduleUrl(`/api/v1/projects/${projectId.value}/documents/${accessDoc.value.id}/access-audit`), {
       params: { page, pageSize: accessAuditPageSize }
     })
     accessAuditLogs.value = Array.isArray(res.data.items) ? res.data.items : []
@@ -741,7 +751,7 @@ async function saveAccessPolicy() {
         lifecycleStage: AccessLifecycleStage
         confidentialityLevel: AccessConfidentialityLevel
       }
-    }>(`/api/v1/projects/${projectId.value}/documents/${accessDoc.value.id}/access-policy`, {
+    }>(moduleUrl(`/api/v1/projects/${projectId.value}/documents/${accessDoc.value.id}/access-policy`), {
       method: 'PUT',
       body: {
         lifecycleStage: accessPolicy.lifecycleStage,
@@ -779,8 +789,10 @@ function randomUuid() {
 async function loadDocuments() {
   if (!projectId.value) return
   documentsLoading.value = true
+  documentsError.value = false
   try {
-    const res = await $fetch<{ code: number, data: { items?: RawProjectDocument[] } }>('/api/v1/project-documents/accessible', {
+    const res = await $fetch<{ code: number, data: { items?: RawProjectDocument[] } }>(moduleUrl('/api/v1/project-documents/accessible'), {
+      retry: 0,
       params: {
         projectId: projectId.value
       }
@@ -789,8 +801,9 @@ async function loadDocuments() {
       documents.value = normalizeListPayload(res.data)
         .map(normalizeDocument)
         .filter(doc => Boolean(doc.id))
-    }
+    } else throw new Error('项目文档服务返回失败')
   } catch (error) {
+    documentsError.value = true
     console.error('[ProjectDocuments] Failed to load documents:', error)
     toast.add({ title: '加载项目文档失败', color: 'error' })
   } finally {
@@ -802,6 +815,7 @@ function openCreateModal(kind: 'document' | 'folder', parentId: number | null = 
   if (!ensureCanWriteDocuments()) return
   const parent = parentId ? documentMap.value.get(parentId) : null
   createKind.value = kind
+  createDocumentUuid.value = randomUuid()
   createParentId.value = parentId
   createTargetKey.value = parent ? documentTargetKey(parent) : activeTarget.value.key
   createTitle.value = ''
@@ -863,7 +877,7 @@ function withAppBase(path: string) {
 
 function cabinetDownloadUrl(doc: ProjectDocument | null) {
   if (!doc?.id) return ''
-  return withAppBase(`/api/v1/projects/${projectId.value}/documents/${doc.id}/download`)
+  return withAppBase(moduleUrl(`/api/v1/projects/${projectId.value}/documents/${doc.id}/download`))
 }
 
 function resetOtherPreview() {
@@ -892,7 +906,7 @@ async function loadOtherDocumentPreview(doc: ProjectDocument) {
   otherPreviewLoading.value = true
   try {
     const response = await $fetch<{ code: number, data: CabinetPreviewInfo }>(
-      `/api/v1/projects/${projectId.value}/documents/${doc.id}/preview`
+      moduleUrl(`/api/v1/projects/${projectId.value}/documents/${doc.id}/preview`)
     )
     otherPreviewInfo.value = response.data
   } catch (error: unknown) {
@@ -915,10 +929,10 @@ async function downloadOtherDocument(doc: ProjectDocument | null) {
 async function createFolder() {
   if (!ensureCanWriteDocuments()) return
   const target = createTarget.value
-  await $fetch('/api/v1/documents', {
+  await $fetch(moduleUrl('/api/v1/documents'), {
     method: 'POST',
     body: {
-      uuid: randomUuid(),
+      uuid: createDocumentUuid.value || (createDocumentUuid.value = randomUuid()),
       ...(target.milestoneId ? { milestoneId: target.milestoneId } : { projectId: projectId.value }),
       projectCode: projectCode.value,
       parentId: createParentId.value,
@@ -931,10 +945,11 @@ async function createFolder() {
 async function createMarkdownDocument(content?: string, sourceFileName?: string) {
   if (!ensureCanWriteDocuments()) return
   const target = createTarget.value
-  await $fetch(`/api/v1/projects/${projectId.value}/markdown-documents`, {
+  await $fetch(moduleUrl(`/api/v1/projects/${projectId.value}/markdown-documents`), {
     method: 'POST',
     body: {
       title: createTitle.value.trim(),
+      uuid: createDocumentUuid.value || (createDocumentUuid.value = randomUuid()),
       docCategory: createCategory.value,
       milestoneId: target.milestoneId,
       parentId: createParentId.value,
@@ -998,6 +1013,7 @@ async function handleMarkdownUpload(event: Event) {
   toast.add({ title: '正在上传 Markdown 文档，请稍候', color: 'secondary' })
   try {
     createKind.value = 'document'
+    createDocumentUuid.value = randomUuid()
     createParentId.value = null
     createTargetKey.value = activeTarget.value.key
     createTitle.value = file.name.replace(/\.md$/i, '')
@@ -1017,6 +1033,11 @@ async function handleOtherUpload(event: Event) {
   input.value = ''
   if (!file) return
 
+  if (file.size > 10 * 1024 * 1024) {
+    toast.add({ title: '请选择不超过 10MB 的文件', color: 'warning' })
+    return
+  }
+
   const extension = fileExtension(file.name)
   if (!otherDocumentExtensions.has(extension)) {
     toast.add({ title: '支持上传 Word、Excel、PowerPoint、PDF、TXT、CSV、压缩包等文件', color: 'warning' })
@@ -1028,9 +1049,10 @@ async function handleOtherUpload(event: Event) {
   try {
     const formData = new FormData()
     formData.append('file', file, file.name)
+    formData.append('documentUuid', randomUuid())
     formData.append('docCategory', otherDocumentCategory(file.name))
 
-    await $fetch(`/api/v1/projects/${projectId.value}/other-documents`, {
+    await $fetch(moduleUrl(`/api/v1/projects/${projectId.value}/other-documents`), {
       method: 'POST',
       body: formData
     })
@@ -1117,7 +1139,7 @@ async function deleteDocument() {
   if (!ensureCanDeleteDocument(deleteTarget.value)) return
   deleting.value = true
   try {
-    await $fetch(`/api/v1/documents/${deleteTarget.value.id}`, { method: 'DELETE' })
+    await $fetch(moduleUrl(`/api/v1/documents/${deleteTarget.value.id}`), { method: 'DELETE' })
     toast.add({ title: '文档已删除', color: 'success' })
     showDeleteModal.value = false
     await loadDocuments()
@@ -1161,7 +1183,15 @@ onBeforeUnmount(clearRefresh)
   <UDashboardPanel id="project-documents" :ui="{ root: 'relative flex flex-col min-w-0 h-full shrink-0', body: 'flex flex-col flex-1 min-h-0 p-0 overflow-hidden' }">
     <template #body>
       <div class="flex h-full min-h-0 flex-col">
-        <ProjectNavbar />
+        <ProjectNavbar v-if="!hosted" />
+        <header v-else class="border-b border-default px-4 py-3">
+          <h1 class="text-lg font-semibold text-highlighted">
+            项目文档
+          </h1>
+          <p class="text-sm text-muted">
+            {{ project?.name || projectCode }}
+          </p>
+        </header>
 
         <div class="grid min-h-0 flex-1 grid-cols-1 overflow-hidden lg:grid-cols-[18rem_1fr]">
           <aside class="flex min-h-0 flex-col border-b border-default bg-default lg:border-b-0 lg:border-r">
@@ -1347,6 +1377,16 @@ onBeforeUnmount(clearRefresh)
 
               <div v-if="documentsLoading" class="flex justify-center py-12">
                 <UIcon name="i-lucide-loader-2" class="size-6 animate-spin text-muted" />
+              </div>
+
+              <div v-else-if="documentsError" role="alert" class="space-y-3 py-12 text-center text-sm">
+                <p>项目文档加载失败，请重试。当前结果不代表项目没有文档。</p>
+                <UButton
+                  label="重新加载文档"
+                  color="neutral"
+                  variant="outline"
+                  @click="loadDocuments"
+                />
               </div>
 
               <div v-else-if="search" class="space-y-2">

@@ -286,6 +286,21 @@ func ReadLightweightVersionPlan(ctx context.Context, db *sql.DB, code, uid strin
 		return out, e
 	}
 	defer tx.Rollback()
+	out, e = ReadLightweightVersionPlanInTransaction(ctx, tx, code, uid, versionID, permit, requestPermit)
+	if e != nil {
+		return out, e
+	}
+	return out, tx.Commit()
+}
+
+// ReadLightweightVersionPlanInTransaction uses the caller's generation-fenced transaction.
+// The owning authorization and query semantics are shared with the legacy entry.
+func ReadLightweightVersionPlanInTransaction(ctx context.Context, tx *sql.Tx, code, uid string, versionID int64, permit, requestPermit AuthorizationPermit) (LightweightVersionPlan, error) {
+	var out LightweightVersionPlan
+	if tx == nil {
+		return out, invalid("product_command_configuration", "缺少产品读取事务")
+	}
+	var e error
 	if e = AuthorizeWorkspaceTransaction(ctx, tx, code, uid, "product_versions", "view", permit); e != nil {
 		return out, e
 	}
@@ -335,7 +350,7 @@ func ReadLightweightVersionPlan(ctx context.Context, db *sql.DB, code, uid strin
 	if out.Confirmation != nil && len(out.Summary.Issues) > 0 {
 		out.PlanStatus = "stale"
 	}
-	return out, tx.Commit()
+	return out, nil
 }
 func nullableString(s sql.NullString) *string {
 	if !s.Valid {

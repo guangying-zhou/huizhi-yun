@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import type { ApiResponse, IpAssetItem, ListPayload, SummaryMetric } from '~/types'
+import { useAssetsModule } from '../../../layer/useAssetsModule'
+import { useAssetLabels } from '../../composables/useAssetLabels'
 
 usePageTitle('知识产权资产')
 
@@ -15,6 +17,16 @@ const { search, debounced: debouncedSearch } = useDebouncedSearch({
   }
 })
 const selectedStatus = ref<'all' | 'active' | 'applying' | 'expired'>('all')
+const { hosted, moduleUrl, cacheKey } = useAssetsModule()
+const { loadPermissions, hasPermission, loaded: permissionsLoaded } = usePermissions()
+const { data: writeAccess } = await useFetch<ApiResponse<{ digital_assets: boolean, ip_assets: boolean }>>(moduleUrl('/api/v1/write-access'), {
+  key: cacheKey('assets-write-access'),
+  immediate: hosted
+})
+if (!hosted) await loadPermissions()
+const canEditIpAsset = computed(() => hosted
+  ? writeAccess.value?.data?.ip_assets === true
+  : permissionsLoaded.value && hasPermission('ip_assets', 'edit'))
 
 watch(selectedStatus, () => {
   page.value = 1
@@ -27,7 +39,10 @@ const query = computed(() => ({
   status: selectedStatus.value === 'all' ? undefined : selectedStatus.value
 }))
 
-const { data: response, refresh, status } = await useFetch<ApiResponse<ListPayload<IpAssetItem>>>('/api/v1/ip-assets', { query })
+const { data: response, refresh, status } = await useFetch<ApiResponse<ListPayload<IpAssetItem>>>(moduleUrl('/api/v1/ip-assets'), {
+  key: cacheKey('ip-assets'),
+  query
+})
 const { setRefresh, clearRefresh } = usePageActions()
 onMounted(() => setRefresh(refresh))
 onBeforeUnmount(clearRefresh)
@@ -51,12 +66,12 @@ const columns = [
 ]
 
 const handleRowSelect = (_event: Event, row: { original: IpAssetItem }) => {
-  navigateTo(`/ip-assets/${row.original.id}`)
+  navigateTo(moduleUrl(`/ip-assets/${row.original.id}`))
 }
 
 const handleCreated = async (id: number) => {
   await refresh()
-  navigateTo(`/ip-assets/${id}`)
+  navigateTo(moduleUrl(`/ip-assets/${id}`))
 }
 </script>
 
@@ -71,6 +86,7 @@ const handleCreated = async (id: number) => {
             <div class="flex items-center justify-between gap-3">
               <span class="font-semibold">台账列表</span>
               <UButton
+                v-if="!hosted || canEditIpAsset"
                 icon="i-lucide-plus"
                 color="primary"
                 class="shrink-0"
@@ -147,9 +163,22 @@ const handleCreated = async (id: number) => {
             />
           </div>
         </UCard>
+        <UAlert
+          v-if="hosted && !canEditIpAsset"
+          color="info"
+          variant="soft"
+          icon="i-lucide-info"
+          title="当前仅提供知识产权资产只读台账"
+          description="当前账号没有知识产权资产编辑权限；产品和文档关联尚未迁入企业工作台。"
+        />
       </div>
     </template>
   </UDashboardPanel>
 
-  <AssetsIpAssetCreateModal :open="createOpen" @update:open="createOpen = $event" @created="handleCreated" />
+  <AssetsIpAssetCreateModal
+    v-if="!hosted || canEditIpAsset"
+    :open="createOpen"
+    @update:open="createOpen = $event"
+    @created="handleCreated"
+  />
 </template>

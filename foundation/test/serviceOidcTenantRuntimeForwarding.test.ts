@@ -1,5 +1,6 @@
 import { afterEach, describe, test } from 'node:test'
 import assert from 'node:assert/strict'
+import { SignJWT } from 'jose'
 import {
   fetchConsoleServiceJson,
   requestServiceAccessToken,
@@ -267,5 +268,154 @@ describe('Console service-token tenant-runtime forwarding', () => {
     assert.equal(body.client_id, 'workflow.runtime')
     assert.equal(body.app_code, 'workflow')
     assert.equal(body.client_secret, undefined)
+  })
+
+  test('coalesces concurrent cold requests for the same service token', async () => {
+    let requests = 0
+    let release: (() => void) | undefined
+    const pending = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    ;(globalThis as { useRuntimeConfig?: () => unknown }).useRuntimeConfig = () => ({
+      hzy: { appCode: 'aims', consoleUrl: 'https://console.example.test', serviceClient: { clientId: 'aims.runtime', clientSecret: 'test-secret' } }
+    })
+    const event = {
+      context: { cloudflare: { env: { HZY_CONSOLE_SERVICE: {
+        async fetch() {
+          requests += 1
+          await pending
+          return Response.json({ access_token: 'coalesced-token', token_type: 'Bearer', expires_in: 900 })
+        }
+      } } } },
+      node: { req: { headers: { 'host': 'aims.example.test', 'x-forwarded-proto': 'https' }, url: '/api/test', originalUrl: '/api/test' } }
+    } as never
+
+    const concurrent = Array.from({ length: 100 }, () => requestServiceAccessToken({
+      audience: 'data-runtime', scope: 'aims:coalesced:test', event
+    }))
+    await new Promise(resolve => setTimeout(resolve, 0))
+    assert.equal(requests, 1)
+    release?.()
+    assert.deepEqual(await Promise.all(concurrent), Array(100).fill('coalesced-token'))
+  })
+
+  test('normalizes scope while isolating tenant, deployment, environment, audience and source binding', async () => {
+    let requests = 0
+    ;(globalThis as { useRuntimeConfig?: () => unknown }).useRuntimeConfig = () => ({
+      hzy: {
+        appCode: 'aims', consoleUrl: 'https://console.example.test',
+        cloudflareInternalToken: 'fixture-gateway-token',
+        serviceClient: { clientId: 'aims.runtime', clientSecret: 'fixture-secret' }
+      }
+    })
+    const eventFor = (tenant: string, deployment: string, environment = 'test') => ({
+      context: { cloudflare: { env: { HZY_CONSOLE_SERVICE: {
+        async fetch(input: string | URL | Request) {
+          const url = input instanceof Request ? input.url : String(input)
+          if (!url.endsWith('/oauth/token')) return Response.json({})
+          requests++
+          return Response.json({ access_token: `token-${requests}`, token_type: 'Bearer', expires_in: 900 })
+        }
+      } } } },
+      node: { req: { headers: {
+        'x-hzy-gateway': 'tenant-gateway',
+        'x-hzy-gateway-token': 'fixture-gateway-token',
+        'x-hzy-tenant': tenant,
+        'x-hzy-deployment': deployment,
+        'x-hzy-environment': environment,
+        'x-hzy-app-code': 'aims',
+        'x-forwarded-host': 'fixture.example.test',
+        'x-forwarded-proto': 'https'
+      }, url: '/api/test' } }
+    }) as never
+    const event = eventFor('C000001', 'C000001-aims')
+    const base = { audience: 'data-runtime', scope: 'aims:one:read aims:two:read', event }
+    const first = await requestServiceAccessToken(base)
+    assert.equal(await requestServiceAccessToken({ ...base, scope: 'aims:two:read aims:one:read aims:one:read' }), first)
+    assert.equal(requests, 1)
+    for (const input of [
+      { ...base, event: eventFor('C000002', 'C000001-aims') },
+      { ...base, event: eventFor('C000001', 'C000002-aims') },
+      { ...base, event: eventFor('C000001', 'C000001-aims', 'prod') },
+      { ...base, audience: 'tenant-runtime' },
+      { ...base, sourceBinding: 'service-client-policy' as const }
+    ]) {
+      assert.notEqual(await requestServiceAccessToken(input), first)
+    }
+    assert.equal(requests, 6)
+  })
+
+  test('forced refresh bypasses an older flight and keeps the newer token', async () => {
+    let requests = 0
+    let releaseOld!: () => void
+    const oldPending = new Promise<void>((resolve) => {
+      releaseOld = resolve
+    })
+    ;(globalThis as { useRuntimeConfig?: () => unknown }).useRuntimeConfig = () => ({
+      hzy: { appCode: 'aims', consoleUrl: 'https://console.example.test', serviceClient: { clientId: 'aims.runtime', clientSecret: 'fixture-secret' } }
+    })
+    const event = {
+      context: { cloudflare: { env: { HZY_CONSOLE_SERVICE: { async fetch(input: string | URL | Request) {
+        const url = input instanceof Request ? input.url : String(input)
+        if (!url.endsWith('/oauth/token')) return Response.json({})
+        requests++
+        const current = requests
+        if (current === 1) await oldPending
+        return Response.json({ access_token: `token-${current}`, token_type: 'Bearer', expires_in: 900 })
+      } } } } },
+      node: { req: { headers: { host: 'aims.example.test' }, url: '/api/test', originalUrl: '/api/test' } }
+    } as never
+    const input = { audience: 'data-runtime', scope: 'aims:refresh:test', event }
+    const old = requestServiceAccessToken(input)
+    await new Promise(resolve => setTimeout(resolve, 0))
+    assert.equal(await requestServiceAccessToken({ ...input, forceRefresh: true }), 'token-2')
+    releaseOld()
+    assert.equal(await old, 'token-1')
+    assert.equal(await requestServiceAccessToken(input), 'token-2')
+    assert.equal(requests, 2)
+  })
+
+  test('local issuer shares the bounded cache and flight without retaining opaque tokens', async () => {
+    ;(globalThis as { useRuntimeConfig?: () => unknown }).useRuntimeConfig = () => ({ hzy: { appCode: 'console' } })
+    let calls = 0
+    const jwt = await new SignJWT({ token_use: 'service' })
+      .setProtectedHeader({ alg: 'HS256' })
+      .setExpirationTime('5m')
+      .sign(new TextEncoder().encode('fixture-secret-fixture-secret-fixture-secret'))
+    setLocalServiceTokenIssuer(async () => {
+      calls++
+      return jwt
+    })
+    const input = { audience: 'data-runtime', scope: 'console:read', event: { node: { req: { headers: {}, url: '/api/test' } } } as never }
+    assert.deepEqual(await Promise.all(Array.from({ length: 100 }, () => requestServiceAccessToken(input))), Array(100).fill(jwt))
+    assert.equal(calls, 1)
+    assert.equal(await requestServiceAccessToken(input), jwt)
+    assert.equal(calls, 1)
+    await requestServiceAccessToken({ ...input, forceRefresh: true })
+    assert.equal(calls, 2)
+    await requestServiceAccessToken({ ...input, deploymentCodeOverride: 'other' })
+    assert.equal(calls, 3)
+  })
+
+  test('evicts the oldest service token when an isolate reaches its cache limit', async () => {
+    ;(globalThis as { useRuntimeConfig?: () => unknown }).useRuntimeConfig = () => ({ hzy: { appCode: 'console' } })
+    let calls = 0
+    const jwt = await new SignJWT({ token_use: 'service' })
+      .setProtectedHeader({ alg: 'HS256' })
+      .setExpirationTime('5m')
+      .sign(new TextEncoder().encode('fixture-secret-fixture-secret-fixture-secret'))
+    setLocalServiceTokenIssuer(async () => {
+      calls++
+      return jwt
+    })
+    const event = { node: { req: { headers: {}, url: '/api/test' } } } as never
+    for (let index = 0; index < 257; index++) {
+      await requestServiceAccessToken({ audience: 'data-runtime', scope: `console:fixture:${index}`, event })
+    }
+    assert.equal(calls, 257)
+    await requestServiceAccessToken({ audience: 'data-runtime', scope: 'console:fixture:256', event })
+    assert.equal(calls, 257, 'the newest entry remains cached')
+    await requestServiceAccessToken({ audience: 'data-runtime', scope: 'console:fixture:0', event })
+    assert.equal(calls, 258, 'the oldest entry was evicted')
   })
 })

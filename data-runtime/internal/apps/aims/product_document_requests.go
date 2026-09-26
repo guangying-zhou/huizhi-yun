@@ -11,6 +11,10 @@ import (
 )
 
 func (a *Adapter) handleProductDocumentRequestRuntime(ctx context.Context, method, path string, query url.Values, body map[string]any) (any, string, bool, error) {
+	outbox, outboxErr := a.enterpriseOutbox()
+	if outboxErr != nil {
+		return nil, "", true, outboxErr
+	}
 	action := "template-create"
 	code, match := pathParam(path, "/v1/aims/internal/products/", "/documents:"+action)
 	if !match {
@@ -40,7 +44,7 @@ func (a *Adapter) handleProductDocumentRequestRuntime(ctx context.Context, metho
 		if err := decodeProductCommandPart(body["input"], &input); err != nil {
 			return nil, operation, true, err
 		}
-		result, err := productcenter.LinkCreatedProductDocument(ctx, a.DB(), identity, permit, input)
+		result, err := productcenter.LinkCreatedProductDocument(ctx, a.DB(), outbox, identity, permit, input)
 		return result, operation, true, productRuntimeError(err)
 	}
 	var input productcenter.ProductDocumentRequestCreate

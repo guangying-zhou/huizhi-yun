@@ -1,4 +1,5 @@
 import { normalizeNullableString, requireString } from '~~/server/utils/api'
+import { currentPolicyEnvelope, currentPolicyRevision, policyDeploymentRefusal } from '~~/server/utils/currentPolicyEnvelope'
 import { contractOk, buildQueryString, resolveDeploymentForV1 } from '~~/server/utils/controlPlaneV1'
 import {
   findOrGeneratePolicyBundleForDeployment,
@@ -15,7 +16,9 @@ export default defineEventHandler(async (event) => {
     deploymentId: deploymentCode,
     tenantCode
   })
+  const signedPolicy = query.format === 'hzy-policy-envelope.v1' || query.format === 'hzy-policy-revision.v1'
   if (deployment.status !== 'active') {
+    if (signedPolicy) throw policyDeploymentRefusal('inactive')
     throw createError({
       statusCode: 409,
       statusMessage: 'Conflict',
@@ -23,6 +26,12 @@ export default defineEventHandler(async (event) => {
     })
   }
 
+  if (signedPolicy) {
+    if (query.version || query.bundleVersion) throw createError({ statusCode: 400, message: 'Historical policy envelopes cannot be renewed' })
+    return contractOk(query.format === 'hzy-policy-revision.v1'
+      ? await currentPolicyRevision(event, deployment)
+      : await currentPolicyEnvelope(event, deployment))
+  }
   const bundle = await findOrGeneratePolicyBundleForDeployment({
     deploymentId: deployment.id,
     tenantCode: deployment.tenant_code,

@@ -2,12 +2,13 @@ import { createError, getHeader, getQuery, getRequestURL, getRouterParam, readBo
 import { requireConsoleAuthContext } from '@hzy/foundation/server/utils/consoleOidc'
 import { hashServiceCommandPayload, verifyServiceCommandRuntimeHeaders } from '@hzy/foundation/server/utils/tenantRuntimeClient'
 import { callCodocsTenantRuntime } from '~~/server/utils/codocsRuntime'
-import { ASSETS_PRODUCT_DOCUMENT_READ_SERVICE_AUTH, requireCodocsServiceAuth, requireCodocsCrossAppServiceTenantDeploymentBinding } from '~~/server/utils/serviceAuthGuard'
+import { ASSETS_PRODUCT_DOCUMENT_READ_SERVICE_AUTH, ENTERPRISE_ASSETS_PRODUCT_DOCUMENT_READ_SERVICE_AUTH, requireCodocsServiceAuth, requireCodocsCrossAppServiceTenantDeploymentBinding } from '~~/server/utils/serviceAuthGuard'
 
 export default defineEventHandler(async (event) => {
   setHeader(event, 'Cache-Control', 'no-store')
   const auth = await requireConsoleAuthContext(event)
-  requireCodocsServiceAuth(auth, ASSETS_PRODUCT_DOCUMENT_READ_SERVICE_AUTH)
+  const sourceApp = auth?.appCode === 'enterprise' ? 'enterprise' : 'assets'
+  requireCodocsServiceAuth(auth, sourceApp === 'enterprise' ? ENTERPRISE_ASSETS_PRODUCT_DOCUMENT_READ_SERVICE_AUTH : ASSETS_PRODUCT_DOCUMENT_READ_SERVICE_AUTH)
   const binding = requireCodocsCrossAppServiceTenantDeploymentBinding(auth, getHeader(event, 'x-hzy-tenant'), getHeader(event, 'x-hzy-deployment'))
   if (getHeader(event, 'x-hzy-app-code') !== 'codocs') throw createError({ statusCode: 403, message: '产品文档目标应用不匹配' })
   const uuid = getRouterParam(event, 'uuid') || ''
@@ -22,7 +23,7 @@ export default defineEventHandler(async (event) => {
   await verifyServiceCommandRuntimeHeaders({
     token, method: 'POST', requestTarget: getRequestURL(event).pathname, requestId: getHeader(event, 'x-request-id') || '',
     tenantCode: binding.tenant, sourceDeploymentCode: binding.sourceDeployment, targetDeploymentCode: binding.targetDeployment,
-    sourceApp: 'assets', sourceClientId: 'assets.runtime', targetApp: 'codocs',
+    sourceApp, sourceClientId: `${sourceApp}.runtime`, targetApp: 'codocs',
     envelope: { operationId: envelope.operationId, targetApp: envelope.targetApp, operationCode: envelope.operationCode, requiredCapability: envelope.requiredCapability, idempotencyKey: envelope.idempotencyKey, commandSchemaVersion: envelope.commandSchemaVersion, commandSha256: envelope.commandSha256 },
     readHeader: name => getHeader(event, name)
   })

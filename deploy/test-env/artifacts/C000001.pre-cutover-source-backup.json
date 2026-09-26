@@ -1,0 +1,14 @@
+{
+  "createdAt": "2026-09-14T15:18:21.810944+00:00",
+  "tenant": "C000001",
+  "environment": "test",
+  "sourceSchemas": [
+    "hzy_aims_test_local_20260910",
+    "hzy_assets_test_local_20260910"
+  ],
+  "reviewHash": "5404dd29e3374a66cb7180670a2850ade0e61414ae250464775e58c16c5eda97",
+  "backupSha256": "5ea96b38488ec1ab553f5fe32d9066cf59b2ee78fd59087390e939bd88ea37ac",
+  "backupBytes": 539669,
+  "protectedDirectory": "/Users/gavinzhou/Library/Application Support/HuizhiYun/test-runtime/cutover-20260914-test",
+  "sourceModified": false
+}

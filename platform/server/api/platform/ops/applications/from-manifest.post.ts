@@ -225,7 +225,7 @@ export default defineEventHandler(async (event) => {
   })
 
   const sourceEndpoint = `gitlab:${repoUrl}#${commitSha}:${manifestPath}`
-  const { manifest, release, roleMaterialization } = await registerAppManifest({
+  const { manifest, release, roleMaterialization, composition } = await registerAppManifest({
     appCode,
     releaseVersion: version,
     manifestJson,
@@ -278,6 +278,7 @@ export default defineEventHandler(async (event) => {
     manifest,
     release,
     roleMaterialization,
+    ...(composition ? { composition } : {}),
     gitlab: {
       repoUrl,
       releaseVersion: version,

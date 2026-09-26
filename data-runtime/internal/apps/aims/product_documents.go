@@ -9,6 +9,10 @@ import (
 )
 
 func (a *Adapter) handleProductDocumentReadRuntime(ctx context.Context, method, path string, query url.Values, body map[string]any) (any, string, bool, error) {
+	outbox, outboxErr := a.enterpriseOutbox()
+	if outboxErr != nil {
+		return nil, "", true, outboxErr
+	}
 	code, match := pathParam(path, "/v1/aims/internal/products/", "/documents:list")
 	detail := false
 	requestDetail := false
@@ -53,7 +57,7 @@ func (a *Adapter) handleProductDocumentReadRuntime(ctx context.Context, method, 
 		if err := decodeProductCommandPart(body["authorization"], &permit); err != nil {
 			return nil, operation, true, err
 		}
-		result, err := productcenter.ListProductDocumentRequests(ctx, a.DB(), code, query.Get("current_user"), permit, input)
+		result, err := productcenter.ListProductDocumentRequests(ctx, a.DB(), outbox, code, query.Get("current_user"), permit, input)
 		return result, operation, true, productRuntimeError(err)
 	}
 	if detail || requestDetail {
@@ -68,7 +72,7 @@ func (a *Adapter) handleProductDocumentReadRuntime(ctx context.Context, method, 
 			return nil, operation, true, err
 		}
 		if requestDetail {
-			result, err := productcenter.ReadProductDocumentRequest(ctx, a.DB(), code, query.Get("current_user"), input.BizID, permit)
+			result, err := productcenter.ReadProductDocumentRequest(ctx, a.DB(), outbox, code, query.Get("current_user"), input.BizID, permit)
 			return result, operation, true, productRuntimeError(err)
 		}
 		result, err := productcenter.ReadProductDocument(ctx, a.DB(), code, query.Get("current_user"), input.BizID, permit)

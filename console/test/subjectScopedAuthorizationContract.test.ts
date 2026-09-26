@@ -11,6 +11,10 @@ test('subject scoped purposes fix resources and actions by caller', () => {
     ['assets', 'product_adoption_deliveries', 'deliveries', 'view'],
     ['assets', 'product_adoption_environments', 'environments', 'view'],
     ['aims', 'product_feedback_create', 'product_requests', 'create'],
+    ['aims', 'enterprise_project_document_write', 'projects', 'view'],
+    ['aims', 'enterprise_project_document_read', 'projects', 'view'],
+    ['aims', 'enterprise_project_document_access_policy_update', 'projects', 'view'],
+    ['aims', 'enterprise_project_admin', 'projects', 'admin'],
     ['finance', 'product_cost_read', 'project_accounting', 'view'],
     ['finance', 'product_cost_rules_edit', 'project_accounting', 'edit']
   ]) {

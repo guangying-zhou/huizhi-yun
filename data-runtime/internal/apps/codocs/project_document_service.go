@@ -20,7 +20,15 @@ const (
 // command. Project/member/role facts remain at Aims; the only actor fact that
 // reaches Codocs is the request-target HMAC-bound user actor.
 func projectDocumentServiceCommand(body map[string]any, uuid string, query url.Values) (string, string, error) {
-	return scopedDocumentServiceCommand(body, uuid, query, documentServiceContract{ContextField: "projectCode", Capability: aimsProjectDocumentContentCapability, Operation: aimsProjectDocumentContentOperation, Schema: aimsProjectDocumentContentSchema, Action: "content:read"})
+	sourceApp := "aims"
+	// ADR-018 物理宿主身份，与 Assets metadata 那条同形：宿主是与 Aims 并列的
+	// 来源，不是放宽 Aims。Codocs BFF 认来源，Runtime 在下面继续要求
+	// source client 精确等于 <sourceApp>.runtime，因此 aims 令牌配
+	// enterprise.runtime（或反向）依然被拒。
+	if strings.TrimSpace(firstTextValue(body, integrationoperation.TrustedServiceCommandSourceAppKey)) == "enterprise" {
+		sourceApp = "enterprise"
+	}
+	return scopedDocumentServiceCommand(body, uuid, query, documentServiceContract{SourceApp: sourceApp, ContextField: "projectCode", Capability: aimsProjectDocumentContentCapability, Operation: aimsProjectDocumentContentOperation, Schema: aimsProjectDocumentContentSchema, Action: "content:read"})
 }
 
 type documentServiceContract struct{ ContextField, Capability, Operation, Schema, Action, SourceApp string }

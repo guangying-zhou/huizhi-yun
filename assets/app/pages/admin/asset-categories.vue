@@ -1,7 +1,13 @@
 <script setup lang="ts">
-import { assetCategoryScopeDefinitions, assetCategoryScopeMap, type AssetCategoryScope } from '~~/shared/assetCategoryDefaults'
-import type { ApiResponse, AssetCategoryGroup } from '~/types'
-import { normalizeAssetCategoryGroups } from '~/utils/assetCategories'
+import { useAssetDictionaries } from '../../composables/useAssetDictionaries'
+import { useAssetsModule } from '../../../layer/useAssetsModule'
+import AssetsAssetCategoryEditModal from '../../components/assets/AssetCategoryEditModal.vue'
+
+import { assetCategoryScopeDefinitions, assetCategoryScopeMap, type AssetCategoryScope } from '../../../shared/assetCategoryDefaults'
+import type { ApiResponse, AssetCategoryGroup } from '../../types'
+import { normalizeAssetCategoryGroups } from '../../utils/assetCategories'
+
+const { moduleUrl, cacheKey, hosted } = useAssetsModule()
 
 usePageTitle('资产类别管理')
 
@@ -12,6 +18,7 @@ const selectedCategory = ref<AssetCategoryGroup | null>(null)
 const editorMode = ref<'create' | 'category' | 'items'>('create')
 
 function normalizeScope(input: unknown): AssetCategoryScope {
+  if (hosted) return 'product'
   return typeof input === 'string' && input in assetCategoryScopeMap
     ? input as AssetCategoryScope
     : 'physical'
@@ -32,12 +39,13 @@ watch(() => route.query.scope, (scope) => {
 })
 
 const currentScopeMeta = computed(() => assetCategoryScopeMap[activeScope.value])
-const tabItems = computed(() => assetCategoryScopeDefinitions.map(item => ({
+const tabItems = computed(() => assetCategoryScopeDefinitions.filter(item => !hosted || item.scope === 'product').map(item => ({
   label: item.label,
   value: item.scope
 })))
 
-const { data: response, refresh } = await useFetch<ApiResponse<{ items: AssetCategoryGroup[] }>>('/api/v1/admin/asset-categories', {
+const { data: response, refresh, error, status } = await useFetch<ApiResponse<{ items: AssetCategoryGroup[] }>>(moduleUrl('/api/v1/admin/asset-categories'), {
+  key: cacheKey('product-category-management'),
   query: computed(() => ({ scope: activeScope.value, pageSize: 500 })),
   watch: [activeScope]
 })
@@ -97,7 +105,9 @@ function handleEditItems(category: AssetCategoryGroup) {
   editOpen.value = true
 }
 
+const { loadDictionaries } = useAssetDictionaries()
 async function handleSaved() {
+  await loadDictionaries(true)
   await refresh()
 }
 </script>
@@ -123,6 +133,7 @@ async function handleSaved() {
                 icon="i-lucide-plus"
                 color="primary"
                 variant="soft"
+                :disabled="Boolean(error) || status === 'pending'"
                 @click="handleCreate"
               >
                 新增{{ currentScopeMeta.groupLabel }}
@@ -131,7 +142,13 @@ async function handleSaved() {
           </template>
         </UTabs>
 
-        <UCard>
+        <UAlert
+          v-if="error"
+          color="error"
+          title="无法加载产品线"
+          :description="error.message"
+        />
+        <UCard v-else>
           <template #header>
             <div class="flex items-center justify-between gap-3">
               <span class="font-semibold">{{ currentScopeMeta.groupLabel }}</span>
@@ -141,7 +158,12 @@ async function handleSaved() {
             </div>
           </template>
 
-          <UTable :data="rows" :columns="columns" @select="handleRowSelect">
+          <UTable
+            :data="rows"
+            :columns="columns"
+            :loading="status === 'pending'"
+            @select="handleRowSelect"
+          >
             <template #details_summary-cell="{ row }">
               <div v-if="currentScopeMeta.itemsSupported" class="flex flex-wrap gap-2 py-1">
                 <UBadge

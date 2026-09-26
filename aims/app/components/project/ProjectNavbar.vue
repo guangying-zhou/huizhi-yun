@@ -1,10 +1,16 @@
 <script setup lang="ts">
-import { projectStatusConfig, getProjectCategoryLabel } from '~/config/project'
+import { useAimsModule } from '../../../layer/useAimsModule'
+import { useProjectStore } from '../../stores/project'
+import { useProjectContext } from '../../composables/useProjectContext'
+import { projectStatusConfig, getProjectCategoryLabel } from '../../config/project'
 import {
   deriveProjectLifecycleFromWorkflow,
   projectWorkflowActionOrder
-} from '~/utils/projectWorkflow'
-import { projectModuleEnabled } from '~/utils/projectModuleConfig'
+} from '../../utils/projectWorkflow'
+import { projectModuleEnabled } from '../../utils/projectModuleConfig'
+
+// 同一份组件供独立应用与企业宿主使用：非宿主模式下 moduleUrl 原样返回路径。
+const { moduleUrl, hosted } = useAimsModule()
 
 const route = useRoute()
 const projectStore = useProjectStore()
@@ -86,7 +92,7 @@ async function fetchRequirementTargets() {
   if (!projectId.value) return
   try {
     const res = await $fetch<{ code: number, data: { items?: Array<{ id: number }>, total?: number } }>(
-      `/api/v1/projects/${projectId.value}/work-items`,
+      moduleUrl(`/api/v1/projects/${projectId.value}/work-items`),
       {
         params: {
           type: 'requirement',
@@ -108,37 +114,37 @@ const tabs = computed(() => {
   const category = p?.category
   if (category === 'routine') {
     return [
-      { label: '概览', icon: 'i-lucide-layout-dashboard', to: `/projects/${pid}` },
-      { label: '工作项', icon: 'i-lucide-list-checks', to: `/projects/${pid}/board` },
-      { label: '工时', icon: 'i-lucide-clock', to: `/projects/${pid}/timesheet` },
-      { label: '设置', icon: 'i-lucide-settings', to: `/projects/${pid}/settings` }
+      { label: '概览', icon: 'i-lucide-layout-dashboard', to: moduleUrl(`/projects/${pid}`) },
+      { label: '工作项', icon: 'i-lucide-list-checks', to: moduleUrl(`/projects/${pid}/board`) },
+      { label: '工时', icon: 'i-lucide-clock', to: moduleUrl(`/projects/${pid}/timesheet`) },
+      { label: '设置', icon: 'i-lucide-settings', to: moduleUrl(`/projects/${pid}/settings`) }
     ]
   }
   const items = [
-    { label: '概览', icon: 'i-lucide-layout-dashboard', to: `/projects/${pid}` },
-    { label: '目标', icon: 'i-lucide-target', to: `/projects/${pid}/work-items` },
-    { label: '任务', icon: 'i-lucide-calendar-check', to: `/projects/${pid}/board` },
-    { label: '文档', icon: 'i-lucide-files', to: `/projects/${pid}/documents` },
-    { label: '成果', icon: 'i-lucide-award', to: `/projects/${pid}/output` },
-    { label: '工时', icon: 'i-lucide-clock', to: `/projects/${pid}/timesheet` },
-    { label: '周报', icon: 'i-lucide-calendar-days', to: `/projects/${pid}/weekly-reports` },
-    { label: '设置', icon: 'i-lucide-settings', to: `/projects/${pid}/settings` }
+    { label: '概览', icon: 'i-lucide-layout-dashboard', to: moduleUrl(`/projects/${pid}`) },
+    { label: '目标', icon: 'i-lucide-target', to: moduleUrl(`/projects/${pid}/work-items`) },
+    { label: '任务', icon: 'i-lucide-calendar-check', to: moduleUrl(`/projects/${pid}/board`) },
+    { label: '文档', icon: 'i-lucide-files', to: moduleUrl(`/projects/${pid}/documents`) },
+    { label: '成果', icon: 'i-lucide-award', to: moduleUrl(`/projects/${pid}/output`) },
+    { label: '工时', icon: 'i-lucide-clock', to: moduleUrl(`/projects/${pid}/timesheet`) },
+    { label: '周报', icon: 'i-lucide-calendar-days', to: moduleUrl(`/projects/${pid}/weekly-reports`) },
+    { label: '设置', icon: 'i-lucide-settings', to: moduleUrl(`/projects/${pid}/settings`) }
   ]
   const insertAfterOverview: Array<{ label: string, icon: string, to: string }> = []
   if (projectModuleEnabled(moduleConfig, category, 'milestones')) {
-    insertAfterOverview.push({ label: '里程碑', icon: 'i-lucide-flag', to: `/projects/${pid}/plan` })
+    insertAfterOverview.push({ label: '里程碑', icon: 'i-lucide-flag', to: moduleUrl(`/projects/${pid}/plan`) })
   }
   if (projectModuleEnabled(moduleConfig, category, 'requirements') && hasRequirementTarget.value) {
-    insertAfterOverview.push({ label: '需求', icon: 'i-lucide-clipboard-list', to: `/projects/${pid}/requirements` })
+    insertAfterOverview.push({ label: '需求', icon: 'i-lucide-clipboard-list', to: moduleUrl(`/projects/${pid}/requirements`) })
   }
   if (projectModuleEnabled(moduleConfig, category, 'releases')) {
-    insertAfterOverview.push({ label: '版本', icon: 'i-lucide-git-branch', to: `/projects/${pid}/releases` })
+    insertAfterOverview.push({ label: '版本', icon: 'i-lucide-git-branch', to: moduleUrl(`/projects/${pid}/releases`) })
   }
   if (projectModuleEnabled(moduleConfig, category, 'environments')) {
-    insertAfterOverview.push({ label: '环境', icon: 'i-lucide-server-cog', to: `/projects/${pid}/environments` })
+    insertAfterOverview.push({ label: '环境', icon: 'i-lucide-server-cog', to: moduleUrl(`/projects/${pid}/environments`) })
   }
   if (projectModuleEnabled(moduleConfig, category, 'service_desk')) {
-    insertAfterOverview.push({ label: '工单', icon: 'i-lucide-headset', to: `/projects/${pid}/service-desk` })
+    insertAfterOverview.push({ label: '工单', icon: 'i-lucide-headset', to: moduleUrl(`/projects/${pid}/service-desk`) })
   }
   items.splice(1, 0, ...insertAfterOverview)
   return items

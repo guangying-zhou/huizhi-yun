@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { ApiResponse, IpAssetItem } from '~/types'
+import type { ApiResponse, IpAssetItem } from '../../types'
 
 const props = defineProps<{ open: boolean, asset: IpAssetItem | null }>()
 const emit = defineEmits<{

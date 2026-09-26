@@ -1,5 +1,6 @@
 import OSS from 'ali-oss'
 import { Buffer } from 'node:buffer'
+import { objectStorageVersionId } from './objectStorageVersion'
 
 export type ObjectStorageProvider = 'aliyun-oss-native' | 'aliyun-oss-s3' | 's3'
 
@@ -168,6 +169,23 @@ function metadataFromHeaders(headers: Record<string, string>) {
     }
   }
   return meta
+}
+
+function requestedObjectVersion(options?: Record<string, unknown>) {
+  if (!options || !Object.prototype.hasOwnProperty.call(options, 'versionId')) return null
+  const version = options.versionId
+  // Control characters are rejected on purpose: the version goes into a query.
+  // eslint-disable-next-line no-control-regex
+  if (typeof version !== 'string' || !version || version.trim() !== version || version.length > 255 || /[\x00-\x1f\x7f]/.test(version)) {
+    throw new Error('Invalid object storage version ID')
+  }
+  return version
+}
+
+function assertObjectVersion(headers: Record<string, string>, requested: string) {
+  if (objectStorageVersionId(headers) !== requested) {
+    throw new Error('Object storage returned a different version')
+  }
 }
 
 function objectUrl(config: ObjectStorageConfig, key: string, params?: URLSearchParams) {
@@ -428,7 +446,12 @@ function createNativeAliOssCompatibleClient(config: ObjectStorageConfig): AliOss
   }) as unknown as NativeAliOssClient
 
   return {
-    get: (name, options) => native.get(name, options),
+    get: async (name, options) => {
+      const version = requestedObjectVersion(options)
+      const result = await native.get(name, options)
+      if (version) assertObjectVersion(result.res.headers, version)
+      return result
+    },
     put: (name, content, options = {}) => {
       const { forbidOverwrite: _forbidOverwrite, ...nativeOptions } = options
       return native.put(name, content, { ...nativeOptions, headers: putHeaders('aliyun-oss-native', options) })
@@ -508,13 +531,17 @@ function createS3CompatibleClient(config: ObjectStorageConfig): AliOssCompatible
   }
 
   return {
-    async get(name) {
-      const response = await request('GET', name)
+    async get(name, options) {
+      const version = requestedObjectVersion(options)
+      const query = version ? new URLSearchParams({ versionId: version }) : undefined
+      const response = await request('GET', name, { query })
+      const headers = headersToRecord(response.headers)
+      if (version) assertObjectVersion(headers, version)
       return {
         content: Buffer.from(await response.arrayBuffer()),
         res: {
           status: response.status,
-          headers: headersToRecord(response.headers)
+          headers
         }
       }
     },
@@ -639,13 +666,46 @@ function createS3CompatibleClient(config: ObjectStorageConfig): AliOssCompatible
   }
 }
 
+// Write-once namespaces: objects here are referenced by exact provider
+// version (Codocs v2 snapshots). The bucket expires noncurrent versions, so a
+// delete (delete marker), overwrite or in-place metadata rewrite would make a
+// referenced version disappear. Only create-only puts are allowed; retiring
+// these objects needs a dedicated, reference-checked path.
+export const WRITE_ONCE_OBJECT_PREFIXES = ['codocs/snapshots/'] as const
+
+export function isWriteOnceObjectKey(name: string) {
+  const key = String(name || '').replace(/^\/+/, '')
+  return WRITE_ONCE_OBJECT_PREFIXES.some(prefix => key.startsWith(prefix))
+}
+
+function writeOnceViolation(action: string) {
+  const error = new Error(`Object ${action} is not allowed in a write-once namespace`) as Error & { statusCode?: number, code?: string }
+  error.statusCode = 409
+  error.code = 'WriteOnceObjectNamespace'
+  return error
+}
+
+function guardWriteOnceNamespaces(client: AliOssCompatibleClient): AliOssCompatibleClient {
+  const reject = (action: string) => Promise.reject(writeOnceViolation(action))
+  return {
+    ...client,
+    put: (name, content, options = {}) => isWriteOnceObjectKey(name) && options.forbidOverwrite !== true
+      ? reject('overwrite')
+      : client.put(name, content, options),
+    copy: (targetName, sourceName) => isWriteOnceObjectKey(targetName) ? reject('overwrite') : client.copy(targetName, sourceName),
+    putMeta: (name, meta, options) => isWriteOnceObjectKey(name) ? reject('metadata rewrite') : client.putMeta(name, meta, options),
+    delete: name => isWriteOnceObjectKey(name) ? reject('delete') : client.delete(name),
+    deleteMulti: names => names.some(isWriteOnceObjectKey) ? reject('delete') : client.deleteMulti(names)
+  }
+}
+
 export function createAliOssCompatibleClient(config: ObjectStorageConfig): AliOssCompatibleClient {
   assertStorageConfig(config)
   const provider = normalizeProvider(config.provider)
   if (provider === 'aliyun-oss-native') {
-    return createNativeAliOssCompatibleClient(config)
+    return guardWriteOnceNamespaces(createNativeAliOssCompatibleClient(config))
   }
-  return createS3CompatibleClient({
+  return guardWriteOnceNamespaces(createS3CompatibleClient({
     ...config,
     provider,
     endpoint: provider === 'aliyun-oss-s3'
@@ -654,7 +714,7 @@ export function createAliOssCompatibleClient(config: ObjectStorageConfig): AliOs
     region: provider === 'aliyun-oss-s3'
       ? aliyunOssRegionFor(config)
       : config.region
-  })
+  }))
 }
 
 export const createObjectStorageClient = createAliOssCompatibleClient

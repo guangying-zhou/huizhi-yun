@@ -60,7 +60,7 @@ describe('Codocs OSS proxy boundary', () => {
     assertBefore(
       content,
       'await loadCodocsOssRuntimeConfigFromConsole(runtimeIntegrationCode(), options.event)',
-      'return factory(clientOptions)'
+      'return factory(clientOptions, runtime)'
     )
   })
 

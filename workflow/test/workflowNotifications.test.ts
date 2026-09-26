@@ -303,6 +303,23 @@ test('Workflow blocks the whole notification when any recipient eligibility requ
   assert.equal(result[0]?.code, 'workflow_notification_eligibility_unavailable')
 })
 
+test('Workflow logs only the status and machine code of an eligibility failure', async () => {
+  const logged: unknown[] = []
+  for (const [reason, expected] of [
+    [Object.assign(new Error('subject_eligibility_runtime_binding_unavailable'), { statusCode: 503 }), { causeStatus: 503, causeCode: 'subject_eligibility_runtime_binding_unavailable', causeClass: 'Error' }],
+    [Object.assign(new Error('Bearer eyJsecret failed for user-a'), { statusCode: 502 }), { causeStatus: 502, causeClass: 'Error' }]
+  ] as const) {
+    logged.length = 0
+    await deliverWorkflowRuntimeNotifications({} as H3Event, [notificationFor('workflow.task.created', { workflowTaskIds: [701] })], {
+      send: async () => {},
+      loadActionTargetCatalog: async () => actionTargetCatalog,
+      checkEligibility: async () => { throw reason },
+      error: (_message, detail) => { logged.push(detail) }
+    })
+    assert.deepEqual(logged, [{ code: 'workflow_notification_eligibility_unavailable', ...expected }])
+  }
+})
+
 test('Workflow fails closed for unknown, contradictory, or unstable fallback contracts before eligibility and catalog access', async () => {
   const invalid = [
     notificationFor('workflow.task.unknown', { workflowTaskIds: [701] }),

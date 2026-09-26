@@ -13,6 +13,18 @@ type FeatureUnscheduledQuery struct {
 }
 
 func ListFeatureUnscheduled(ctx context.Context, db *sql.DB, code, uid string, planningPermit, featurePermit AuthorizationPermit, q FeatureUnscheduledQuery) (PlanningPage, error) {
+	tx, err := db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
+	if err != nil {
+		return PlanningPage{}, err
+	}
+	defer tx.Rollback()
+	out, err := ListFeatureUnscheduledInTransaction(ctx, tx, code, uid, planningPermit, featurePermit, q)
+	if err != nil {
+		return out, err
+	}
+	return out, tx.Commit()
+}
+func ListFeatureUnscheduledInTransaction(ctx context.Context, tx *sql.Tx, code, uid string, planningPermit, featurePermit AuthorizationPermit, q FeatureUnscheduledQuery) (PlanningPage, error) {
 	var out PlanningPage
 	id, err := uuid.Parse(q.FeatureBizID)
 	if err != nil || id.String() != q.FeatureBizID {
@@ -21,11 +33,9 @@ func ListFeatureUnscheduled(ctx context.Context, db *sql.DB, code, uid string, p
 	if err := ValidatePlanningPageQuery(PlanningPageQuery{Page: q.Page, PageSize: q.PageSize}); err != nil {
 		return out, err
 	}
-	tx, err := db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
-	if err != nil {
-		return out, err
+	if tx == nil {
+		return out, invalid("product_transaction_required", "事务不可用")
 	}
-	defer tx.Rollback()
 	if err := AuthorizeWorkspaceTransaction(ctx, tx, code, uid, "product_priorities", "view", planningPermit); err != nil {
 		return out, err
 	}
@@ -60,5 +70,5 @@ func ListFeatureUnscheduled(ctx context.Context, db *sql.DB, code, uid string, p
 		return out, err
 	}
 	out.Page, out.PageSize, out.WorkspaceRevision = q.Page, q.PageSize, planningPermit.Facts.Revision
-	return out, tx.Commit()
+	return out, nil
 }

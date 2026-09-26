@@ -4,6 +4,40 @@
 日期：2026-06-01  
 关联 ADR：[`ADR-016: Tenant Runtime 业务 API 架构`](./ADR-016-Tenant-Runtime-Business-API-Architecture.md)
 
+2026-09-21 可选策略合同：`GET/PUT /v1/console/verified-policy` 已有代码及隔离
+HTTP/MySQL 验证，默认关闭。复用 `console:policy-bundle:read|write`，严格 Console
+JWT、显式部署绑定及实时 grant/credential 检查；新持久表与旧 opaque 存储隔离。
+PUT `{envelope,expectedEtag}` 执行事务 CAS/防回退，相同内容重放不刷新接纳时间。
+GET 返回当前持久回执（可含过期/撤销策略），不代表授权通过；消费者必须复验
+签名、当前有效期和 active 状态。尚未启用 Enterprise source 或目标环境切换。
+Console GET 首次缺行返回 `404 policy_snapshot_missing`；缺表/配置/损坏为 503，
+不能把任意 404/503 当作空水位。Enterprise 读口缺行仍为 503。Console 显式新后端
+已按此接线，未切换运行环境，详见同一合同第 9 节。
+完整字段、配置、兼容及错误码见 [策略验证合同](./Console-Enterprise-Policy-Verification-Contract.md#7-runtime-持久化与接口批次代码验证完成环境未启用)。
+
+2026-09-25 可选 P1：`POST /v1/console/auth/service-tokens/exchange` 仅接受 `console.runtime` 的完整服务 JWT 和新 `console:service-token:exchange` 精确 scope，拒绝 key assertion/bootstrap 及请求体自选来源、租户、部署。仅用于携带 secret 的 `client_credentials`；Runtime 在同一事务检查客户端当前密钥、grant 和来源部署，比较 Console 已验证策略摘要与本地存储的 version/hash，签名并写成功审计，提交后才返回令牌。摘要不作为授权事实。默认关闭；无密钥 Gateway 路径保留现有合同。
+
+2026-09-22 Console 稳态服务身份（R1）：`POST /v1/console/auth/service-tokens/issue` 除 Platform 启动令牌外，
+还接受 Console 部署密钥断言（`typ: hzy-console-assertion+jwt`）。只在该路由生效；Runtime 要求
+Console 部署的已验证信封为 `valid/grace`、公钥在信封 `serviceKeys` 中，并一次性消费 `jti`
+（可选表 `console_service_assertion_replay`）。错误码 `console_assertion_invalid`（401）、
+`console_assertion_replayed`（401）、`console_assertion_policy_inactive`（403）、
+`console_assertion_not_migrated`（503）。详见策略验证合同 §15。
+
+2026-09-22 续签状态（阶段 B，需先执行 `Console-SQL-Migration-verified-policy-renewal-state.sql`）：
+`PUT /v1/console/verified-policy/renewal` 请求体为 `{state,expectedEtag}`，`state` 取
+`ok|platform_unavailable|refused|invalid`（`refused/invalid` 对同一 ETag 粘性，只有接纳新信封才重置），要求精确 capability `console:policy-bundle:write` 和 Console 来源；
+`expectedEtag` 必须等于当前快照，否则返回 409；没有快照返回 `404 policy_snapshot_missing`；
+表未迁移返回 `503 policy_renewal_not_migrated`。尝试时间由 Runtime 取，只会向后推进，
+不接受调用方传入。成功写入信封会自动把状态置为 `ok`。
+`GET /v1/console/verified-policy` 和 `GET /v1/enterprise/console-policy` 的 `data` 新增
+`renewal: {state, attemptedAt} | null`；未迁移或没有状态时为 null。续签状态不属于签名回执，
+也不单独构成授权结论。判定规则见 docs/Console-Enterprise-Policy-Verification-Contract.md 第 14 节。
+
+后续只读候选 `GET /v1/enterprise/console-policy` 已注册，默认额外关闭。
+要求 Enterprise 自身精确读 grant 与部署、Console 存储部署显式绑定、签名覆盖
+两个部署及当前有效 active 状态；不开放写入。Host gate 接线但未启用，见上述合同 §8。
+
 ## 1. 目标
 
 本文定义 `tenant-runtime` 第一版业务 API 合同规范，用于约束 Platform 之外的业务应用从 Nuxt server 直连数据库迁移到客户侧 runtime 的接口形态。
@@ -613,3 +647,10 @@ Replay 在同一事务产生 `cancelled` closure；`RecordSuccessWithMutation` �
 - 不在错误响应中返回 SQL、secret、token。
 - 不让一个 app adapter 直接跨库 join 另一个 app 的表。
 - 不把 Console vault/OIDC 启动闭环迁入第一阶段 runtime。
+
+
+### ADR-018 AA-04：既有Aims审批回调的统一事务模式
+
+`POST /v1/aims/service/workflow/callback` 保持既有请求/响应，只有Runtime服务器配置 `enterprise.enableMilestoneReceivable=true` 且子类型为 `milestones/milestone_completion` 才分流。false继续旧adapter；true但Enterprise关闭或服务缺失返回503。协调模式重验严格Aims服务JWT、当前租户及legacy Aims deployment、`sub/client=aims.runtime`、当前credential/grant和精确 `altoc:receivable:mark-billable`；原 `aims.write` 入口要求仍保留。仅允许固定Runtime audience的组合token，不转发Workflow或Altoc audience token。
+
+审批事实仍从已认证Workflow→Aims BFF边界进入，浏览器不能提交可信授权。Aims审批、Altoc可开票变更、目标receipt、源ACK在同一Registry双域事务内提交，成功提交后响应operationStatus为succeeded；同键重放保留历史身份。详细开关、调用方及验证范围见[AA-04专项](./Unified-Enterprise-Altoc-Aims-Expansion.md)。此模式尚未在线上启用。

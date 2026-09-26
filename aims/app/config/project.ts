@@ -1,8 +1,8 @@
-import type { LifecycleStatus, ProjectCategory, Methodology, ProjectConfidentialityLevel, ProjectSecurityLevel, ModuleConfig } from '~/types/aims'
-import { projectModuleDefaultConfig } from '~/utils/projectModuleConfig'
+import type { LifecycleStatus, ProjectCategory, Methodology, ProjectConfidentialityLevel, ProjectSecurityLevel, ModuleConfig } from '../types/aims'
+import { projectModuleDefaultConfig } from '../utils/projectModuleConfig'
 
 // 简称校验规则见 ~/utils/projectShortName（零依赖，便于单测直接加载）
-export { validateProjectShortName } from '~/utils/projectShortName'
+export { validateProjectShortName } from '../utils/projectShortName'
 
 // ============================================================
 // 项目状态配置

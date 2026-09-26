@@ -1,19 +1,23 @@
 <script setup lang="ts">
+import { useAimsModule } from '../../../../../../layer/useAimsModule'
+import ProductsVersionDevelopmentAction from '../../../../../components/products/VersionDevelopmentAction.vue'
+
+const { moduleUrl, hosted, cacheKey } = useAimsModule()
 definePageMeta({ layoutHeader: true, layoutHeaderTitle: '版本详情', layoutHeaderProjectSwitcher: false })
 const route = useRoute()
 const versionPerspectiveQuery = computed(() => route.query.view === 'gtm' ? { view: 'gtm' } : {})
 const code = computed(() => String(route.params.productCode || ''))
 const id = computed(() => String(route.params.versionId || ''))
-const base = computed(() => `/api/v1/products/${encodeURIComponent(code.value)}/versions`)
+const base = computed(() => moduleUrl(`/api/v1/products/${encodeURIComponent(code.value)}/versions`))
 const endpoint = computed(() => `${base.value}/${encodeURIComponent(id.value)}`)
 const states = { planning: '规划中', developing: '开发中', released: '已发布', archived: '已归档' }
 interface Version { business_owner_uid?: string | null, current_release_record_id: number | null, id: number, product_code: string, version_code: string, name: string | null, description: string | null, planned_release_date: string | null, status: keyof typeof states, revision: number, scope_revision: number, workspace_revision: number }
-const { data, status, error, refresh } = await useFetch(endpoint, { server: false, transform: (response: { code: number, data: Version }) => {
+const { data, status, error, refresh } = await useFetch(endpoint, { ...(hosted ? { key: computed(() => cacheKey('aims/app/pages/products/[productCode]/versions/[versionId]/index.vue:0' + ':' + String(toValue(endpoint)))) } : {}), server: false, transform: (response: { code: number, data: Version }) => {
   const v = response.data
   if (response.code !== 0 || v?.product_code !== code.value || String(v.id) !== id.value || !Object.hasOwn(states, v.status) || !Number.isSafeInteger(v.revision) || v.revision < 1 || !Number.isSafeInteger(v.workspace_revision) || v.workspace_revision < 1) throw new Error('版本详情响应不完整')
   return v
 } })
-const { data: permission, status: permissionStatus, error: permissionError, refresh: refreshPermission } = await useFetch<{ code: number, data: { product_code: string, status: string, edit: boolean, reopen: boolean, archive: boolean, delete: boolean } }>(() => `${base.value}/permissions`, { server: false })
+const { data: permission, status: permissionStatus, error: permissionError, refresh: refreshPermission } = await useFetch<{ code: number, data: { product_code: string, status: string, edit: boolean, reopen: boolean, archive: boolean, delete: boolean } }>(() => `${base.value}/permissions`, { ...(hosted ? { key: computed(() => cacheKey('aims/app/pages/products/[productCode]/versions/[versionId]/index.vue:1' + ':' + String(toValue(() => `${base.value}/permissions`)))) } : {}), server: false })
 const canEdit = computed(() => status.value === 'success' && data.value?.product_code === code.value && String(data.value.id) === id.value && ['planning', 'developing'].includes(data.value.status) && permissionStatus.value === 'success' && permission.value?.code === 0 && permission.value.data.product_code === code.value && permission.value.data.status === 'active' && permission.value.data.edit === true)
 const alert = useApiErrorAlert(error, { fallbackTitle: '版本详情加载失败' })
 const permissionAlert = useApiErrorAlert(permissionError, { fallbackTitle: '版本权限加载失败' })
@@ -147,7 +151,7 @@ async function removeVersion() {
   } finally {
     saving.value = false
   }
-  if (completed) await navigateTo(`/products/${encodeURIComponent(code.value)}/versions`)
+  if (completed) await navigateTo(moduleUrl(`/products/${encodeURIComponent(code.value)}/versions`))
 }
 function bindRevisions() {
   if (canEdit.value && data.value) revisions.value = { workspace: data.value.workspace_revision, version: data.value.revision }
@@ -251,12 +255,12 @@ onBeforeRouteUpdate(() => !saving.value && !reloading.value)
         编辑版本信息
       </UButton>
     </div>
-    <UButton :to="{ path: `/products/${encodeURIComponent(code)}/versions/${encodeURIComponent(id)}/acceptances`, query: versionPerspectiveQuery }" color="neutral" variant="outline">
+    <UButton :to="{ path: moduleUrl(`/products/${encodeURIComponent(code)}/versions/${encodeURIComponent(id)}/acceptances`), query: versionPerspectiveQuery }" color="neutral" variant="outline">
       查看验收记录
     </UButton>
     <UButton
       v-if="data?.current_release_record_id"
-      :to="{ path: `/products/${encodeURIComponent(code)}/versions/${encodeURIComponent(id)}/releases/${data.current_release_record_id}`, query: versionPerspectiveQuery }"
+      :to="{ path: moduleUrl(`/products/${encodeURIComponent(code)}/versions/${encodeURIComponent(id)}/releases/${data.current_release_record_id}`), query: versionPerspectiveQuery }"
       color="primary"
       variant="outline"
     >
@@ -286,13 +290,13 @@ onBeforeRouteUpdate(() => !saving.value && !reloading.value)
     <UAlert v-if="reopenedRecord" color="success" title="版本已回到开发中，请重新验收后发布更正" />
     <UButton
       v-if="reopenedRecord"
-      :to="{ path: `/products/${encodeURIComponent(code)}/versions/${encodeURIComponent(id)}/releases/${reopenedRecord}`, query: versionPerspectiveQuery }"
+      :to="{ path: moduleUrl(`/products/${encodeURIComponent(code)}/versions/${encodeURIComponent(id)}/releases/${reopenedRecord}`), query: versionPerspectiveQuery }"
       color="neutral"
       variant="outline"
     >
       查看已撤回的原发布快照
     </UButton>
-    <UButton :to="{ path: `/products/${encodeURIComponent(code)}/versions/${encodeURIComponent(id)}/releases`, query: versionPerspectiveQuery }" color="neutral" variant="outline">
+    <UButton :to="{ path: moduleUrl(`/products/${encodeURIComponent(code)}/versions/${encodeURIComponent(id)}/releases`), query: versionPerspectiveQuery }" color="neutral" variant="outline">
       查看发布历史
     </UButton>
     <UAlert v-if="alert" v-bind="alert" />

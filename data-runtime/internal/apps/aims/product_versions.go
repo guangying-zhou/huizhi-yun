@@ -372,6 +372,10 @@ func (a *Adapter) deleteProjectProduct(ctx context.Context, projectIDText string
 }
 
 func (a *Adapter) listProjectReleases(ctx context.Context, projectIDText string, query url.Values) (map[string]any, error) {
+	page, err := parseOptionalProjectListPage(query)
+	if err != nil {
+		return nil, err
+	}
 	projectID, _, err := a.requireProjectReadable(ctx, projectIDText, query, nil)
 	if err != nil {
 		return nil, err
@@ -392,7 +396,25 @@ func (a *Adapter) listProjectReleases(ctx context.Context, projectIDText string,
 		where = append(where, "pv.status = ?")
 		args = append(args, status)
 	}
-	rows, err := a.DB().QueryContext(ctx, projectReleasesListQuery(where), append([]any{projectID, projectID}, args...)...)
+	var total int64
+	if page.enabled {
+		countSQL := `SELECT COUNT(*) FROM product_versions pv
+			LEFT JOIN aims_project_products app_primary
+			  ON app_primary.project_id = ? AND app_primary.product_code = pv.product_code AND app_primary.is_primary = 1
+			LEFT JOIN aims_project_products app_any
+			  ON app_any.project_id = ? AND app_any.product_code = pv.product_code
+			WHERE ` + strings.Join(where, " AND ")
+		if err := a.DB().QueryRowContext(ctx, countSQL, append([]any{projectID, projectID}, args...)...).Scan(&total); err != nil {
+			return nil, err
+		}
+	}
+	listSQL := projectReleasesListQuery(where)
+	listArgs := append([]any{projectID, projectID}, args...)
+	if page.enabled {
+		listSQL += " LIMIT ? OFFSET ?"
+		listArgs = append(listArgs, page.pageSize, page.offset)
+	}
+	rows, err := a.DB().QueryContext(ctx, listSQL, listArgs...)
 	if err != nil {
 		return nil, err
 	}
@@ -401,7 +423,13 @@ func (a *Adapter) listProjectReleases(ctx context.Context, projectIDText string,
 	if err != nil {
 		return nil, err
 	}
-	return map[string]any{"items": items}, nil
+	result := map[string]any{"items": items}
+	if page.enabled {
+		result["total"] = total
+		result["page"] = page.page
+		result["pageSize"] = page.pageSize
+	}
+	return result, nil
 }
 
 func projectReleasesListQuery(where []string) string {
@@ -468,6 +496,22 @@ func (a *Adapter) createProductVersion(ctx context.Context, projectIDText string
 }
 
 func (a *Adapter) createProjectWithProductBinding(ctx context.Context, query url.Values, body map[string]any) (map[string]any, error) {
+	tx, err := a.DB().BeginTx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+	result, err := a.createProjectWithProductBindingTx(ctx, tx, query, body)
+	if err != nil {
+		return nil, err
+	}
+	if err = tx.Commit(); err != nil {
+		return nil, err
+	}
+	return a.projectDetail(ctx, fmt.Sprint(result["id"]), query)
+}
+
+func (a *Adapter) createProjectWithProductBindingTx(ctx context.Context, tx *sql.Tx, query url.Values, body map[string]any) (map[string]any, error) {
 	uid := currentUserFrom(query, body)
 	if uid == "" {
 		return nil, httperror.New(http.StatusUnauthorized, "missing_current_user", "current_user is required")
@@ -532,12 +576,6 @@ func (a *Adapter) createProjectWithProductBinding(ctx context.Context, query url
 		return nil, err
 	}
 	lifecycleStatus := projectInitialLifecycleStatus(category)
-
-	tx, err := a.DB().BeginTx(ctx, nil)
-	if err != nil {
-		return nil, err
-	}
-	defer tx.Rollback()
 
 	templateVersion, err := resolveProjectTemplateVersionTx(ctx, tx, category, requestedTemplateVersionID)
 	if err != nil {
@@ -667,10 +705,7 @@ func (a *Adapter) createProjectWithProductBinding(ctx context.Context, query url
 		}
 	}
 
-	if err := tx.Commit(); err != nil {
-		return nil, err
-	}
-	return a.projectDetail(ctx, strconv.FormatInt(projectID, 10), query)
+	return map[string]any{"id": projectID, "projectCode": projectCode, "name": name, "shortName": shortName, "category": category, "lifecycleStatus": lifecycleStatus, "leaderUid": leaderUID}, nil
 }
 
 // projectPortfolioDefaultCategory 返回项目集声明的默认项目分类，空串表示不预设。

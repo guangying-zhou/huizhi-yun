@@ -1,5 +1,7 @@
 <script setup lang="ts">
-import type { ApiResponse } from '~/types'
+import type { ApiResponse } from '../../types'
+import { useAssetDictionaries } from '../../composables/useAssetDictionaries'
+import { useAssetsModule } from '../../../layer/useAssetsModule'
 
 const props = defineProps<{ open: boolean }>()
 const emit = defineEmits<{
@@ -17,6 +19,8 @@ await loadDictionaries()
 
 const toast = useToast()
 const submitting = ref(false)
+const submissionKey = ref('')
+const { moduleUrl } = useAssetsModule()
 const typeOptions = computed(() => getOptions('digital_asset_type'))
 const statusOptions = computed(() => getOptions('digital_asset_status'))
 const accessScopeOptions = computed(() => getOptions('digital_access_scope'))
@@ -58,8 +62,9 @@ async function handleSubmit() {
   submitting.value = true
 
   try {
-    const response = await $fetch<ApiResponse<{ id: number }>>('/api/v1/digital-assets', {
+    const response = await $fetch<ApiResponse<{ id: number }>>(moduleUrl('/api/v1/digital-assets'), {
       method: 'POST',
+      headers: { 'Idempotency-Key': submissionKey.value ||= crypto.randomUUID() },
       body: {
         digital_code: state.digital_code.trim() || null,
         digital_name: state.digital_name.trim(),

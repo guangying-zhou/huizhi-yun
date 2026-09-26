@@ -521,6 +521,24 @@ describe('Aims sensitive route permissions', () => {
     assert.match(content, /suffix\.startsWith\('\/service\/'\)[\s\S]{0,160}Unsupported Aims service endpoint capability/)
   })
 
+  test('work item completion callback has the same Workflow-only service gate as existing callbacks', () => {
+    const content = source('server/middleware/tenant-runtime.ts')
+    const nuxtOnly = content.split('const NUXT_ONLY_PATTERNS = [')[1]?.split('\n]')[0] || ''
+    assert.match(nuxtOnly, /\^\\\/api\\\/v1\\\/service\\\/work-item-completion\\\/workflow-callback\$/)
+    assert.match(content, /if \(NUXT_ONLY_PATTERNS\.some\(pattern => pattern\.test\(apiPath\)\)\) return true/)
+    assert.match(
+      content,
+      /suffix === '\/service\/workflow\/callback' \|\| suffix === '\/service\/work-item-completion\/workflow-callback'\)\s*\{\s*return \{ scope: 'workflow:callback', allowedApps: \['workflow'\] \}/
+    )
+    assertGuardBefore(
+      'server/middleware/tenant-runtime.ts',
+      'requireForwardedServiceCapability(event)',
+      'maybeProxyCurrentApiToTenantRuntime(event'
+    )
+    const handler = source('server/api/v1/service/work-item-completion/workflow-callback.post.ts')
+    assert.match(handler, /requireServiceScope\(event, \{ scope: 'workflow:callback', allowedApps: \['workflow'\] \}\)/)
+  })
+
   test('requirements export requires reports/export before reading runtime export data', () => {
     assertGuardBefore(
       'server/api/v1/projects/[id]/requirements/export.get.ts',
@@ -1348,7 +1366,10 @@ describe('Aims sensitive route permissions', () => {
 
     assert.doesNotMatch(config, /pattern:\s*['"]\/projects(?:\/\*\*)?['"]/)
     assert.match(projectPage, /projectStore\.fetchProjects\(buildProjectListQuery\(\)\)/)
-    assert.match(projectStore, /\$fetch<\{ code: number, data: PaginatedList<RawAimsProject> \}>\(\s*`\/api\/v1\/projects/)
+    // 同一份 store 供独立应用与企业宿主使用，路径统一经 moduleUrl；
+    // 非宿主模式下它原样返回，断言的仍是"走 runtime 列表接口"这一事实。
+    assert.match(projectStore, /\$fetch<\{ code: number, data: PaginatedList<RawAimsProject> \}>\(\s*moduleUrl\(`\/api\/v1\/projects/)
+    assert.match(projectStore, /const \{ moduleUrl \} = useAimsModule\(\)/)
     assert.ok(middleware.includes('context.method === \'GET\' && context.suffix === \'/projects\''))
     assert.match(middleware, /resolveCurrentUserProjectVisibilityContext\(context\.event, context\.currentUser\)/)
     assert.match(middleware, /resolveAimsProjectListAdminScopeQuery\(context\.event, context\.currentUser, visibilityContext\)/)
@@ -1684,7 +1705,7 @@ describe('Aims sensitive route permissions', () => {
     assert.match(middleware, /context\.method === 'POST' && context\.suffix === '\/documents'\) return false/)
     assert.ok(middleware.includes('/^\\/api\\/v1\\/documents$/'))
 
-    const handlerSource = source('server/api/v1/documents/index.post.ts')
+    const handlerSource = source('server/utils/projectDocumentWrites.ts')
     assert.match(handlerSource, /callAimsRuntime/)
     assert.match(handlerSource, /createCodocsDocument/)
     assert.match(handlerSource, /buildAimsProjectListRuntimeAccessQuery/)
@@ -1708,10 +1729,11 @@ describe('Aims sensitive route permissions', () => {
 
   test('project markdown and other document creation writes use scoped query instead of body actor fields', () => {
     for (const path of [
-      'server/api/v1/projects/[id]/markdown-documents.post.ts',
-      'server/api/v1/projects/[id]/other-documents.post.ts'
+      'server/utils/projectDocumentWrites.ts',
+      'server/utils/projectDocumentUpload.ts'
     ]) {
-      const handlerSource = source(path)
+      const content = source(path)
+      const handlerSource = path.endsWith('projectDocumentWrites.ts') ? content.slice(content.indexOf('export async function createProjectMarkdownDocument')) : content
       assert.match(handlerSource, /buildAimsProjectRuntimeAccessQuery/)
       assert.match(handlerSource, /baseQuery: \{ operator_uid: uid \}/)
 
@@ -1725,7 +1747,7 @@ describe('Aims sensitive route permissions', () => {
   })
 
   test('direct document delete uses trusted scoped runtime query for final delete', () => {
-    const handlerSource = source('server/api/v1/documents/[id].delete.ts')
+    const handlerSource = source('server/utils/projectDocumentWrites.ts')
 
     assert.match(handlerSource, /requireProjectDocumentDeleteAccess/)
     assert.match(handlerSource, /deleteCodocsProjectCabinetFile/)
@@ -1747,7 +1769,7 @@ describe('Aims sensitive route permissions', () => {
   })
 
   test('project document access policy write carries scoped query instead of body actor fields', () => {
-    const handlerSource = source('server/api/v1/projects/[id]/documents/[documentId]/access-policy.put.ts')
+    const handlerSource = source('server/utils/projectDocumentAccessPolicy.ts')
 
     assert.match(handlerSource, /buildAimsProjectListRuntimeAccessQuery/)
     assert.match(handlerSource, /query: await buildAimsProjectListRuntimeAccessQuery\(event, \{\s*uid,\s*baseQuery: \{ operator_uid: uid \}\s*\}\)/s)
@@ -2355,7 +2377,7 @@ describe('Aims sensitive route permissions', () => {
     assert.doesNotMatch(download, /project_member_direct/)
     assert.doesNotMatch(download, /catch \(error\)/)
 
-    const accessCheck = source('server/api/v1/projects/[id]/documents/[documentId]/access-check.post.ts')
+    const accessCheck = source('server/utils/projectDocumentAccessPolicy.ts')
     assert.match(accessCheck, /function normalizeDocumentAccessAction/)
     assert.match(accessCheck, /action === 'view' \|\| action === 'download' \|\| action === 'edit'/)
     assert.match(accessCheck, /statusCode:\s*400/)
@@ -2371,19 +2393,20 @@ describe('Aims sensitive route permissions', () => {
     assert.match(api, /'codocs:project-cabinet:upload'/)
     assert.match(api, /'codocs:project-cabinet:read'/)
     assert.match(api, /'codocs:project-cabinet:delete'/)
-    assert.match(api, /uploadCodocsProjectCabinetFile[\s\S]*getAuthHeaders\('codocs:project-cabinet:upload', params\.event\)/)
-    assert.match(api, /getCodocsProjectCabinetDownloadUrl[\s\S]*getAuthHeaders\('codocs:project-cabinet:read', params\.event\)/)
-    assert.match(api, /getCodocsProjectCabinetPreviewUrl[\s\S]*getAuthHeaders\('codocs:project-cabinet:read', params\.event\)/)
-    assert.match(api, /deleteCodocsProjectCabinetFile[\s\S]*getAuthHeaders\('codocs:project-cabinet:delete', params\.event\)/)
+    assert.match(api, /uploadCodocsProjectCabinetFile[\s\S]*projectDocumentAuthHeaders\('codocs:project-cabinet:upload', params\.event\)/)
+    assert.match(api, /getCodocsProjectCabinetDownloadUrl[\s\S]*projectDocumentAuthHeaders\('codocs:project-cabinet:read', params\.event\)/)
+    assert.match(api, /getCodocsProjectCabinetPreviewUrl[\s\S]*projectDocumentAuthHeaders\('codocs:project-cabinet:read', params\.event\)/)
+    assert.match(api, /deleteCodocsProjectCabinetFile[\s\S]*projectDocumentAuthHeaders\('codocs:project-cabinet:delete', params\.event\)/)
 
-    const upload = source('server/api/v1/projects/[id]/other-documents.post.ts')
+    const upload = source('server/utils/projectDocumentUpload.ts')
     assert.ok(upload.indexOf('isProjectMember(project, uid, members)') < upload.indexOf('uploadCodocsProjectCabinetFile({'))
     const download = source('server/api/v1/projects/[id]/documents/[documentId]/download.get.ts')
     assert.ok(download.indexOf('if (!access.allowed)') < download.indexOf('getCodocsProjectCabinetDownloadUrl({'))
     const preview = source('server/api/v1/projects/[id]/documents/[documentId]/preview.get.ts')
     assert.ok(preview.indexOf('if (!access.allowed)') < preview.indexOf('getCodocsProjectCabinetPreviewUrl({'))
-    const remove = source('server/api/v1/documents/[id].delete.ts')
-    assert.ok(remove.indexOf('requireProjectDocumentDeleteAccess(') < remove.indexOf('deleteCodocsProjectCabinetFile({'))
+    const remove = source('server/utils/projectDocumentWrites.ts')
+    assert.ok(remove.indexOf('requireProjectDocumentDeleteAccess(event') < remove.indexOf('await deleteProjectCabinetBackingFile(event'))
+    assert.match(remove, /return await deleteCodocsProjectCabinetFile\(\{/)
   })
 
   test('manifest exposes work_items/confirm for project managers', () => {

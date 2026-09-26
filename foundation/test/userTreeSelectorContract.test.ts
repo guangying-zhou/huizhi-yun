@@ -7,13 +7,16 @@ const component = readFileSync(
   'utf8'
 )
 
-test('UserTreeSelector skips membership APIs when committees are hidden', () => {
+test('Enterprise Host and hidden committees skip membership APIs while retaining department and user lists', () => {
   const loadData = component.slice(
     component.indexOf('async function loadData()'),
     component.indexOf('onMounted(loadData)')
   )
 
-  assert.match(loadData, /const shouldLoadMemberships = !props\.hideCommittees/)
+  assert.match(component, /const hosted = useRuntimeConfig\(\)\.public\.appCode === 'enterprise'/)
+  assert.match(loadData, /const shouldLoadMemberships = !hosted && !props\.hideCommittees/)
+  assert.match(loadData, /\$fetch<DeptsResp>\('\/api\/directory\/departments'\)/)
+  assert.match(loadData, /\$fetch<UsersResp>\('\/api\/directory\/users'/)
   assert.match(
     loadData,
     /shouldLoadMemberships\s*\?\s*\$fetch<UserDeptsResp>\('\/api\/directory\/user-departments'\)/
@@ -22,4 +25,5 @@ test('UserTreeSelector skips membership APIs when committees are hidden', () => 
     loadData,
     /if \(shouldLoadMemberships\) \{[\s\S]*await loadCommitteeMembersFallback\(committeeCodes\)[\s\S]*\}/
   )
+  assert.match(component, /\(hosted \|\| props\.hideCommittees\) && n\.orgType === 'committee'/)
 })

@@ -39,6 +39,29 @@ Does not own:
   `/v1/console/policy-bundle` in `policy_bundle_snapshots`; this does not move
   policy governance or evaluation into Runtime. Storage requires exact read/write
   capabilities, full service claims and current credential/grant validation.
+  `internal/policyenvelope` verifies full Platform envelopes and persists current
+  snapshots under transaction locks/CAS. The opt-in `/v1/console/verified-policy`
+  requires strict JWT, explicit Console deployment and live credential/grant
+  checks; `apps.console.policyEnvelope` defaults disabled. Its separate migration
+  is not installed automatically or required by the legacy schema gate. GET may
+  return expired/revoked state for synchronizer CAS recovery: consumers must check
+  current validity/status, not treat HTTP 200 as authorization. `PUT /v1/console/verified-policy/renewal`
+  records the syncer's Runtime-timed renewal outcome (`ok/platform_unavailable/
+  refused/invalid`; refused/invalid are sticky per ETag) for the current ETag; GET returns it as `renewal` (null before its
+  separate migration). It is metadata for the outage-grace rule, not a verdict. It does not upgrade
+  legacy opaque rows; policy evaluation stays outside Runtime. The separately
+  gated GET `/v1/enterprise/console-policy` retains Enterprise source/deployment,
+  exact policy read scope and live grant checks, reads the registered Console
+  row and verifies signed coverage of both deployments. No Enterprise policy
+  writer exists. `enterpriseReadEnabled` defaults false; only the pinned local
+  C000001 test Runtime enabled it on 2026-09-21. The hzy0 reader has exact read
+  grants plus both audience mappings; this instance still only accepts its
+  configured data-runtime audience. See the policy verification contract §12.
+- Console steady service identity (R1): `POST /v1/console/auth/service-tokens/issue`
+  also accepts a Console deployment key assertion, only while the Console
+  envelope is valid or in outage grace and carries the key in `serviceKeys`;
+  each `jti` is consumed once (optional `console_service_assertion_replay`).
+  Other routes never accept it. See the policy verification contract §15.
 - Exportable external integration secrets. The target Vault adapter keeps
   ciphertext and key operations customer-side; Directory Connector receives
   only RSA-OAEP encrypted command secrets and never a database credential.
@@ -62,9 +85,14 @@ Does not own:
 - Console's own service-token issuer uses its authenticated Console deployment
   in both source-binding modes; it must not invent `<tenant>-console` when the
   authenticated binding has a custom site/environment code.
-- Keep app adapters scoped to their app schemas. Cross-module writes belong in
-  the caller app BFF plus target app service API contract, not direct database
-  joins here.
+- Existing unmigrated adapters keep their app-schema and service API contracts.
+  The accepted [ADR-018](../docs/ADR-018-Unified-Enterprise-Application-and-Data.md)
+  target permits scoped cross-domain queries, owning-domain service calls and
+  shared transactions inside Runtime for explicitly migrated business paths.
+  Follow the [implementation plan](../docs/Unified-Enterprise-Implementation-Plan.md)
+  and update the actual API/identity/transaction contracts before switching paths;
+  no current path is migrated by adding this documentation. Nuxt/BFF DB access,
+  arbitrary cross-domain writes and tenant/actor authorization bypass remain disallowed.
 - Migration commands must default to dry-run and require an explicit `--apply`
   or equivalent for writes.
 
@@ -110,3 +138,7 @@ Package:
   contract is intentionally changed.
 - When adding or changing app API behavior, update the app module docs and the
   relevant cross-module contract if other modules consume it.
+
+AA-04 milestone callback coordination is opt-in via `enterprise.enableMilestoneReceivable` (default false). Only the authenticated Aims milestone-completion subtype is coordinated; the disabled setting preserves the legacy adapter. See the Runtime API contract and `docs/Unified-Enterprise-Altoc-Aims-Expansion.md` for strict service identity, exact capability and shared transaction requirements.
+
+Codocs v2 snapshot routes (`/v1/enterprise/codocs/personal-documents:snapshot-{prepare,publish,read}`) are opt-in via `apps.codocs.snapshotV2Enabled` (default false). They reuse the exact personal-documents edit/read capabilities, verify bucket write-once retention and exact provider versions before publishing, and must not be enabled before the snapshot tables, Host writer, Collab epoch coordination and environment grant/retention checks are in place. See `docs/Codocs-Document-Write-Coordination.md`.

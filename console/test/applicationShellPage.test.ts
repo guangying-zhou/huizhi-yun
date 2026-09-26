@@ -35,6 +35,18 @@ describe('Console enterprise application shell', () => {
     assert.match(page, /window\.location\.replace\(shellEntry\)/)
   })
 
+  test('checks the trusted migration projection before creating an iframe', () => {
+    assert.match(page, /application-shell-migration/)
+    assert.match(page, /resolveMigratedTarget\(application, target\)/)
+    assert.match(page, /window\.location\.replace\(migratedTarget\)/)
+    assert.ok(page.indexOf('resolveMigratedTarget(application, target)') < page.indexOf('frames.value.push({'))
+    assert.match(page, /query: \{ appCode, target \}/)
+    assert.match(page, /generation !== activationGeneration/)
+    assert.match(page, /v-else-if="migrationError"/)
+    const prewarm = page.slice(page.indexOf('async function prewarmApplication'), page.indexOf('function setFrameElement'))
+    assert.doesNotMatch(prewarm, /window\.location\.(replace|assign)\(/)
+  })
+
   test('owns the global navigation while embedded applications own business navigation', () => {
     assert.match(page, /<AppRail/)
     assert.match(page, /<AppLauncher/)

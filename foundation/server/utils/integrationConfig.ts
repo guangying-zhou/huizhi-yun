@@ -124,6 +124,7 @@ async function fetchServiceIntegrationRuntime<T>(
     {
       appCode: 'console',
       scope: options.scope,
+      capabilityFormat: 'console-integration',
       serviceTokenSourceBinding: 'service-client-policy',
       method: options.method || 'GET',
       body: options.body

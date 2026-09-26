@@ -84,6 +84,11 @@ function resolveAppAsset(path: string, fallback: string) {
 
 // https://nuxt.com/docs/api/configuration/nuxt-config
 export default defineNuxtConfig({
+  ...(process.env.HZY0_LOCAL_CONSOLE_FACADE === 'true'
+    ? {
+        vite: { server: { allowedHosts: ['hzy0.isme.dev'], hmr: { protocol: 'wss' as const, clientPort: 443 } } }
+      }
+    : {}),
   extends: ['@hzy/foundation'],
 
   modules: ['@nuxt/eslint', '@nuxt/ui', '@vueuse/nuxt', '@pinia/nuxt'],
@@ -235,7 +240,9 @@ export default defineNuxtConfig({
       ? {}
       : {
           externals: {
-            inline: ['collab']
+            // This workspace .mjs contract must travel with Nitro's bundle;
+            // externalizing it leaves a relocated relative import in dev/index.mjs.
+            inline: ['collab', fileURLToPath(new URL('../foundation/shared/contracts/gatewayAssertion.mjs', import.meta.url))]
           }
         }),
     cloudflare: {

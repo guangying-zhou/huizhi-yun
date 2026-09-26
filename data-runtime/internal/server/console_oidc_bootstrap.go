@@ -5,12 +5,14 @@ import (
 	"crypto/ed25519"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"net"
 	"net/http"
 	"net/url"
 	"strings"
 	"time"
 
+	"github.com/huizhi-yun/data-runtime/internal/apps/console"
 	"github.com/huizhi-yun/data-runtime/internal/config"
 	"github.com/huizhi-yun/data-runtime/internal/httperror"
 )
@@ -117,18 +119,46 @@ func (s *Server) bootstrapConsoleOIDCSigningKey(ctx context.Context, body map[st
 	if err != nil {
 		return nil, err
 	}
+	if s.auth == nil {
+		return nil, httperror.New(http.StatusServiceUnavailable, "console_oidc_bootstrap_auth_unavailable", "Runtime authenticator is unavailable")
+	}
+
+	// Record the envelope as consumed before acting on it. The receipt is shared
+	// and durable, so it survives restart and covers a second instance, which a
+	// process mutex cannot. Re-sending the identical envelope stays a safe retry
+	// — persisting the same trust is a no-op — while reusing a consumed jti to
+	// carry different trust values is a replay and is refused.
+	replayed, err := adapter.ConsumeOIDCBootstrapJTI(ctx, payload.JTI, map[string]any{
+		"issuer":         jwtTrust.Issuer,
+		"audience":       jwtTrust.Audience,
+		"jwksUrl":        jwtTrust.JWKSURL,
+		"tenantCode":     strings.TrimSpace(payload.TenantCode),
+		"deploymentCode": strings.TrimSpace(payload.DeploymentCode),
+		"runtimeCode":    strings.TrimSpace(payload.RuntimeCode),
+	}, console.AuditMutationMeta{
+		RequestID: strings.TrimSpace(stringValue(body["requestId"])),
+		ActorType: "system",
+		ActorID:   "platform:tenant-owner",
+	})
+	if err != nil {
+		return nil, err
+	}
 
 	result, err := adapter.BootstrapOIDCSigningKeyToVault(ctx, "platform:tenant-owner")
 	if err != nil {
 		return nil, err
 	}
+	// Persisting is idempotent for identical trust and refused for anything
+	// else, so an established trust root is never silently replaced. Memory and
+	// disk therefore move together or not at all.
 	if err := config.PersistJWTTrustOverlay(s.cfg.Control.ConfigDir, jwtTrust); err != nil {
+		if errors.Is(err, config.ErrJWTTrustAlreadyInitialized) {
+			return nil, httperror.New(http.StatusConflict, "console_oidc_bootstrap_jwt_trust_immutable", "Console OIDC JWT trust is already initialized with different values")
+		}
 		return nil, httperror.New(http.StatusInternalServerError, "console_oidc_bootstrap_jwt_trust_persist_failed", "Console OIDC JWT trust could not be persisted")
 	}
-	if s.auth == nil {
-		return nil, httperror.New(http.StatusServiceUnavailable, "console_oidc_bootstrap_auth_unavailable", "Runtime authenticator is unavailable")
-	}
 	s.auth.UpdateJWTTrust(jwtTrust)
+	result["replayed"] = replayed
 	result["tenantCode"] = s.cfg.Tenant
 	result["deploymentCode"] = s.cfg.DeploymentForApp("console")
 	result["runtimeCode"] = s.cfg.Control.RuntimeCode

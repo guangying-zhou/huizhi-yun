@@ -7,7 +7,7 @@ import { createError } from 'h3'
 
 const code = ts.transpileModule(readFileSync(new URL('../server/utils/subjectScopedAuthorization.ts', import.meta.url), 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText
 test('subject scope client uses service binding helper and rejects mismatched snapshots', async () => {
-  for (const mode of ['valid', 'runtime', 'uid', 'appCode', 'purpose', 'resourceCode', 'action', 'authorizationMode', 'grants', 'outage']) {
+  for (const mode of ['valid', 'long-budget', 'runtime', 'uid', 'appCode', 'purpose', 'resourceCode', 'action', 'authorizationMode', 'grants', 'outage', 'timeout']) {
     const exports: Record<string, (input: unknown) => Promise<Record<string, unknown>>> = {}
     let requested = false
     runInNewContext(code, { exports, require: (name: string) => {
@@ -21,12 +21,14 @@ test('subject scope client uses service binding helper and rejects mismatched sn
           assert.equal(options.scope, 'console:subject-authorization:read')
           return options.request('test-token')
         },
-        fetchConsoleServiceJson: async (_event: unknown, url: string, options: { body: Record<string, unknown>, headers: Record<string, string> }) => {
+        fetchConsoleServiceJson: async (_event: unknown, url: string, options: { body: Record<string, unknown>, headers: Record<string, string>, timeout: number }) => {
+          assert.equal(options.timeout, mode === 'long-budget' ? 100000 : 10000)
           assert.equal(url, 'https://console.test/api/v1/console/service/authorization/subject-scoped')
           assert.equal(options.headers.authorization, 'Bearer test-token')
           assert.equal(options.headers['x-hzy-tenant'], 'T')
           assert.deepEqual(Object.keys(options.body).sort(), ['purpose', 'subjectUid'])
           if (mode === 'outage') throw createError({ statusCode: 503 })
+          if (mode === 'timeout') throw Object.assign(new Error('deadline exceeded'), { name: 'TimeoutError' })
           const data: Record<string, unknown> = { uid: 'U1', appCode: 'aims', purpose: 'product_feedback_create', resourceCode: 'product_requests', action: 'create', authorizationMode: 'merged', policyRevision: 1, bundleVersion: 'v1', grants: [], departmentCodes: [], departmentTree: {} }
           if (mode in data) data[mode] = mode === 'grants' ? [{ permissions: [{ appCode: 'assets', resourceCode: 'deliveries' }] }] : 'other'
           return { code: 0, data }
@@ -34,8 +36,8 @@ test('subject scope client uses service binding helper and rejects mismatched sn
       }
       throw new Error(name)
     } })
-    const promise = exports.loadSubjectScopedAuthorizationByService!({ event: {}, subjectUid: 'U1', purpose: 'product_feedback_create', resourceCode: 'product_requests', action: 'create' })
-    if (mode === 'valid') assert.equal((await promise).uid, 'U1')
+    const promise = exports.loadSubjectScopedAuthorizationByService!({ event: {}, subjectUid: 'U1', purpose: 'product_feedback_create', resourceCode: 'product_requests', action: 'create', ...(mode === 'long-budget' ? { timeoutMs: 100000 } : {}) })
+    if (mode === 'valid' || mode === 'long-budget') assert.equal((await promise).uid, 'U1')
     else await assert.rejects(promise, { statusCode: 503 })
     assert.equal(requested, mode !== 'runtime')
   }

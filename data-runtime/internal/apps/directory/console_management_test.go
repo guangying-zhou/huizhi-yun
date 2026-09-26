@@ -65,6 +65,31 @@ func TestConsoleDirectoryMutationBatchesAreBounded(t *testing.T) {
 	}
 }
 
+func TestEnterpriseSelfDepartmentsUsesOnlyActorMembershipsAndMinimalFields(t *testing.T) {
+	database, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherRegexp))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer database.Close()
+	mock.ExpectQuery(`(?s)FROM directory_user_departments ud.*WHERE ud.uid=\? AND ud.status='active'.*LIMIT 101`).
+		WithArgs("person-a").WillReturnRows(sqlmock.NewRows([]string{"dept_code", "dept_name", "org_type", "relation_type", "is_primary", "manager_uid", "leader_uid"}).
+		AddRow("dept-a", "Team", "department", "member", true, "manager-a", "leader-a"))
+	got, err := (&Adapter{db: database}).EnterpriseSelfDepartments(context.Background(), "person-a")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got["primaryDeptCode"] != "dept-a" {
+		t.Fatalf("wrong primary department: %#v", got)
+	}
+	rows := got["departments"].([]map[string]any)
+	if len(rows) != 1 || len(rows[0]) != 5 || rows[0]["managerId"] != "manager-a" || rows[0]["leaderId"] != "leader-a" {
+		t.Fatalf("unexpected projection: %#v", rows)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestConsoleUserProjectsIncludesChildrenInheritedFromParentGroup(t *testing.T) {
 	database, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherRegexp))
 	if err != nil {

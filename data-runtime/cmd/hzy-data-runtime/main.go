@@ -77,8 +77,25 @@ func main() {
 	if err != nil {
 		log.Fatalf("[hzy-data-runtime] create server failed: %v", err)
 	}
+	defer runtime.Close()
 	runtimeContext, cancelRuntime := context.WithCancel(context.Background())
 	defer cancelRuntime()
+	if cfg.GatewayKeyset.Enabled {
+		go func() {
+			ticker := time.NewTicker(time.Minute)
+			defer ticker.Stop()
+			for {
+				if err := runtime.SyncGatewayKeyset(runtimeContext); err != nil {
+					log.Printf("[hzy-data-runtime] Gateway keyset sync unavailable")
+				}
+				select {
+				case <-runtimeContext.Done():
+					return
+				case <-ticker.C:
+				}
+			}
+		}()
+	}
 	restartCh := make(chan struct{}, 1)
 	startControlHeartbeat(runtimeContext, cfg, runtime.ControlSnapshot, runtime.RequestControlPlaneUpdate, func() {
 		select {

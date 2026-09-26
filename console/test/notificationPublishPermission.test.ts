@@ -24,8 +24,12 @@ describe('Console notification publish permissions', () => {
       'requireConsoleServiceActor(event, \'notifications\', \'notifications:publish\')',
       'readBody(event)'
     )
+    assertBefore(content, 'resolveNotificationPublisherBinding(event, serviceActor)', 'assertNotificationPublisherIdentity(')
     assertBefore(content, 'assertNotificationPublisherIdentity(', 'readBody(event)')
-    assert.match(content, /resolveConsoleRuntimeBinding\(event\)/)
+    assert.match(content, /if \(!binding\) throw createError\(\{ statusCode: 403/)
+    const publisherBinding = source('server/utils/localWorkflowNotificationBinding.ts')
+    assert.match(publisherBinding, /resolveConsoleRuntimeBinding\(event\)/)
+    assert.match(publisherBinding, /HZY0_NOTIFICATIONS_IN_APP_ONLY/)
     assertBefore(
       content,
       'requireConsoleServiceActor(event, \'notifications\', \'notifications:publish\')',
@@ -37,14 +41,12 @@ describe('Console notification publish permissions', () => {
     assert.match(idempotency, /idempotencyKey is required and must not exceed 191 characters/)
     assert.match(idempotency, /uid\.toLowerCase\(\) === '@all'/)
 
-    for (const routePath of [
-      'server/api/v1/console/notifications/actionable-lifecycle.post.ts',
-      'server/api/v1/console/notifications/integration-operation-dead-letter.post.ts'
-    ]) {
-      const route = source(routePath)
-      assertBefore(route, 'assertNotificationPublisherIdentity(', 'readBody(event)')
-      assert.match(route, /resolveConsoleRuntimeBinding\(event\)/)
-    }
+    const lifecycleRoute = source('server/api/v1/console/notifications/actionable-lifecycle.post.ts')
+    assertBefore(lifecycleRoute, 'assertNotificationPublisherIdentity(', 'readBody(event)')
+    assert.match(lifecycleRoute, /resolveNotificationPublisherBinding\(event, serviceActor\)/)
+    const deadLetterRoute = source('server/api/v1/console/notifications/integration-operation-dead-letter.post.ts')
+    assertBefore(deadLetterRoute, 'assertNotificationPublisherIdentity(', 'readBody(event)')
+    assert.match(deadLetterRoute, /resolveConsoleRuntimeBinding\(event\)/)
   })
 
   test('notification read and archive APIs bind recipient to the current user', () => {

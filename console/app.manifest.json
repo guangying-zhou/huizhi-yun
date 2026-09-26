@@ -20,9 +20,37 @@
   },
   "resources": [
     {
+      "code": "policy-bundle",
+      "name": "策略快照服务",
+      "description": "既有 console:policy-bundle:read|write 精确服务能力；旧封包存储和显式启用的完整签名快照接口共用，不授予浏览器或普通角色权限",
+      "actions": ["read", "write"],
+      "sortOrder": 0
+    },
+    {
+      "code": "directory-project-access",
+      "name": "项目目录服务读取",
+      "description": "既有 Service API 的精确读取能力；调用方须具备 Console grant，不授予人员项目管理权限",
+      "actions": ["read"],
+      "sortOrder": 0
+    },
+    {
+      "code": "business-domain",
+      "name": "业务域字典服务读取",
+      "description": "既有业务域 Service API 读取能力；不包含字典写入或人员管理权限",
+      "actions": ["view"],
+      "sortOrder": 0
+    },
+    {
       "code": "subject-authorization",
       "name": "固定用途用户范围授权服务",
       "description": "服务能力 console:subject-authorization:read：按登记用途查询有效用户的当前合并范围授权，不授予用户角色",
+      "actions": ["read"],
+      "sortOrder": 0
+    },
+    {
+      "code": "directory-users",
+      "name": "目录用户服务读取",
+      "description": "服务能力 console:directory-users:read：供已授权调用方读取目录投影与显式UID活跃状态，不授予人员管理权限",
       "actions": ["read"],
       "sortOrder": 0
     },

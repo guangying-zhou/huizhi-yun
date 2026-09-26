@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="420" height="360" viewBox="0 0 420 360" role="img" aria-labelledby="title description">
+  <title id="title">404 页面不存在</title>
+  <desc id="description">蓝色六边形中的橙色 404 标识</desc>
+  <defs>
+    <linearGradient id="hex-blue" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#1565c0"/>
+      <stop offset="1" stop-color="#1e88e5"/>
+    </linearGradient>
+    <linearGradient id="hex-cyan" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#4dd0e1"/>
+      <stop offset="1" stop-color="#29b6f6"/>
+    </linearGradient>
+    <filter id="number-shadow" x="-30%" y="-30%" width="160%" height="180%">
+      <feDropShadow dx="0" dy="8" stdDeviation="12" flood-color="#f57c00" flood-opacity=".3"/>
+    </filter>
+  </defs>
+  <ellipse cx="210" cy="330" rx="150" ry="18" fill="#dfe5ec"/>
+  <polygon points="210,40 330,108 330,244 210,312 90,244 90,108" fill="url(#hex-blue)" opacity=".9" transform="rotate(-8 210 176)"/>
+  <polygon points="210,60 316,120 316,240 210,300 104,240 104,120" fill="url(#hex-cyan)" opacity=".85"/>
+  <circle cx="70" cy="80" r="8" fill="#f57c00" opacity=".7"/>
+  <circle cx="360" cy="60" r="5" fill="#29b6f6" opacity=".8"/>
+  <circle cx="380" cy="270" r="7" fill="#f57c00" opacity=".5"/>
+  <circle cx="46" cy="250" r="4" fill="#1565c0" opacity=".5"/>
+  <text
+    x="210"
+    y="215"
+    fill="#f57c00"
+    filter="url(#number-shadow)"
+    font-family="PingFang SC, Microsoft YaHei, Helvetica Neue, sans-serif"
+    font-size="110"
+    font-weight="800"
+    letter-spacing="4"
+    text-anchor="middle"
+  >404</text>
+</svg>

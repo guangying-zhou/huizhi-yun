@@ -7,10 +7,10 @@ func TestProductCostOperationValidatesFrozenRulesAndReceiptTarget(t *testing.T) 
 	if !validProductCostRulesOperation(command) {
 		t.Fatal("valid command rejected")
 	}
-	if err := validateServiceTicketDeliveryOperation("finance", productCostRulesOperationCode, command); err != nil {
+	if err := validateServiceTicketDeliveryOperation("finance", productCostRulesOperationCode, "product-cost-rules.v1", command); err != nil {
 		t.Fatal(err)
 	}
-	if err := validateServiceTicketDeliveryOperation("assets", productCostRulesOperationCode, command); err == nil {
+	if err := validateServiceTicketDeliveryOperation("assets", productCostRulesOperationCode, "product-cost-rules.v1", command); err == nil {
 		t.Fatal("wrong target accepted")
 	}
 	if aimsIntegrationOperationCommandSchema(productCostRulesOperationCode) != "product-cost-rules.v1" {

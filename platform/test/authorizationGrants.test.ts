@@ -307,6 +307,9 @@ function createQueries(options: {
   omitDirectRoles?: boolean
   configuredBaselinePermissions?: RowDataPacket[]
   baselineExcludedSubjects?: string[]
+  additionalDirectRoles?: typeof directRoles
+  additionalPermissionRows?: typeof permissionRows
+  additionalRoleScopeRows?: typeof roleScopeRows
 } = {}): AuthorizationGrantQueryAdapter {
   const adapter = {
     queryRow: async (sql: string): Promise<RowDataPacket | null> => {
@@ -326,7 +329,7 @@ function createQueries(options: {
         assertEffectiveSubjectRoleFilter(sql)
         if (options.omitDirectRoles) return []
         const subjectIds = selectedNumbers(params)
-        return directRoles.filter(row => subjectIds.has(row.subject_id)) as unknown as RowDataPacket[]
+        return [...directRoles, ...(options.additionalDirectRoles || [])].filter(row => subjectIds.has(row.subject_id)) as unknown as RowDataPacket[]
       }
       if (sql.includes('FROM tenant_template_bindings')) {
         return []
@@ -336,11 +339,11 @@ function createQueries(options: {
       }
       if (sql.includes('FROM tenant_role_permissions')) {
         const roleIds = selectedNumbers(params)
-        return permissionRows.filter(row => roleIds.has(row.role_id)) as unknown as RowDataPacket[]
+        return [...permissionRows, ...(options.additionalPermissionRows || [])].filter(row => roleIds.has(row.role_id)) as unknown as RowDataPacket[]
       }
       if (sql.includes('FROM tenant_role_scopes')) {
         const roleIds = selectedNumbers(params)
-        return roleScopeRows.filter(row => roleIds.has(row.role_id)) as unknown as RowDataPacket[]
+        return [...roleScopeRows, ...(options.additionalRoleScopeRows || [])].filter(row => roleIds.has(row.role_id)) as unknown as RowDataPacket[]
       }
       if (sql.includes('FROM tenant_subject_role_scopes')) {
         assert.match(sql, /status = 'active'/)
@@ -366,6 +369,23 @@ function createQueries(options: {
 }
 
 describe('buildDbAuthorizationGrantsWithQueries', () => {
+  test('product manager 旧 role scope 解析为 manager 而非 equals:manager', async () => {
+    const base = {
+      additionalDirectRoles: [{ ...directRoles[0]!, assignment_id: 9001, role_id: 9001,
+        role_code: 'product_manager', role_name: '产品经理' }],
+      additionalPermissionRows: [{ role_id: 9001, app_code: 'aims', resource_code: 'product_versions', action: 'accept' }],
+      additionalRoleScopeRows: [{ role_id: 9001, app_code: 'aims', resource_code: 'product_versions',
+        action: 'accept', scope_type: 'product', scope_value: 'manager' }]
+    }
+    const grantResult = await buildDbAuthorizationGrantsWithQueries(createQueries(base), tenantCode, uid, 'aims')
+    const grant = grantResult.grants.find(row => row.roleCode === 'product_manager')
+    assert.deepEqual(grant?.defaultScopes?.map(scope => `${scope.dimension}:${scope.predicate}:${scope.value}`), ['product:manager:null'])
+    const oldMistake = await buildDbAuthorizationGrantsWithQueries(createQueries({ ...base,
+      additionalRoleScopeRows: [{ ...base.additionalRoleScopeRows[0]!, scope_value: 'equals:manager' }]
+    }), tenantCode, uid, 'aims')
+    assert.equal(oldMistake.grants.find(row => row.roleCode === 'product_manager')?.defaultScopes?.[0]?.predicate, 'equals')
+  })
+
   test('active 部门/职位 membership 上的主体角色会生成继承授权单元', async () => {
     const result = await evaluateDbAuthorizationWithQueries(
       createQueries({ includeInheritedMembership: true }),

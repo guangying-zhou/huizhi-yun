@@ -1,5 +1,8 @@
 <script setup lang="ts">
-import type { ProductRelease } from '~/types/productRelease'
+import { useAimsModule } from '../../../../../../../layer/useAimsModule'
+import type { ProductRelease } from '../../../../../../types/productRelease'
+
+const { moduleUrl, cacheKey } = useAimsModule()
 
 definePageMeta({ layoutHeader: true, layoutHeaderTitle: '发布快照', layoutHeaderProjectSwitcher: false })
 const route = useRoute()
@@ -9,8 +12,8 @@ const versionID = computed(() => String(route.params.versionId || ''))
 const recordID = computed(() => String(route.params.recordId || ''))
 const base = computed(() => `/products/${encodeURIComponent(code.value)}/versions/${encodeURIComponent(versionID.value)}`)
 const labels: Record<string, string> = { 'execution-review': '执行目标评审', 'blocking-defects-review': '阻塞缺陷评审', 'release-readiness': '发布就绪评审' }
-const { data, status, error, refresh } = await useFetch(() => `/api/v1${base.value}/releases/${encodeURIComponent(recordID.value)}`, {
-  server: false,
+const { data, status, error, refresh } = await useFetch(() => moduleUrl(`/api/v1${base.value}/releases/${encodeURIComponent(recordID.value)}`), {
+  server: false, key: computed(() => cacheKey('history-releases-[recordId]:' + route.path)),
   transform: (response: { code: number, data: ProductRelease }) => {
     const r = response.data
     if (response.code !== 0 || String(r?.id) !== recordID.value || String(r.version_id) !== versionID.value || !['verified', 'legacy_import'].includes(r.evidence_level) || !Array.isArray(r.scopes) || !Array.isArray(r.checks) || !Array.isArray(r.exceptions) || (r.snapshot_available && (r.version?.product_code !== code.value || String(r.version.id) !== versionID.value))) throw new Error('发布快照响应不完整')
@@ -23,7 +26,7 @@ const alert = useApiErrorAlert(error, { fallbackTitle: '发布快照读取失败
 <template>
   <div class="mx-auto min-w-0 max-w-5xl space-y-4 p-4 sm:p-6">
     <div class="flex flex-wrap gap-2">
-      <UButton :to="{ path: base, query: versionPerspectiveQuery }" color="neutral" variant="ghost">
+      <UButton :to="{ path: moduleUrl(base), query: versionPerspectiveQuery }" color="neutral" variant="ghost">
         返回版本详情
       </UButton>
       <UButton
@@ -35,7 +38,7 @@ const alert = useApiErrorAlert(error, { fallbackTitle: '发布快照读取失败
         重新读取
       </UButton>
     </div>
-    <UButton :to="{ path: `${base}/releases`, query: versionPerspectiveQuery }" color="neutral" variant="outline">
+    <UButton :to="{ path: moduleUrl(`${base}/releases`), query: versionPerspectiveQuery }" color="neutral" variant="outline">
       查看全部发布历史
     </UButton>
     <h1 class="text-xl font-semibold">

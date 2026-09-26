@@ -2,6 +2,8 @@ import { setLocalServiceTokenIssuer } from '@hzy/foundation/server/utils/service
 import { issueConsoleRuntimeServiceToken } from '@hzy/foundation/server/utils/consoleTenantRuntimeClient'
 import { getOidcIssuer, getOidcTtl, loadOidcPolicyDigest } from '~~/server/utils/oidc'
 import { isPolicyStorageToken } from '~~/server/utils/policyStorageToken'
+import { coalescePolicyRead } from '~~/server/utils/persistentPolicyBundle'
+import { logAuthDependencyFailure } from '@hzy/foundation/server/utils/authDependencyDiagnostic'
 
 /**
  * Console 是 service token 的签发方（持有 OIDC signing key）。它自身调用跨模块 API
@@ -16,25 +18,46 @@ export default defineNitroPlugin(() => {
   setLocalServiceTokenIssuer(async ({ audience, scope, deploymentCodeOverride, sourceBinding, event }) => {
     if (!event) return null
 
-    const issuedScope = deploymentCodeOverride
-      && audience === 'data-runtime'
-      && scope === 'data-runtime:runtime:update'
-      ? 'runtime.update'
-      : scope
-    const policy = isPolicyStorageToken(audience, scope)
-      ? { policyVersion: null, caps: null }
-      : await loadOidcPolicyDigest(event)
-    const response = await issueConsoleRuntimeServiceToken(event, {
-      audience,
-      scope,
-      issuedScope,
-      issuer: getOidcIssuer(event),
-      ttlSeconds: getOidcTtl(event, 'accessTokenTtlSeconds'),
-      deploymentCodeOverride,
-      sourceBinding,
-      policyVersion: policy.policyVersion,
-      caps: policy.caps
+    // This adapter only merges pending work within an event. Foundation's
+    // caller also has a context-isolated, expiry-bounded token cache/flight;
+    // this local guard prevents duplicate work if the adapter is called again
+    // from the same event before that shared layer resolves.
+    const key = JSON.stringify(['local-service-token', audience, scope, deploymentCodeOverride || null, sourceBinding || 'trusted-gateway'])
+    return coalescePolicyRead(event, key, async () => {
+      const issuedScope = deploymentCodeOverride
+        && audience === 'data-runtime'
+        && scope === 'data-runtime:runtime:update'
+        ? 'runtime.update'
+        : scope
+      const policyStartedAt = Date.now()
+      let policy
+      try {
+        policy = isPolicyStorageToken(audience, scope)
+          ? { policyVersion: null, caps: null }
+          : await loadOidcPolicyDigest(event)
+      } catch (error) {
+        logAuthDependencyFailure(event, 'service-token-local-policy', error, Date.now() - policyStartedAt)
+        throw error
+      }
+      const issueStartedAt = Date.now()
+      let response
+      try {
+        response = await issueConsoleRuntimeServiceToken(event, {
+          audience,
+          scope,
+          issuedScope,
+          issuer: getOidcIssuer(event),
+          ttlSeconds: getOidcTtl(event, 'accessTokenTtlSeconds'),
+          deploymentCodeOverride,
+          sourceBinding,
+          policyVersion: policy.policyVersion,
+          caps: policy.caps
+        })
+      } catch (error) {
+        logAuthDependencyFailure(event, 'service-token-local-runtime', error, Date.now() - issueStartedAt)
+        throw error
+      }
+      return response.data.accessToken
     })
-    return response.data.accessToken
   })
 })

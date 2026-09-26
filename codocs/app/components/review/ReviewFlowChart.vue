@@ -6,7 +6,7 @@
 
 <script setup lang="ts">
 import type { MermaidConfig } from 'mermaid'
-import { renderMermaid } from '~/utils/mermaidLoader'
+import { renderMermaid } from '../../utils/mermaidLoader'
 
 interface ReviewFlowNode {
   name: string

@@ -5,10 +5,10 @@ import { Script, createContext } from 'node:vm'
 import ts from 'typescript'
 
 test('Assets document caller binds actor and deployments and rejects invalid metadata', async () => {
-  const source = readFileSync(new URL('../server/utils/productDocumentCodocs.ts', import.meta.url), 'utf8').replace(/^import .*$/gm, '').replace('export async function', 'async function')
+  const source = ['assetProductDocumentTransport.ts', 'productDocumentCodocs.ts'].map(file => readFileSync(new URL('../server/utils/' + file, import.meta.url), 'utf8')).join('\n').replace(/^import .*$/gm, '').replaceAll('export async function', 'async function').replaceAll('export interface', 'interface')
   const uuid = '00000000-0000-4000-8000-000000000001'
   const calls: string[] = []
-  let denied = false, wrongResult = false
+  let denied = false, wrongResult = false, enterprise = false
   const context = createContext({
     URL,
     createError: (input: { statusCode: number }) => Object.assign(new Error('rejected'), input),
@@ -20,7 +20,7 @@ test('Assets document caller binds actor and deployments and rejects invalid met
       if (denied) throw new Error('denied')
     },
     requireRequestUid: () => 'verified-user',
-    resolveTrustedTenantGatewayContext: () => ({ tenant: 'TENANT', deployment: 'custom-assets' }),
+    resolveTrustedTenantGatewayContext: () => ({ tenant: 'TENANT', deployment: enterprise ? 'custom-enterprise' : 'custom-assets' }),
     resolveTrustedServiceAppRoute: () => ({ baseUrl: 'https://codocs.invalid', deploymentCode: 'custom-codocs' }),
     hashServiceCommandPayload: async (command: { actorUid: string }) => {
       assert.equal(command.actorUid, 'verified-user')
@@ -33,9 +33,9 @@ test('Assets document caller binds actor and deployments and rejects invalid met
     },
     trustedServiceRequestHeaders: () => ({}),
     buildServiceCommandRuntimeHeaders: async (args: { sourceApp: string, sourceClientId: string, sourceDeploymentCode: string, targetDeploymentCode: string, requestTarget: string }) => {
-      assert.equal(args.sourceApp, 'assets')
-      assert.equal(args.sourceClientId, 'assets.runtime')
-      assert.equal(args.sourceDeploymentCode, 'custom-assets')
+      assert.equal(args.sourceApp, enterprise ? 'enterprise' : 'assets')
+      assert.equal(args.sourceClientId, enterprise ? 'enterprise.runtime' : 'assets.runtime')
+      assert.equal(args.sourceDeploymentCode, enterprise ? 'custom-enterprise' : 'custom-assets')
       assert.equal(args.targetDeploymentCode, 'custom-codocs')
       assert.equal(args.requestTarget, `/api/v1/service/assets-product-documents/${uuid}/metadata`)
       return {}
@@ -50,6 +50,9 @@ test('Assets document caller binds actor and deployments and rejects invalid met
   const result = await context.readAssetProductDocumentMetadata({}, 'P1', uuid)
   assert.deepEqual(Object.keys(result).sort(), ['doc_type', 'title', 'updated_at', 'uuid'])
   assert.deepEqual(calls, ['permission', 'token', 'fetch'])
+  enterprise = true
+  await context.readProductDocumentMetadataTransport({}, 'P1', uuid, 'verified-user', 'enterprise')
+  enterprise = false
   wrongResult = true
   await assert.rejects(context.readAssetProductDocumentMetadata({}, 'P1', uuid))
   calls.length = 0
@@ -57,6 +60,7 @@ test('Assets document caller binds actor and deployments and rejects invalid met
   await assert.rejects(context.readAssetProductDocumentMetadata({}, 'P1', uuid), /denied/)
   assert.deepEqual(calls, ['permission'])
   calls.length = 0
+  denied = false
   await assert.rejects(context.readAssetProductDocumentMetadata({}, 'P1', 'DOC-1'))
-  assert.deepEqual(calls, [])
+  assert.deepEqual(calls, ['permission'])
 })

@@ -1,11 +1,14 @@
 <script setup lang="ts">
-import type { ProductRequestRecord } from '~/types/productRequest'
+import { useAimsModule } from '../../../../../../layer/useAimsModule'
+import type { ProductRequestRecord } from '../../../../../types/productRequest'
+
+const { moduleUrl, cacheKey } = useAimsModule()
 
 definePageMeta({ layoutHeader: true, layoutHeaderTitle: '功能关联需求', layoutHeaderProjectSwitcher: false })
 const route = useRoute()
 const code = computed(() => String(route.params.productCode || ''))
 const featureId = computed(() => String(route.params.featureId || ''))
-const base = computed(() => `/api/v1/products/${encodeURIComponent(code.value)}`)
+const base = computed(() => moduleUrl(`/api/v1/products/${encodeURIComponent(code.value)}`))
 const featurePath = computed(() => `${base.value}/features/${encodeURIComponent(featureId.value)}`)
 interface Page { items: ProductRequestRecord[], total: number, workspace_revision: number }
 interface Feature { biz_id: string, product_code: string, title: string, lifecycle: string, revision: number }
@@ -18,10 +21,10 @@ const pageData = (response: { code: number, data: Page }) => {
   if (response.code !== 0 || !Array.isArray(value?.items) || !Number.isSafeInteger(value.total) || value.total < 0 || !Number.isSafeInteger(value.workspace_revision) || value.workspace_revision < 1 || value.items.some(item => item.product_code !== code.value || !item.biz_id || !Number.isSafeInteger(item.revision) || item.revision < 1)) throw new Error('需求列表响应不完整')
   return value
 }
-const { data: linked, status: linkedStatus, error: linkedError, refresh: refreshLinked } = await useFetch(() => `${featurePath.value}/requests`, { server: false, query: computed(() => ({ page: linkedPage.value, pageSize: 20 })), transform: pageData })
-const { data: candidates, status: candidateStatus, error: candidateError, refresh: refreshCandidates } = await useFetch(() => `${base.value}/requests`, { server: false, query: computed(() => ({ page: page.value, pageSize, keyword: debounced.value || undefined })), transform: pageData })
-const { data: feature, status: featureStatus, error: featureError, refresh: refreshFeature } = await useFetch<{ code: number, data: Feature }>(featurePath, { server: false })
-const { data: permission, status: permissionStatus, error: permissionError, refresh: refreshPermission } = await useFetch<{ code: number, data: Permission }>(() => `${base.value}/requests/permissions`, { server: false })
+const { data: linked, status: linkedStatus, error: linkedError, refresh: refreshLinked } = await useFetch(() => `${featurePath.value}/requests`, { server: false, key: computed(() => cacheKey('feature-requests-1:' + code.value + ':' + String(route.params.featureId))), query: computed(() => ({ page: linkedPage.value, pageSize: 20 })), transform: pageData })
+const { data: candidates, status: candidateStatus, error: candidateError, refresh: refreshCandidates } = await useFetch(() => `${base.value}/requests`, { server: false, key: computed(() => cacheKey('feature-requests-2:' + code.value + ':' + String(route.params.featureId))), query: computed(() => ({ page: page.value, pageSize, keyword: debounced.value || undefined })), transform: pageData })
+const { data: feature, status: featureStatus, error: featureError, refresh: refreshFeature } = await useFetch<{ code: number, data: Feature }>(featurePath, { server: false, key: computed(() => cacheKey('feature-requests-11:' + code.value + ':' + String(route.params.featureId))) })
+const { data: permission, status: permissionStatus, error: permissionError, refresh: refreshPermission } = await useFetch<{ code: number, data: Permission }>(() => `${base.value}/requests/permissions`, { server: false, key: computed(() => cacheKey('feature-requests-12:' + code.value + ':' + String(route.params.featureId))) })
 const canChange = computed(() => featureStatus.value === 'success' && feature.value?.code === 0 && feature.value.data.biz_id === featureId.value && feature.value.data.product_code === code.value && permissionStatus.value === 'success' && permission.value?.code === 0 && permission.value.data.product_code === code.value && permission.value.data.status === 'active' && permission.value.data.edit === true)
 const linkedAlert = useApiErrorAlert(linkedError, { fallbackTitle: '关联需求加载失败' })
 const candidateAlert = useApiErrorAlert(candidateError, { fallbackTitle: '需求池加载失败' })
@@ -103,7 +106,7 @@ onBeforeRouteUpdate(() => !busy.value)
   <div class="mx-auto min-w-0 max-w-5xl space-y-4 p-4 sm:p-6">
     <div class="flex flex-wrap gap-2">
       <UButton
-        :to="`/products/${encodeURIComponent(code)}/features/${featureId}`"
+        :to="moduleUrl(`/products/${encodeURIComponent(code)}/features/${featureId}`)"
         color="neutral"
         variant="ghost"
         :disabled="busy"

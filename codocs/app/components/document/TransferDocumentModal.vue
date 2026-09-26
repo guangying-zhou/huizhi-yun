@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import type { FetchError } from 'ofetch'
-import type { Project, UserProjects, ApiResponse } from '~/types/account'
+import type { Project, UserProjects, ApiResponse } from '../../types/account'
+import { createShareCreationAttempt } from '../../../layer/shareCreationAttempt.mjs'
+import { useCodocsModule } from '../../../layer/useCodocsModule'
 
 interface DeptNode {
   deptCode: string
@@ -38,6 +40,8 @@ const isOpen = computed({
 const { user } = useAuth()
 const toast = useToast()
 const apiFetch = useRequestFetch()
+const { moduleUrl, cacheKey, hosted } = useCodocsModule()
+const transferAttempt = createShareCreationAttempt({ storagePrefix: 'codocs:pending-document-transfer' })
 
 const targetType = ref<TargetType>('department')
 
@@ -141,8 +145,8 @@ const loadDepartments = async () => {
 
   loadingDepartments.value = true
   try {
-    const res = await apiFetch<UserDepartmentsResponse>('/api/account/user-departments', {
-      params: { uid }
+    const res = await apiFetch<UserDepartmentsResponse>(hosted ? moduleUrl('/api/document-transfer/targets') : '/api/account/user-departments', {
+      params: hosted ? { target: 'department' } : { uid }
     })
     departments.value = res.data?.departments || []
     primaryDeptCode.value = res.data?.primaryDeptCode || null
@@ -171,7 +175,7 @@ const loadProjects = async () => {
 
   loadingProjects.value = true
   try {
-    const res = await apiFetch<ApiResponse<UserProjects>>(`/api/account/users/${encodeURIComponent(uid)}/projects`)
+    const res = await apiFetch<ApiResponse<UserProjects>>(hosted ? moduleUrl('/api/document-transfer/targets') : `/api/account/users/${encodeURIComponent(uid)}/projects`, hosted ? { params: { target: 'project' } } : undefined)
     const managed = res?.data?.managed || []
     const joined = res?.data?.joined || []
 
@@ -196,13 +200,14 @@ const handleSelectProject = (projectCode: string) => {
 
 const submitDepartmentTransfer = async () => {
   if (!selectedDepartment.value) return
-  await $fetch(`/api/documents/${props.docId}/dept-shares`, {
+  const payload = { deptCode: selectedDepartment.value.value, departmentName: selectedDepartment.value.label }
+  const attemptScope = cacheKey(`document-transfer:department:${user.value || 'unverified'}:${props.docId}:${payload.deptCode}`)
+  const attemptKey = await transferAttempt.keyFor(attemptScope, payload)
+  await $fetch(moduleUrl(`/api/documents/${props.docId}/dept-shares`), {
     method: 'POST',
-    body: {
-      deptCode: selectedDepartment.value.value,
-      departmentName: selectedDepartment.value.label
-    }
+    headers: { 'Idempotency-Key': attemptKey }, body: payload
   })
+  transferAttempt.complete(attemptScope, attemptKey)
   toast.add({
     title: '已发起移交',
     description: '等待部门经理确认接收',
@@ -213,13 +218,14 @@ const submitDepartmentTransfer = async () => {
 const submitProjectTransfer = async () => {
   const project = selectedProject.value
   if (!project) return
-  await $fetch(`/api/documents/${props.docId}/project-transfer`, {
+  const payload = { projectCode: project.projectCode, projectName: project.name }
+  const attemptScope = cacheKey(`document-transfer:project:${user.value || 'unverified'}:${props.docId}:${payload.projectCode}`)
+  const attemptKey = await transferAttempt.keyFor(attemptScope, payload)
+  await $fetch(moduleUrl(`/api/documents/${props.docId}/project-transfer`), {
     method: 'POST',
-    body: {
-      projectCode: project.projectCode,
-      projectName: project.name
-    }
+    headers: { 'Idempotency-Key': attemptKey }, body: payload
   })
+  transferAttempt.complete(attemptScope, attemptKey)
   toast.add({
     title: '已移交至项目组',
     description: `文档已移至《${project.name}》`,

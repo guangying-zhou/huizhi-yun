@@ -29,7 +29,7 @@
     "preview:cloudflare": "pnpm run cloudflare:config && pnpm run build:cloudflare && pnpm dlx wrangler@4 dev --config .wrangler.generated.jsonc",
     "postinstall": "nuxt prepare",
     "lint": "eslint .",
-    "test": "node --test --experimental-strip-types \"test/**/*.test.ts\"",
+    "test": "tsx --test \"test/**/*.test.ts\"",
     "typecheck": "nuxt typecheck"
   },
   "dependencies": {
@@ -55,6 +55,7 @@
     "@types/ali-oss": "^6.23.3",
     "@types/node": "^24.10.0",
     "eslint": "^9.38.0",
+    "tsx": "^4.19.0",
     "typescript": "^5.9.3",
     "vue-tsc": "^3.1.2"
   },

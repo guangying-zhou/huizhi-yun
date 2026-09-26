@@ -16,6 +16,8 @@ function harness(fetch: (action: string, revision?: number) => unknown) {
     batch: { value: null as null | { refresh_id: string, status: string, revision: number } },
     busy: { value: false }, error: { value: null as null | Error }, resumeId: { value: '' },
     disposed: false, startKey: undefined, crypto: { randomUUID: () => 'stable-key' },
+    // From useAimsModule(); standalone Aims keeps module-relative URLs unchanged.
+    moduleUrl: (path: string) => path,
     confirm: async () => true, emit: (event: string) => events.push(event),
     $fetch: async (_: string, options: { body: { action: string, expectedRevision?: number } }) => {
       actions.push(options.body.action)

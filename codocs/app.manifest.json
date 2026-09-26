@@ -19,6 +19,13 @@
   },
   "resources": [
     {
+      "code": "project-document-access",
+      "name": "项目文档服务访问控制",
+      "description": "Aims 已验签的项目文档查询、访问判定与策略治理",
+      "actions": ["read", "manage", "create"],
+      "sortOrder": 9
+    },
+    {
       "code": "documents",
       "name": "文档中心",
       "description": "个人文档、共享文档、收藏、回收站与通用文档操作",
@@ -62,7 +69,14 @@
       "code": "company",
       "name": "组织资产",
       "description": "公司制度、公告、法务合规、技术规范、产品资料与知识库",
-      "actions": ["view", "create", "edit", "publish", "export", "admin"],
+      "actions": [
+        "view",
+        "create",
+        "edit",
+        "publish",
+        "export",
+        "admin"
+      ],
       "sortOrder": 40
     },
     {
@@ -117,6 +131,98 @@
         "create"
       ],
       "sortOrder": 190
+    },
+    {
+      "code": "project-document",
+      "name": "项目文档服务能力",
+      "description": "供 Aims 与统一企业宿主按签名命令读取项目文档内容；不授予普通用户角色",
+      "actions": [
+        "content:read"
+      ],
+      "sortOrder": 191
+    },
+    {
+      "code": "personal-documents",
+      "name": "统一宿主个人文档",
+      "description": "Enterprise 到 Runtime 的精确用户域能力（含个人周报）；仍需对应 documents:view/create/edit/delete/export 与签名 actor，逐文档执行现有 ACL；恢复使用 edit，不授予普通用户角色",
+      "actions": [
+        "read",
+        "edit",
+        "export",
+        "create",
+        "delete"
+      ],
+      "sortOrder": 192
+    },
+    {
+      "code": "collab-documents",
+      "name": "统一宿主协同文档中心",
+      "description": "Enterprise 协同关系列表精确读取；普通读取与发文执行管理员待盖章视图分开授权，Runtime 固定签名 actor，不授予普通用户角色",
+      "actions": ["read", "review-admin"],
+      "sortOrder": 192
+    },
+    {
+      "code": "collaboration-snapshots",
+      "name": "协作运行时 v2 快照",
+      "description": "Collab 服务身份（collab.runtime）经 Host 为已验证写者打开的协作会话读取、准备与发布 Markdown/Yjs 配对快照；每次写入在文档行锁下核对会话、epoch 与发起人写权限，不授予任何用户角色",
+      "actions": ["read", "publish"],
+      "sortOrder": 193
+    },
+    {
+      "code": "publish-execution",
+      "name": "统一宿主对外发文执行",
+      "description": "盖章、发送、接收三个状态动作分别授权；Runtime 锁定发布申请并重验管理员、发起人或指定发送人关系",
+      "actions": ["seal", "send", "receive"],
+      "sortOrder": 192
+    },
+    {
+      "code": "document-shares",
+      "name": "统一宿主文档共享",
+      "description": "Enterprise 文档共享列表、授予、调权和撤销的精确能力；Runtime 重验签名 actor 为文档 owner 并同步协同关系",
+      "actions": ["read", "mark-read", "create", "edit", "delete"],
+      "sortOrder": 192
+    },
+    {
+      "code": "review-history",
+      "name": "统一宿主发文记录",
+      "description": "按文档或归档 OSS 路径查询发布记录；组织资产历史使用独立 company-read 授权",
+      "actions": ["read", "company-read"],
+      "sortOrder": 192
+    },
+    {
+      "code": "document-annotations",
+      "name": "统一宿主文档批注",
+      "description": "文档批注、状态和回复操作；作者与处理人只从签名 Host actor 派生",
+      "actions": ["read", "create", "edit"],
+      "sortOrder": 192
+    },
+    {
+      "code": "document-transfer",
+      "name": "统一宿主文档移交",
+      "description": "个人文档向当前用户关联部门发起待接收移交，或直接移交到当前用户参与的项目",
+      "actions": ["department", "project"],
+      "sortOrder": 192
+    },
+    {
+      "code": "personal-folders",
+      "name": "统一宿主个人目录",
+      "description": "Enterprise 用户域目录精确能力；Runtime 必须重验个人 owner 与目标目录，不授予普通用户角色",
+      "actions": ["read", "create", "edit", "delete"],
+      "sortOrder": 193
+    },
+    {
+      "code": "personal-cabinet",
+      "name": "统一宿主个人文件柜",
+      "description": "Enterprise 文件柜精确读取、上传、转文档、下载及幂等软删除；转换同时要求 documents:view/create，Runtime 绑定当前 owner 并排除部门与项目柜，不授予普通用户角色",
+      "actions": ["read", "create", "export", "delete"],
+      "sortOrder": 195
+    },
+    {
+      "code": "document-access-records",
+      "name": "统一宿主文档访问记录",
+      "description": "仅供 Host 正文读取和导出内部审计；签名 actor、逐文档 ACL 与存储路径摘要绑定，不授予普通用户角色",
+      "actions": ["record"],
+      "sortOrder": 194
     }
   ],
   "recommendedRoles": [

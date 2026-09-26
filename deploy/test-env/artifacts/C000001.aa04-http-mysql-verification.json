@@ -1,0 +1,24 @@
+{
+  "recordedAt": "2026-09-14T05:56:18.534492+00:00",
+  "command": "node data-runtime/scripts/test-contract-activation-http-mysql.mjs",
+  "result": "PASS",
+  "packageDurationSeconds": 3.401,
+  "scope": "real HTTP/JWT and isolated MySQL; no live tenant enablement",
+  "checks": [
+    "callback success reports succeeded",
+    "same-key replay",
+    "missing exact capability rejection",
+    "wrong source deployment rejection",
+    "wrong token use rejection",
+    "revoked current credential rejection",
+    "missing service 503",
+    "disabled migration uses legacy adapter",
+    "fresh pending receivable late ACK failure rolls back approval milestone lock source operation receipt target status",
+    "same request succeeds after fault removal"
+  ],
+  "sourceSha256": {
+    "data-runtime/internal/server/enterprise_contract_activation_mysql_test.go": "2f33cb989e475101611598dfb97c34f79590bd20150bfcf49471d99d71a5c66b",
+    "data-runtime/internal/server/enterprise_milestone_receivable.go": "db756909d9080c97deffea59b36e5b8f7bbc9b8cd08880415e70982c4b40cb69",
+    "data-runtime/internal/enterprisecontracts/milestone_receivable.go": "3f462bc81776adb40266ccdaa7c0ca9ac576be6b151eab27e3d00f047b9e6a02"
+  }
+}

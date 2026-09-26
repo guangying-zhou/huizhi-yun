@@ -1,0 +1,19 @@
+{
+  "schemaVersion": "enterprise-host-deployment.v1",
+  "tenant": "C000001",
+  "environment": "test",
+  "sourceCommit": "ee1fbb8430fcfcb17cb304653e68219dca62ca2d",
+  "builtAt": "2026-09-14T17:59:44.460519+00:00",
+  "outputFiles": 376,
+  "outputBytes": 7652292,
+  "outputManifestSha256": "bac124907b1b6941b06b0425b2536944c8bf4494b20238604bb37bf10c585b29",
+  "nodeVersion": "24.18.0",
+  "worker": "hzy-test-enterprise",
+  "testPrefix": true,
+  "deployed": true,
+  "workerVersion": "615f6fe3-4fe2-42d4-94f0-d7dc4ed329d7",
+  "trafficPercent": 100,
+  "previousWorkerVersion": "d6a2d58c-b225-4558-92c7-f1f7cc2095ba",
+  "verifiedBy": "wrangler deployments list",
+  "change": "首页移除业务模块尚未启用的过时说明"
+}

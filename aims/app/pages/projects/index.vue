@@ -1,12 +1,17 @@
 <script setup lang="ts">
-import { projectSecurityLevelConfig, projectStatusConfig, getProjectCategoryLabel, projectCategoryOptions, selectableProjectCategoryOptions } from '~/config/project'
+import { projectSecurityLevelConfig, projectStatusConfig, getProjectCategoryLabel, projectCategoryOptions, selectableProjectCategoryOptions } from '../../config/project'
 import type {
   AimsProject,
   ProjectPortfolio,
   ProjectCategory,
   LifecycleStatus,
   UpdatePortfolioRequest
-} from '~/types/aims'
+} from '../../types/aims'
+import { useProjectContext } from '../../composables/useProjectContext'
+import { usePortfolioStore } from '../../stores/portfolio'
+import { useProjectStore } from '../../stores/project'
+import { readProjectListState, writeProjectListState } from '../../utils/project-list-state.mjs'
+import { useAimsModule } from '../../../layer/useAimsModule'
 
 definePageMeta({
   layoutHeader: true,
@@ -18,6 +23,9 @@ const projectStore = useProjectStore()
 const portfolioStore = usePortfolioStore()
 const toast = useToast()
 const { enterProject } = useProjectContext()
+const { hosted } = useAimsModule()
+const route = useRoute()
+const router = useRouter()
 const { user: authUser } = useAuth()
 const { loaded: permissionsLoaded, loadPermissions, hasPermission } = usePermissions()
 const canManagePortfolios = computed(() => hasPermission('portfolios', 'admin'))
@@ -144,6 +152,18 @@ const statusColor = Object.fromEntries(
 const categoryOptions = projectCategoryOptions
 
 const projectOverviewPageSize = 500
+const restoredSearch = ref<string | undefined>(undefined)
+
+if (hosted) {
+  const initial = readProjectListState(route.query)
+  filterCategory.value = initial.category
+  filterStatus.value = initial.status
+  filterPortfolio.value = initial.portfolio
+  filterMyProjects.value = initial.participatingOnly
+  viewMode.value = initial.view
+  searchText.value = initial.search
+  restoredSearch.value = initial.search || undefined
+}
 
 const editPortfolioForm = ref<UpdatePortfolioRequest>({
   name: '',
@@ -163,21 +183,21 @@ const currentEditingPortfolio = computed(() => {
 
 const canDeleteEditingPortfolio = computed(() => Number(currentEditingPortfolio.value?.projectCount ?? 0) === 0)
 
-function buildProjectListQuery() {
+function buildProjectListQuery(searchValue = debouncedSearchText.value) {
   return {
     category: (filterCategory.value !== 'all' ? filterCategory.value : undefined) as ProjectCategory | undefined,
     lifecycleStatus: (filterStatus.value !== 'all' ? filterStatus.value : undefined) as LifecycleStatus | undefined,
     portfolioId: filterPortfolio.value !== 'all' ? Number(filterPortfolio.value) : undefined,
-    search: debouncedSearchText.value || undefined,
+    search: searchValue || undefined,
     participatingOnly: filterMyProjects.value,
     pageSize: projectOverviewPageSize
   }
 }
 
 // 加载数据
-async function loadData() {
+async function loadData(searchValue?: string) {
   await Promise.all([
-    projectStore.fetchProjects(buildProjectListQuery()),
+    projectStore.fetchProjects(buildProjectListQuery(searchValue)),
     portfolioStore.fetchPortfolios()
   ])
 }
@@ -186,12 +206,43 @@ onMounted(async () => {
   if (!permissionsLoaded.value) {
     await loadPermissions()
   }
-  loadData()
+  loadData(restoredSearch.value)
 })
+
+let restoringFromUrl = false
+function syncProjectListUrl() {
+  if (!hosted || restoringFromUrl) return
+  const next = writeProjectListState({
+    category: filterCategory.value,
+    status: filterStatus.value,
+    portfolio: filterPortfolio.value,
+    search: searchText.value,
+    participatingOnly: filterMyProjects.value,
+    view: viewMode.value
+  })
+  const query = { ...route.query }
+  for (const key of ['category', 'status', 'portfolio', 'search', 'participatingOnly', 'view']) delete query[key]
+  Object.assign(query, next)
+  void router.replace({ query })
+}
 
 watch([filterCategory, filterStatus, filterPortfolio, filterMyProjects, debouncedSearchText], () => {
   projectStore.fetchProjects(buildProjectListQuery())
+  syncProjectListUrl()
 })
+watch(viewMode, syncProjectListUrl)
+watch(() => route.query, (query) => {
+  if (!hosted || restoringFromUrl) return
+  const next = readProjectListState(query)
+  restoringFromUrl = true
+  filterCategory.value = next.category
+  filterStatus.value = next.status
+  filterPortfolio.value = next.portfolio
+  filterMyProjects.value = next.participatingOnly
+  viewMode.value = next.view
+  searchText.value = next.search
+  nextTick(() => { restoringFromUrl = false })
+}, { deep: true })
 
 // ---- 计算属性：按项目集分组 ----
 
@@ -712,11 +763,15 @@ const portfolioAssignOptions = computed(() => {
                   square
                 />
                 <NuxtLink
+                  v-if="!hosted"
                   :to="`/portfolios/${group.portfolio.id}`"
                   class="text-xl font-bold transition-colors hover:text-primary"
                 >
                   {{ group.portfolio.name }}
                 </NuxtLink>
+                <span v-else class="text-xl font-bold">
+                  {{ group.portfolio.name }}
+                </span>
                 <span class="text-base text-muted">
                   ({{ getPortfolioProjectCount(group.portfolio, group.projects) }} 个项目)
                 </span>

@@ -1,4 +1,8 @@
 <script setup lang="ts">
+import { useAimsModule } from '../../layer/useAimsModule'
+
+// 同一份代码供独立应用与企业宿主使用：非宿主模式下 moduleUrl 原样返回路径。
+const { moduleUrl } = useAimsModule()
 interface SummaryObligation {
   obligationId: number
   projectId: number
@@ -154,10 +158,10 @@ async function load() {
   try {
     const [summaryResponse, versionResponse] = await Promise.all([
       $fetch<{ code: number, data: SummaryProjection }>(
-        `/api/v1/company-weekly-summaries/${encodeURIComponent(props.periodKey)}`
+        moduleUrl(`/api/v1/company-weekly-summaries/${encodeURIComponent(props.periodKey)}`)
       ),
       $fetch<{ code: number, data: { items?: SummaryVersion[] } }>(
-        `/api/v1/company-weekly-summaries/${encodeURIComponent(props.periodKey)}/versions`
+        moduleUrl(`/api/v1/company-weekly-summaries/${encodeURIComponent(props.periodKey)}/versions`)
       ).catch(() => ({ code: 0, data: { items: [] } }))
     ])
     applyProjection(summaryResponse.data)
@@ -177,7 +181,7 @@ async function generate() {
   loading.value = true
   try {
     const response = await $fetch<{ code: number, data: SummaryProjection }>(
-      `/api/v1/company-weekly-summaries/${encodeURIComponent(props.periodKey)}:generate`,
+      moduleUrl(`/api/v1/company-weekly-summaries/${encodeURIComponent(props.periodKey)}:generate`),
       { method: 'POST' }
     )
     applyProjection(response.data)
@@ -200,7 +204,7 @@ async function saveDraft() {
       .map(recipientSelectionForKey)
       .filter((item): item is RecipientSelection => Boolean(item))
     const response = await $fetch<{ code: number, data: SummaryProjection }>(
-      `/api/v1/company-weekly-summaries/${encodeURIComponent(props.periodKey)}/draft`,
+      moduleUrl(`/api/v1/company-weekly-summaries/${encodeURIComponent(props.periodKey)}/draft`),
       {
         method: 'PUT',
         body: {
@@ -236,7 +240,7 @@ async function publish() {
     const response = await $fetch<{
       code: number
       data: { status: string, delivery?: { synced?: boolean, pending?: boolean } }
-    }>(`/api/v1/company-weekly-summaries/${encodeURIComponent(props.periodKey)}:publish`, {
+    }>(moduleUrl(`/api/v1/company-weekly-summaries/${encodeURIComponent(props.periodKey)}:publish`), {
       method: 'POST',
       body: { correctionReason: correctionReason.value.trim() || undefined }
     })
@@ -264,7 +268,7 @@ async function retryPublish() {
     const response = await $fetch<{
       code: number
       data: { delivery?: { synced?: boolean } }
-    }>(`/api/v1/company-weekly-summaries/${encodeURIComponent(props.periodKey)}:retry`, {
+    }>(moduleUrl(`/api/v1/company-weekly-summaries/${encodeURIComponent(props.periodKey)}:retry`), {
       method: 'POST'
     })
     toast.add({
@@ -286,7 +290,7 @@ async function cancelPublish() {
   if (!canCancelPublish.value) return
   publishing.value = true
   try {
-    await $fetch(`/api/v1/company-weekly-summaries/${encodeURIComponent(props.periodKey)}:cancel-publish`, {
+    await $fetch(moduleUrl(`/api/v1/company-weekly-summaries/${encodeURIComponent(props.periodKey)}:cancel-publish`), {
       method: 'POST'
     })
     toast.add({ title: '发布已取消，项目周报已解冻并恢复为汇总草稿', color: 'success' })
@@ -306,7 +310,7 @@ async function openCorrection() {
   openingCorrection.value = true
   try {
     const response = await $fetch<{ code: number, data: SummaryProjection }>(
-      `/api/v1/company-weekly-summaries/${encodeURIComponent(props.periodKey)}:open-correction`,
+      moduleUrl(`/api/v1/company-weekly-summaries/${encodeURIComponent(props.periodKey)}:open-correction`),
       {
         method: 'POST',
         body: { reason: correctionReason.value.trim() }

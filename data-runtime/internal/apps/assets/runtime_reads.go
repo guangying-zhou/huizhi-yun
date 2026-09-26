@@ -2,6 +2,7 @@ package assets
 
 import (
 	"context"
+	"database/sql"
 	"net/http"
 	"net/url"
 	"strings"
@@ -395,6 +396,13 @@ func (a *Adapter) listAssetsForUser(ctx context.Context, query url.Values) (map[
 	return a.listAssetsWithScope(ctx, query, where, args)
 }
 
+// EnterpriseAssetItemsList reuses the owning Assets list query and its
+// object-scope predicate.  The Enterprise Host compiles the trusted query;
+// callers cannot select a Runtime path or bypass this predicate.
+func (a *Adapter) EnterpriseAssetItemsList(ctx context.Context, query url.Values) (map[string]any, error) {
+	return a.listAssetsForUser(ctx, query)
+}
+
 func (a *Adapter) listAssetsWithScope(ctx context.Context, query url.Values, scopeWhere string, scopeArgs []any) (map[string]any, error) {
 	category := firstText(query.Get("category"))
 	var categoryArg any
@@ -449,6 +457,11 @@ func (a *Adapter) getAssetForUser(ctx context.Context, query url.Values, identif
 	}
 	where, args := assetItemScopeWhere("ai", actor, units)
 	return a.getAssetWithScope(ctx, identifier, where, args)
+}
+
+// EnterpriseAssetItemView is the corresponding exact object read entrypoint.
+func (a *Adapter) EnterpriseAssetItemView(ctx context.Context, query url.Values, identifier string) (map[string]any, error) {
+	return a.getAssetForUser(ctx, query, identifier)
 }
 
 func (a *Adapter) getAssetWithScope(ctx context.Context, identifier, scopeWhere string, scopeArgs []any) (map[string]any, error) {
@@ -525,36 +538,19 @@ func (a *Adapter) getAssetWithScope(ctx context.Context, identifier, scopeWhere 
 }
 
 func (a *Adapter) documentsFor(ctx context.Context, objectType string, objectID int64) ([]map[string]any, error) {
-	hasArtifactType, err := a.tableColumnExists(ctx, "asset_documents", "artifact_type")
+	tx, err := a.DB().BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelRepeatableRead, ReadOnly: true})
 	if err != nil {
 		return nil, err
 	}
-	artifactSelect := "NULL AS artifact_type"
-	if hasArtifactType {
-		artifactSelect = "artifact_type"
-	}
-	hasSourceContext, err := a.tableColumnExists(ctx, "asset_documents", "source_context")
+	defer tx.Rollback()
+	result, err := (productMasterReader{tx: tx}).documentsFor(ctx, objectType, objectID)
 	if err != nil {
 		return nil, err
 	}
-	sourceContextSelect := "NULL AS source_context"
-	if hasSourceContext {
-		sourceContextSelect = "source_context"
-	}
-	items, err := a.queryMaps(ctx, `
-		SELECT id, document_id, document_type, `+artifactSelect+`, `+sourceContextSelect+`, remark
-		FROM asset_documents
-		WHERE object_type = ? AND object_id = ?
-		ORDER BY id DESC`, objectType, objectID)
-	if err != nil {
+	if err := tx.Commit(); err != nil {
 		return nil, err
 	}
-	for _, item := range items {
-		if cleanAnyString(item["artifact_type"]) == "" && objectType == "delivery_view" {
-			item["artifact_type"] = artifactTypeFromDocumentType(cleanAnyString(item["document_type"]))
-		}
-	}
-	return items, nil
+	return result, nil
 }
 
 func artifactTypeFromDocumentType(documentType string) string {

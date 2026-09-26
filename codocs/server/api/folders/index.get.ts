@@ -47,11 +47,17 @@ export default defineEventHandler(async (event) => {
         items: page.items || [],
         total: Number(page.total || 0),
         page: Number(page.page || 1),
-        limit: Number(page.limit || page.pageSize || query.limit || 5000)
+        pageSize: Number(page.pageSize || page.limit || query.pageSize || query.limit || 5000),
+        // Keep the legacy field for existing callers while exposing the
+        // runtime's canonical pageSize without discarding pagination facts.
+        limit: Number(page.limit || page.pageSize || query.limit || query.pageSize || 5000)
       }
     }
   } catch (error: unknown) {
     console.error('Failed to fetch folders:', error)
+    if (typeof error === 'object' && error !== null && 'statusCode' in error && typeof error.statusCode === 'number' && error.statusCode >= 400 && error.statusCode < 600) {
+      throw error
+    }
     throw createError({
       statusCode: 500,
       message: '获取文件夹列表失败'

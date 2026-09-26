@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useAimsModule } from '../../../../layer/useAimsModule'
 import type {
   CreateMilestoneRequest,
   UpdateMilestoneRequest,
@@ -8,15 +9,23 @@ import type {
   PivrStage,
   ProjectTemplateVersionDetail,
   ProjectTemplateWorkItemDefinition
-} from '~/types/aims'
-import { milestoneStatusConfig } from '~/config/milestone'
-import { typeConfig, getStatusLabel, getStatusColor } from '~/config/work-item'
+} from '../../../types/aims'
+import { milestoneStatusConfig } from '../../../config/milestone'
+import { typeConfig, getStatusLabel, getStatusColor } from '../../../config/work-item'
 import {
   normalizeProjectTemplateVersion,
   type RawProjectTemplateVersion
-} from '~/utils/projectTemplateVersions'
-import { projectModuleEnabled } from '~/utils/projectModuleConfig'
+} from '../../../utils/projectTemplateVersions'
+import { projectModuleEnabled } from '../../../utils/projectModuleConfig'
+import { useMilestoneStore } from '../../../stores/milestone'
+import { useProjectStore } from '../../../stores/project'
+import { useWorkItemStore } from '../../../stores/workItem'
+import ProjectModuleDisabledState from '../../../components/project/ProjectModuleDisabledState.vue'
+import ProjectNavbar from '../../../components/project/ProjectNavbar.vue'
 
+
+// 同一份代码供独立应用与企业宿主使用：非宿主模式下 moduleUrl 原样返回路径。
+const { moduleUrl } = useAimsModule()
 // ========================
 // 里程碑表单校验
 // ========================
@@ -92,7 +101,7 @@ async function loadProjectTemplateVersion() {
   if (!templateVersionId) return
 
   try {
-    const res = await $fetch<{ code: number, data: RawProjectTemplateVersion | null }>(`/api/v1/project-template-versions/${templateVersionId}`, {
+    const res = await $fetch<{ code: number, data: RawProjectTemplateVersion | null }>(moduleUrl(`/api/v1/project-template-versions/${templateVersionId}`), {
       query: { optional: 1 }
     })
     if (res.code !== 0 || !res.data) return
@@ -253,7 +262,7 @@ async function loadMilestoneWorkItems(milestoneId: number) {
   milestoneWorkItemsLoading.value.add(milestoneId)
   try {
     const res = await $fetch<{ code: number, data: { items: WorkItem[] } }>(
-      `/api/v1/projects/${projectId.value}/work-items`,
+      moduleUrl(`/api/v1/projects/${projectId.value}/work-items`),
       { params: { milestone_id: milestoneId } }
     )
     if (res.code === 0) {
@@ -404,7 +413,7 @@ async function loadProjectDeliverables() {
   if (deliverablesLoaded.value) return
   try {
     const res = await $fetch<{ code: number, data: ListPayload<RawDeliverableItem> }>(
-      '/api/v1/deliverables',
+      moduleUrl('/api/v1/deliverables'),
       { params: { project_id: projectId.value } }
     )
     if (res.code === 0) {
@@ -471,7 +480,7 @@ async function handleSubmitDeliverable() {
   if (!currentDeliverable.value) return
   submittingDeliverable.value = true
   try {
-    await $fetch(`/api/v1/deliverables/${currentDeliverable.value.id}`, {
+    await $fetch(moduleUrl(`/api/v1/deliverables/${currentDeliverable.value.id}`), {
       method: 'PUT',
       body: {
         status: 'submitted',
@@ -581,7 +590,7 @@ async function handleRolloverMilestone() {
   rollingOverMilestone.value = true
   try {
     const milestoneId = rolloverMilestone.value.id
-    await $fetch(`/api/v1/projects/${projectId.value}/milestones/${milestoneId}/rollover`, {
+    await $fetch(moduleUrl(`/api/v1/projects/${projectId.value}/milestones/${milestoneId}/rollover`), {
       method: 'POST',
       body: {
         carryover: rolloverCarryover.value
@@ -695,7 +704,7 @@ async function loadEditMilestoneDeliverables(milestoneId: number, pivrStage: Piv
 async function _handleCreateRequirementChange(milestone: typeof milestoneStore.milestones[0]) {
   try {
     const res = await $fetch<{ code: number, data: { id: number, itemKey: string, title: string } }>(
-      `/api/v1/projects/${projectId.value}/requirement-targets`,
+      moduleUrl(`/api/v1/projects/${projectId.value}/requirement-targets`),
       {
         method: 'POST',
         body: { milestoneId: milestone.id }
@@ -703,7 +712,7 @@ async function _handleCreateRequirementChange(milestone: typeof milestoneStore.m
     )
     if (res.code === 0) {
       useToast().add({ title: `已创建 ${res.data.itemKey} ${res.data.title}`, color: 'success' })
-      navigateTo(`/projects/${projectId.value}/requirements?workItemId=${res.data.id}`)
+      navigateTo(moduleUrl(`/projects/${projectId.value}/requirements?workItemId=${res.data.id}`))
     }
   } catch (err: unknown) {
     const msg = (err as { data?: { message?: string } })?.data?.message
@@ -746,7 +755,7 @@ async function handleEditMilestone() {
       if (!template.selected && template.existingWorkItemId) {
         // 取消勾选且有已存在的工作项 → 删除
         try {
-          await $fetch(`/api/v1/work-items/${template.existingWorkItemId}`, { method: 'DELETE' })
+          await $fetch(moduleUrl(`/api/v1/work-items/${template.existingWorkItemId}`), { method: 'DELETE' })
         } catch {
           // 静默处理，可能已被删除
         }
@@ -754,7 +763,7 @@ async function handleEditMilestone() {
         // 新勾选且无已存在的工作项 → 创建
         try {
           const wiRes = await $fetch<{ code: number, data: { id: number } }>(
-            `/api/v1/projects/${projectId.value}/work-items`,
+            moduleUrl(`/api/v1/projects/${projectId.value}/work-items`),
             {
               method: 'POST',
               body: {
@@ -771,7 +780,7 @@ async function handleEditMilestone() {
             }
           )
           if (wiRes.code === 0 && wiRes.data?.id) {
-            await $fetch('/api/v1/deliverables/batch', {
+            await $fetch(moduleUrl('/api/v1/deliverables/batch'), {
               method: 'POST',
               body: {
                 items: template.deliverables.map((deliverable, index) => ({

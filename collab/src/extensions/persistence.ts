@@ -4,7 +4,7 @@
  * Persists Yjs snapshots and Markdown mirrors to OSS.
  */
 
-import type { Extension, onLoadDocumentPayload, onStoreDocumentPayload } from '@hocuspocus/server'
+import type { afterUnloadDocumentPayload, Extension, onLoadDocumentPayload, onStoreDocumentPayload } from '@hocuspocus/server'
 import crypto from 'node:crypto'
 import OSS from 'ali-oss'
 import * as Y from 'yjs'
@@ -12,16 +12,29 @@ import * as Y from 'yjs'
 import type { OssConfig } from '../config.js'
 import { createDocumentVersion, loadDocumentContext } from '../utils/document-context.js'
 import { yjsDocumentToMarkdown } from '../utils/prosemirror-markdown.js'
+import type { V2Snapshots } from '../utils/v2-snapshots.js'
+
+type V2Context = { mode?: string, sessionId?: string }
+const v2SessionOf = (context: unknown) => {
+  const value = context as V2Context | undefined
+  return value?.mode === 'v2' && value.sessionId ? value.sessionId : null
+}
 
 export class PersistenceExtension implements Extension {
   private defaultClient: OSS | null = null
   private projectsClient: OSS | null = null
   private config: OssConfig
   private lastStoredHash = new Map<string, string>()
+  private v2: V2Snapshots | null = null
+  private v2Sessions = new Map<string, string>()
 
   constructor(config: OssConfig) {
     this.config = config
     this.initOSSClient()
+  }
+
+  useV2(v2: V2Snapshots | null) {
+    this.v2 = v2
   }
 
   private getYjsSnapshotPath(ossPath: string): string {
@@ -99,13 +112,23 @@ export class PersistenceExtension implements Extension {
    */
   async onLoadDocument(data: onLoadDocumentPayload): Promise<void> {
     const { documentName, document } = data
+    const v2Session = v2SessionOf(data.context)
+    if (v2Session) {
+      if (!this.v2) throw new Error('collab-v2-disabled')
+      await this.v2.load(documentName, v2Session, document)
+      this.v2Sessions.set(documentName, v2Session)
+      this.v2.startLease(documentName, v2Session, () => {
+        console.warn(`[collab] v2 session lost, closing room: ${documentName}`)
+        data.instance.closeConnections(documentName)
+      })
+      return
+    }
 
     try {
       const { ossPath, docType } = await loadDocumentContext(documentName, data.context)
       const client = this.clientForDocument(docType)
       if (!client) {
-        console.log(`[collab] loading document without OSS: ${documentName}`)
-        return
+        throw new Error('collab-storage-unavailable')
       }
 
       const yjsPath = this.getYjsSnapshotPath(ossPath)
@@ -162,6 +185,7 @@ export class PersistenceExtension implements Extension {
     } catch (error: unknown) {
       const err = error as Record<string, unknown>
       console.error(`[collab] failed to load document: ${documentName}`, err.message)
+      throw error
     }
   }
 
@@ -172,14 +196,20 @@ export class PersistenceExtension implements Extension {
    */
   async onStoreDocument(data: onStoreDocumentPayload): Promise<void> {
     const { documentName, document } = data
+    const v2Session = this.v2Sessions.get(documentName) || v2SessionOf(data.context)
+    if (v2Session) {
+      if (!this.v2) throw new Error('collab-v2-disabled')
+      // Failures propagate so the store is retried; nothing is published partially.
+      await this.v2.store(documentName, v2Session, document)
+      return
+    }
 
     try {
       const context = await loadDocumentContext(documentName, data.context)
       const { ossPath } = context
       const client = this.clientForDocument(context.docType)
       if (!client) {
-        console.log(`[collab] storing document without OSS: ${documentName}`)
-        return
+        throw new Error('collab-storage-unavailable')
       }
 
       const yjsPath = this.getYjsSnapshotPath(ossPath)
@@ -214,6 +244,7 @@ export class PersistenceExtension implements Extension {
         const responseHeaders = (markdownResult.res?.headers || {}) as Record<string, string | undefined>
         const versionId = String(
           responseHeaders['x-oss-version-id']
+          || responseHeaders['x-amz-version-id']
           || (markdownResult as unknown as { versionId?: string }).versionId
           || ''
         )
@@ -234,6 +265,15 @@ export class PersistenceExtension implements Extension {
     } catch (error: unknown) {
       const err = error as Record<string, unknown>
       console.error(`[collab] failed to store document: ${documentName}`, err.message)
+      throw error
+    }
+  }
+
+  async afterUnloadDocument(data: afterUnloadDocumentPayload): Promise<void> {
+    const session = this.v2Sessions.get(data.documentName)
+    if (session && this.v2) {
+      this.v2Sessions.delete(data.documentName)
+      await this.v2.release(data.documentName, session)
     }
   }
 }

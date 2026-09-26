@@ -382,26 +382,8 @@ func (a *Adapter) linkDocument(ctx context.Context, objectType string, objectID 
 }
 
 func (a *Adapter) linkProductDocument(ctx context.Context, objectID int64, body map[string]any, query url.Values) error {
-	documentUUID, err := productDocumentIdentity(body)
-	if err != nil {
-		return err
-	}
-	hasArtifactType, err := a.tableColumnExists(ctx, "asset_documents", "artifact_type")
-	if err != nil {
-		return err
-	}
-	hasSourceContext, err := a.tableColumnExists(ctx, "asset_documents", "source_context")
-	if err != nil {
-		return err
-	}
-	_, err = a.withTx(ctx, func(tx *sql.Tx) (any, error) {
-		if err := requireProductWriteScopeTx(ctx, tx, objectID, query); err != nil {
-			return nil, err
-		}
-		if err := requireProductDocumentProofTx(ctx, tx, objectID, documentUUID, query); err != nil {
-			return nil, err
-		}
-		return nil, linkDocumentWithSchema(ctx, tx, "product_asset", objectID, body, query.Get("current_user"), hasArtifactType, hasSourceContext)
+	_, err := a.withTx(ctx, func(tx *sql.Tx) (any, error) {
+		return nil, LinkProductDocumentInTransaction(ctx, tx, objectID, body, query)
 	})
 	return err
 }
@@ -548,64 +530,11 @@ func (a *Adapter) bindEnvironmentAsset(ctx context.Context, id int64, body map[s
 }
 
 func (a *Adapter) createProduct(ctx context.Context, body map[string]any, query url.Values) (int64, error) {
-	access, operatorUID, err := assetsObjectAccess(query)
-	if err != nil {
-		return 0, err
+	if bodyText(body, "idempotency_key") != "" {
+		return a.executeLegacyProductMaster(ctx, "create", 0, body, query)
 	}
-	if query.Get(assetsPermissionActionQueryKey) != "edit" {
-		return 0, httperror.New(403, "assets_product_edit_scope_required", "product edit scope required")
-	}
-	if access != "all" {
-		if _, err := assetsScopeUnits(query); err != nil {
-			return 0, err
-		}
-	}
-
 	result, err := a.withTx(ctx, func(tx *sql.Tx) (any, error) {
-		insert, err := tx.ExecContext(ctx, `
-			INSERT INTO product_assets (
-			  product_code, product_name, product_line, customer_domain, business_domain, product_level,
-			  asset_level, status, build_stage, current_version, target_version, productization_value_level,
-			  supported_terminals, summary, built_at, business_owner_uid, technical_owner_uid, project_code,
-			  covered_legacy_systems, notes, created_by, updated_by
-			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-			coalesceText(body, "product_code", buildCode("PROD")),
-			coalesceText(body, "product_name", "未命名产品"),
-			coalesceText(body, "product_line", "FC"),
-			jsonStringListOrFallback(body["customer_domain"], []string{"G"}),
-			coalesceText(body, "business_domain", "pending"),
-			nullableBodyText(body, "product_level"),
-			nullableBodyText(body, "asset_level"),
-			coalesceText(body, "status", "mvp"),
-			nullableBodyText(body, "build_stage"),
-			nullableBodyText(body, "current_version"),
-			nullableBodyText(body, "target_version"),
-			nullableBodyText(body, "productization_value_level"),
-			jsonStringListOrNil(body["supported_terminals"]),
-			nullableBodyText(body, "summary"),
-			nullableBodyText(body, "built_at"),
-			nullableBodyText(body, "business_owner_uid"),
-			nullableBodyText(body, "technical_owner_uid"),
-			nullableBodyText(body, "project_code"),
-			jsonStringListOrNil(body["covered_legacy_systems"]),
-			nullableBodyText(body, "notes"),
-			nullableString(operatorUID),
-			nullableString(operatorUID),
-		)
-		if err != nil {
-			return nil, err
-		}
-		id, err := insert.LastInsertId()
-		if err != nil {
-			return nil, err
-		}
-		if err := requireProductWriteScopeTx(ctx, tx, id, query); err != nil {
-			return nil, err
-		}
-		if err := insertEvent(ctx, tx, "product_asset", id, "created", operatorUID, map[string]any{"summary": "产品主档已创建"}); err != nil {
-			return nil, err
-		}
-		return id, nil
+		return CreateProductInTransaction(ctx, tx, body, query)
 	})
 	if err != nil {
 		return 0, err
@@ -614,124 +543,28 @@ func (a *Adapter) createProduct(ctx context.Context, body map[string]any, query 
 }
 
 func (a *Adapter) updateProduct(ctx context.Context, id int64, body map[string]any, query url.Values) error {
-	operatorUID := query.Get("current_user")
+	if bodyText(body, "idempotency_key") != "" {
+		_, err := a.executeLegacyProductMaster(ctx, "edit", id, body, query)
+		return err
+	}
 	_, err := a.withTx(ctx, func(tx *sql.Tx) (any, error) {
-		if err := requireProductWriteScopeTx(ctx, tx, id, query); err != nil {
-			return nil, err
-		}
-		_, err := tx.ExecContext(ctx, `
-		UPDATE product_assets
-		SET product_code = COALESCE(?, product_code),
-		    product_name = COALESCE(?, product_name),
-		    product_line = COALESCE(?, product_line),
-		    customer_domain = COALESCE(?, customer_domain),
-		    business_domain = COALESCE(?, business_domain),
-		    product_level = ?,
-		    asset_level = ?,
-		    status = COALESCE(?, status),
-		    build_stage = ?,
-		    current_version = ?,
-		    target_version = ?,
-		    productization_value_level = ?,
-		    supported_terminals = ?,
-		    summary = ?,
-		    built_at = COALESCE(?, built_at),
-		    business_owner_uid = COALESCE(?, business_owner_uid),
-		    technical_owner_uid = COALESCE(?, technical_owner_uid),
-		    project_code = COALESCE(?, project_code),
-		    covered_legacy_systems = ?,
-		    notes = ?,
-		    updated_by = ?
-		WHERE id = ?`,
-			nullableBodyText(body, "product_code"),
-			nullableBodyText(body, "product_name"),
-			nullableBodyText(body, "product_line"),
-			jsonStringListOrNil(body["customer_domain"]),
-			nullableBodyText(body, "business_domain"),
-			nullableBodyText(body, "product_level"),
-			nullableBodyText(body, "asset_level"),
-			nullableBodyText(body, "status"),
-			nullableBodyText(body, "build_stage"),
-			nullableBodyText(body, "current_version"),
-			nullableBodyText(body, "target_version"),
-			nullableBodyText(body, "productization_value_level"),
-			jsonStringListOrNil(body["supported_terminals"]),
-			nullableBodyText(body, "summary"),
-			nullableBodyText(body, "built_at"),
-			nullableBodyText(body, "business_owner_uid"),
-			nullableBodyText(body, "technical_owner_uid"),
-			nullableBodyText(body, "project_code"),
-			jsonStringListOrNil(body["covered_legacy_systems"]),
-			nullableBodyText(body, "notes"),
-			nullableString(operatorUID),
-			id,
-		)
-		if err != nil {
-			return nil, err
-		}
-		if err := requireProductWriteScopeTx(ctx, tx, id, query); err != nil {
-			return nil, err
-		}
-		return nil, nil
+		return nil, UpdateProductInTransaction(ctx, tx, id, body, query)
 	})
 	return err
 }
 
 func (a *Adapter) linkProductBase(ctx context.Context, id int64, body map[string]any, query url.Values) error {
-	operatorUID := query.Get("current_user")
-	baseID, err := requireIDBody(body, "technology_base_id", "缺少 technology_base_id")
-	if err != nil {
-		return err
-	}
-	_, err = a.withTx(ctx, func(tx *sql.Tx) (any, error) {
-		if err := requireProductWriteScopeTx(ctx, tx, id, query); err != nil {
-			return nil, err
-		}
-		if err := requireProductTargetBaseTx(ctx, tx, baseID, query); err != nil {
-			return nil, err
-		}
-		if _, err := tx.ExecContext(ctx,
-			`INSERT INTO product_asset_bases (product_asset_id, technology_base_id, created_by) VALUES (?, ?, ?)`,
-			id, baseID, nullableString(operatorUID),
-		); err != nil {
-			return nil, err
-		}
-		if err := insertEvent(ctx, tx, "product_asset", id, "base_bound", operatorUID, map[string]any{"summary": "产品已关联技术底座", "technology_base_id": baseID}); err != nil {
-			return nil, err
-		}
-		return nil, nil
+	_, err := a.withTx(ctx, func(tx *sql.Tx) (any, error) {
+		return nil, LinkProductBaseInTransaction(ctx, tx, id, body, query)
 	})
 	return err
 }
-
 func (a *Adapter) linkProductAsset(ctx context.Context, id int64, body map[string]any, query url.Values) error {
-	operatorUID := query.Get("current_user")
-	assetID, err := requireIDBody(body, "asset_id", "缺少 asset_id")
-	if err != nil {
-		return err
-	}
-	_, err = a.withTx(ctx, func(tx *sql.Tx) (any, error) {
-		if err := requireProductWriteScopeTx(ctx, tx, id, query); err != nil {
-			return nil, err
-		}
-		if err := requireProductTargetAssetTx(ctx, tx, assetID, query); err != nil {
-			return nil, err
-		}
-		if _, err := tx.ExecContext(ctx, `
-			INSERT INTO product_asset_resources (product_asset_id, asset_id, relation_type, is_primary, created_by)
-			VALUES (?, ?, ?, COALESCE(?,0), ?)`,
-			id, assetID, coalesceText(body, "relation_type", "runtime"), boolIntFromAny(body["is_primary"]), nullableString(operatorUID),
-		); err != nil {
-			return nil, err
-		}
-		if err := insertEvent(ctx, tx, "product_asset", id, "asset_bound", operatorUID, map[string]any{"summary": "产品已关联资产", "asset_id": assetID}); err != nil {
-			return nil, err
-		}
-		return nil, nil
+	_, err := a.withTx(ctx, func(tx *sql.Tx) (any, error) {
+		return nil, LinkProductAssetInTransaction(ctx, tx, id, body, query)
 	})
 	return err
 }
-
 func (a *Adapter) createTechnologyBase(ctx context.Context, body map[string]any, operatorUID string) (int64, error) {
 	result, err := a.withTx(ctx, func(tx *sql.Tx) (any, error) {
 		insert, err := tx.ExecContext(ctx, `

@@ -1,7 +1,9 @@
 export const APPLICATION_SHELL_EMBED_QUERY = 'hzy_embed'
 export const APPLICATION_SHELL_STANDALONE_QUERY = 'standalone'
 export const APPLICATION_SHELL_MESSAGE_VERSION = 1
-export const APPLICATION_SHELL_NATIVE_APP_CODES = ['workspace', 'console'] as const
+// Enterprise is the physical Host, never a business iframe inside Console.
+// Logical Aims/Assets/Codocs compatibility still depends on registered routes.
+export const APPLICATION_SHELL_NATIVE_APP_CODES = ['workspace', 'console', 'enterprise'] as const
 
 const applicationShellNativeApps = new Set<string>(APPLICATION_SHELL_NATIVE_APP_CODES)
 const prefetchedApplicationEntries = new Set<string>()

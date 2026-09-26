@@ -9,6 +9,9 @@ const sourcePath = resolve(root, 'console/docs/hzy_console_schema.sql')
 const outputPath = resolve(root, 'data-runtime/internal/apps/console/schema_manifest.json')
 const source = readFileSync(sourcePath, 'utf8').replace(/\r\n/g, '\n')
 const checkOnly = process.argv.slice(2).includes('--check')
+// Envelope and assertion stores are opt-in and must not make existing
+// deployments fail the mandatory gate before their separate migrations.
+const excludedTables = ['console_runtime_cache', 'console_service_assertion_replay', 'gateway_service_assertion_replay', 'verified_policy_snapshots']
 
 function fail(message) {
   throw new Error(message)
@@ -67,7 +70,7 @@ const tables = {}
 const header = /CREATE TABLE IF NOT EXISTS\s+`([^`]+)`\s*\(/g
 for (const match of source.matchAll(header)) {
   const table = match[1]
-  if (table === 'console_runtime_cache') continue
+  if (excludedTables.includes(table)) continue
 
   const openingIndex = match.index + match[0].length - 1
   const end = statementEnd(openingIndex)
@@ -120,7 +123,7 @@ for (const match of source.matchAll(alterConstraint)) {
 const manifest = {
   schemaRevision: `sha256:${createHash('sha256').update(source).digest('hex')}`,
   source: 'console/docs/hzy_console_schema.sql',
-  excludedTables: ['console_runtime_cache'],
+  excludedTables,
   tables: Object.fromEntries(Object.entries(tables).sort(([left], [right]) => left.localeCompare(right)))
 }
 

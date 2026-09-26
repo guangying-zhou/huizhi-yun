@@ -52,7 +52,7 @@ import { StableEditorTableView, createEnsureTableColgroupPlugin } from './editor
 import { createEditorMermaidPreview, EDITOR_MERMAID_RENDERER_VARIANT, initEditorMermaid } from './editorMermaid'
 import { createMermaidSvgCache } from './editorMermaidCache'
 import { createEditorToolbarConfig } from './editorToolbarConfig'
-import { MERMAID_RUNTIME_VARIANT } from '~/utils/mermaidLoader'
+import { MERMAID_RUNTIME_VARIANT } from '../../utils/mermaidLoader'
 import { useEditorAnnotations } from './useEditorAnnotations'
 import { useEditorImageUpload } from './useEditorImageUpload'
 import { useEditorModeSync } from './useEditorModeSync'
@@ -105,9 +105,12 @@ interface Props {
   watermarkText?: string
   theme?: 'frame' | 'classic' | 'nord'
   showSidebar?: boolean
+  aiEnabled?: boolean
+  cloudClipboardEnabled?: boolean
   documentId?: string
   versions?: VersionItem[]
   versionsLoading?: boolean
+  versionsError?: string
   showVersionHistory?: boolean
   showSharePanel?: boolean
   docType?: string
@@ -132,9 +135,12 @@ const props = withDefaults(defineProps<Props>(), {
   watermarkText: '',
   theme: 'frame',
   showSidebar: true,
+  aiEnabled: true,
+  cloudClipboardEnabled: true,
   documentId: '',
   versions: () => [],
   versionsLoading: false,
+  versionsError: '',
   showVersionHistory: false,
   showSharePanel: false,
   docType: 'private',
@@ -878,6 +884,8 @@ const _toggleFormat = (command: { key: string }) => {
 }
 
 const editorToolbarConfig = createEditorToolbarConfig({
+  aiEnabled: props.aiEnabled,
+  cloudClipboardEnabled: props.cloudClipboardEnabled,
   isAnnotationDialogOpen,
   aiMenuVisible,
   pasteFromCloudClipboard,
@@ -1713,6 +1721,7 @@ defineExpose({
       :document-id="documentId"
       :versions="versions"
       :versions-loading="versionsLoading"
+      :versions-error="versionsError"
       :show-version-history="showVersionHistory"
       :show-share-panel="showSharePanel"
       :is-project-doc="docType === 'project'"
@@ -1724,6 +1733,7 @@ defineExpose({
       :can-manage-shares="canManageShares"
       :active-version-num="activeVersionNum"
       :ai-abstract="aiAbstract"
+      :ai-enabled="aiEnabled"
       :readonly="readonly"
       @close="emit('close-sidebar')"
       @update-abstract="(text: string) => emit('update-abstract', text)"
@@ -1748,7 +1758,7 @@ defineExpose({
 
     <!-- AI 下拉菜单（从 Crepe 工具栏 AI 按钮触发） -->
     <EditorAiToolbar
-      v-if="!readonly"
+      v-if="!readonly && aiEnabled"
       :visible="aiMenuVisible"
       :selected-text="aiSelectedText"
       :position="aiMenuPosition"

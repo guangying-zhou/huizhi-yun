@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import type { ApiResponse, IpAssetItem, ListPayload, ProductAssetItem } from '~/types'
+import type { ApiResponse, IpAssetItem, ListPayload, ProductAssetItem } from '../../types'
+import { useAssetsModule } from '../../../layer/useAssetsModule'
 
 const props = defineProps<{ open: boolean, asset: IpAssetItem | null }>()
 const emit = defineEmits<{
@@ -13,15 +14,17 @@ const isOpen = computed({
 })
 
 const toast = useToast()
+const { moduleUrl } = useAssetsModule()
 const submitting = ref(false)
 const loadingProducts = ref(false)
 const productOptions = ref<Array<{ label: string, value: number }>>([])
+const submissionKey = ref('')
 const state = reactive({ product_asset_id: undefined as number | undefined })
 
 async function loadProducts() {
   loadingProducts.value = true
   try {
-    const response = await $fetch<ApiResponse<ListPayload<ProductAssetItem>>>('/api/v1/products')
+    const response = await $fetch<ApiResponse<ListPayload<ProductAssetItem>>>(moduleUrl('/api/v1/products?pageSize=100'))
     const linkedIds = new Set((props.asset?.linked_products || []).map(item => item.id))
     productOptions.value = (response.data.items || []).filter(item => !linkedIds.has(item.id)).map(item => ({
       label: `${item.product_code} · ${item.product_name}`,
@@ -38,8 +41,12 @@ async function loadProducts() {
 watch(() => props.open, async (open) => {
   if (open) {
     state.product_asset_id = undefined
+    submissionKey.value = ''
     await loadProducts()
   }
+})
+watch(() => state.product_asset_id, () => {
+  submissionKey.value = ''
 })
 
 async function handleSubmit() {
@@ -50,8 +57,9 @@ async function handleSubmit() {
   }
   submitting.value = true
   try {
-    await $fetch<ApiResponse<{ id: number }>>(`/api/v1/ip-assets/${props.asset.id}/products`, {
+    await $fetch<ApiResponse<{ id: number }>>(moduleUrl(`/api/v1/ip-assets/${props.asset.id}/products`), {
       method: 'POST',
+      headers: { 'Idempotency-Key': submissionKey.value ||= crypto.randomUUID() },
       body: { product_asset_id: state.product_asset_id }
     })
     toast.add({ title: '产品已关联', description: '知识产权与产品关系已保存。', color: 'success', icon: 'i-lucide-check' })
@@ -59,7 +67,8 @@ async function handleSubmit() {
     isOpen.value = false
   } catch (error) {
     console.error('[IpAssetProductLink] Failed:', error)
-    toast.add({ title: '关联失败', description: '可能已存在相同关联。', color: 'error', icon: 'i-lucide-circle-alert' })
+    const status = Number((error as { statusCode?: number, response?: { status?: number } }).statusCode || (error as { response?: { status?: number } }).response?.status)
+    toast.add({ title: status === 409 ? '产品已关联' : '关联失败', description: status === 409 ? '该知识产权与产品的关系已存在，请刷新详情页。' : '请检查目标权限或稍后用同一操作重试。', color: 'error', icon: 'i-lucide-circle-alert' })
   } finally {
     submitting.value = false
   }

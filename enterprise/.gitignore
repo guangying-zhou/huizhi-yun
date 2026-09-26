@@ -1,0 +1,8 @@
+node_modules/
+.nuxt/
+.output/
+.wrangler/
+.wrangler.generated.jsonc
+.env
+.env.*
+!.env.example

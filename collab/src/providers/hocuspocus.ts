@@ -7,6 +7,7 @@ import { AuthenticationExtension } from '../extensions/authentication.js'
 import { PersistenceExtension } from '../extensions/persistence.js'
 import { RuntimeHttpExtension } from '../extensions/runtime-http.js'
 import { configureCodocsRuntime } from '../utils/codocs-runtime.js'
+import { createV2RuntimeClient, createV2Snapshots } from '../utils/v2-snapshots.js'
 import type { CollabProvider, CollabRuntimeStatus } from './types.js'
 
 export function createHocuspocusProvider(config: CollabConfig): CollabProvider {
@@ -94,10 +95,18 @@ export function createHocuspocusProvider(config: CollabConfig): CollabProvider {
     async start() {
       configureCodocsRuntime(config.codocsRuntime)
 
+      const authentication = new AuthenticationExtension()
+      const persistence = new PersistenceExtension(config.oss)
+      if (config.v2.enabled) {
+        // Stage B: collab.runtime service identity via Foundation; no static token.
+        const v2 = createV2Snapshots(createV2RuntimeClient(config.codocsRuntime.endpoint, config.v2), config.v2)
+        authentication.useV2(v2)
+        persistence.useV2(v2)
+      }
       const extensions: Extension[] = [
         new RuntimeHttpExtension(config.basePath, getStatus),
-        new AuthenticationExtension(),
-        new PersistenceExtension(config.oss)
+        authentication,
+        persistence
       ]
 
       await startRedis(extensions)

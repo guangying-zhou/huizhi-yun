@@ -1,7 +1,7 @@
 import { createError, type H3Event } from 'h3'
 import { getConsoleDirectoryUser } from '@hzy/foundation/server/utils/consoleTenantRuntimeClient'
 import { loadConsoleRuntimeMode } from '~~/server/utils/platformRuntime'
-import { evaluateWithFreshNotificationDetailPolicy } from '~~/server/utils/notificationDetailFreshPolicy'
+import { evaluateWithRevisionCheckedConsoleServicePolicy } from '~~/server/utils/revisionCheckedServicePolicy'
 import { loadPolicyAuthorizationSnapshot } from '~~/server/utils/policyAuthorization'
 import { evaluateFlatSnapshotPermission } from '~~/server/utils/policyAuthorizationGrants'
 import {
@@ -36,7 +36,7 @@ export async function evaluateSubjectEligibility(
         throw createError({ statusCode: 503, message: 'subject_eligibility_policy_unavailable' })
       }
       try {
-        return await evaluateWithFreshNotificationDetailPolicy(event, binding, async () => {
+        return await evaluateWithRevisionCheckedConsoleServicePolicy(event, binding.tenantId, async () => {
           const snapshot = await loadPolicyAuthorizationSnapshot(input.subjectUid, input.targetAppCode, event, {
             authorizationMode: 'merged',
             allowRoleSimulation: false,

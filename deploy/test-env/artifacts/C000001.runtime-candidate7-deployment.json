@@ -1,0 +1,47 @@
+{
+  "backup": "owner-only candidate6 backup retained",
+  "binarySha256": "d7d1840455d3e6dc338287cdd86a8a8740aa34a2172ad7c96361a16e0d464a76",
+  "configSha256": "c3b11ae10bcd5c9b141a4c6479e3fcf20d17ad01f24c54d12e8f3ff7e00ae756",
+  "configUnchanged": true,
+  "deployedAt": "2026-09-14T16:47:15Z",
+  "environment": "test",
+  "heartbeat": {
+    "bindingErrors": null,
+    "bindings": {
+      "aims": "schema_ready",
+      "assets": "schema_ready",
+      "console": "schema_ready/not_applicable",
+      "enterprise": "active/not_applicable",
+      "finance": "schema_ready",
+      "people": "schema_ready"
+    },
+    "currentVersion": "0.3.219-test.adr018-candidate.7",
+    "desiredVersion": "0.3.219-test.adr018-candidate.7",
+    "runtimeStatus": "ready"
+  },
+  "localHealth": {
+    "commit": "71ac6eca5eabf979602fccd834a31dbdc4d4975d",
+    "httpStatus": 200,
+    "status": "ok",
+    "version": "0.3.219-test.adr018-candidate.7"
+  },
+  "platformRelease": {
+    "approved": true,
+    "channel": "stable",
+    "manifestSha256": "04d3abd473bc24f8ccea16f95eb97f3a6c705bf8ab288c65e6b277f1b3d5c9be",
+    "releaseInventorySha256": "c33b58a9650ef0994918c724e18cfe1cbb32f1a1a788ab1b22fff187aebd84a1"
+  },
+  "previousBinarySha256": "ff7c799addac899daaa1bb71d2b772ddbc62f7a00c4fbc64f00cae3523b19734",
+  "productionConfigUsed": false,
+  "publicHealth": {
+    "commit": "71ac6eca5eabf979602fccd834a31dbdc4d4975d",
+    "httpStatus": 200,
+    "status": "ok",
+    "version": "0.3.219-test.adr018-candidate.7"
+  },
+  "schemaVersion": "test-runtime-deployment.v1",
+  "sourceCommit": "71ac6eca5eabf979602fccd834a31dbdc4d4975d",
+  "sourceTree": "2822effe758a7ec408e24c85262cfe75b311a91d",
+  "tenant": "C000001",
+  "version": "0.3.219-test.adr018-candidate.7"
+}

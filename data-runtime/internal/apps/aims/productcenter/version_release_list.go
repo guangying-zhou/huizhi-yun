@@ -27,6 +27,18 @@ type ProductReleasePage struct {
 }
 
 func ListProductVersionReleases(ctx context.Context, db *sql.DB, code, uid string, permit AuthorizationPermit, versionID int64, q PlanningPageQuery) (ProductReleasePage, error) {
+	tx, err := db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
+	if err != nil {
+		return ProductReleasePage{}, err
+	}
+	defer tx.Rollback()
+	out, err := ListProductVersionReleasesInTransaction(ctx, tx, code, uid, permit, versionID, q)
+	if err != nil {
+		return out, err
+	}
+	return out, tx.Commit()
+}
+func ListProductVersionReleasesInTransaction(ctx context.Context, tx *sql.Tx, code, uid string, permit AuthorizationPermit, versionID int64, q PlanningPageQuery) (ProductReleasePage, error) {
 	out := ProductReleasePage{Items: []ProductReleaseSummary{}, Page: q.Page, PageSize: q.PageSize}
 	if versionID <= 0 || q.Keyword != "" || q.Lifecycle != "" || q.InvestmentCategory != "" {
 		return out, invalid("product_release_query_invalid", "发布记录查询参数无效")
@@ -34,11 +46,10 @@ func ListProductVersionReleases(ctx context.Context, db *sql.DB, code, uid strin
 	if err := ValidatePlanningPageQuery(q); err != nil {
 		return out, err
 	}
-	tx, err := db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
-	if err != nil {
-		return out, err
+	if tx == nil {
+		return out, invalid("product_transaction_required", "History requires a transaction")
 	}
-	defer tx.Rollback()
+	var err error
 	if err = AuthorizeWorkspaceTransaction(ctx, tx, code, uid, "product_versions", "view", permit); err != nil {
 		return out, err
 	}
@@ -67,5 +78,5 @@ func ListProductVersionReleases(ctx context.Context, db *sql.DB, code, uid strin
 	if err != nil {
 		return out, err
 	}
-	return out, tx.Commit()
+	return out, nil
 }

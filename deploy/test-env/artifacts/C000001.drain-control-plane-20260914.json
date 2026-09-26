@@ -1,0 +1,80 @@
+{
+  "schemaVersion": "test-drain-control-plane-deployment-receipt.v1",
+  "environment": "test",
+  "tenant": "C000001",
+  "deployedAt": "2026-09-14",
+  "scope": {
+    "coordinator": true,
+    "gatewayDrainControl": true,
+    "aimsWrapper": false,
+    "assetsWrapper": false,
+    "databaseMigration": false,
+    "closeOrSeal": false
+  },
+  "gateway": {
+    "rollbackVersion": "0979bab5-8f46-4e06-b8f1-f5aa1be7cabb",
+    "supersededVersion": "82801516-72aa-4ca4-baf0-874920235fdd",
+    "version": "bf0b01dd-6244-44e7-ac5b-c1a20f1bc1b0",
+    "trafficPercentage": 100,
+    "sourceModuleSHA256": "315a74b9adb68bb973b3541cfa9588b6a9703986f4d9923dd888cb117daaa630",
+    "workersDev": false,
+    "previewUrls": false,
+    "changes": [
+      "HZY_DRAIN_COORDINATOR binding",
+      "HZY_TEST_DRAIN_CONTROL_ENABLED=true",
+      "single HZY_DRAIN_CONTROL_TOKEN secret"
+    ],
+    "preserved": [
+      "enterprise-auth binding",
+      "existing secret bindings and registry",
+      "assets and metadata",
+      "original exported Worker module"
+    ]
+  },
+  "coordinator": {
+    "worker": "hzy-test-drain-coordinator",
+    "version": "06c3e6dd-eb69-49fd-ab9b-38720285a607",
+    "trafficPercentage": 100,
+    "workersDev": false,
+    "configuredInputs": [
+      "dedicated control credential",
+      "existing tenant Gateway internal credential",
+      "verified Platform signing public key and kid"
+    ]
+  },
+  "preRegisterSnapshot": {
+    "state": "not_registered",
+    "httpStatus": 503
+  },
+  "openSnapshot": {
+    "signed": true,
+    "mode": "open",
+    "revision": 2,
+    "actors": [
+      {
+        "app": "aims",
+        "deployment": "C000001-test-aims",
+        "artifactSHA256": "150b6d536140414e29040eb076ea98ecfb9d4ce1f5af5d770a6b74412b3236ac"
+      },
+      {
+        "app": "assets",
+        "deployment": "C000001-test-assets",
+        "artifactSHA256": "c8be3bcddb02a60d28e678beb2ecdfc5b0d5cd160b613c1b2da709271fa2deb7"
+      }
+    ],
+    "workerCredentialConfigured": true,
+    "ingressDrained": false,
+    "externalReceiptsVerified": false
+  },
+  "existingWorkers": {
+    "aimsVersion": "8d573b11-b6cf-4052-a4a0-d0d6bf7b5a41",
+    "assetsVersion": "c6ae2f23-286f-4bb6-95a4-679d456f13b9",
+    "wrappersDeployed": false
+  },
+  "gatewayRegression": {
+    "rootStatus": 200,
+    "enterpriseLoginStatus": 200,
+    "registryDigestStatus": 200
+  },
+  "sensitiveOperationalLogs": "stored only in protected local deployment directories"
+}

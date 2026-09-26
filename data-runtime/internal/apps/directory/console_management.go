@@ -833,6 +833,47 @@ func (a *Adapter) ConsoleUserDepartments(ctx context.Context, uid string) (any, 
 	return map[string]any{"departments": items, "primaryDeptCode": primaryCode}, nil
 }
 
+// EnterpriseSelfDepartments is only called with a verified signed actor. It
+// exposes the transfer selector fields and the recipients needed after submit.
+func (a *Adapter) EnterpriseSelfDepartments(ctx context.Context, uid string) (map[string]any, error) {
+	uid = strings.TrimSpace(uid)
+	if uid == "" || len(uid) > 128 {
+		return nil, httperror.New(http.StatusBadRequest, "directory_uid_invalid", "Directory uid is invalid")
+	}
+	rows, err := a.db.QueryContext(ctx, `SELECT d.dept_code,d.dept_name,d.org_type,ud.relation_type,ud.is_primary,d.manager_uid,d.leader_uid
+		FROM directory_user_departments ud
+		INNER JOIN directory_users u ON u.uid=ud.uid
+		INNER JOIN directory_departments d ON d.dept_code=ud.dept_code
+		WHERE ud.uid=? AND ud.status='active' AND u.status='active' AND d.status='active'
+		ORDER BY CASE WHEN d.org_type='department' AND ud.relation_type='member' THEN 0 ELSE 1 END,
+		ud.is_primary DESC,d.sort_order ASC LIMIT 101`, uid)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	departments := make([]map[string]any, 0)
+	var primary any
+	for rows.Next() {
+		var code, name, orgType, relation string
+		var isPrimary bool
+		var manager, leader sql.NullString
+		if err := rows.Scan(&code, &name, &orgType, &relation, &isPrimary, &manager, &leader); err != nil {
+			return nil, err
+		}
+		departments = append(departments, map[string]any{"deptCode": code, "name": name, "managerId": nullableValue(manager), "leaderId": nullableValue(leader), "children": []any{}})
+		if primary == nil && orgType == "department" && relation == "member" {
+			primary = code
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	if len(departments) > 100 {
+		return nil, httperror.New(http.StatusBadRequest, "directory_pagination_required", "Directory memberships exceed the transfer selector limit")
+	}
+	return map[string]any{"departments": departments, "primaryDeptCode": primary}, nil
+}
+
 func (a *Adapter) ConsoleProject(ctx context.Context, code string) (map[string]any, error) {
 	code = strings.TrimSpace(code)
 	if code == "" || len(code) > 128 {

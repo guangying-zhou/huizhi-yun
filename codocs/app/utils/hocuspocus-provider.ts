@@ -87,7 +87,7 @@ interface HocuspocusProviderOptions {
   url: string
   documentName: string
   document: Y.Doc
-  token?: string
+  token?: string | (() => Promise<string>)
   params?: Record<string, string>
   awareness?: Awareness
   connect?: boolean
@@ -103,7 +103,7 @@ export class HocuspocusCollaborationProvider {
 
   private readonly baseUrl: string
   private readonly maxBackoffTime: number
-  private readonly token: string
+  private readonly token: string | (() => Promise<string>)
   private readonly params: Record<string, string>
   private readonly listeners = new Map<keyof ProviderEvents, Set<EventHandler<unknown>>>()
 
@@ -111,6 +111,8 @@ export class HocuspocusCollaborationProvider {
   private shouldConnect = false
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null
   private wsUnsuccessfulReconnects = 0
+  private authenticatingSocket: WebSocket | null = null
+  private authenticationSent = false
 
   isAuthenticated = false
   authorizedScope: AuthenticationScope | null = null
@@ -201,10 +203,25 @@ export class HocuspocusCollaborationProvider {
     this.ws.send(encoding.toUint8Array(encoder))
   }
 
-  private sendAuthentication() {
-    const encoder = this.createEncoder(MESSAGE_TYPE_AUTH)
-    writeAuthentication(encoder, this.token)
-    this.send(encoder)
+  private async sendAuthentication(websocket: WebSocket) {
+    if (this.authenticatingSocket === websocket || this.authenticationSent || websocket !== this.ws) return
+    this.authenticatingSocket = websocket
+    try {
+      const token = typeof this.token === 'function' ? await this.token() : this.token
+      if (websocket !== this.ws || !this.shouldConnect) return
+      if (!token) throw new Error('协同认证令牌获取失败')
+      const encoder = this.createEncoder(MESSAGE_TYPE_AUTH)
+      writeAuthentication(encoder, token)
+      this.authenticationSent = true
+      this.send(encoder)
+    } catch {
+      if (websocket === this.ws) {
+        this.emit('connection-error', new Event('error'))
+        this.closeWebSocket(websocket, null)
+      }
+    } finally {
+      if (this.authenticatingSocket === websocket) this.authenticatingSocket = null
+    }
   }
 
   private sendSyncStepOne() {
@@ -301,7 +318,7 @@ export class HocuspocusCollaborationProvider {
       case MESSAGE_TYPE_AUTH:
         readAuthMessage(
           decoder,
-          () => this.sendAuthentication(),
+          () => { if (this.ws) void this.sendAuthentication(this.ws) },
           reason => this.handleAuthenticationFailed(reason),
           scope => this.handleAuthenticated(scope)
         )
@@ -365,6 +382,8 @@ export class HocuspocusCollaborationProvider {
 
     this.emit('connection-close', event)
     this.ws = null
+    this.authenticatingSocket = null
+    this.authenticationSent = false
 
     try {
       websocket.close()
@@ -402,7 +421,7 @@ export class HocuspocusCollaborationProvider {
       if (websocket !== this.ws) return
       this.wsUnsuccessfulReconnects = 0
       this.emit('status', { status: 'connected' })
-      this.sendAuthentication()
+      void this.sendAuthentication(websocket)
     }
 
     websocket.onmessage = this.handleMessage

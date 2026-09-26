@@ -1,5 +1,7 @@
 <script setup lang="ts">
-import type { ApiResponse, IpAssetItem } from '~/types'
+import type { ApiResponse, IpAssetItem } from '../../types'
+import { useAssetDictionaries } from '../../composables/useAssetDictionaries'
+import { useAssetsModule } from '../../../layer/useAssetsModule'
 
 const props = defineProps<{ open: boolean, asset: IpAssetItem | null }>()
 const emit = defineEmits<{
@@ -17,6 +19,8 @@ await loadDictionaries()
 
 const toast = useToast()
 const submitting = ref(false)
+const submissionKey = ref('')
+const { moduleUrl } = useAssetsModule()
 const typeOptions = computed(() => getOptions('ip_asset_type'))
 const statusOptions = computed(() => getOptions('ip_asset_status'))
 
@@ -61,8 +65,9 @@ async function handleSubmit() {
   }
   submitting.value = true
   try {
-    await $fetch<ApiResponse<{ id: number }>>(`/api/v1/ip-assets/${props.asset.id}`, {
+    await $fetch<ApiResponse<{ id: number }>>(moduleUrl(`/api/v1/ip-assets/${props.asset.id}`), {
       method: 'PATCH',
+      headers: { 'Idempotency-Key': submissionKey.value ||= crypto.randomUUID() },
       body: {
         ip_name: state.ip_name.trim(),
         ip_type: state.ip_type || null,

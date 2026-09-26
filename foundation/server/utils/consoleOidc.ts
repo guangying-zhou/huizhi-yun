@@ -20,6 +20,8 @@ import { fetchExternal } from './externalFetch'
 import { trustedServiceRequestHeaders } from './serviceOidc'
 import { createRequestAuthMemo } from './requestAuthMemo'
 import { measureRequestStage } from './performanceTiming'
+import { authDiagnosticRequestId, logAuthDependencyFailure } from './authDependencyDiagnostic'
+import { resolveLocalConsoleFacade } from './localConsoleFacade'
 import {
   consoleServiceBinding,
   consoleServiceFetch,
@@ -76,6 +78,7 @@ type ConsoleOidcConfig = {
   enabled: boolean
   legacyFallback: boolean
   issuer: string
+  publicEndpointBaseUrl?: string
   clientId: string
   redirectUri: string
   logoutRedirectUri: string
@@ -426,6 +429,8 @@ function resolveLogoutRedirectUri(event: H3Event) {
 }
 
 function resolveIssuer(event: H3Event) {
+  const facade = resolveLocalConsoleFacade(event)
+  if (facade) return facade.issuer
   const config = useRuntimeConfig(event) as unknown as Record<string, unknown>
   const tenantGatewayIssuer = resolveTenantGatewayConsoleOrigin(event)
   if (tenantGatewayIssuer) {
@@ -490,6 +495,7 @@ export function getConsoleOidcConfig(event: H3Event): ConsoleOidcConfig {
     legacyFallback,
     issuer,
     clientId: resolveClientId(event),
+    publicEndpointBaseUrl: resolveLocalConsoleFacade(event)?.publicEndpointBaseUrl,
     redirectUri: resolveRedirectUri(event),
     logoutRedirectUri: resolveLogoutRedirectUri(event),
     scope: getConfigValue(event, [
@@ -655,7 +661,7 @@ function appendLoggedOutState(redirect: string, state: string) {
 }
 
 function getAuthorizeUrl(config: ConsoleOidcConfig, state: string, nonce: string, challenge: string) {
-  const url = new URL(`${config.issuer}/oauth/authorize`)
+  const url = new URL(`${config.publicEndpointBaseUrl || config.issuer}/oauth/authorize`)
   url.searchParams.set('response_type', 'code')
   url.searchParams.set('client_id', config.clientId)
   url.searchParams.set('redirect_uri', config.redirectUri)
@@ -847,14 +853,28 @@ function getIssuerJwks(event: H3Event, issuer: string, endpointBaseUrl = issuer)
 
   const headerState = { value: headers }
   const resolver = createRemoteJWKSet(new URL(jwksUrl), {
-    [customFetch]: (input, init) => {
+    [customFetch]: async (input, init) => {
       const requestHeaders = new Headers(init?.headers)
       for (const [name, value] of Object.entries(headerState.value)) {
         requestHeaders.set(name, value)
       }
-      return binding
-        ? binding.fetch(normalizeConsoleServiceBindingUrl(String(input)), { ...init, headers: requestHeaders })
-        : fetch(input, { ...init, headers: requestHeaders })
+      try {
+        const response = await (binding
+          ? binding.fetch(normalizeConsoleServiceBindingUrl(String(input)), { ...init, headers: requestHeaders })
+          : fetch(input, { ...init, headers: requestHeaders }))
+        if (response.status !== 200) {
+          await response.body?.cancel()
+          throw createError({ statusCode: response.status, message: 'jwks_unavailable' })
+        }
+        return response
+      } catch (error) {
+        // A key endpoint/network failure says nothing about this user's JWT.
+        const unavailable = createError({ statusCode: 503, message: 'Console key verification is unavailable',
+          data: { code: 'console_session_verification_unavailable' } })
+        const failure = error as { statusCode?: number, status?: number, response?: { status?: number } }
+        Object.defineProperty(unavailable, 'dependencyStatus', { value: Number(failure?.response?.status || failure?.statusCode || failure?.status || 0) })
+        throw unavailable
+      }
     }
   })
   const entry = { headerState, resolver }
@@ -913,11 +933,22 @@ function tokenValidationDiagnostics(
 
 async function validateConsoleOidcSession(event: H3Event, config: ConsoleOidcConfig, token: string) {
   const endpointBaseUrl = resolveConsoleOidcEndpointBaseUrl(event, config)
-  await consoleServiceFetch<unknown>(event, `${endpointBaseUrl}/oauth/userinfo`, {
-    headers: consoleOidcReadHeaders(event, {
-      authorization: `Bearer ${token}`
+  const startedAt = Date.now()
+  try {
+    await consoleServiceFetch<unknown>(event, `${endpointBaseUrl}/oauth/userinfo`, {
+      headers: consoleOidcReadHeaders(event, {
+        authorization: `Bearer ${token}`,
+        'x-request-id': authDiagnosticRequestId(event)
+      }),
+      // Includes local bootstrap, Console session verification and the bounded
+      // audit write. Keep this route's whole-request budget explicit.
+      timeout: 25_000,
+      retry: 0
     })
-  })
+  } catch (error) {
+    logAuthDependencyFailure(event, 'userinfo', error, Date.now() - startedAt)
+    throw error
+  }
 }
 
 // Reads target Console's deployment; /oauth/token deliberately retains the
@@ -1000,9 +1031,11 @@ async function loadConsoleAuthContext(event: H3Event): Promise<ConsoleAuthReques
       // that succeeds may this application consume the decoded claims. This
       // avoids a second issuer-JWKS network dependency on every Worker while
       // retaining exact local issuer/audience/expiry checks.
+      const startedAt = Date.now()
       try {
         await validateConsoleOidcServiceToken(event, config, token)
       } catch (error) {
+        logAuthDependencyFailure(event, 'service-introspection', error, Date.now() - startedAt)
         const statusCode = Number((error as { statusCode?: number, status?: number })?.statusCode
           || (error as { status?: number })?.status
           || 0)
@@ -1026,11 +1059,19 @@ async function loadConsoleAuthContext(event: H3Event): Promise<ConsoleAuthReques
       // same signing keys. Fetch keys through the direct Console endpoint to
       // avoid a Cloudflare Worker subrequest loop through the tenant domain;
       // jwtVerify still enforces the tenant issuer claim independently.
-      const { payload } = await jwtVerify(token, getIssuerJwks(event, config.issuer, endpointBaseUrl), {
-        issuer: issuerCandidates(event, config.issuer),
-        audience: config.clientId
-      })
-      claims = payload as ConsoleOidcClaims
+      const startedAt = Date.now()
+      try {
+        const { payload } = await jwtVerify(token, getIssuerJwks(event, config.issuer, endpointBaseUrl), {
+          issuer: issuerCandidates(event, config.issuer),
+          audience: config.clientId
+        })
+        claims = payload as ConsoleOidcClaims
+      } catch (error) {
+        if ((error as { data?: { code?: string } })?.data?.code === 'console_session_verification_unavailable') {
+          logAuthDependencyFailure(event, 'jwks', error, Date.now() - startedAt)
+        }
+        throw error
+      }
     }
 
     const tokenUse = String(claims.token_use || 'access')
@@ -1042,7 +1083,15 @@ async function loadConsoleAuthContext(event: H3Event): Promise<ConsoleAuthReques
     if (tokenUse === 'access') {
       try {
         await validateConsoleOidcSession(event, config, token)
-      } catch {
+      } catch (error) {
+        const failure = error as { statusCode?: number, status?: number, response?: { status?: number } }
+        const status = Number(failure?.response?.status || failure?.statusCode || failure?.status || 0)
+        // Only an authoritative rejection revokes the browser session. An
+        // unavailable Runtime/Console must not log every concurrent tab out.
+        if (status !== 401) {
+          throw createError({ statusCode: 503, message: 'Console session verification is unavailable',
+            data: { code: 'console_session_verification_unavailable' } })
+        }
         clearConsoleOidcCookies(event)
         return {
           authenticated: false,
@@ -1075,6 +1124,7 @@ async function loadConsoleAuthContext(event: H3Event): Promise<ConsoleAuthReques
       policyVersion: String(claims.policy_ver || '').trim() || undefined
     }
   } catch (error) {
+    if ((error as { data?: { code?: string } })?.data?.code === 'console_session_verification_unavailable') throw error
     console.warn('[console-oidc] token validation failed:', tokenValidationDiagnostics(event, config, endpointBaseUrl, token, error))
     clearConsoleOidcCookies(event, { preserveRefreshToken: isExpiredJwt(token) })
     return { authenticated: false, reason: 'invalid_token', token }
@@ -1130,7 +1180,7 @@ export async function handleConsoleOidcLogout(event: H3Event) {
   clearConsoleOidcCookies(event)
 
   if (config.enabled) {
-    const logoutUrl = new URL(`${config.issuer}/oauth/logout`)
+    const logoutUrl = new URL(`${config.publicEndpointBaseUrl || config.issuer}/oauth/logout`)
     logoutUrl.searchParams.set('state', state)
     if (redirect) {
       logoutUrl.searchParams.set('client_id', config.clientId)

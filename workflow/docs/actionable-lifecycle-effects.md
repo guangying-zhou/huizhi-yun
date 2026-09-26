@@ -40,6 +40,8 @@ Data Runtime 的写请求可返回：
 
 每条 lifecycle effect 与 Workflow 动作同事务写入 `flow_actionable_outbox`。outbox 只保存该 effect 真正依赖的“创建新 pending 投影”通知，不把通过、撤回等状态通知当作屏障。
 
+创建待办的通知（`workflow.task.created`、`workflow.task.delegated`、`workflow.instance.resubmitted`、`rejectStrategy=to_previous` 的退回）另外与业务事实同事务写入 `flow_notification_outbox`（迁移 `012_durable_notification_outbox.sql`），以通知自身 `idempotencyKey` 唯一，覆盖实例发起这类没有 lifecycle effect 的写入。同步快路径仍立即发布；outbox 保证发布失败后由定时 drain 重发，Console 按幂等键 exact replay。某 `actionable_key` 仍有未投递的创建通知时，Runtime 不返回该键的 lifecycle 待投项，避免在投影创建前做 CAS 而永久 `404 actionable_not_found`。`skipped`（无收件人或通知合同不完整，永远无法发布）按终态确认，`failed` 按 60/300/900/3600 秒退避重试。
+
 Workflow BFF 的顺序为：
 
 1. 通过统一通知入口幂等发布 prerequisite notification；
@@ -51,11 +53,14 @@ Console 首次返回 401 时，BFF 仅强制刷新一次服务令牌并重试；
 
 Data Runtime 内部恢复接口：
 
+- `GET /v1/workflow/notification-effects/pending?limit=100`
+- `POST /v1/workflow/notification-effects/:id/ack`
+- `POST /v1/workflow/notification-effects/:id/fail`
 - `GET /v1/workflow/actionable-lifecycle-effects/pending?limit=100`
 - `POST /v1/workflow/actionable-lifecycle-effects/:id/ack`
 - `POST /v1/workflow/actionable-lifecycle-effects/:id/fail`
 
-这些接口由 Workflow BFF 通过 tenant-runtime 服务调用，不暴露为浏览器业务 API。BFF 响应中的 `effect_results` 只用于观测；耐久恢复以 outbox 和受信定时 drain 为准。定时 drain 同时处理 actionable lifecycle 与 callback outbox，业务 GET 只返回当前读取结果及本次 runtime effects。
+这些接口由 Workflow BFF 通过 tenant-runtime 服务调用，不暴露为浏览器业务 API。BFF 响应中的 `effect_results` 只用于观测；耐久恢复以 outbox 和受信定时 drain 为准。定时 drain 依次处理创建通知、actionable lifecycle 与 callback outbox，业务 GET 只返回当前读取结果及本次 runtime effects。
 
 ## 通知详情实时授权
 

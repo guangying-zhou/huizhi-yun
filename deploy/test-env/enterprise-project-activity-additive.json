@@ -1,0 +1,12 @@
+{
+  "status": "candidate-not-applied",
+  "candidateCodeClosure": {"aimsTables": 114, "assetsTables": 37, "totalTables": 151},
+  "activatedEvidenceClosure": {"aimsTables": 113, "assetsTables": 37, "totalTables": 150},
+  "domain": "aims",
+  "logicalTable": "project_activity_logs",
+  "physicalTable": "aims_project_activity_logs",
+  "canonicalMigration": "aims/docs/migration_v5.38_project_activity_logs.sql",
+  "unifiedMigrationRequirement": "Rewrite CREATE table and foreign-key target through the reviewed Aims table mapping; register logical-to-physical table before planning compatibility views.",
+  "compatibilityView": {"logical": "project_activity_logs", "physical": "aims_project_activity_logs", "security": "INVOKER", "algorithm": "MERGE"},
+  "baselineRequirement": "Existing 150-table migration receipts do not cover this additive table; regenerate the data inventory and reviewed plan before environment use."
+}

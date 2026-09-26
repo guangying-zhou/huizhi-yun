@@ -129,7 +129,8 @@ describe('tenant gateway routing and trusted context', () => {
         'x-hzy-service-routes': '{"assets":{"origin":"https://attacker.example.test"}}',
         'x-hzy-data-runtime-url': 'https://attacker.example.test',
         'x-hzy-data-runtime-code': 'attacker-runtime',
-        'x-hzy-data-runtime-token': 'stolen'
+        'x-hzy-data-runtime-token': 'stolen',
+        'x-hzy-runtime-bootstrap-unavailable': 'platform'
       }
     })
 
@@ -149,6 +150,7 @@ describe('tenant gateway routing and trusted context', () => {
     assert.equal(calls[0].headers.get('x-hzy-data-runtime-code'), 'acme-prod-tenant-runtime')
     assert.equal(calls[0].headers.get('x-hzy-data-runtime-token'), 'runtime-secret')
     assert.equal(calls[0].headers.get('x-hzy-data-runtime-audience'), 'data-runtime')
+    assert.equal(calls[0].headers.has('x-hzy-runtime-bootstrap-unavailable'), false, 'a caller cannot claim a Platform outage')
     assert.deepEqual(JSON.parse(calls[0].headers.get('x-hzy-service-routes')), {
       people: {
         origin: 'https://people-worker.example.test',

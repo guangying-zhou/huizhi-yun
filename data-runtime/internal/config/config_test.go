@@ -3,6 +3,7 @@ package config
 import (
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -91,6 +92,69 @@ func TestLoadEnablesPeopleAdapterFromEnv(t *testing.T) {
 		}
 		if cfg.Apps.People.DB.Database != "custom_people" {
 			t.Fatalf("expected custom People database, got %q", cfg.Apps.People.DB.Database)
+		}
+	})
+}
+
+func TestLoadPrefersPersistedDeploymentBindingsOverStaticConfig(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "config.json")
+	configJSON, _ := json.Marshal(Config{DeploymentBindings: map[string]string{
+		"aims": "aims-deployment", "collab": "stale-collab-deployment",
+	}})
+	if err := os.WriteFile(configPath, configJSON, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	overlayJSON, _ := json.Marshal(map[string]string{
+		"aims": "aims-deployment", "codocs": "codocs-deployment",
+	})
+	if err := os.WriteFile(filepath.Join(dir, "deployment-bindings.json"), overlayJSON, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	withEnv(t, map[string]string{"HZY_DATA_RUNTIME_CONFIG_DIR": dir}, func() {
+		t.Setenv("HZY_DATA_RUNTIME_CONFIG", configPath)
+		cfg, err := Load()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(cfg.DeploymentBindings) != 2 || cfg.DeploymentBindings["codocs"] != "codocs-deployment" || cfg.DeploymentBindings["collab"] != "" {
+			t.Fatalf("persisted Platform bindings were not authoritative: %#v", cfg.DeploymentBindings)
+		}
+	})
+}
+
+func TestLocalWorkflowBindingIsExactAndDoesNotReplacePlatformBindings(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "config.json")
+	configJSON, _ := json.Marshal(Config{Tenant: "C000001", Deployment: "c000001-test-tenant-runtime",
+		Server: ServerConfig{Host: "127.0.0.1", Port: 18084},
+		Apps:   AppsConfig{Workflow: WorkflowConfig{Enabled: true}}})
+	if err := os.WriteFile(configPath, configJSON, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "deployment-bindings.json"), []byte(`{"aims":"C000001-test-aims"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	withEnv(t, map[string]string{"HZY_DATA_RUNTIME_CONFIG_DIR": dir}, func() {
+		t.Setenv("HZY_DATA_RUNTIME_CONFIG", configPath)
+		cfg, err := Load()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if cfg.DeploymentBindings["workflow"] != "" {
+			t.Fatal("local binding active without opt-in")
+		}
+		t.Setenv("HZY_LOCAL_WORKFLOW_DEPLOYMENT", "C000001-test-workflow-local")
+		cfg, err = Load()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if cfg.DeploymentBindings["workflow"] != "C000001-test-workflow-local" || cfg.DeploymentBindings["aims"] != "C000001-test-aims" {
+			t.Fatal("local binding replaced Platform bindings")
+		}
+		t.Setenv("HZY_LOCAL_WORKFLOW_DEPLOYMENT", "C000001-workflow")
+		if _, err := Load(); err == nil {
+			t.Fatal("nonlocal binding accepted")
 		}
 	})
 }
@@ -356,4 +420,60 @@ func withEnv(t *testing.T, values map[string]string, fn func()) {
 	}()
 
 	fn()
+}
+
+// A one-time bootstrap must not double as a standing facility for replacing the
+// authentication trust root. Re-running it with the same values confirms the
+// existing state; anything different is refused and leaves disk untouched.
+func TestPersistJWTTrustOverlayIsWriteOnceAndIdempotent(t *testing.T) {
+	configDir := t.TempDir()
+	trust := JWTConfig{
+		Issuer:   "https://wiztek.huizhi.yun",
+		Audience: "data-runtime",
+		JWKSURL:  "https://wiztek.huizhi.yun/.well-known/jwks.json",
+	}
+	if err := PersistJWTTrustOverlay(configDir, trust); err != nil {
+		t.Fatal(err)
+	}
+	overlayPath := filepath.Join(configDir, "auth-jwt-trust.json")
+	original, err := os.ReadFile(overlayPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Identical bootstrap: idempotent confirmation, not a second write.
+	if err := PersistJWTTrustOverlay(configDir, trust); err != nil {
+		t.Fatalf("identical re-bootstrap must be idempotent: %v", err)
+	}
+
+	for name, changed := range map[string]JWTConfig{
+		"different issuer": {
+			Issuer:   "https://attacker.huizhi.yun",
+			Audience: trust.Audience,
+			JWKSURL:  trust.JWKSURL,
+		},
+		"different jwks": {
+			Issuer:   trust.Issuer,
+			Audience: trust.Audience,
+			JWKSURL:  "https://attacker.huizhi.yun/.well-known/jwks.json",
+		},
+		"different audience": {
+			Issuer:   trust.Issuer,
+			Audience: "other-runtime",
+			JWKSURL:  trust.JWKSURL,
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			if err := PersistJWTTrustOverlay(configDir, changed); !errors.Is(err, ErrJWTTrustAlreadyInitialized) {
+				t.Fatalf("err = %v, want ErrJWTTrustAlreadyInitialized", err)
+			}
+			current, err := os.ReadFile(overlayPath)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if string(current) != string(original) {
+				t.Fatal("refused bootstrap still rewrote the trust root on disk")
+			}
+		})
+	}
 }

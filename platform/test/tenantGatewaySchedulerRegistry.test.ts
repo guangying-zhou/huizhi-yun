@@ -9,7 +9,7 @@ const root = fileURLToPath(new URL('..', import.meta.url))
 
 function rows(offset: number, limit: number) {
   const all = [
-    { id: 1, tenant_code: 'tenant-a', environment: 'prod', public_url: 'https://a.huizhi.yun', app_codes: 'aims,console,finance,people,workflow' },
+    { id: 1, tenant_code: 'tenant-a', environment: 'prod', public_url: 'https://a.huizhi.yun', app_codes: 'aims,assets,console,finance,people,workflow' },
     { id: 2, tenant_code: 'tenant-b', environment: 'prod', public_url: 'https://b.huizhi.yun', app_codes: 'altoc' },
     { id: 3, tenant_code: 'tenant-c', environment: 'prod', public_url: 'https://c.huizhi.yun', app_codes: 'aims,altoc' },
     { id: 4, tenant_code: 'tenant-d', environment: 'prod', public_url: 'https://d.huizhi.yun', app_codes: 'aims' }
@@ -35,14 +35,14 @@ describe('tenant gateway scheduler registry', () => {
     const input = { slot: 4, shardIndex: 0, shardCount: 4, limit: 2, windowSize: 3 }
     const first = await listTenantGatewaySchedulerPageWithQueries(queries(sql), input)
     assert.deepEqual(first.items.map(item => item.tenantCode), ['tenant-d', 'tenant-a'])
-    assert.deepEqual(first.items[1]?.appCodes, ['aims', 'console', 'finance', 'people', 'workflow'])
+    assert.deepEqual(first.items[1]?.appCodes, ['aims', 'assets', 'console', 'finance', 'people', 'workflow'])
     assert.ok(first.nextCursor)
 
     const second = await listTenantGatewaySchedulerPageWithQueries(queries(sql), { ...input, cursor: first.nextCursor! })
     assert.deepEqual(second.items.map(item => item.tenantCode), ['tenant-b'])
     assert.equal(second.nextCursor, null)
     assert.match(sql.join('\n'), /t\.status = 'active'/)
-    assert.match(sql.join('\n'), /eligible\.app_code IN \('aims', 'altoc', 'console', 'finance', 'people', 'workflow'\)/)
+    assert.match(sql.join('\n'), /eligible\.app_code IN \('aims', 'altoc', 'assets', 'console', 'finance', 'people', 'workflow'\)/)
     assert.doesNotMatch(JSON.stringify({ first, second }), /token|runtime|secret/i)
   })
 

@@ -2,11 +2,13 @@ import { createHash } from 'node:crypto'
 import type { ResultSetHeader, RowDataPacket } from 'mysql2/promise'
 import { queryRow, queryRows, withTransaction } from '~~/server/utils/db'
 import { exportPubkey, sign } from '~~/server/utils/platformSigning'
-import { issueRuntimeToken, type RuntimeCredentialSnapshot } from '~~/server/utils/runtimeToken'
+import { issueRuntimeToken, issueInitialRuntimeToken, type RuntimeCredentialSnapshot } from '~~/server/utils/runtimeToken'
 import { generatePolicyBundle, type GeneratedPolicyBundle } from '~~/server/utils/policyBundle'
 import { CONSOLE_APP_CODE, requireConsoleApplicationRegistered } from '~~/server/utils/consoleApp'
 import { ensureConsoleVaultMasterKey, fingerprintConsoleVaultMasterKey } from '~~/server/utils/deploymentBootstrapSecrets'
 import { buildDeploymentRouteDefaults, findActiveDeploymentSite, type DeploymentSiteRow } from '~~/server/utils/deploymentSites'
+import { loadBundleEnterpriseEntitlement } from './enterpriseEntitlementBundle'
+import { prepareEnterpriseProvisioning } from './enterpriseProvisioning'
 import { DEFAULT_DEPLOYMENT_ENVIRONMENT, normalizeDeploymentEnvironment } from '~~/server/utils/tenantDeploymentSettings'
 
 type TransactionExecutor = {
@@ -391,7 +393,7 @@ async function setStep(
   })
 }
 
-async function updateTenantStage(tx: TransactionExecutor, tenantCode: string, stage: string, completed = false) {
+async function updateTenantStage(tx: TransactionExecutor, tenantCode: string, stage: string, completed = false, preserveStatus = false) {
   await tx.execute<ResultSetHeader>(
     `UPDATE tenants
      SET onboarding_stage = ?,
@@ -401,7 +403,7 @@ async function updateTenantStage(tx: TransactionExecutor, tenantCode: string, st
          status = CASE WHEN ? THEN 'active' ELSE status END,
          updated_at = UTC_TIMESTAMP()
      WHERE tenant_code = ?`,
-    [stage, completed ? 1 : 0, completed ? 1 : 0, completed ? 1 : 0, tenantCode]
+    [stage, completed ? 1 : 0, completed ? 1 : 0, completed && !preserveStatus ? 1 : 0, tenantCode]
   )
 }
 
@@ -1117,6 +1119,23 @@ export async function startOnboarding(input: OnboardingInput): Promise<Onboardin
 
   const prepared = await withTransaction(async (tx) => {
     const createdByAccountId = await findPlatformAccountId(tx, requestedByUid)
+    if (planCode === 'enterprise-full') {
+      const tenantCode = requireNonEmpty(input.tenantCode, 'tenantCode')
+      const tenant = await tx.queryRow<TenantRow>('SELECT * FROM tenants WHERE tenant_code = ? FOR UPDATE', [tenantCode])
+      if (!tenant) throw createError({ statusCode: 404, message: 'Existing approved enterprise tenant is required' })
+      const site = await findActiveDeploymentSite(tenantCode, tx, environment)
+      if (!site) throw createError({ statusCode: 409, message: 'Enterprise deployment site is required' })
+      const prepared = await prepareEnterpriseProvisioning(tx, { tenant, site, environment, options: input, accountId: createdByAccountId })
+      await ensureOnboardingSteps(tx, tenantCode)
+      await writeStep(tx, tenantCode, 'tenant', 'completed', { tenantCode })
+      await writeStep(tx, tenantCode, 'console_app', 'completed', { appCode: CONSOLE_APP_CODE })
+      await writeStep(tx, tenantCode, 'subscription', 'completed', { planCode, technicalAppCodes: prepared.subscriptions.map(item => item.app_code) })
+      await writeStep(tx, tenantCode, 'deployment', 'completed', { deploymentCode: prepared.deployment.deployment_code, environment, technicalDeployments: prepared.technicalDeployments.map(item => ({ appCode: item.app_code, deploymentCode: item.deployment_code })) })
+      await writeStep(tx, tenantCode, 'license', 'completed', { licenseCode: prepared.license.license_code })
+      await updateTenantStage(tx, tenantCode, 'runtime_token_pending')
+      return prepared
+    }
+
     const tenant = await createOrUpdateTenant(tx, input)
     await ensureOnboardingSteps(tx, tenant.tenant_code)
     await writeStep(tx, tenant.tenant_code, 'tenant', 'completed', { tenantCode: tenant.tenant_code })
@@ -1187,7 +1206,7 @@ export async function startOnboarding(input: OnboardingInput): Promise<Onboardin
     }
   })
 
-  const issued = await issueRuntimeToken({
+  const issued = await (planCode === 'enterprise-full' ? issueInitialRuntimeToken : issueRuntimeToken)({
     tenantCode: prepared.tenant.tenant_code,
     issuedByAccountId: null,
     expiresAt: toSqlDateTime(input.runtimeTokenExpiresAt)
@@ -1229,7 +1248,7 @@ export async function startOnboarding(input: OnboardingInput): Promise<Onboardin
         consoleEnvReady: true,
         licenseReady: Boolean(prepared.license.signed_token)
       })
-      await updateTenantStage(tx, prepared.tenant.tenant_code, 'active', true)
+      await updateTenantStage(tx, prepared.tenant.tenant_code, 'active', true, planCode === 'enterprise-full')
     })
   } else if (generateBundleRequested) {
     await setStep(
@@ -1324,6 +1343,13 @@ export async function finalizeOnboarding(input: {
     })
   }
 
+  if (license.plan_code === 'enterprise-full') {
+    const qualification = await loadBundleEnterpriseEntitlement(queryRow, tenantCode, tenant.status, new Date().toISOString())
+    if (qualification?.effectiveStatus !== 'active' || deployment.status !== 'active' || license.status !== 'active') throw createError({ statusCode: 409, message: 'Unified enterprise onboarding qualification is inactive' })
+  }
+
+  if (license.plan_code === 'enterprise-full' && input.rotateRuntimeToken) throw createError({ statusCode: 409, message: 'Unified onboarding cannot rotate or restore runtime credentials; use the explicit credential management path' })
+
   let runtimeToken: string | null = null
   let runtimeCredential: RuntimeCredentialSnapshot | null = null
   if (input.rotateRuntimeToken) {
@@ -1363,7 +1389,7 @@ export async function finalizeOnboarding(input: {
         consoleEnvReady: Boolean(runtimeToken),
         licenseReady: Boolean(license.signed_token)
       })
-      await updateTenantStage(tx, tenantCode, 'active', true)
+      await updateTenantStage(tx, tenantCode, 'active', true, license.plan_code === 'enterprise-full')
     })
   } else {
     await withTransaction(async (tx) => {
@@ -1481,3 +1507,9 @@ export async function runOnboardingStep(input: {
     message: `unsupported onboarding step: ${stepCode}`
   })
 }
+
+export type EnterpriseProvisioningTenantRow = TenantRow
+export type EnterpriseProvisioningPlanRow = PlanRow
+export type EnterpriseProvisioningSubscriptionRow = SubscriptionRow
+export type EnterpriseProvisioningDeploymentRow = DeploymentRow
+export type EnterpriseProvisioningLicenseRow = LicenseRow

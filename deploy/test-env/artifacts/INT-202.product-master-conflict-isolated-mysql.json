@@ -1,0 +1,17 @@
+{
+  "schema": "hzy.enterprise.migration-conflict-verification.v1",
+  "executedAt": "2026-09-15T03:38:26Z",
+  "environment": "fresh random /tmp MySQL instance created by temporary-mysql-harness; automatically removed",
+  "businessData": "synthetic only",
+  "command": "node data-runtime/scripts/test-enterprise-migration-conflicts-mysql.mjs",
+  "result": "PASS",
+  "checks": [
+    "case-distinct product master codes that normalize to one key produce a blocking conflict",
+    "Aims workspace without an exact binary Assets master produces a blocking conflict",
+    "report contains only domain-separated SHA-256 key identity and row count",
+    "reviewed apply rejects every plan containing unresolved blocking conflicts before connecting or creating a target"
+  ],
+  "productionAccess": false,
+  "deployment": false,
+  "temporaryInstanceCleaned": true
+}

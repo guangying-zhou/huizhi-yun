@@ -1,0 +1,24 @@
+{
+  "schemaVersion": "enterprise-host-deployment.v1",
+  "tenant": "C000001",
+  "environment": "test",
+  "sourceCommit": "ad65c5de1f1912d50f2a11750668df128420b43a",
+  "builtAt": "2026-09-14T21:18:21.556193+00:00",
+  "outputFiles": 376,
+  "outputBytes": 7652391,
+  "outputManifestSha256": "54c22382bed3b8c44a87e4075fa3240a12c3e82b53842727a11c84397b495af2",
+  "nodeVersion": "24.18.0",
+  "worker": "hzy-test-enterprise",
+  "testPrefix": true,
+  "deployed": true,
+  "workerVersion": "bcf7157b-7a08-4e04-bb82-1a6d300c0d9a",
+  "trafficPercent": 100,
+  "previousWorkerVersion": "615f6fe3-4fe2-42d4-94f0-d7dc4ed329d7",
+  "verifiedBy": "wrangler deployments list",
+  "verification": {
+    "sessionTests": 7,
+    "foundationOidcTests": 11,
+    "browser": "/aims/ redirects to /aims/products; six product lines visible; auth/me 200",
+    "expiryRecovery": "Not verified in live browser. URL-scoped cookie removal did not remove the domain cookie; domain-scoped operation is disallowed by browser tool and was not bypassed."
+  }
+}

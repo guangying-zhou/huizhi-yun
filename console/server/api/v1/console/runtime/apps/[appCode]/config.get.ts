@@ -5,6 +5,7 @@ import {
   type CachedPolicyBundle
 } from '~~/server/utils/bundleCache'
 import { getOidcIssuer } from '~~/server/utils/oidc'
+import { resolveLocalConsoleFacade } from '@hzy/foundation/server/utils/localConsoleFacade'
 import {
   loadPlatformRuntimeConfig,
   refreshPlatformBundle,
@@ -179,7 +180,8 @@ export default defineEventHandler(async (event) => {
   const applications = appsFromBundle(event, bundle)
   const app = applications.find(item => item.appCode === appCode) || fallbackApp(appCode)
   const deployment = bundle?.payload?.deployment as Record<string, unknown> | undefined
-  const consoleBaseUrl = normalizeBaseUrl(requestOrigin(event))
+  // Backchannels retain canonical names; the private local transport selects the dial address.
+  const consoleBaseUrl = resolveLocalConsoleFacade(event)?.issuer || normalizeBaseUrl(requestOrigin(event))
   const [workflowApiUrl, notificationRuntimeApiUrl] = await Promise.all([
     getSystemParameter('workflow.apiUrl').catch(() => null),
     getSystemParameter('notification.runtimeApiUrl').catch(() => null)

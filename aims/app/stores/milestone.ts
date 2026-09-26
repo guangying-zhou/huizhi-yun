@@ -1,4 +1,5 @@
 import { defineStore } from 'pinia'
+import { useAimsModule } from '../../layer/useAimsModule'
 import type {
   Milestone,
   CreateMilestoneRequest,
@@ -6,7 +7,7 @@ import type {
   MilestoneMode,
   MilestoneStatus,
   PivrStage
-} from '~/types/aims'
+} from '../types/aims'
 
 interface MilestonesResponse {
   milestones?: RawMilestone[]
@@ -58,6 +59,8 @@ function normalizeMilestoneItems(data: MilestonesResponse | RawMilestone[] | nul
 }
 
 export const useMilestoneStore = defineStore('milestone', () => {
+  // 同一份 store 供独立应用与企业宿主使用：非宿主模式下 moduleUrl 原样返回路径。
+  const { moduleUrl } = useAimsModule()
   const milestones = ref<Milestone[]>([])
   const loading = ref(false)
 
@@ -65,7 +68,7 @@ export const useMilestoneStore = defineStore('milestone', () => {
     loading.value = true
     try {
       const res = await $fetch<{ code: number, data: MilestonesResponse }>(
-        `/api/v1/projects/${projectId}/milestones`
+        moduleUrl(`/api/v1/projects/${projectId}/milestones`)
       )
       if (res.code === 0) {
         milestones.value = normalizeMilestoneItems(res.data)
@@ -77,7 +80,7 @@ export const useMilestoneStore = defineStore('milestone', () => {
 
   async function createMilestone(projectId: number, data: CreateMilestoneRequest) {
     const res = await $fetch<{ code: number, data: { id: number } }>(
-      `/api/v1/projects/${projectId}/milestones`,
+      moduleUrl(`/api/v1/projects/${projectId}/milestones`),
       { method: 'POST', body: data }
     )
     if (res.code === 0) {
@@ -89,7 +92,7 @@ export const useMilestoneStore = defineStore('milestone', () => {
 
   async function updateMilestone(id: number, data: UpdateMilestoneRequest, projectId: number) {
     const res = await $fetch<{ code: number, data: null }>(
-      `/api/v1/milestones/${id}`,
+      moduleUrl(`/api/v1/milestones/${id}`),
       { method: 'PUT', body: data }
     )
     if (res.code === 0) {
@@ -99,7 +102,7 @@ export const useMilestoneStore = defineStore('milestone', () => {
 
   async function deleteMilestone(id: number, projectId: number) {
     const res = await $fetch<{ code: number, data: null }>(
-      `/api/v1/milestones/${id}`,
+      moduleUrl(`/api/v1/milestones/${id}`),
       { method: 'DELETE' }
     )
     if (res.code === 0) {

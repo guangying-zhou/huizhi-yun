@@ -24,13 +24,25 @@ type ProductVersionScopeVisibility struct {
 
 // Visibility changes are product decisions, not unversioned project metadata.
 func ChangeProductVersionScopeVisibility(ctx context.Context, db *sql.DB, identity CommandIdentity, permit AuthorizationPermit, input ProductVersionScopeVisibility, trusted integrationoperation.TrustedContext) (CommandResult, error) {
+	return changeProductVersionScopeVisibility(ctx, identity, permit, input, trusted, func(payload any, authorize AuthorizeCommand, apply ApplyCommand) (CommandResult, error) {
+		return ExecuteCommand(ctx, db, identity, payload, authorize, apply)
+	})
+}
+
+func ChangeProductVersionScopeVisibilityInTransaction(ctx context.Context, tx *sql.Tx, identity CommandIdentity, permit AuthorizationPermit, input ProductVersionScopeVisibility, trusted integrationoperation.TrustedContext) (CommandResult, error) {
+	return changeProductVersionScopeVisibility(ctx, identity, permit, input, trusted, func(payload any, authorize AuthorizeCommand, apply ApplyCommand) (CommandResult, error) {
+		return ExecuteCommandInTransaction(ctx, tx, identity, payload, authorize, apply)
+	})
+}
+
+func changeProductVersionScopeVisibility(ctx context.Context, identity CommandIdentity, permit AuthorizationPermit, input ProductVersionScopeVisibility, trusted integrationoperation.TrustedContext, execute func(any, AuthorizeCommand, ApplyCommand) (CommandResult, error)) (CommandResult, error) {
 	if identity.Action != "product_versions:scope-visibility" {
 		return CommandResult{}, invalid("product_command_identity_invalid", "公开范围命令不匹配")
 	}
 	if input.VersionID <= 0 || input.ScopeID <= 0 || input.ExpectedRevision == 0 || input.ExpectedVersionRevision == 0 || input.ExpectedScopeRevision == 0 || input.IsPublic == nil || strings.TrimSpace(input.Reason) == "" || !utf8.ValidString(input.Reason) || utf8.RuneCountInString(input.Reason) > 2000 || strings.ContainsFunc(input.Reason, unicode.IsControl) {
 		return CommandResult{}, invalid("product_version_visibility_invalid", "请提供公开设置、完整修订及变更原因")
 	}
-	return ExecuteCommand(ctx, db, identity, input, func(ctx context.Context, tx *sql.Tx) error {
+	return execute(input, func(ctx context.Context, tx *sql.Tx) error {
 		return AuthorizeWorkspaceTransaction(ctx, tx, identity.ProductCode, identity.ActorUID, "product_versions", "edit", permit)
 	}, func(ctx context.Context, tx *sql.Tx) (any, error) {
 		root, err := loadWorkspace(ctx, tx, identity.ProductCode)

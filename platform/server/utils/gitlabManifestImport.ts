@@ -124,6 +124,7 @@ export async function importGitLabManifest(input: ImportGitLabManifestInput, eve
     manifest: result.manifest,
     release: result.release,
     roleMaterialization: result.roleMaterialization,
+    ...(result.composition ? { composition: result.composition } : {}),
     gitlab: {
       repoUrl: application.repo_url,
       releaseVersion,

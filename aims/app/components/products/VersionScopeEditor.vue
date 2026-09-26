@@ -2,18 +2,20 @@
 import type { ProductVersionScope } from '~/types/productVersionScope'
 import type { ProductPlanningDetail } from '~/types/productPlanning'
 import type { ProductPlanningCycle } from '~/types/productPlanningCycle'
+import { useAimsModule } from '../../../layer/useAimsModule'
 
 const props = defineProps<{ productCode: string, scope: ProductVersionScope, versionRevision: number }>()
 const emit = defineEmits<{ saved: [], cancel: [], busy: [value: boolean] }>()
-const base = computed(() => `/api/v1/products/${encodeURIComponent(props.productCode)}`)
+const { moduleUrl, cacheKey, hosted } = useAimsModule()
+const base = computed(() => moduleUrl(`/api/v1/products/${encodeURIComponent(props.productCode)}`))
 const draft = reactive({ title: props.scope.title, description: props.scope.description || '', acceptanceCriteria: props.scope.acceptance_criteria || '', changeType: props.scope.change_type || 'new', reason: '' })
 const saving = ref(false)
 const mutationError = ref<Error | null>(null)
-const { data: item, status, error } = await useFetch(() => `${base.value}/planning-items/${props.scope.planning_item_biz_id}`, { server: false, transform: (response: { code: number, data: ProductPlanningDetail }) => {
+const { data: item, status, error } = await useFetch(() => `${base.value}/planning-items/${props.scope.planning_item_biz_id}`, { ...(hosted ? { key: computed(() => cacheKey(`scope-editor-item:${props.productCode}:${props.scope.planning_item_biz_id}`)) } : {}), server: false, transform: (response: { code: number, data: ProductPlanningDetail }) => {
   if (response.code !== 0 || response.data?.product_code !== props.productCode || response.data.biz_id !== props.scope.planning_item_biz_id) throw new Error('范围来源事项响应无效')
   return response.data
 } })
-const { data: cycle, status: cycleStatus, error: cycleError } = await useFetch(() => `${base.value}/planning-cycles`, { server: false, query: { page: 1, pageSize: 1, status: 'open' }, transform: (response: { code: number, data: { items: ProductPlanningCycle[], total: number } }) => {
+const { data: cycle, status: cycleStatus, error: cycleError } = await useFetch(() => `${base.value}/planning-cycles`, { ...(hosted ? { key: computed(() => cacheKey(`scope-editor-cycle:${props.productCode}`)) } : {}), server: false, query: { page: 1, pageSize: 1, status: 'open' }, transform: (response: { code: number, data: { items: ProductPlanningCycle[], total: number } }) => {
   if (response.code !== 0 || !Array.isArray(response.data?.items) || !Number.isSafeInteger(response.data.total) || response.data.total < 0 || response.data.total > 1 || response.data.items.length !== response.data.total || response.data.items.some(c => c.product_code !== props.productCode || c.status !== 'open')) throw new Error('当前规划周期响应无效')
   return response.data.items[0] || null
 } })

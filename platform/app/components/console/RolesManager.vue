@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { setTenantAppRoleSelected } from '../../utils/tenantAppRoleSelection'
+
 usePageTitle('角色管理')
 
 type RoleType = 'system' | 'custom'
@@ -132,6 +134,10 @@ const roles = ref<RoleItem[]>([])
 const resources = ref<ResourceItem[]>([])
 const appRoles = ref<AppRoleItem[]>([])
 const selectedAppRoleCodes = ref<string[]>([])
+
+function setAppRoleSelected(roleCode: string, checked: boolean) {
+  selectedAppRoleCodes.value = setTenantAppRoleSelected(selectedAppRoleCodes.value, roleCode, checked)
+}
 const selectedRoleId = ref<number | null>(null)
 const listPending = ref(false)
 const formPending = ref(false)
@@ -1121,8 +1127,8 @@ onMounted(async () => {
                     class="flex items-start gap-3 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm"
                   >
                     <UCheckbox
-                      v-model="selectedAppRoleCodes"
-                      :value="appRole.roleCode"
+                      :model-value="selectedAppRoleCodes.includes(appRole.roleCode)"
+                      @update:model-value="setAppRoleSelected(appRole.roleCode, $event === true)"
                     />
                     <span class="min-w-0">
                       <span class="block font-medium text-slate-900">{{ appRole.roleName }}</span>

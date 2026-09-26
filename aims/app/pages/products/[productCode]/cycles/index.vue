@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import type { TableColumn } from '@nuxt/ui'
 import type { ProductPlanningCycle } from '~/types/productPlanningCycle'
+import { productPlanningCycleStates } from '~/utils/productReadLabels'
 
 definePageMeta({ layoutHeader: true, layoutHeaderTitle: '高级规划 · 周期与评分选入', layoutHeaderProjectSwitcher: false })
 const route = useRoute()
 const code = computed(() => String(route.params.productCode || ''))
-const states = { draft: '草案', open: '开放中', closed: '已关闭' }
+const states = Object.fromEntries(Object.entries(productPlanningCycleStates).map(([value, state]) => [value, state.label])) as Record<ProductPlanningCycle['status'], string>
 const { search, debounced, flush, reset: resetSearch } = useDebouncedSearch()
 const cycleStatus = ref('all')
 const reviewFilter = ref('all')
@@ -111,7 +112,9 @@ onBeforeUnmount(clearRefresh)
           {{ row.original.starts_on }} 至 {{ row.original.ends_on }}
         </template>
         <template #status-cell="{ row }">
-          {{ states[row.original.status] }}
+          <UBadge :color="productPlanningCycleStates[row.original.status].color" variant="subtle">
+            {{ states[row.original.status] }}
+          </UBadge>
         </template>
         <template #next_review_at-cell="{ row }">
           {{ row.original.next_review_at ? row.original.next_review_at.replace('T', ' ').replace('Z', ' UTC') : '未安排' }}

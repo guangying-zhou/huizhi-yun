@@ -75,20 +75,20 @@ func (a *Adapter) handleDueNotificationRuntime(ctx context.Context, method, path
 	}
 	switch path {
 	case "/v1/assets/service/notifications:scan-due":
-		data, err := a.scanAssetsDueNotifications(ctx, body)
+		data, err := a.legacyAssetsDueStore().scanAssetsDueNotifications(ctx, body)
 		return data, "assets.notifications.due.scan", true, err
 	case "/v1/assets/service/notifications:acknowledge":
-		data, err := a.acknowledgeAssetsDueNotification(ctx, body)
+		data, err := a.legacyAssetsDueStore().acknowledgeAssetsDueNotification(ctx, body)
 		return data, "assets.notifications.due.acknowledge", true, err
 	case "/v1/assets/service/notifications:acknowledge-closure":
-		data, err := a.acknowledgeAssetsDueClosure(ctx, body)
+		data, err := a.legacyAssetsDueStore().acknowledgeAssetsDueClosure(ctx, body)
 		return data, "assets.notifications.due.closure_acknowledge", true, err
 	default:
 		return nil, "", false, nil
 	}
 }
 
-func (a *Adapter) scanAssetsDueNotifications(ctx context.Context, body map[string]any) (map[string]any, error) {
+func (s assetsDueStore) scanAssetsDueNotifications(ctx context.Context, body map[string]any) (map[string]any, error) {
 	stream := strings.TrimSpace(bodyString(body, "stream"))
 	if !validAssetsDueStream(stream) {
 		return nil, httperror.New(http.StatusBadRequest, "assets_due_stream_invalid", "stream is not supported")
@@ -106,10 +106,10 @@ func (a *Adapter) scanAssetsDueNotifications(ctx context.Context, body map[strin
 	if limit <= 0 || limit > 200 {
 		limit = 100
 	}
-	if err := a.reconcileAssetsDueCheckpoints(ctx, stream, asOf); err != nil {
+	if err := s.reconcileAssetsDueCheckpoints(ctx, stream, asOf); err != nil {
 		return nil, err
 	}
-	facts, err := a.queryAssetsDueFacts(ctx, stream, asOf, cursor, limit+1)
+	facts, err := s.queryAssetsDueFacts(ctx, stream, asOf, cursor, limit+1)
 	if err != nil {
 		return nil, err
 	}
@@ -119,7 +119,7 @@ func (a *Adapter) scanAssetsDueNotifications(ctx context.Context, body map[strin
 	}
 	items := make([]assetsDueCandidate, 0, len(facts))
 	for _, fact := range facts {
-		candidate, pending, err := a.openAssetsDueCheckpoint(ctx, stream, asOf, fact)
+		candidate, pending, err := s.openAssetsDueCheckpoint(ctx, stream, asOf, fact)
 		if err != nil {
 			return nil, err
 		}
@@ -127,7 +127,7 @@ func (a *Adapter) scanAssetsDueNotifications(ctx context.Context, body map[strin
 			items = append(items, *candidate)
 		}
 	}
-	closures, err := a.pendingAssetsDueClosures(ctx, stream, limit)
+	closures, err := s.pendingAssetsDueClosures(ctx, stream, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -141,7 +141,7 @@ func (a *Adapter) scanAssetsDueNotifications(ctx context.Context, body map[strin
 	return map[string]any{"stream": stream, "asOf": asOf.Format(time.RFC3339), "items": items, "nextCursor": nextCursor, "closures": closures}, nil
 }
 
-func (a *Adapter) queryAssetsDueFacts(ctx context.Context, stream string, asOf time.Time, cursor *assetsDueCursor, limit int) ([]assetsDueFact, error) {
+func queryAssetsDueFactsWith(ctx context.Context, q assetsDueQuerier, stream string, asOf time.Time, cursor *assetsDueCursor, limit int) ([]assetsDueFact, error) {
 	windowEnd := assetsDueWindowEnd(stream, asOf)
 	args := []any{windowEnd}
 	query := `
@@ -196,7 +196,7 @@ func (a *Adapter) queryAssetsDueFacts(ctx context.Context, stream string, asOf t
 		idColumn, dueColumn = "cda.id", "cda."+assetsDeliveryDueColumn(stream)
 	}
 	args = append(args, limit)
-	rows, err := a.DB().QueryContext(ctx, query+" ORDER BY "+dueColumn+" ASC, "+idColumn+" ASC LIMIT ?", args...)
+	rows, err := q.QueryContext(ctx, query+" ORDER BY "+dueColumn+" ASC, "+idColumn+" ASC LIMIT ?", args...)
 	if err != nil {
 		return nil, err
 	}
@@ -244,12 +244,12 @@ func (a *Adapter) queryAssetsDueFacts(ctx context.Context, stream string, asOf t
 		return nil, err
 	}
 	if stream == assetsDueIP && len(facts) != 0 {
-		if err := a.appendIPProductOwners(ctx, facts); err != nil {
+		if err := appendIPProductOwnersWith(ctx, q, facts); err != nil {
 			return nil, err
 		}
 	}
 	if stream == assetsDueOffboarding && len(facts) != 0 {
-		facts, err = a.withOffboardingHoldingsFingerprints(ctx, facts)
+		facts, err = withOffboardingHoldingsFingerprintsWith(ctx, q, facts)
 		if err != nil {
 			return nil, err
 		}
@@ -260,10 +260,10 @@ func (a *Adapter) queryAssetsDueFacts(ctx context.Context, stream string, asOf t
 	return facts, nil
 }
 
-func (a *Adapter) withOffboardingHoldingsFingerprints(ctx context.Context, facts []assetsDueFact) ([]assetsDueFact, error) {
+func withOffboardingHoldingsFingerprintsWith(ctx context.Context, q assetsDueQuerier, facts []assetsDueFact) ([]assetsDueFact, error) {
 	kept := make([]assetsDueFact, 0, len(facts))
 	for _, fact := range facts {
-		rows, err := a.DB().QueryContext(ctx, `SELECT ai.id,ai.asset_code,ai.status,ai.user_uid FROM asset_items ai JOIN asset_offboarding_recovery_cases c ON c.id=? WHERE ai.archived_at IS NULL AND ai.status NOT IN ('in_stock','scrapped','inactive','disposed','retired') AND ai.user_uid=c.departed_employee_uid ORDER BY ai.id`, fact.ID)
+		rows, err := q.QueryContext(ctx, `SELECT ai.id,ai.asset_code,ai.status,ai.user_uid FROM asset_items ai JOIN asset_offboarding_recovery_cases c ON c.id=? WHERE ai.archived_at IS NULL AND ai.status NOT IN ('in_stock','scrapped','inactive','disposed','retired') AND ai.user_uid=c.departed_employee_uid ORDER BY ai.id`, fact.ID)
 		if err != nil {
 			return nil, err
 		}
@@ -293,14 +293,14 @@ func (a *Adapter) withOffboardingHoldingsFingerprints(ctx context.Context, facts
 	return kept, nil
 }
 
-func (a *Adapter) appendIPProductOwners(ctx context.Context, facts []assetsDueFact) error {
+func appendIPProductOwnersWith(ctx context.Context, q assetsDueQuerier, facts []assetsDueFact) error {
 	placeholders := make([]string, len(facts))
 	args := make([]any, len(facts))
 	byID := make(map[int64]*assetsDueFact, len(facts))
 	for index := range facts {
 		placeholders[index], args[index], byID[facts[index].ID] = "?", facts[index].ID, &facts[index]
 	}
-	rows, err := a.DB().QueryContext(ctx, `
+	rows, err := q.QueryContext(ctx, `
 		SELECT iap.ip_asset_id, p.business_owner_uid, p.technical_owner_uid
 		FROM ip_asset_products iap
 		JOIN product_assets p ON p.id = iap.product_asset_id
@@ -330,16 +330,16 @@ func (a *Adapter) appendIPProductOwners(ctx context.Context, facts []assetsDueFa
 	return rows.Err()
 }
 
-func (a *Adapter) reconcileAssetsDueCheckpoints(ctx context.Context, stream string, asOf time.Time) error {
+func reconcileAssetsDueCheckpointsWith(ctx context.Context, q assetsDueQuerier, stream string, asOf time.Time) error {
 	windowEnd := assetsDueWindowEnd(stream, asOf)
 	if stream == assetsDueOffboarding {
-		if _, err := a.DB().ExecContext(ctx, `UPDATE assets_notification_checkpoint cp JOIN asset_offboarding_recovery_cases c ON c.id=cp.source_id
+		if _, err := q.ExecContext(ctx, `UPDATE assets_notification_checkpoint cp JOIN asset_offboarding_recovery_cases c ON c.id=cp.source_id
 			SET cp.state='closed',cp.close_reason='condition_resolved',cp.closed_at=UTC_TIMESTAMP(),cp.updated_at=UTC_TIMESTAMP()
 			WHERE cp.event_stream=? AND cp.source_type='offboarding_recovery_case' AND cp.state='open'
 			AND NOT EXISTS (SELECT 1 FROM asset_items ai WHERE ai.archived_at IS NULL AND ai.status NOT IN ('in_stock','scrapped','inactive','disposed','retired') AND `+offboardingOutstandingPredicate("c", "ai")+`)`, stream); err != nil {
 			return err
 		}
-		_, err := a.DB().ExecContext(ctx, `UPDATE assets_notification_checkpoint cp LEFT JOIN asset_offboarding_recovery_cases c ON c.id=cp.source_id
+		_, err := q.ExecContext(ctx, `UPDATE assets_notification_checkpoint cp LEFT JOIN asset_offboarding_recovery_cases c ON c.id=cp.source_id
 			SET cp.state='closed',cp.close_reason='condition_cancelled',cp.closed_at=UTC_TIMESTAMP(),cp.updated_at=UTC_TIMESTAMP()
 			WHERE cp.event_stream=? AND cp.source_type='offboarding_recovery_case' AND cp.state='open'
 			AND (c.id IS NULL OR c.status<>'active' OR c.recovery_due_at IS NULL OR c.recovery_due_at<>DATE(cp.due_at)
@@ -350,7 +350,7 @@ func (a *Adapter) reconcileAssetsDueCheckpoints(ctx context.Context, stream stri
 		return err
 	}
 	if stream == assetsDueResource {
-		if _, err := a.DB().ExecContext(ctx, `
+		if _, err := q.ExecContext(ctx, `
 			UPDATE assets_notification_checkpoint c
 			JOIN asset_items ai ON ai.id = c.source_id
 			SET c.state='closed', c.close_reason='condition_resolved', c.closed_at=UTC_TIMESTAMP(), c.updated_at=UTC_TIMESTAMP()
@@ -358,7 +358,7 @@ func (a *Adapter) reconcileAssetsDueCheckpoints(ctx context.Context, stream stri
 			  AND (ai.asset_category <> 'resource' OR ai.status <> 'active' OR ai.archived_at IS NOT NULL)`, stream); err != nil {
 			return err
 		}
-		_, err := a.DB().ExecContext(ctx, `
+		_, err := q.ExecContext(ctx, `
 			UPDATE assets_notification_checkpoint c
 			LEFT JOIN asset_items ai ON ai.id = c.source_id
 			LEFT JOIN asset_resource_details ard ON ard.asset_id = ai.id
@@ -368,14 +368,14 @@ func (a *Adapter) reconcileAssetsDueCheckpoints(ctx context.Context, stream stri
 		return err
 	}
 	if stream == assetsDueIP {
-		if _, err := a.DB().ExecContext(ctx, `
+		if _, err := q.ExecContext(ctx, `
 		UPDATE assets_notification_checkpoint c
 		JOIN ip_assets ip ON ip.id = c.source_id
 		SET c.state='closed', c.close_reason='condition_resolved', c.closed_at=UTC_TIMESTAMP(), c.updated_at=UTC_TIMESTAMP()
 		WHERE c.event_stream=? AND c.source_type='ip_asset' AND c.state='open' AND ip.status <> 'active'`, stream); err != nil {
 			return err
 		}
-		_, err := a.DB().ExecContext(ctx, `
+		_, err := q.ExecContext(ctx, `
 			UPDATE assets_notification_checkpoint c
 			LEFT JOIN ip_assets ip ON ip.id = c.source_id
 			SET c.state='closed', c.close_reason='condition_cancelled', c.closed_at=UTC_TIMESTAMP(), c.updated_at=UTC_TIMESTAMP()
@@ -384,7 +384,7 @@ func (a *Adapter) reconcileAssetsDueCheckpoints(ctx context.Context, stream stri
 		return err
 	}
 	dueColumn := assetsDeliveryDueColumn(stream)
-	if _, err := a.DB().ExecContext(ctx, `
+	if _, err := q.ExecContext(ctx, `
 		UPDATE assets_notification_checkpoint c
 		JOIN customer_delivery_assets cda ON cda.id=c.source_id
 		SET c.state='closed', c.close_reason='condition_resolved', c.closed_at=UTC_TIMESTAMP(), c.updated_at=UTC_TIMESTAMP()
@@ -392,7 +392,7 @@ func (a *Adapter) reconcileAssetsDueCheckpoints(ctx context.Context, stream stri
 		  AND (cda.deleted_at IS NOT NULL OR cda.status NOT IN ('delivered','online','accepted','suspended'))`, stream); err != nil {
 		return err
 	}
-	_, err := a.DB().ExecContext(ctx, `
+	_, err := q.ExecContext(ctx, `
 		UPDATE assets_notification_checkpoint c
 		LEFT JOIN customer_delivery_assets cda ON cda.id=c.source_id
 		SET c.state='closed', c.close_reason='condition_cancelled', c.closed_at=UTC_TIMESTAMP(), c.updated_at=UTC_TIMESTAMP()
@@ -436,12 +436,15 @@ func assetsDueCursorValue(stream string, value time.Time) string {
 	return value.UTC().Format("2006-01-02")
 }
 
-func (a *Adapter) openAssetsDueCheckpoint(ctx context.Context, stream string, asOf time.Time, fact assetsDueFact) (*assetsDueCandidate, bool, error) {
+func (s assetsDueStore) openAssetsDueCheckpoint(ctx context.Context, stream string, asOf time.Time, fact assetsDueFact) (*assetsDueCandidate, bool, error) {
 	if len(fact.Recipients) == 0 {
-		_, err := a.DB().ExecContext(ctx, `
+		err := s.statement(ctx, func(q assetsDueQuerier) error {
+			_, err := q.ExecContext(ctx, `
 			UPDATE assets_notification_checkpoint
 			SET state='closed', close_reason='condition_cancelled', closed_at=UTC_TIMESTAMP(), updated_at=UTC_TIMESTAMP()
 			WHERE event_stream=? AND source_type=? AND source_id=? AND state='open'`, stream, fact.SourceType, fact.ID)
+			return err
+		})
 		if err != nil {
 			return nil, false, err
 		}
@@ -451,7 +454,7 @@ func (a *Adapter) openAssetsDueCheckpoint(ctx context.Context, stream string, as
 	if phase == "" {
 		return nil, false, nil
 	}
-	tx, err := a.DB().BeginTx(ctx, nil)
+	tx, err := s.begin(ctx)
 	if err != nil {
 		return nil, false, err
 	}
@@ -524,8 +527,8 @@ func (a *Adapter) openAssetsDueCheckpoint(ctx context.Context, stream string, as
 	return &candidate, state == "open" && !notificationID.Valid, nil
 }
 
-func (a *Adapter) pendingAssetsDueClosures(ctx context.Context, stream string, limit int) ([]assetsDueClosure, error) {
-	rows, err := a.DB().QueryContext(ctx, `
+func pendingAssetsDueClosuresWith(ctx context.Context, q assetsDueQuerier, stream string, limit int) ([]assetsDueClosure, error) {
+	rows, err := q.QueryContext(ctx, `
 		SELECT c.event_version, delivered.event_version, c.actionable_key, c.source_type, c.source_id,
 		       delivered.notified_recipient_uid, c.close_reason
 		FROM assets_notification_checkpoint c
@@ -559,14 +562,14 @@ func (a *Adapter) pendingAssetsDueClosures(ctx context.Context, stream string, l
 	return items, rows.Err()
 }
 
-func (a *Adapter) acknowledgeAssetsDueNotification(ctx context.Context, body map[string]any) (map[string]any, error) {
+func acknowledgeAssetsDueNotificationWith(ctx context.Context, q assetsDueQuerier, body map[string]any) (map[string]any, error) {
 	eventVersion := strings.TrimSpace(bodyString(body, "eventVersion", "event_version"))
 	notificationID := strings.TrimSpace(bodyString(body, "notificationId", "notification_id"))
 	recipientUID := strings.TrimSpace(bodyString(body, "recipientUid", "recipient_uid"))
 	if eventVersion == "" || notificationID == "" || recipientUID == "" || strings.EqualFold(recipientUID, "@all") {
 		return nil, httperror.New(http.StatusBadRequest, "assets_due_ack_invalid", "eventVersion, notificationId and an explicit recipientUid are required")
 	}
-	result, err := a.DB().ExecContext(ctx, `
+	result, err := q.ExecContext(ctx, `
 		UPDATE assets_notification_checkpoint
 		SET notification_id=?, notified_recipient_uid=?, acknowledged_at=UTC_TIMESTAMP(), updated_at=UTC_TIMESTAMP()
 		WHERE event_version=? AND JSON_CONTAINS(recipient_candidates_json, JSON_QUOTE(?))
@@ -581,7 +584,7 @@ func (a *Adapter) acknowledgeAssetsDueNotification(ctx context.Context, body map
 	if rows == 0 {
 		var state string
 		var storedNotification, storedRecipient sql.NullString
-		err := a.DB().QueryRowContext(ctx, `SELECT state, notification_id, notified_recipient_uid FROM assets_notification_checkpoint WHERE event_version=? LIMIT 1`, eventVersion).Scan(&state, &storedNotification, &storedRecipient)
+		err := q.QueryRowContext(ctx, `SELECT state, notification_id, notified_recipient_uid FROM assets_notification_checkpoint WHERE event_version=? LIMIT 1`, eventVersion).Scan(&state, &storedNotification, &storedRecipient)
 		if err == nil && (state == "open" || state == "closed") && storedNotification.String == notificationID && storedRecipient.String == recipientUID {
 			return map[string]any{"eventVersion": eventVersion, "notificationId": notificationID, "recipientUid": recipientUID, "acknowledged": true, "idempotent": true}, nil
 		}
@@ -590,13 +593,13 @@ func (a *Adapter) acknowledgeAssetsDueNotification(ctx context.Context, body map
 	return map[string]any{"eventVersion": eventVersion, "notificationId": notificationID, "recipientUid": recipientUID, "acknowledged": true}, nil
 }
 
-func (a *Adapter) acknowledgeAssetsDueClosure(ctx context.Context, body map[string]any) (map[string]any, error) {
+func acknowledgeAssetsDueClosureWith(ctx context.Context, q assetsDueQuerier, body map[string]any) (map[string]any, error) {
 	eventVersion := strings.TrimSpace(bodyString(body, "eventVersion", "event_version"))
 	nextVersion := strings.TrimSpace(bodyString(body, "nextVersion", "next_version"))
 	if eventVersion == "" || nextVersion == "" {
 		return nil, httperror.New(http.StatusBadRequest, "assets_due_closure_ack_invalid", "eventVersion and nextVersion are required")
 	}
-	result, err := a.DB().ExecContext(ctx, `UPDATE assets_notification_checkpoint SET lifecycle_closed_at=UTC_TIMESTAMP(), lifecycle_next_version=?, updated_at=UTC_TIMESTAMP() WHERE event_version=? AND state='closed' AND close_reason IN ('condition_resolved','condition_cancelled') AND (lifecycle_next_version IS NULL OR lifecycle_next_version=?)`, nextVersion, eventVersion, nextVersion)
+	result, err := q.ExecContext(ctx, `UPDATE assets_notification_checkpoint SET lifecycle_closed_at=UTC_TIMESTAMP(), lifecycle_next_version=?, updated_at=UTC_TIMESTAMP() WHERE event_version=? AND state='closed' AND close_reason IN ('condition_resolved','condition_cancelled') AND (lifecycle_next_version IS NULL OR lifecycle_next_version=?)`, nextVersion, eventVersion, nextVersion)
 	if err != nil {
 		return nil, err
 	}
@@ -607,7 +610,7 @@ func (a *Adapter) acknowledgeAssetsDueClosure(ctx context.Context, body map[stri
 	if rows == 0 {
 		var stored sql.NullString
 		var closed sql.NullTime
-		err := a.DB().QueryRowContext(ctx, `SELECT lifecycle_next_version, lifecycle_closed_at FROM assets_notification_checkpoint WHERE event_version=? LIMIT 1`, eventVersion).Scan(&stored, &closed)
+		err := q.QueryRowContext(ctx, `SELECT lifecycle_next_version, lifecycle_closed_at FROM assets_notification_checkpoint WHERE event_version=? LIMIT 1`, eventVersion).Scan(&stored, &closed)
 		if err == nil && closed.Valid && stored.String == nextVersion {
 			return map[string]any{"eventVersion": eventVersion, "nextVersion": nextVersion, "acknowledged": true, "idempotent": true}, nil
 		}
@@ -742,4 +745,124 @@ func pointerText(value *string) string {
 		return ""
 	}
 	return strings.TrimSpace(*value)
+}
+
+// assetsDueQuerier is satisfied by both *sql.DB and *sql.Tx.
+type assetsDueQuerier interface {
+	ExecContext(context.Context, string, ...any) (sql.Result, error)
+	QueryContext(context.Context, string, ...any) (*sql.Rows, error)
+	QueryRowContext(context.Context, string, ...any) *sql.Row
+}
+
+// assetsDueStore decides where due-notification statements run. The legacy
+// store keeps its original autocommit statements; the unified scheduler store
+// runs every step inside a generation-fenced transaction.
+type assetsDueStore struct {
+	statement func(context.Context, func(assetsDueQuerier) error) error
+	begin     func(context.Context) (*sql.Tx, error)
+}
+
+func (a *Adapter) legacyAssetsDueStore() assetsDueStore {
+	return assetsDueStore{
+		statement: func(ctx context.Context, run func(assetsDueQuerier) error) error { return run(a.DB()) },
+		begin:     func(ctx context.Context) (*sql.Tx, error) { return a.DB().BeginTx(ctx, nil) },
+	}
+}
+
+func schedulerAssetsDueStore(begin func(context.Context) (*sql.Tx, error)) assetsDueStore {
+	return assetsDueStore{
+		statement: func(ctx context.Context, run func(assetsDueQuerier) error) error {
+			tx, err := begin(ctx)
+			if err != nil {
+				return err
+			}
+			defer tx.Rollback()
+			if err = run(tx); err != nil {
+				return err
+			}
+			return tx.Commit()
+		},
+		begin: begin,
+	}
+}
+
+func (s assetsDueStore) queryAssetsDueFacts(ctx context.Context, stream string, asOf time.Time, cursor *assetsDueCursor, limit int) ([]assetsDueFact, error) {
+	var facts []assetsDueFact
+	err := s.statement(ctx, func(q assetsDueQuerier) error {
+		var err error
+		facts, err = queryAssetsDueFactsWith(ctx, q, stream, asOf, cursor, limit)
+		return err
+	})
+	return facts, err
+}
+
+func (s assetsDueStore) reconcileAssetsDueCheckpoints(ctx context.Context, stream string, asOf time.Time) error {
+	return s.statement(ctx, func(q assetsDueQuerier) error { return reconcileAssetsDueCheckpointsWith(ctx, q, stream, asOf) })
+}
+
+func (s assetsDueStore) pendingAssetsDueClosures(ctx context.Context, stream string, limit int) ([]assetsDueClosure, error) {
+	var closures []assetsDueClosure
+	err := s.statement(ctx, func(q assetsDueQuerier) error {
+		var err error
+		closures, err = pendingAssetsDueClosuresWith(ctx, q, stream, limit)
+		return err
+	})
+	return closures, err
+}
+
+func (s assetsDueStore) acknowledgeAssetsDueNotification(ctx context.Context, body map[string]any) (map[string]any, error) {
+	var out map[string]any
+	err := s.statement(ctx, func(q assetsDueQuerier) error {
+		var err error
+		out, err = acknowledgeAssetsDueNotificationWith(ctx, q, body)
+		return err
+	})
+	return out, err
+}
+
+func (s assetsDueStore) acknowledgeAssetsDueClosure(ctx context.Context, body map[string]any) (map[string]any, error) {
+	var out map[string]any
+	err := s.statement(ctx, func(q assetsDueQuerier) error {
+		var err error
+		out, err = acknowledgeAssetsDueClosureWith(ctx, q, body)
+		return err
+	})
+	return out, err
+}
+
+// Legacy adapter entry points kept for the original path and its tests.
+func (a *Adapter) scanAssetsDueNotifications(ctx context.Context, body map[string]any) (map[string]any, error) {
+	return a.legacyAssetsDueStore().scanAssetsDueNotifications(ctx, body)
+}
+
+func (a *Adapter) queryAssetsDueFacts(ctx context.Context, stream string, asOf time.Time, cursor *assetsDueCursor, limit int) ([]assetsDueFact, error) {
+	return a.legacyAssetsDueStore().queryAssetsDueFacts(ctx, stream, asOf, cursor, limit)
+}
+
+func (a *Adapter) reconcileAssetsDueCheckpoints(ctx context.Context, stream string, asOf time.Time) error {
+	return a.legacyAssetsDueStore().reconcileAssetsDueCheckpoints(ctx, stream, asOf)
+}
+
+func (a *Adapter) openAssetsDueCheckpoint(ctx context.Context, stream string, asOf time.Time, fact assetsDueFact) (*assetsDueCandidate, bool, error) {
+	return a.legacyAssetsDueStore().openAssetsDueCheckpoint(ctx, stream, asOf, fact)
+}
+
+func (a *Adapter) pendingAssetsDueClosures(ctx context.Context, stream string, limit int) ([]assetsDueClosure, error) {
+	return a.legacyAssetsDueStore().pendingAssetsDueClosures(ctx, stream, limit)
+}
+
+func (a *Adapter) acknowledgeAssetsDueNotification(ctx context.Context, body map[string]any) (map[string]any, error) {
+	return a.legacyAssetsDueStore().acknowledgeAssetsDueNotification(ctx, body)
+}
+
+func (a *Adapter) acknowledgeAssetsDueClosure(ctx context.Context, body map[string]any) (map[string]any, error) {
+	return a.legacyAssetsDueStore().acknowledgeAssetsDueClosure(ctx, body)
+}
+
+func (a *Adapter) withOffboardingHoldingsFingerprints(ctx context.Context, facts []assetsDueFact) ([]assetsDueFact, error) {
+	return withOffboardingHoldingsFingerprintsWith(ctx, a.DB(), facts)
+}
+
+func (a *Adapter) appendIPProductOwners(ctx context.Context, facts []assetsDueFact) error {
+	return appendIPProductOwnersWith(ctx, a.DB(), facts)
 }

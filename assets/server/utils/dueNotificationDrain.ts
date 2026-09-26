@@ -24,6 +24,8 @@ import {
 } from './scheduledRuntime'
 import { runAssetsDueEligibilityGate } from './dueNotificationEligibility'
 
+type DueRuntimeCaller = <T>(path: '/v1/assets/service/notifications:scan-due' | '/v1/assets/service/notifications:acknowledge' | '/v1/assets/service/notifications:acknowledge-closure', body: Record<string, unknown>) => Promise<T>
+
 interface DirectoryEnvelope<T> {
   code?: number
   data?: T
@@ -55,8 +57,8 @@ function durableInAppNotificationId(error: unknown) {
   return result?.inApp?.status === 'fulfilled' ? notificationIdFromValue(result.inApp.value) : ''
 }
 
-async function acknowledge(candidate: AssetsDueCandidate, notificationId: string, recipientUid: string) {
-  await callAssetsDueNotificationRuntime('/v1/assets/service/notifications:acknowledge', {
+async function acknowledge(runtime: DueRuntimeCaller, candidate: AssetsDueCandidate, notificationId: string, recipientUid: string) {
+  await runtime('/v1/assets/service/notifications:acknowledge', {
     stream: candidate.stream,
     sourceType: candidate.sourceType,
     sourceId: candidate.sourceId,
@@ -66,8 +68,8 @@ async function acknowledge(candidate: AssetsDueCandidate, notificationId: string
   })
 }
 
-async function acknowledgeClosure(closure: AssetsDueClosure) {
-  await callAssetsDueNotificationRuntime('/v1/assets/service/notifications:acknowledge-closure', {
+async function acknowledgeClosure(runtime: DueRuntimeCaller, closure: AssetsDueClosure) {
+  await runtime('/v1/assets/service/notifications:acknowledge-closure', {
     eventVersion: closure.checkpointEventVersion,
     nextVersion: closure.nextVersion
   })
@@ -90,7 +92,7 @@ async function closeActionable(input: {
   })
 }
 
-async function closeDueCondition(closure: AssetsDueClosure) {
+async function closeDueCondition(runtime: DueRuntimeCaller, closure: AssetsDueClosure) {
   await closeActionable({
     actionableKey: closure.actionableKey,
     expectedVersion: closure.expectedVersion,
@@ -98,10 +100,10 @@ async function closeDueCondition(closure: AssetsDueClosure) {
     state: closure.state,
     recipientUid: closure.recipientUid
   })
-  await acknowledgeClosure(closure)
+  await acknowledgeClosure(runtime, closure)
 }
 
-async function deliverCandidate(event: H3Event, candidate: AssetsDueCandidate) {
+async function deliverCandidate(runtime: DueRuntimeCaller, event: H3Event, candidate: AssetsDueCandidate) {
   const recipientUid = await resolveAssetsDueRecipient(candidate, { findActiveUser })
   if (!recipientUid) throw new Error(`No active responsible recipient for ${candidate.actionableKey}`)
   const transition = assetsDueRecipientTransition(candidate, recipientUid)
@@ -153,10 +155,10 @@ async function deliverCandidate(event: H3Event, candidate: AssetsDueCandidate) {
         })
         const notificationId = notificationIdFromValue(delivery.inApp.value)
         if (!notificationId) throw new Error(`Console did not return notification evidence for ${candidate.actionableKey}`)
-        await acknowledge(candidate, notificationId, recipientUid)
+        await acknowledge(runtime, candidate, notificationId, recipientUid)
       } catch (error) {
         const notificationId = durableInAppNotificationId(error)
-        if (notificationId) await acknowledge(candidate, notificationId, recipientUid)
+        if (notificationId) await acknowledge(runtime, candidate, notificationId, recipientUid)
         throw error
       }
     }
@@ -187,11 +189,15 @@ export async function drainAssetsDueNotifications(options: {
   maxWallTimeMs?: number
   event?: H3Event
   taskContext?: Record<string, unknown>
+  // The unified scheduler wake supplies a generation-bound caller; the legacy
+  // cron uses the purpose-signed worker contract.
+  runtime?: DueRuntimeCaller
 } = {}) {
   if (!isAssetsDueNotificationDeliveryEnabled()) {
     return { enabled: false, scanned: 0, delivered: 0, failed: 0, stoppedBy: 'feature_flag' }
   }
   requireAssetsDueNotificationRuntimeBinding()
+  const runtime: DueRuntimeCaller = options.runtime || callAssetsDueNotificationRuntime
   const eligibilityEvent = options.event || taskEligibilityEvent(options.taskContext)
 
   const pageSize = Math.min(Math.max(options.pageSize || 100, 1), 200)
@@ -217,12 +223,12 @@ export async function drainAssetsDueNotifications(options: {
       if (Date.now() - startedAt >= maxWallTimeMs) {
         return { enabled: true, asOf, scanned, delivered, failed, stoppedBy: 'wall_time' }
       }
-      const runtimePage = await callAssetsDueNotificationRuntime<unknown>('/v1/assets/service/notifications:scan-due', { stream, asOf, cursor: cursor || undefined, limit: pageSize })
+      const runtimePage = await runtime<unknown>('/v1/assets/service/notifications:scan-due', { stream, asOf, cursor: cursor || undefined, limit: pageSize })
       const page = requireAssetsDueRuntimePage(runtimePage, stream, asOf)
       const failedClosures = new Set<string>()
       for (const closure of page.closures || []) {
         try {
-          await closeDueCondition(closure)
+          await closeDueCondition(runtime, closure)
         } catch (error) {
           failed += 1
           failedClosures.add(`${closure.sourceType}:${closure.sourceId}`)
@@ -233,7 +239,7 @@ export async function drainAssetsDueNotifications(options: {
       for (const candidate of page.items) {
         if (failedClosures.has(`${candidate.sourceType}:${candidate.sourceId}`)) continue
         try {
-          await deliverCandidate(eligibilityEvent, candidate)
+          await deliverCandidate(runtime, eligibilityEvent, candidate)
           delivered += 1
         } catch (error) {
           failed += 1

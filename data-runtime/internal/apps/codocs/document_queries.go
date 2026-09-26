@@ -82,6 +82,14 @@ func (a *Adapter) documentsList(ctx context.Context, query url.Values) (map[stri
 			args = append(args, owner)
 		}
 	}
+	if keyword := strings.TrimSpace(query.Get("search")); keyword != "" {
+		if len([]rune(keyword)) > 100 {
+			return nil, httperror.New(400, "codocs_document_search_invalid", "Invalid document search")
+		}
+		literal := strings.NewReplacer("!", "!!", "\\", "!\\", "%", "!%", "_", "!_").Replace(keyword)
+		where = append(where, "d.title LIKE ? ESCAPE '!'")
+		args = append(args, "%"+literal+"%")
+	}
 
 	addEqualsFilter := func(queryKey string, column string) {
 		value := strings.TrimSpace(query.Get(queryKey))

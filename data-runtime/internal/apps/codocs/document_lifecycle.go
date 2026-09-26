@@ -3,11 +3,15 @@ package codocs
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"sort"
 	"strconv"
 	"strings"
+
+	"github.com/go-sql-driver/mysql"
 
 	"github.com/huizhi-yun/data-runtime/internal/httperror"
 )
@@ -33,7 +37,8 @@ func (a *Adapter) createDocument(ctx context.Context, body map[string]any) (map[
 	}
 	folderID := int64Value(firstNonEmpty(stringValue(body["folderId"]), stringValue(body["folder_id"])))
 	folderPath := firstNonEmpty(stringValue(body["folderPath"]), stringValue(body["folder_path"]))
-	if folderPath == "" && folderID > 0 {
+	personalExplicitPath := (docType == "private" || docType == "slide") && firstNonEmpty(stringValue(body["ossPath"]), stringValue(body["oss_path"])) != ""
+	if folderPath == "" && folderID > 0 && !personalExplicitPath {
 		resolvedFolderPath, err := a.folderPath(ctx, folderID)
 		if err != nil {
 			return nil, err
@@ -51,6 +56,21 @@ func (a *Adapter) createDocument(ctx context.Context, body map[string]any) (map[
 		return nil, err
 	}
 	if existingID > 0 {
+		// Only the UUID-addressed immutable creation path supports replay.
+		// Legacy title-addressed documents retain their conflict semantics.
+		uuid := stringValue(body["uuid"])
+		if uuid != "" && strings.HasPrefix(ossPath, "codocs/document-creations/"+uuid+"/") {
+			var matched int64
+			err := a.db.QueryRowContext(ctx, `SELECT id FROM documents WHERE id=? AND uuid=? AND title=?
+			  AND doc_type=? AND owner_uid=? AND dept_code <=> ? AND project_code <=> ?
+			  AND folder_id <=> ? AND status != 0`, existingID, uuid, title, docType, ownerUID, nullableString(deptCode), nullableString(projectCode), nullableInt64(folderID)).Scan(&matched)
+			if err == nil {
+				return map[string]any{"id": matched, "uuid": uuid, "title": title, "doc_type": docType, "oss_path": ossPath}, nil
+			}
+			if err != sql.ErrNoRows {
+				return nil, err
+			}
+		}
 		return nil, httperror.New(http.StatusConflict, "document_exists", "Document already exists")
 	}
 
@@ -82,6 +102,15 @@ func (a *Adapter) createDocument(ctx context.Context, body map[string]any) (map[
 		return nil, err
 	}
 	defer tx.Rollback()
+	if folderID > 0 && (docType == "private" || docType == "slide") {
+		folder, err := readFolderScope(ctx, tx, folderID, true)
+		if err != nil {
+			return nil, err
+		}
+		if folder.Kind != docType || !folderScopeAllowed(folder, ownerUID, url.Values{"current_user": {ownerUID}}, true) {
+			return nil, httperror.New(403, "document_folder_scope_mismatch", "Folder is outside the personal document scope")
+		}
+	}
 
 	result, err := tx.ExecContext(ctx, `
       INSERT INTO documents
@@ -98,6 +127,23 @@ func (a *Adapter) createDocument(ctx context.Context, body map[string]any) (map[
 		contentSize,
 	)
 	if err != nil {
+		var duplicate *mysql.MySQLError
+		if errors.As(err, &duplicate) && duplicate.Number == 1062 {
+			_ = tx.Rollback()
+			if strings.HasPrefix(ossPath, "codocs/document-creations/"+docUUID+"/") {
+				var matched int64
+				lookupErr := a.db.QueryRowContext(ctx, `SELECT id FROM documents WHERE uuid=? AND oss_path=? AND title=?
+				 AND doc_type=? AND owner_uid=? AND dept_code <=> ? AND project_code <=> ?
+				 AND folder_id <=> ? AND status != 0`, docUUID, ossPath, title, docType, ownerUID, nullableString(deptCode), nullableString(projectCode), nullableInt64(folderID)).Scan(&matched)
+				if lookupErr == nil {
+					return map[string]any{"id": matched, "uuid": docUUID, "title": title, "doc_type": docType, "oss_path": ossPath}, nil
+				}
+				if lookupErr != sql.ErrNoRows {
+					return nil, lookupErr
+				}
+			}
+			return nil, httperror.New(http.StatusConflict, "document_uuid_conflict", "Document UUID already belongs to another creation")
+		}
 		return nil, err
 	}
 	id, _ := result.LastInsertId()
@@ -166,6 +212,17 @@ func (a *Adapter) updateDocument(ctx context.Context, uuid string, body map[stri
 	if err != nil {
 		return nil, err
 	}
+	// Legacy content saves report content_size; metadata-only edits stay allowed.
+	// Not under a row lock: a racing legacy write can only touch the derived copy,
+	// which the v2 mirror repair restores.
+	if _, sized := body["content_size"]; sized {
+		err = refuseSnapshotV2Document(ctx, a.db, uuid)
+	} else if _, sized = body["contentSize"]; sized {
+		err = refuseSnapshotV2Document(ctx, a.db, uuid)
+	}
+	if err != nil {
+		return nil, err
+	}
 	updates := map[string]any{}
 	setIfPresent := func(bodyKey string, column string, normalize func(any) any) {
 		value, ok := body[bodyKey]
@@ -201,17 +258,35 @@ func (a *Adapter) updateDocument(ctx context.Context, uuid string, body map[stri
 	setIfPresent("ai_abstract", "ai_abstract", normalizeNullableString)
 	setIfPresent("aiAbstract", "ai_abstract", normalizeNullableString)
 
+	actorUID := actorFromBody(body)
+	if _, readonlyUpdate := updates["readonly_flag"]; readonlyUpdate && actorUID != stringValue(doc["owner_uid"]) {
+		return nil, httperror.New(http.StatusForbidden, "permission_denied", "Only document owner can change readonly flag")
+	}
+	if _, folderUpdate := updates["folder_id"]; folderUpdate {
+		if err := a.validateDocumentFolderTarget(ctx, doc, updates); err != nil {
+			return nil, err
+		}
+	}
+
 	if int64Value(doc["readonly_flag"]) == 1 && !isReadonlyUnlockUpdate(updates) {
 		return nil, httperror.New(http.StatusForbidden, "document_readonly", "Document is readonly")
 	}
 
-	if title, ok := updates["title"]; ok && strings.TrimSpace(fmt.Sprint(title)) != stringValue(doc["title"]) {
+	_, folderUpdate := updates["folder_id"]
+	if title, ok := updates["title"]; ok && (strings.TrimSpace(fmt.Sprint(title)) != stringValue(doc["title"]) || folderUpdate) {
 		folderValue := doc["folder_id"]
 		if value, ok := updates["folder_id"]; ok {
 			folderValue = value
 		}
 		if err := a.ensureDocumentTitleAvailable(ctx, uuid, doc, strings.TrimSpace(fmt.Sprint(title)), folderValue); err != nil {
 			return nil, err
+		}
+	}
+	if folderUpdate {
+		if _, titleUpdate := updates["title"]; !titleUpdate {
+			if err := a.ensureDocumentTitleAvailable(ctx, uuid, doc, stringValue(doc["title"]), updates["folder_id"]); err != nil {
+				return nil, err
+			}
 		}
 	}
 
@@ -236,6 +311,38 @@ func (a *Adapter) updateDocument(ctx context.Context, uuid string, body map[stri
 		return nil, err
 	}
 	return map[string]any{"uuid": uuid, "updated": true}, nil
+}
+
+func (a *Adapter) validateDocumentFolderTarget(ctx context.Context, doc map[string]any, updates map[string]any) error {
+	for _, field := range []string{"doc_type", "dept_code", "project_code"} {
+		if value, ok := updates[field]; ok {
+			var original string
+			switch field {
+			case "doc_type":
+				original = stringValue(doc["doc_type"])
+			case "dept_code":
+				original = stringValue(doc["dept_code"])
+			case "project_code":
+				original = stringValue(doc["project_code"])
+			}
+			if stringValue(value) != original {
+				return httperror.New(http.StatusForbidden, "folder_scope_mismatch", "Folder move cannot change document scope")
+			}
+		}
+	}
+
+	folderValue := updates["folder_id"]
+	parentID := int64Value(folderValue)
+	if parentID <= 0 {
+		return nil
+	}
+	folderType := stringValue(doc["doc_type"])
+	switch folderType {
+	case "private", "slide", "department":
+	default:
+		return httperror.New(http.StatusForbidden, "folder_scope_mismatch", "Document type cannot use a folder target")
+	}
+	return a.validateFolderParent(ctx, parentID, folderType, stringValue(doc["owner_uid"]), stringValue(doc["dept_code"]), stringValue(doc["project_code"]))
 }
 
 func (a *Adapter) deleteDocument(ctx context.Context, uuid string, body map[string]any) (map[string]any, error) {
@@ -276,7 +383,11 @@ func (a *Adapter) requireDocumentWrite(ctx context.Context, uuid string, body ma
 }
 
 func (a *Adapter) requireDocumentWriteForMutation(ctx context.Context, uuid string, body map[string]any, includeDeleted bool, allowReadonlyUnlock bool) (map[string]any, error) {
-	doc, err := a.documentByUUID(ctx, uuid, includeDeleted)
+	return requireDocumentWriteFrom(ctx, a.db, uuid, body, includeDeleted, allowReadonlyUnlock, false)
+}
+
+func requireDocumentWriteFrom(ctx context.Context, db documentReadDB, uuid string, body map[string]any, includeDeleted, allowReadonlyUnlock, lock bool) (map[string]any, error) {
+	doc, err := readDocumentByUUID(ctx, db, uuid, includeDeleted, lock)
 	if err != nil {
 		return nil, err
 	}
@@ -290,7 +401,7 @@ func (a *Adapter) requireDocumentWriteForMutation(ctx context.Context, uuid stri
 	if actorUID == stringValue(doc["owner_uid"]) {
 		return doc, nil
 	}
-	permission, err := a.sharePermission(ctx, int64Value(doc["id"]), actorUID)
+	permission, err := readDocumentSharePermission(ctx, db, int64Value(doc["id"]), actorUID, lock)
 	if err != nil {
 		return nil, err
 	}
@@ -306,6 +417,10 @@ func isReadonlyUnlockUpdate(updates map[string]any) bool {
 }
 
 func (a *Adapter) ensureDocumentTitleAvailable(ctx context.Context, uuid string, doc map[string]any, title string, folderValue any) error {
+	return ensureDocumentTitleAvailableFrom(ctx, a.db, uuid, doc, title, folderValue)
+}
+
+func ensureDocumentTitleAvailableFrom(ctx context.Context, db documentReadDB, uuid string, doc map[string]any, title string, folderValue any) error {
 	if title == "" {
 		return httperror.New(http.StatusBadRequest, "invalid_request", "Document title is required")
 	}
@@ -325,7 +440,7 @@ func (a *Adapter) ensureDocumentTitleAvailable(ctx context.Context, uuid string,
 		args = append(args, folderValue)
 	}
 	var count int
-	if err := a.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM documents WHERE "+strings.Join(where, " AND "), args...).Scan(&count); err != nil {
+	if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM documents WHERE "+strings.Join(where, " AND "), args...).Scan(&count); err != nil {
 		return err
 	}
 	if count > 0 {

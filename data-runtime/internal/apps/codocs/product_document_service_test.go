@@ -245,48 +245,58 @@ func TestProductDocumentContentRuntimeRejectsMethods(t *testing.T) {
 }
 
 func TestAssetsProductDocumentMetadataUsesIndependentIdentity(t *testing.T) {
-	db, mock, err := sqlmock.New()
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
-	adapter := &Adapter{db: db}
-	body := projectDocumentServiceBody("00000000-0000-4000-8000-000000000001", "PRJ-1")
-	if _, err = adapter.assetsProductDocumentMetadata(context.Background(), "00000000-0000-4000-8000-000000000001", productDocumentServiceQuery(), body); err == nil {
-		t.Fatal("project contract accepted as product contract")
-	}
-	envelope := body[integrationoperation.ServiceCommandEnvelopeKey].(map[string]any)
-	envelope["operationCode"] = assetsProductDocumentReadOperation
-	envelope["requiredCapability"] = aimsProductDocumentReadCapability
-	envelope["commandSchemaVersion"] = assetsProductDocumentReadOperation
-	command := envelope["command"].(map[string]any)
-	delete(command, "projectCode")
-	command["productCode"] = "P-1"
-	command["action"] = "metadata:read"
-	if _, err := adapter.assetsProductDocumentMetadata(context.Background(), "00000000-0000-4000-8000-000000000001", productDocumentServiceQuery(), body); err == nil {
-		t.Fatal("AIMS identity accepted for Assets operation")
-	}
-	body[integrationoperation.TrustedServiceCommandSourceAppKey] = "assets"
-	body[integrationoperation.TrustedServiceCommandSourceClientKey] = "assets.runtime"
-	if _, err := adapter.productDocumentServiceMetadata(context.Background(), "00000000-0000-4000-8000-000000000001", productDocumentServiceQuery(), body); err == nil {
-		t.Fatal("Assets identity accepted for AIMS operation")
-	}
-	mock.ExpectQuery(regexp.QuoteMeta("SELECT * FROM documents WHERE uuid = ? AND status <> 0 LIMIT 1")).WithArgs("00000000-0000-4000-8000-000000000001").WillReturnRows(projectDocumentServiceReadRows("00000000-0000-4000-8000-000000000001", "PRJ-1"))
-	wire, operation, err := adapter.HandleRuntime(context.Background(), "POST", "/v1/codocs/service/assets-product-documents/00000000-0000-4000-8000-000000000001/metadata", productDocumentServiceQuery(), body)
-	if err != nil || operation != "codocs.service.assets_product_document.metadata" {
-		t.Fatalf("runtime: %s %v", operation, err)
-	}
-	result := wire.(map[string]any)["data"].(map[string]any)
-	if err != nil || result["uuid"] != "00000000-0000-4000-8000-000000000001" || result["title"] != "Project requirement" || len(result) != 4 {
-		t.Fatalf("metadata %+v %v", result, err)
-	}
-	for _, key := range []string{"ossPath", "oss_path", "owner_uid", "content", "project_code"} {
-		if _, ok := result[key]; ok {
-			t.Fatalf("internal field leaked %s", key)
-		}
-	}
-	if err = mock.ExpectationsWereMet(); err != nil {
-		t.Fatal(err)
+	for _, source := range []string{"assets", "enterprise"} {
+		t.Run(source, func(t *testing.T) {
+			db, mock, err := sqlmock.New()
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer db.Close()
+			adapter := &Adapter{db: db}
+			body := projectDocumentServiceBody("00000000-0000-4000-8000-000000000001", "PRJ-1")
+			if _, err = adapter.assetsProductDocumentMetadata(context.Background(), "00000000-0000-4000-8000-000000000001", productDocumentServiceQuery(), body); err == nil {
+				t.Fatal("project contract accepted as product contract")
+			}
+			envelope := body[integrationoperation.ServiceCommandEnvelopeKey].(map[string]any)
+			envelope["operationCode"] = assetsProductDocumentReadOperation
+			envelope["requiredCapability"] = aimsProductDocumentReadCapability
+			envelope["commandSchemaVersion"] = assetsProductDocumentReadOperation
+			command := envelope["command"].(map[string]any)
+			delete(command, "projectCode")
+			command["productCode"] = "P-1"
+			command["action"] = "metadata:read"
+			if _, err := adapter.assetsProductDocumentMetadata(context.Background(), "00000000-0000-4000-8000-000000000001", productDocumentServiceQuery(), body); err == nil {
+				t.Fatal("AIMS identity accepted for Assets operation")
+			}
+			body[integrationoperation.TrustedServiceCommandSourceAppKey] = source
+			body[integrationoperation.TrustedServiceCommandSourceClientKey] = source + ".runtime"
+			body[integrationoperation.TrustedServiceCommandSourceClientKey] = "other.runtime"
+			if _, err := adapter.assetsProductDocumentMetadata(context.Background(), "00000000-0000-4000-8000-000000000001", productDocumentServiceQuery(), body); err == nil {
+				t.Fatal("mismatched physical client accepted")
+			}
+			body[integrationoperation.TrustedServiceCommandSourceClientKey] = source + ".runtime"
+			if _, err := adapter.productDocumentServiceMetadata(context.Background(), "00000000-0000-4000-8000-000000000001", productDocumentServiceQuery(), body); err == nil {
+				t.Fatal("Assets identity accepted for AIMS operation")
+			}
+			mock.ExpectQuery(regexp.QuoteMeta("SELECT * FROM documents WHERE uuid = ? AND status <> 0 LIMIT 1")).WithArgs("00000000-0000-4000-8000-000000000001").WillReturnRows(projectDocumentServiceReadRows("00000000-0000-4000-8000-000000000001", "PRJ-1"))
+			wire, operation, err := adapter.HandleRuntime(context.Background(), "POST", "/v1/codocs/service/assets-product-documents/00000000-0000-4000-8000-000000000001/metadata", productDocumentServiceQuery(), body)
+			if err != nil || operation != "codocs.service.assets_product_document.metadata" {
+				t.Fatalf("runtime: %s %v", operation, err)
+			}
+			result := wire.(map[string]any)["data"].(map[string]any)
+			if err != nil || result["uuid"] != "00000000-0000-4000-8000-000000000001" || result["title"] != "Project requirement" || len(result) != 4 {
+				t.Fatalf("metadata %+v %v", result, err)
+			}
+			for _, key := range []string{"ossPath", "oss_path", "owner_uid", "content", "project_code"} {
+				if _, ok := result[key]; ok {
+					t.Fatalf("internal field leaked %s", key)
+				}
+			}
+			if err = mock.ExpectationsWereMet(); err != nil {
+				t.Fatal(err)
+			}
+
+		})
 	}
 }
 

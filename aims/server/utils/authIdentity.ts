@@ -1,5 +1,6 @@
 import { createError, getCookie, type H3Event } from 'h3'
 import { requireFoundationSessionUid } from '@hzy/foundation/server/utils/authIdentity'
+import { verifiedServiceCommandActor } from '@hzy/foundation/server/utils/tenantRuntimeClient'
 
 type ConsoleAuthContext = {
   authenticated?: boolean
@@ -46,6 +47,8 @@ export function getAimsConsoleAuth(event: H3Event) {
 }
 
 export function getRequestUid(event: H3Event) {
+  const delegated = verifiedServiceCommandActor(event, 'aims')
+  if (delegated) return delegated.uid
   const consoleAuth = getAimsConsoleAuth(event)
   const verifiedUid = String(consoleAuth?.uid || '').trim()
 

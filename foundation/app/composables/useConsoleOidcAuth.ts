@@ -1,4 +1,5 @@
 import type { RouteLocationNormalized } from 'vue-router'
+import { isLoggedOutLoginRoute, isLoginRoutePath, loginRedirectTarget } from '../utils/loginRoute'
 
 type JwtClaims = {
   exp?: number
@@ -113,16 +114,8 @@ function isTokenActive(claims: JwtClaims | null) {
   return claims.exp > Math.floor(Date.now() / 1000) + 15
 }
 
-function resolveRedirectUrl(to: RouteLocationNormalized) {
-  return useAppUrls().resolveCurrentAppUrl(to.fullPath)
-}
-
 function resolveDisplayName(claims: JwtClaims | null, uid: string) {
   return String(claims?.real_name || claims?.name || claims?.nickname || uid || '').trim()
-}
-
-function isLoggedOutRoute(to: RouteLocationNormalized) {
-  return to.path === '/login' && (to.query.logged_out === '1' || to.query.state === 'logged_out')
 }
 
 function cookieScope(value: unknown) {
@@ -166,6 +159,8 @@ export function useConsoleOidcAuth() {
   const config = useRuntimeConfig()
   const pub = (config.public || {}) as Record<string, unknown>
   const { resolveCurrentAppUrl } = useAppUrls()
+  const authPrefix = pub.authApiPrefix === '/enterprise' && pub.appCode === 'enterprise' ? '/enterprise' : ''
+  const resolveAuthUrl = (path: string) => authPrefix ? `${authPrefix}${path}` : resolveCurrentAppUrl(path)
   const authMode = String(pub.authMode || '').trim()
   const legacyAuthBridge = pub.legacyAuthBridge === true || String(pub.legacyAuthBridge || '').toLowerCase() === 'true'
   const consoleUrl = String(pub.consoleUrl || '').trim()
@@ -240,11 +235,11 @@ export function useConsoleOidcAuth() {
   async function login(redirect?: string) {
     const target = redirect || (import.meta.client ? window.location.href : '/')
     const query = new URLSearchParams({ redirect: target })
-    return navigateTo(resolveCurrentAppUrl(`/api/auth/oidc-login?${query.toString()}`), { external: true })
+    return navigateTo(resolveAuthUrl(`/api/auth/oidc-login?${query.toString()}`), { external: true })
   }
 
   async function logout() {
-    return navigateTo(resolveCurrentAppUrl('/api/auth/logout?state=logged_out'), { external: true })
+    return navigateTo(resolveAuthUrl('/api/auth/logout?state=logged_out'), { external: true })
   }
 
   async function refresh() {
@@ -255,7 +250,7 @@ export function useConsoleOidcAuth() {
       hasActiveToken: () => isTokenActive(claims.value),
       syncCookies: syncOidcCookiesFromBrowser,
       performRefresh: async () => {
-        await $fetch(resolveCurrentAppUrl('/api/auth/refresh'), { method: 'POST' })
+        await $fetch(resolveAuthUrl('/api/auth/refresh'), { method: 'POST' })
       },
       withCrossTabLock: lockManager
         ? (name, task) => lockManager.request(name, task)
@@ -268,7 +263,7 @@ export function useConsoleOidcAuth() {
   async function getServerSession() {
     try {
       return await $fetch<ConsoleServerSession>(
-        resolveCurrentAppUrl('/api/auth/me'),
+        resolveAuthUrl('/api/auth/me'),
         { credentials: 'include' }
       )
     } catch {
@@ -318,8 +313,8 @@ export function useConsoleOidcAuth() {
       return
     }
 
-    if (to.path === '/login') {
-      if (isLoggedOutRoute(to)) {
+    if (isLoginRoutePath(pub, to.path)) {
+      if (isLoggedOutLoginRoute(pub, to)) {
         clearLocalOidcState()
       }
       return
@@ -335,7 +330,7 @@ export function useConsoleOidcAuth() {
       }
 
       clearLocalOidcState()
-      return login(resolveRedirectUrl(to))
+      return login(loginRedirectTarget(pub, to, resolveCurrentAppUrl))
     }
 
     if (await recoverServerSession()) {
@@ -343,7 +338,7 @@ export function useConsoleOidcAuth() {
     }
 
     clearLocalOidcState()
-    return login(resolveRedirectUrl(to))
+    return login(loginRedirectTarget(pub, to, resolveCurrentAppUrl))
   }
 
   return {

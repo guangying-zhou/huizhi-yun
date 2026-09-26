@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import MarkdownContent from '../MarkdownContent.vue'
+import { useAimsModule } from '../../../layer/useAimsModule'
 
 const props = defineProps<{ productCode: string, bizId: string, documentUuid: string, disabled?: boolean }>()
+const { moduleUrl } = useAimsModule()
 const open = ref(false), loading = ref(false)
 const data = ref<{ uuid: string, title: string, content: string, updatedAt: string }>()
 const error = ref<unknown>(null)
@@ -17,7 +19,7 @@ async function load() {
   const product = props.productCode, bizId = props.bizId, uuid = props.documentUuid
   loading.value = true
   try {
-    const response = await $fetch<{ code: number, data: { uuid: string, title: string, content: string, updatedAt: string } }, string>(`/api/v1/products/${encodeURIComponent(product)}/roadmaps/documents/content`, { query: { bizId }, retry: 0, timeout: 30000 })
+    const response = await $fetch<{ code: number, data: { uuid: string, title: string, content: string, updatedAt: string } }, string>(moduleUrl(`/api/v1/products/${encodeURIComponent(product)}/roadmaps/documents/content`), { query: { bizId }, retry: 0, timeout: 30000 })
     const value = response.data
     if (response.code !== 0 || value?.uuid !== uuid || typeof value.title !== 'string' || typeof value.content !== 'string' || typeof value.updatedAt !== 'string') throw new Error('文档正文响应不完整')
     if (request === generation) data.value = value

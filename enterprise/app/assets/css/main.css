@@ -1,0 +1,73 @@
+@import "tailwindcss";
+@import "@nuxt/ui";
+/* Explicitly composed source files live outside the Host app directory. */
+@source "../../../../aims/app/pages/products";
+@source "../../../../aims/app/components/products";
+@source "../../../../aims/app/pages/products.vue";
+/* Codocs is composed explicitly without importing its legacy application shell. */
+@source "../../../../codocs/app/pages/mydocs";
+@source "../../../../codocs/app/components";
+
+/* Host navigation tokens from the selected enterprise navigation design. */
+:root {
+  --host-nav-surface: #fafafa;
+  --host-nav-hover: #f4f4f5;
+  --host-nav-border: #e4e4e7;
+  --host-nav-ink: #18181b;
+  --host-nav-muted: #6b6b74;
+  --host-nav-active: #fff7ed;
+  --host-nav-active-ink: #9f2d00;
+  --host-nav-indicator: #f54a00;
+  --host-nav-focus: #1447e6;
+}
+
+.dark {
+  --host-nav-surface: #1f1f23;
+  --host-nav-hover: #27272a;
+  --host-nav-border: #3f3f46;
+  --host-nav-ink: #fafafa;
+  --host-nav-muted: #a1a1aa;
+  --host-nav-active: #441306;
+  --host-nav-active-ink: #ffb86a;
+  --host-nav-indicator: #ff6900;
+  --host-nav-focus: #51a2ff;
+}
+
+.host-nav-row {
+  color: var(--host-nav-muted);
+}
+
+.host-nav-row:hover {
+  background: var(--host-nav-hover);
+  color: var(--host-nav-ink);
+}
+
+.host-nav-row:focus-visible,
+.host-nav-control:focus-visible {
+  outline: 2px solid var(--host-nav-focus);
+  outline-offset: -2px;
+}
+
+.host-nav-row[aria-current="page"] {
+  background: var(--host-nav-active);
+  color: var(--host-nav-active-ink);
+  font-weight: 600;
+}
+
+.host-nav-indicator {
+  background: var(--host-nav-indicator);
+}
+
+.host-nav-branches {
+  position: relative;
+}
+
+.host-nav-branches::before {
+  position: absolute;
+  top: 4px;
+  bottom: 4px;
+  left: 20px;
+  width: 1px;
+  background: var(--host-nav-border);
+  content: "";
+}

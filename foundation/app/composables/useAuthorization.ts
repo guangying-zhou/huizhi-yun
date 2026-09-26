@@ -75,7 +75,9 @@ async function fetchAuthorizationSnapshot() {
     const clientFetch: unknown = $fetch
     requestFetch = clientFetch as AuthorizationFetch
   }
-  const response = await requestFetch('/api/auth/permissions')
+  const publicConfig = useRuntimeConfig().public
+  const authPrefix = publicConfig.appCode === 'enterprise' && publicConfig.authApiPrefix === '/enterprise' ? '/enterprise' : ''
+  const response = await requestFetch(`${authPrefix}/api/auth/permissions`)
 
   if (response.code === 0 && response.data) {
     const availableRoles = (response.data.availableRoles || []).map(role => ({

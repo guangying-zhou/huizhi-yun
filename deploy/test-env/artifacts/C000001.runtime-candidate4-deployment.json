@@ -1,0 +1,51 @@
+{
+  "schemaVersion": "test-runtime-deployment-receipt.v1",
+  "environment": "test",
+  "tenant": "C000001",
+  "runtimeDeployment": "c000001-test-tenant-runtime",
+  "deployedAt": "2026-09-14T04:25:50Z",
+  "runtime": {
+    "previousVersion": "0.3.219-test.adr018-candidate.2",
+    "previousBinarySHA256": "cb5c2d15c2f4c70c0bf47f25ca7c86bd93deed7c5c6980c49b15b583b5659e12",
+    "version": "0.3.219-test.adr018-candidate.4",
+    "binarySHA256": "c0d8a54fd9114b46b7cbe7110ad0f24c0c05f1115ba4a97decb3c2b9d35a71fd",
+    "binaryBytes": 30043650,
+    "platform": "darwin/arm64"
+  },
+  "candidateVerification": {
+    "raceSuite": "go test -race ./...",
+    "raceSuiteExitCode": 0,
+    "sourceFrozen": true,
+    "sourceDriftAtStart": 0,
+    "sourceDriftAtCompletion": 0,
+    "independentRealHttpMysqlEvidenceReviewed": true
+  },
+  "runtimeConfig": {
+    "bytesUnchanged": true,
+    "enterpriseEnabled": false,
+    "enterpriseContractEnabled": false
+  },
+  "deploymentOperation": {
+    "method": "same-directory atomic binary replacement",
+    "launchAgent": "cn.wiztek.hzy-test-runtime",
+    "backup": "protected test-runtime backup created; binary and configuration retained with owner-only permissions"
+  },
+  "health": {
+    "local": {
+      "endpoint": "http://127.0.0.1:18084/runtime/health",
+      "status": 200,
+      "versionMatched": true
+    },
+    "public": {
+      "endpoint": "https://hzy-test-runtime.isme.dev/runtime/health",
+      "status": 200,
+      "versionMatched": true
+    }
+  },
+  "businessMigrationApplied": false,
+  "browserBusinessAcceptance": "not run for this binary-only deployment; health checks do not replace browser acceptance",
+  "rollback": {
+    "required": false,
+    "performed": false
+  }
+}
