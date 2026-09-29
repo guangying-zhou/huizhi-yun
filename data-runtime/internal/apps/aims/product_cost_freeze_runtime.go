@@ -80,7 +80,7 @@ func (a *Adapter) handleProductCostFreezeRuntime(ctx context.Context, method, pa
 
 	if readStatus {
 		var status string
-		err = tx.QueryRowContext(ctx, `SELECT status FROM integration_operation WHERE operation_id=? AND BINARY tenant_code=BINARY ? AND BINARY deployment_code=BINARY ? AND source_app='aims' AND target_app='finance' AND operation_code=? AND required_capability='finance:product-cost:replace-rules' AND BINARY original_actor_uid=BINARY ? AND BINARY JSON_UNQUOTE(JSON_EXTRACT(command_json,'$.projectCode'))=BINARY ?`, requestID, trusted.TenantCode, trusted.DeploymentCode, productCostRulesOperationCode, actor, projectCode).Scan(&status)
+		err = tx.QueryRowContext(ctx, trusted.SQL(`SELECT status FROM integration_operation WHERE operation_id=? AND BINARY tenant_code=BINARY ? AND BINARY deployment_code=BINARY ? AND source_app='aims' AND target_app='finance' AND operation_code=? AND required_capability='finance:product-cost:replace-rules' AND BINARY original_actor_uid=BINARY ? AND BINARY JSON_UNQUOTE(JSON_EXTRACT(command_json,'$.projectCode'))=BINARY ?`), requestID, trusted.TenantCode, trusted.DeploymentCode, productCostRulesOperationCode, actor, projectCode).Scan(&status)
 		if errors.Is(err, sql.ErrNoRows) {
 			return fail(404, "product_cost_request_not_found")
 		}

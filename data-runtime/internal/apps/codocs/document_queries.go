@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"net/url"
+	"strconv"
 	"strings"
 
 	"github.com/huizhi-yun/data-runtime/internal/httperror"
@@ -17,8 +18,21 @@ func (a *Adapter) documentsList(ctx context.Context, query url.Values) (map[stri
 	if err != nil {
 		return nil, err
 	}
+	selectedPage, selectedSize, paged, pageErr := trashPagination(query)
+	if pageErr != nil {
+		return nil, pageErr
+	}
+	if query.Has("pageSize") && query.Has("limit") {
+		return nil, httperror.New(400, "invalid_pagination", "Invalid pagination")
+	}
+	if query.Has("limit") {
+		paged = false // legacy page+limit contract
+	}
 	page := positiveInt(query.Get("page"), 1)
 	pageSize := positiveInt(firstNonEmpty(query.Get("limit"), query.Get("pageSize"), query.Get("page_size")), 5000)
+	if paged {
+		page, pageSize = selectedPage, selectedSize
+	}
 	offset := (page - 1) * pageSize
 
 	docType := strings.TrimSpace(query.Get("type"))
@@ -82,6 +96,14 @@ func (a *Adapter) documentsList(ctx context.Context, query url.Values) (map[stri
 			args = append(args, owner)
 		}
 	}
+	if keyword := strings.TrimSpace(query.Get("search")); keyword != "" {
+		if len([]rune(keyword)) > 100 {
+			return nil, httperror.New(400, "codocs_document_search_invalid", "Invalid document search")
+		}
+		literal := strings.NewReplacer("!", "!!", "\\", "!\\", "%", "!%", "_", "!_").Replace(keyword)
+		where = append(where, "d.title LIKE ? ESCAPE '!'")
+		args = append(args, "%"+literal+"%")
+	}
 
 	addEqualsFilter := func(queryKey string, column string) {
 		value := strings.TrimSpace(query.Get(queryKey))
@@ -124,18 +146,34 @@ func (a *Adapter) documentsList(ctx context.Context, query url.Values) (map[stri
 	}
 
 	whereSQL := strings.Join(where, " AND ")
+	var readDB interface {
+		QueryRowContext(context.Context, string, ...any) *sql.Row
+		QueryContext(context.Context, string, ...any) (*sql.Rows, error)
+	} = a.db
+	var tx *sql.Tx
+	if paged && (docType == "private" || docType == "department") {
+		tx, err = a.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelRepeatableRead, ReadOnly: true})
+		if err != nil {
+			return nil, err
+		}
+		defer tx.Rollback()
+		readDB = tx
+	}
 	var total int64
-	if err := a.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM documents d WHERE "+whereSQL, args...).Scan(&total); err != nil {
+	if err := readDB.QueryRowContext(ctx, "SELECT COUNT(*) FROM documents d WHERE "+whereSQL, args...).Scan(&total); err != nil {
 		return nil, err
 	}
 
-	rows, err := a.db.QueryContext(ctx, `
+	order := "ORDER BY d.updated_at DESC"
+	if tx != nil {
+		order += ", d.id DESC"
+	}
+	rows, err := readDB.QueryContext(ctx, `
       SELECT `+selectColumns+`
       FROM documents d
       LEFT JOIN folders f ON d.folder_id = f.id
       WHERE `+whereSQL+`
-      ORDER BY d.updated_at DESC
-      LIMIT ? OFFSET ?`, append(append(selectArgs, args...), pageSize, offset)...)
+	  `+order+` LIMIT ? OFFSET ?`, append(append(selectArgs, args...), pageSize, offset)...)
 	if err != nil {
 		return nil, err
 	}
@@ -143,6 +181,14 @@ func (a *Adapter) documentsList(ctx context.Context, query url.Values) (map[stri
 	items, err := rowsToMaps(rows)
 	if err != nil {
 		return nil, err
+	}
+	if tx != nil {
+		if err = rows.Close(); err != nil {
+			return nil, err
+		}
+		if err = tx.Commit(); err != nil {
+			return nil, err
+		}
 	}
 	return map[string]any{"items": items, "total": total, "page": page, "pageSize": pageSize}, nil
 }
@@ -380,15 +426,39 @@ func (a *Adapter) documentsTrash(ctx context.Context, query url.Values) (map[str
 		where = append(where, "d.project_code = ?")
 		args = append(args, projectCode)
 	}
-	rows, err := a.db.QueryContext(ctx, `
+	page, pageSize, paged, err := trashPagination(query)
+	if err != nil {
+		return nil, err
+	}
+	from := " FROM documents d LEFT JOIN folders f ON d.folder_id = f.id WHERE " + strings.Join(where, " AND ")
+	var tx *sql.Tx
+	var total int64
+	conn := documentTrashQueryer(a.db)
+	if paged {
+		tx, err = a.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true, Isolation: sql.LevelRepeatableRead})
+		if err != nil {
+			return nil, err
+		}
+		defer tx.Rollback()
+		conn = tx
+		if err = tx.QueryRowContext(ctx, "SELECT COUNT(*)"+from, args...).Scan(&total); err != nil {
+			return nil, err
+		}
+	}
+	selectSQL := `
       SELECT d.id, d.uuid, d.title, d.doc_type, d.oss_path, d.owner_uid,
         d.dept_code, d.project_code, d.folder_id, d.content_size,
         d.last_editor_uid, d.created_at, d.updated_at, d.deleted_at,
         f.name AS folder_name
       FROM documents d
       LEFT JOIN folders f ON d.folder_id = f.id
-      WHERE `+strings.Join(where, " AND ")+`
-      ORDER BY d.deleted_at DESC`, args...)
+      WHERE ` + strings.Join(where, " AND ") + `
+      ORDER BY d.deleted_at DESC`
+	if paged {
+		selectSQL += ", d.id DESC LIMIT ? OFFSET ?"
+		args = append(args, pageSize, (page-1)*pageSize)
+	}
+	rows, err := conn.QueryContext(ctx, selectSQL, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -397,5 +467,40 @@ func (a *Adapter) documentsTrash(ctx context.Context, query url.Values) (map[str
 	if err != nil {
 		return nil, err
 	}
+	if paged {
+		if err = rows.Close(); err != nil {
+			return nil, err
+		}
+		if err = tx.Commit(); err != nil {
+			return nil, err
+		}
+		return map[string]any{"items": items, "total": total, "page": page, "pageSize": pageSize}, nil
+	}
 	return map[string]any{"items": items, "total": len(items), "page": 1, "pageSize": len(items)}, nil
+}
+
+type documentTrashQueryer interface {
+	QueryContext(context.Context, string, ...any) (*sql.Rows, error)
+}
+
+func trashPagination(query url.Values) (int, int, bool, error) {
+	_, hasPage := query["page"]
+	_, hasSize := query["pageSize"]
+	if !hasPage && !hasSize {
+		return 0, 0, false, nil
+	}
+	page, size := 1, 20
+	for key, dest := range map[string]*int{"page": &page, "pageSize": &size} {
+		if values, ok := query[key]; ok {
+			if len(values) != 1 {
+				return 0, 0, true, httperror.New(400, "invalid_pagination", "Invalid pagination")
+			}
+			n, e := strconv.Atoi(values[0])
+			if e != nil || n < 1 || strconv.Itoa(n) != values[0] || (key == "pageSize" && n > 100) || (key == "page" && n > 1000000) {
+				return 0, 0, true, httperror.New(400, "invalid_pagination", "Invalid pagination")
+			}
+			*dest = n
+		}
+	}
+	return page, size, true, nil
 }

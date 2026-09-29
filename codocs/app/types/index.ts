@@ -92,4 +92,10 @@ export interface ProjectDocsTreeItem {
   name: string
   data: Record<string, unknown>
   children?: ProjectDocsTreeItem[]
+  folderTotal?: number
+  documentTotal?: number
+  folderPage?: number
+  documentPage?: number
+  childrenLoading?: boolean
+  childrenError?: string
 }

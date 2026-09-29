@@ -110,6 +110,13 @@ function hasDiagnosticsToken(event: H3Event) {
 }
 
 function isLocalRequest(event: H3Event) {
+  // Anything forwarded by a tenant gateway (managed or self-hosted, which
+  // always set this marker after stripping the client's) is public traffic,
+  // even though it reaches Console on a loopback address.
+  if (getHeader(event, 'x-hzy-gateway')) {
+    return false
+  }
+
   const host = normalizeHost(getHeader(event, 'host'))
   if (!isLoopbackAddress(host)) {
     return false

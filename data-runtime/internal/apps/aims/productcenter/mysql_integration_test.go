@@ -25,8 +25,9 @@ func mysqlTestDatabase(t *testing.T) *sql.DB {
 		t.Skip("set HZY_PRODUCT_CENTER_TEST_SOCKET to an isolated local MySQL socket")
 	}
 	// This suite never accepts a network address, ambient DSN, or a business DB.
-	if !strings.HasPrefix(filepath.Clean(socket), "/tmp/hzy-product-center.") {
-		t.Fatal("test socket must be inside a dedicated /tmp/hzy-product-center.* directory")
+	cleanSocket := filepath.Clean(socket)
+	if !strings.HasPrefix(cleanSocket, "/tmp/hzy-product-center.") && !strings.HasPrefix(cleanSocket, "/tmp/hzy-test-mysql-") {
+		t.Fatal("test socket must be inside a dedicated temporary MySQL directory")
 	}
 	config := mysql.NewConfig()
 	config.User, config.Net, config.Addr = "root", "unix", socket

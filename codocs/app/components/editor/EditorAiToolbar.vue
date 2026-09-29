@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useAi } from '../../composables/useAi'
 /**
  * AI 下拉菜单 + 结果预览面板
  * 由 Crepe 工具栏中的 AI 按钮触发，显示为下拉菜单
@@ -172,13 +173,13 @@ onUnmounted(() => {
       <!-- 下拉菜单（纵向列表） -->
       <div
         v-if="!showResult"
-        class="flex flex-col min-w-36 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg shadow-lg py-1"
+        class="flex flex-col min-w-36 bg-default border border-default rounded-lg shadow-lg py-1"
         :class="{ 'pointer-events-none': justOpened }"
       >
         <button
           v-for="action in actions"
           :key="action.key"
-          class="flex items-center gap-2 px-3 py-1.5 text-sm text-gray-700 dark:text-gray-300 transition-colors hover:bg-primary-50 dark:hover:bg-primary-900/30 hover:text-primary"
+          class="flex items-center gap-2 px-3 py-1.5 text-sm text-default transition-colors hover:bg-primary-50 dark:hover:bg-primary-900/30 hover:text-primary"
           @click="handleAction(action.key)"
         >
           <UIcon :name="action.icon" class="w-4 h-4" />
@@ -189,23 +190,23 @@ onUnmounted(() => {
       <!-- 结果预览面板（对比视图） -->
       <div
         v-else
-        class="flex flex-col bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg shadow-xl"
+        class="flex flex-col bg-default border border-default rounded-lg shadow-xl"
         :style="{
           width: 'min(720px, calc(100vw - 16px))',
           maxHeight: `calc(100vh - ${adjustedTop}px - 8px)`
         }"
       >
         <!-- 标题栏 -->
-        <div class="shrink-0 flex items-center justify-between px-3 py-2 border-b border-gray-200 dark:border-gray-700">
+        <div class="shrink-0 flex items-center justify-between px-3 py-2 border-b border-default">
           <div class="flex items-center gap-2">
             <UIcon name="i-lucide-sparkles" class="w-4 h-4 text-primary" />
-            <span class="text-xs font-medium text-gray-700 dark:text-gray-300">
+            <span class="text-xs font-medium text-default">
               AI {{ actions.find(a => a.key === currentAction)?.label || '处理' }}
             </span>
             <UIcon v-if="loading" name="i-lucide-loader-2" class="w-3 h-3 animate-spin text-primary" />
           </div>
           <button
-            class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
+            class="text-dimmed hover:text-muted"
             @click="handleClose"
           >
             <UIcon name="i-lucide-x" class="w-4 h-4" />
@@ -215,18 +216,18 @@ onUnmounted(() => {
         <!-- 对比内容区域：大屏左右分，小屏上下分 -->
         <div class="flex-1 min-h-0 flex flex-col sm:flex-row overflow-hidden" style="min-height: 120px;">
           <!-- 原始内容 -->
-          <div class="flex-1 min-h-0 flex flex-col border-b sm:border-b-0 sm:border-r border-gray-200 dark:border-gray-700">
-            <div class="shrink-0 px-3 py-1.5 bg-gray-50 dark:bg-gray-800/50 border-b border-gray-200 dark:border-gray-700">
-              <span class="text-xs font-medium text-gray-500 dark:text-gray-400">原文</span>
+          <div class="flex-1 min-h-0 flex flex-col border-b sm:border-b-0 sm:border-r border-default">
+            <div class="shrink-0 px-3 py-1.5 bg-default border-b border-default">
+              <span class="text-xs font-medium text-muted">原文</span>
             </div>
-            <div class="flex-1 min-h-0 p-3 overflow-y-auto text-sm text-gray-700 dark:text-gray-300 leading-relaxed whitespace-pre-wrap">
+            <div class="flex-1 min-h-0 p-3 overflow-y-auto text-sm text-default leading-relaxed whitespace-pre-wrap">
               {{ selectedText }}
             </div>
           </div>
 
           <!-- AI 生成内容 -->
           <div class="flex-1 min-h-0 flex flex-col">
-            <div class="shrink-0 px-3 py-1.5 bg-primary-50 dark:bg-primary-900/20 border-b border-gray-200 dark:border-gray-700">
+            <div class="shrink-0 px-3 py-1.5 bg-primary-50 dark:bg-primary-900/20 border-b border-default">
               <span class="text-xs font-medium text-primary">AI 结果</span>
             </div>
             <div class="flex-1 min-h-0 p-3 overflow-y-auto">
@@ -237,7 +238,7 @@ onUnmounted(() => {
               <!-- 结果文本 -->
               <div
                 v-else
-                class="text-sm text-gray-700 dark:text-gray-300 leading-relaxed whitespace-pre-wrap"
+                class="text-sm text-default leading-relaxed whitespace-pre-wrap"
               >
                 {{ result }}<span v-if="loading" class="inline-block w-0.5 h-4 bg-primary animate-pulse ml-0.5" />
               </div>
@@ -246,7 +247,7 @@ onUnmounted(() => {
         </div>
 
         <!-- 操作栏 -->
-        <div class="shrink-0 flex items-center justify-end gap-2 px-3 py-2 border-t border-gray-200 dark:border-gray-700">
+        <div class="shrink-0 flex items-center justify-end gap-2 px-3 py-2 border-t border-default">
           <UButton
             size="xs"
             variant="ghost"

@@ -15,6 +15,11 @@ import (
 	"github.com/huizhi-yun/data-runtime/internal/httperror"
 )
 
+type weeklyReportReadDB interface {
+	QueryContext(context.Context, string, ...any) (*sql.Rows, error)
+	QueryRowContext(context.Context, string, ...any) *sql.Row
+}
+
 const weeklyReportBaseHours = 40.0
 
 type projectWeeklyReportItem struct {
@@ -118,6 +123,10 @@ func (a *Adapter) projectWeeklyReports(ctx context.Context, projectID string, qu
 		return nil, err
 	}
 
+	page, paged, err := timeEntryPagination(query)
+	if err != nil {
+		return nil, err
+	}
 	where := []string{"r.project_id = ?"}
 	args := []any{projectID}
 	if year := firstQueryText(query, "year", "reportYear", "report_year"); year != "" {
@@ -130,6 +139,45 @@ func (a *Adapter) projectWeeklyReports(ctx context.Context, projectID string, qu
 	}
 
 	whereSQL := strings.Join(where, " AND ")
+	if paged {
+		return a.projectWeeklyReportListPage(ctx, projectID, currentUser, query, page, whereSQL, args, `
+		SELECT
+			r.id,
+			r.project_id,
+			r.report_year,
+			r.report_week,
+			DATE_FORMAT(r.week_start, '%Y-%m-%d') AS week_start,
+			DATE_FORMAT(r.week_end, '%Y-%m-%d') AS week_end,
+			r.main_work,
+			r.overall_progress,
+			r.department_name,
+			r.project_type_name,
+			r.project_manager_name,
+			r.initiation_status,
+			r.current_stage,
+			r.progress_status,
+			CAST(r.completion_percent AS CHAR) AS completion_percent,
+			r.contract_status,
+			CAST(r.contract_amount AS CHAR) AS contract_amount,
+			r.payment_status,
+			CAST(r.cumulative_labor_cost AS CHAR) AS cumulative_labor_cost,
+			r.major_risks,
+			r.coordination_needs,
+			r.remarks,
+			r.status,
+			r.created_by,
+			r.updated_by,
+			DATE_FORMAT(r.created_at, '%Y-%m-%d %H:%i:%s') AS created_at,
+			DATE_FORMAT(r.updated_at, '%Y-%m-%d %H:%i:%s') AS updated_at,
+			CAST(COALESCE(SUM(e.hours), 0) AS CHAR) AS total_hours,
+			COUNT(e.id) AS member_count
+		FROM project_weekly_reports r
+		LEFT JOIN project_weekly_report_entries e ON e.report_id = r.id
+		WHERE `+whereSQL+`
+		GROUP BY r.id
+		ORDER BY r.report_year DESC, r.report_week DESC
+	`)
+	}
 	var total int64
 	if err := a.DB().QueryRowContext(ctx, `
 		SELECT COUNT(*)
@@ -211,6 +259,10 @@ func (a *Adapter) saveProjectWeeklyReport(ctx context.Context, projectID string,
 	if projectID == "" {
 		return projectWeeklyReportItem{}, httperror.New(http.StatusBadRequest, "missing_project_id", "project id is required")
 	}
+	parsedProjectID, err := parseID(projectID, "project_id")
+	if err != nil {
+		return projectWeeklyReportItem{}, err
+	}
 
 	currentUser := currentUserFrom(query, body)
 	if currentUser == "" {
@@ -288,6 +340,12 @@ func (a *Adapter) saveProjectWeeklyReport(ctx context.Context, projectID string,
 		return projectWeeklyReportItem{}, err
 	}
 	defer tx.Rollback()
+	if err := requireEnterpriseProjectWeeklyReportScopeTx(ctx, tx, currentUser, parsedProjectID); err != nil {
+		return projectWeeklyReportItem{}, err
+	}
+	if err := requireProjectWeeklyReportManagerWith(ctx, tx, projectID, currentUser, query); err != nil {
+		return projectWeeklyReportItem{}, err
+	}
 
 	governanceObligationID, _ := bodyInt64(body, "_governance_obligation_id")
 	if governanceObligationID > 0 {
@@ -524,7 +582,11 @@ func (a *Adapter) saveProjectWeeklyReport(ctx context.Context, projectID string,
 }
 
 func (a *Adapter) getProjectWeeklyReport(ctx context.Context, reportID int64, includeEntries bool) (projectWeeklyReportItem, error) {
-	rows, err := a.DB().QueryContext(ctx, `
+	return getProjectWeeklyReportWith(ctx, a.DB(), reportID, includeEntries)
+}
+
+func getProjectWeeklyReportWith(ctx context.Context, db weeklyReportReadDB, reportID int64, includeEntries bool) (projectWeeklyReportItem, error) {
+	rows, err := db.QueryContext(ctx, `
 		SELECT
 			r.id,
 			r.project_id,
@@ -574,10 +636,10 @@ func (a *Adapter) getProjectWeeklyReport(ctx context.Context, reportID int64, in
 		return projectWeeklyReportItem{}, httperror.New(http.StatusNotFound, "weekly_report_not_found", "weekly report not found")
 	}
 	if includeEntries {
-		if err := a.attachProjectWeeklyReportEntries(ctx, items); err != nil {
+		if err := attachProjectWeeklyReportEntriesWith(ctx, db, items); err != nil {
 			return projectWeeklyReportItem{}, err
 		}
-		if err := a.attachProjectWeeklyReportWorkItems(ctx, items); err != nil {
+		if err := attachProjectWeeklyReportWorkItemsWith(ctx, db, items); err != nil {
 			return projectWeeklyReportItem{}, err
 		}
 	}
@@ -670,6 +732,10 @@ func scanProjectWeeklyReports(rows *sql.Rows) ([]projectWeeklyReportItem, error)
 }
 
 func (a *Adapter) attachProjectWeeklyReportEntries(ctx context.Context, items []projectWeeklyReportItem) error {
+	return attachProjectWeeklyReportEntriesWith(ctx, a.DB(), items)
+}
+
+func attachProjectWeeklyReportEntriesWith(ctx context.Context, db weeklyReportReadDB, items []projectWeeklyReportItem) error {
 	if len(items) == 0 {
 		return nil
 	}
@@ -681,7 +747,7 @@ func (a *Adapter) attachProjectWeeklyReportEntries(ctx context.Context, items []
 		items[i].Entries = []projectWeeklyReportEntry{}
 	}
 	placeholders := strings.TrimRight(strings.Repeat("?,", len(ids)), ",")
-	rows, err := a.DB().QueryContext(ctx, `
+	rows, err := db.QueryContext(ctx, `
 		SELECT
 			id,
 			report_id,
@@ -734,6 +800,12 @@ func (a *Adapter) attachProjectWeeklyReportEntries(ctx context.Context, items []
 }
 
 func (a *Adapter) attachProjectWeeklyReportWorkItems(ctx context.Context, items []projectWeeklyReportItem) error {
+	return attachProjectWeeklyReportWorkItemsWith(ctx, a.DB(), items)
+}
+
+func attachProjectWeeklyReportWorkItemsWith(ctx context.Context, db interface {
+	QueryContext(context.Context, string, ...any) (*sql.Rows, error)
+}, items []projectWeeklyReportItem) error {
 	if len(items) == 0 {
 		return nil
 	}
@@ -745,7 +817,7 @@ func (a *Adapter) attachProjectWeeklyReportWorkItems(ctx context.Context, items 
 		items[i].WorkItems = []projectWeeklyReportWorkItem{}
 	}
 	placeholders := strings.TrimRight(strings.Repeat("?,", len(ids)), ",")
-	rows, err := a.DB().QueryContext(ctx, `
+	rows, err := db.QueryContext(ctx, `
 		SELECT
 			id,
 			report_id,
@@ -1083,11 +1155,15 @@ func (a *Adapter) validateProjectWeeklyReportEntries(ctx context.Context, projec
 }
 
 func (a *Adapter) requireProjectWeeklyReportRead(ctx context.Context, projectID string, uid string, query url.Values) error {
+	return requireProjectWeeklyReportReadWith(ctx, a.DB(), projectID, uid, query)
+}
+
+func requireProjectWeeklyReportReadWith(ctx context.Context, db weeklyReportReadDB, projectID string, uid string, query url.Values) error {
 	if currentUserIsProjectAdmin(query) {
-		return a.requireProjectExists(ctx, projectID)
+		return requireProjectExistsWith(ctx, db, projectID)
 	}
 
-	if err := a.requireProjectWeeklyReportProjectAccess(ctx, projectID, uid, query); err == nil {
+	if err := requireProjectWeeklyReportProjectAccessWith(ctx, db, projectID, uid, query); err == nil {
 		return nil
 	} else if !isHTTPStatus(err, http.StatusForbidden) {
 		return err
@@ -1095,7 +1171,7 @@ func (a *Adapter) requireProjectWeeklyReportRead(ctx context.Context, projectID 
 
 	var leaderUID sql.NullString
 	var memberRole sql.NullString
-	err := a.DB().QueryRowContext(ctx, `
+	err := db.QueryRowContext(ctx, `
 		SELECT p.leader_uid, m.role
 		FROM aims_projects p
 		LEFT JOIN aims_project_members m
@@ -1120,11 +1196,15 @@ func (a *Adapter) requireProjectWeeklyReportRead(ctx context.Context, projectID 
 }
 
 func (a *Adapter) requireProjectWeeklyReportProjectAccess(ctx context.Context, projectID string, uid string, query url.Values) error {
+	return requireProjectWeeklyReportProjectAccessWith(ctx, a.DB(), projectID, uid, query)
+}
+
+func requireProjectWeeklyReportProjectAccessWith(ctx context.Context, db weeklyReportReadDB, projectID string, uid string, query url.Values) error {
 	visibilityWhere, visibilityArgs := projectVisibilityWhere(query, "p", uid)
 	args := append([]any{projectID}, visibilityArgs...)
 
 	var id int64
-	err := a.DB().QueryRowContext(ctx, `
+	err := db.QueryRowContext(ctx, `
 		SELECT p.id
 		FROM aims_projects p
 		WHERE p.id = ?
@@ -1138,6 +1218,10 @@ func (a *Adapter) requireProjectWeeklyReportProjectAccess(ctx context.Context, p
 }
 
 func (a *Adapter) requireProjectWeeklyReportManager(ctx context.Context, projectID string, uid string, query url.Values) error {
+	return requireProjectWeeklyReportManagerWith(ctx, a.DB(), projectID, uid, query)
+}
+
+func requireProjectWeeklyReportManagerWith(ctx context.Context, db weeklyReportReadDB, projectID string, uid string, query url.Values) error {
 	if !truthyQuery(
 		query,
 		"current_user_can_submit_weekly_report",
@@ -1149,7 +1233,7 @@ func (a *Adapter) requireProjectWeeklyReportManager(ctx context.Context, project
 	}
 
 	var responsibleUID sql.NullString
-	err := a.DB().QueryRowContext(ctx, `
+	err := db.QueryRowContext(ctx, `
 		SELECT COALESCE((
 		  SELECT delegation.delegate_uid
 		  FROM project_manager_delegations delegation
@@ -1176,8 +1260,12 @@ func (a *Adapter) requireProjectWeeklyReportManager(ctx context.Context, project
 }
 
 func (a *Adapter) requireProjectExists(ctx context.Context, projectID string) error {
+	return requireProjectExistsWith(ctx, a.DB(), projectID)
+}
+
+func requireProjectExistsWith(ctx context.Context, db weeklyReportReadDB, projectID string) error {
 	var id int64
-	err := a.DB().QueryRowContext(ctx, "SELECT id FROM aims_projects WHERE id = ? LIMIT 1", projectID).Scan(&id)
+	err := db.QueryRowContext(ctx, "SELECT id FROM aims_projects WHERE id = ? LIMIT 1", projectID).Scan(&id)
 	if err == sql.ErrNoRows {
 		return httperror.New(http.StatusNotFound, "project_not_found", "project not found")
 	}

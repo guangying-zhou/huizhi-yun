@@ -14,12 +14,24 @@ type ProductLineGroup struct {
 	CanUnify              bool    `json:"can_unify"`
 }
 
-func listProductLineGroups(ctx context.Context, tx *sql.Tx, out ProductListPage, from string, args []any, canOnboard bool, generation uint64, input ProductListQuery) (ProductListPage, error) {
-	groupExpr := `COALESCE(bl.line_code,l.line_code,c.product_line,'')`
-	if err := tx.QueryRowContext(ctx, `SELECT COUNT(DISTINCT `+groupExpr+`)`+from, args...).Scan(&out.Total); err != nil {
+type productLineQuery struct {
+	prefix                 string
+	prefixArgs             []any
+	catalog, lineExpr      string
+	generation             uint64
+	current, globalOnboard bool
+}
+
+func listProductLineGroups(ctx context.Context, tx *sql.Tx, out ProductListPage, from string, args []any, catalog productLineQuery, input ProductListQuery) (ProductListPage, error) {
+	groupExpr := "COALESCE(" + catalog.lineExpr + ",'')"
+	labelExpr := `COALESCE(MAX(lc.label),MAX(bl.line_label),MAX(l.line_label),MAX(c.product_line_label),MAX(c.product_line),'未分类')`
+	if catalog.current {
+		labelExpr = `COALESCE(MAX(lc.label),MAX(c.product_line),'未分类')`
+	}
+	if err := tx.QueryRowContext(ctx, catalog.prefix+`SELECT COUNT(DISTINCT `+groupExpr+`)`+from, args...).Scan(&out.Total); err != nil {
 		return out, err
 	}
-	rows, err := tx.QueryContext(ctx, `SELECT `+groupExpr+` AS line_key,COALESCE(MAX(lc.label),MAX(bl.line_label),MAX(l.line_label),MAX(c.product_line_label),MAX(c.product_line),'未分类'),SUM(l.product_code IS NULL),MAX(COALESCE(bl.product_code,l.product_code)),MAX(CASE WHEN l.product_code IS NOT NULL THEN w.status ELSE owner.status END)`+from+` GROUP BY line_key ORDER BY MIN(COALESCE(c.product_line_sort_order,2147483647)),line_key LIMIT ? OFFSET ?`, append(append([]any{}, args...), input.PageSize, (input.Page-1)*input.PageSize)...)
+	rows, err := tx.QueryContext(ctx, catalog.prefix+`SELECT `+groupExpr+` AS line_key,`+labelExpr+`,SUM(l.product_code IS NULL),MAX(COALESCE(bl.product_code,l.product_code)),MAX(CASE WHEN l.product_code IS NOT NULL THEN w.status ELSE owner.status END)`+from+` GROUP BY line_key ORDER BY MIN(COALESCE(c.product_line_sort_order,2147483647)),line_key LIMIT ? OFFSET ?`, append(append([]any{}, args...), input.PageSize, (input.Page-1)*input.PageSize)...)
 	if err != nil {
 		return out, err
 	}
@@ -42,14 +54,20 @@ func listProductLineGroups(ctx context.Context, tx *sql.Tx, out ProductListPage,
 	}
 	// Whole-line eligibility never derives from a filtered/authorized child page.
 	// Only a verified tenant-global onboarding actor receives this hint.
-	if canOnboard {
+	if catalog.globalOnboard {
 		for i := range out.Groups {
 			g := &out.Groups[i]
 			if g.LineCode == "" || g.ManagementProductCode != nil {
 				continue
 			}
 			var total, blocked int
-			err = tx.QueryRowContext(ctx, `SELECT COUNT(*),COALESCE(SUM(EXISTS(SELECT 1 FROM product_workspaces w WHERE w.product_code=c.product_code) OR EXISTS(SELECT 1 FROM product_component_sources b WHERE b.source_product_code=c.product_code)),0) FROM product_catalog_projection c WHERE c.generation=? AND c.product_line=?`, generation, g.LineCode).Scan(&total, &blocked)
+			guard := "c.generation=? AND "
+			args := []any{catalog.generation, g.LineCode}
+			if catalog.current {
+				guard = ""
+				args = append(append([]any{}, catalog.prefixArgs...), g.LineCode)
+			}
+			err = tx.QueryRowContext(ctx, catalog.prefix+`SELECT COUNT(*),COALESCE(SUM(EXISTS(SELECT 1 FROM product_workspaces w WHERE w.product_code=c.product_code) OR EXISTS(SELECT 1 FROM product_component_sources b WHERE b.source_product_code=c.product_code)),0) FROM `+catalog.catalog+` c WHERE `+guard+` BINARY c.product_line=BINARY ?`, args...).Scan(&total, &blocked)
 			if err != nil {
 				return out, err
 			}
@@ -62,5 +80,5 @@ func listProductLineGroups(ctx context.Context, tx *sql.Tx, out ProductListPage,
 			g.CanUnify = total > 0 && total <= 1000 && blocked < total && existing == 0
 		}
 	}
-	return out, tx.Commit()
+	return out, nil
 }

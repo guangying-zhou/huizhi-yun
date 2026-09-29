@@ -47,13 +47,30 @@ func ValidateManualRequestSource(input ManualRequestSource) error {
 }
 
 func AddManualRequestSource(ctx context.Context, db *sql.DB, identity CommandIdentity, permit AuthorizationPermit, input ManualRequestSource) (CommandResult, error) {
+	return addManualRequestSource(ctx, identity, permit, input, func(authorize AuthorizeCommand, apply ApplyCommand) (CommandResult, error) {
+		return ExecuteCommand(ctx, db, identity, input, authorize, apply)
+	})
+}
+
+// AddManualRequestSourceInTransaction reuses the owning-domain command; the caller owns commit.
+func AddManualRequestSourceInTransaction(ctx context.Context, tx *sql.Tx, identity CommandIdentity, permit AuthorizationPermit, input ManualRequestSource) (CommandResult, error) {
+	result, err := addManualRequestSource(ctx, identity, permit, input, func(authorize AuthorizeCommand, apply ApplyCommand) (CommandResult, error) {
+		return ExecuteCommandInTransaction(ctx, tx, identity, input, authorize, apply)
+	})
+	if err != nil && tx != nil {
+		_ = tx.Rollback()
+	}
+	return result, err
+}
+
+func addManualRequestSource(ctx context.Context, identity CommandIdentity, permit AuthorizationPermit, input ManualRequestSource, execute func(AuthorizeCommand, ApplyCommand) (CommandResult, error)) (CommandResult, error) {
 	if identity.Action != "product_requests:source-create" {
 		return CommandResult{}, invalid("product_command_identity_invalid", "来源添加命令不匹配")
 	}
 	if err := ValidateManualRequestSource(input); err != nil {
 		return CommandResult{}, err
 	}
-	return ExecuteCommand(ctx, db, identity, input, func(ctx context.Context, tx *sql.Tx) error {
+	return execute(func(ctx context.Context, tx *sql.Tx) error {
 		return AuthorizeWorkspaceTransaction(ctx, tx, identity.ProductCode, identity.ActorUID, "product_requests", "edit", permit)
 	}, func(ctx context.Context, tx *sql.Tx) (any, error) {
 		root, err := loadWorkspace(ctx, tx, identity.ProductCode)
@@ -135,16 +152,27 @@ type RequestSourcePage struct {
 }
 
 func ListRequestSources(ctx context.Context, db *sql.DB, code, uid string, permit AuthorizationPermit, input RequestSourcePageQuery) (RequestSourcePage, error) {
+	tx, err := db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
+	if err != nil {
+		return RequestSourcePage{}, err
+	}
+	defer tx.Rollback()
+	out, err := ListRequestSourcesInTransaction(ctx, tx, code, uid, permit, input)
+	if err != nil {
+		return RequestSourcePage{}, err
+	}
+	if err = tx.Commit(); err != nil {
+		return RequestSourcePage{}, err
+	}
+	return out, nil
+}
+
+func ListRequestSourcesInTransaction(ctx context.Context, tx *sql.Tx, code, uid string, permit AuthorizationPermit, input RequestSourcePageQuery) (RequestSourcePage, error) {
 	var out RequestSourcePage
 	id, err := uuid.Parse(input.BizID)
 	if err != nil || id.String() != input.BizID || input.Page < 1 || input.Page > 1000000 || input.PageSize < 1 || input.PageSize > 100 {
 		return out, invalid("product_source_query_invalid", "来源分页或需求标识无效")
 	}
-	tx, err := db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
-	if err != nil {
-		return out, err
-	}
-	defer tx.Rollback()
 	if err := AuthorizeWorkspaceTransaction(ctx, tx, code, uid, "product_requests", "view", permit); err != nil {
 		return out, err
 	}
@@ -174,5 +202,5 @@ func ListRequestSources(ctx context.Context, db *sql.DB, code, uid string, permi
 		return out, err
 	}
 	out.Page, out.PageSize, out.WorkspaceRevision = input.Page, input.PageSize, permit.Facts.Revision
-	return out, tx.Commit()
+	return out, nil
 }

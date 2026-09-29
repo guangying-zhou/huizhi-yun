@@ -1,4 +1,5 @@
 import { createError, type H3Event } from 'h3'
+import { selfHostedServiceBinding } from './selfHostedServiceTransport'
 
 /**
  * Console Service Binding 解析。
@@ -44,10 +45,17 @@ export function cloudflareEnvFromEvent(event?: H3Event | null): CloudflareEnv {
 }
 
 export function consoleServiceBinding(event?: H3Event | null): CloudflareServiceBinding | null {
+  // A server-installed local transport is not derived from request headers or
+  // runtimeConfig.public. Workers continue to use their actual Service Binding.
+  const local = event?.context?.hzyConsoleTransport as Partial<CloudflareServiceBinding> | undefined
+  if ((process.env.HZY0_LOCAL_ENTERPRISE === 'true' || process.env.HZY0_WORKFLOW_LOCAL_ONLY === 'true')
+    && local && typeof local.fetch === 'function') return local as CloudflareServiceBinding
   const candidate = cloudflareEnvFromEvent(event).HZY_CONSOLE_SERVICE as Partial<CloudflareServiceBinding> | undefined
-  return candidate && typeof candidate.fetch === 'function'
-    ? candidate as CloudflareServiceBinding
-    : null
+  if (candidate && typeof candidate.fetch === 'function') return candidate as CloudflareServiceBinding
+  // Self-hosted single site: dial the local Console process directly (same
+  // semantics as the Service Binding) instead of the public ingress, which
+  // strips the trusted x-hzy-* context. Null when not configured.
+  return selfHostedServiceBinding('console')
 }
 
 /**
@@ -69,6 +77,7 @@ export interface ConsoleServiceFetchOptions {
   params?: Record<string, unknown>
   body?: unknown
   timeout?: number
+  retry?: number
 }
 
 /**
@@ -140,11 +149,13 @@ export async function consoleServiceFetch<T>(
     headers: Record<string, string>
     body?: unknown
     timeout: number
+    retry?: number
   }) => Promise<T>
   return await publicFetch(target.toString(), {
     method,
     headers: { 'user-agent': CONSOLE_WORKER_USER_AGENT, ...headers },
     ...(options.body === undefined ? {} : { body: options.body }),
-    timeout: timeoutMs
+    timeout: timeoutMs,
+    ...(options.retry === undefined ? {} : { retry: options.retry })
   })
 }

@@ -12,7 +12,7 @@ func TestWorkItemExecutionContextRequiresProjectMemberOrScopedAdmin(t *testing.T
 	adapter, mock, cleanup := newAimsSQLMockAdapter(t)
 	defer cleanup()
 
-	mock.ExpectQuery("(?s)SELECT\\s+wi\\.id, wi\\.project_id, p\\.project_code, wi\\.milestone_id, m\\.name AS milestone_name,.*FROM work_items wi").
+	mock.ExpectQuery("(?s)SELECT\\s+wi\\.id, wi\\.project_id, p\\.project_code, wi\\.milestone_id, m\\.name AS milestone_name,.*FROM work_items wi\\s+JOIN aims_projects p.*LEFT JOIN milestones m").
 		WithArgs("77").
 		WillReturnRows(sqlmock.NewRows([]string{
 			"id",
@@ -48,8 +48,8 @@ func TestWorkItemExecutionContextRequiresProjectMemberOrScopedAdmin(t *testing.T
 			int64(77),
 			int64(42),
 			"PRJ-1",
-			int64(5),
-			"执行里程碑",
+			nil,
+			nil,
 			int64(77),
 			"PRJ-1-77",
 			"matter",
@@ -156,7 +156,7 @@ func TestWorkItemExecutionContextRequiresProjectMemberOrScopedAdmin(t *testing.T
 		t.Fatalf("workItemExecutionContext returned error: %v", err)
 	}
 	item, ok := data["item"].(*executionItem)
-	if !ok || item.ProjectID != int64(42) {
+	if !ok || item.ProjectID != int64(42) || item.MilestoneID != nil || item.MilestoneName != nil {
 		t.Fatalf("unexpected item: %#v", data["item"])
 	}
 	deliverables, ok := data["deliverables"].([]executionDeliverable)

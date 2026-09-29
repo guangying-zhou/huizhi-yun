@@ -1,5 +1,5 @@
 import { defineEventHandler, getQuery, sendRedirect } from 'h3'
-import { deriveCasCallbackUrl } from '@hzy/foundation/server/utils/appUrls'
+import { deriveCasCallbackUrl, resolveCurrentAppUrl } from '@hzy/foundation/server/utils/appUrls'
 import { hasConsoleLogoutMarker } from '~~/server/utils/authSession'
 import { resolveConsoleLoginConfig } from '~~/server/utils/loginConfig'
 
@@ -23,7 +23,7 @@ export default defineEventHandler(async (event) => {
   if (hasConsoleLogoutMarker(event) && !forceLogin) {
     const loginQuery = new URLSearchParams({ logged_out: '1' })
     if (redirect) loginQuery.set('redirect', redirect)
-    return sendRedirect(event, `/login?${loginQuery.toString()}`)
+    return sendRedirect(event, `${resolveCurrentAppUrl(event, '/login')}?${loginQuery.toString()}`)
   }
 
   if (!loginConfig.cas.enabled || !casBaseUrl) {

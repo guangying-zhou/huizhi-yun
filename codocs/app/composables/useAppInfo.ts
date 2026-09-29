@@ -15,7 +15,7 @@ function isImageIcon(value: string | null | undefined) {
     || normalized.startsWith('data:')
 }
 
-export function useAppInfo() {
+export function useAppInfo(options: { loadOnMount?: boolean } = {}) {
   const config = useRuntimeConfig()
   const pub = config.public as Record<string, unknown>
   const appCode = String(pub.appCode || pub.appName || 'unknown')
@@ -32,7 +32,7 @@ export function useAppInfo() {
 
   const load = () => loadApps()
 
-  if (import.meta.client) {
+  if (import.meta.client && options.loadOnMount !== false) {
     onMounted(() => {
       void load()
     })

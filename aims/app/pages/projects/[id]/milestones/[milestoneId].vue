@@ -326,6 +326,10 @@ onMounted(async () => {
                 </UBadge>
               </div>
 
+              <div v-if="milestone.mode === 'periodic' && !milestone.templateKey" class="mb-3 rounded-lg border border-warning/40 bg-warning/5 p-3 text-sm text-warning">
+                无法关期，请迁至模板
+              </div>
+
               <div v-if="milestone.description" class="text-sm text-muted mb-3 whitespace-pre-line">
                 {{ milestone.description }}
               </div>

@@ -1,7 +1,10 @@
 <script setup lang="ts">
-import type { ApiResponse } from '~/types'
+import AssetFormSurface from './AssetFormSurface.vue'
+import type { ApiResponse } from '../../types'
+import { useAssetDictionaries } from '../../composables/useAssetDictionaries'
+import { useAssetsModule } from '../../../layer/useAssetsModule'
 
-const props = defineProps<{ open: boolean }>()
+const props = defineProps<{ open: boolean, page?: boolean }>()
 const emit = defineEmits<{
   'update:open': [value: boolean]
   'created': [id: number]
@@ -15,8 +18,11 @@ const isOpen = computed({
 const { loadDictionaries, getOptions } = useAssetDictionaries()
 await loadDictionaries()
 
+const surface = ref<InstanceType<typeof AssetFormSurface> | null>(null)
 const toast = useToast()
 const submitting = ref(false)
+const submissionKey = ref('')
+const { moduleUrl } = useAssetsModule()
 const typeOptions = computed(() => getOptions('ip_asset_type'))
 const statusOptions = computed(() => getOptions('ip_asset_status'))
 
@@ -48,7 +54,7 @@ watch(() => props.open, (open) => {
     state.owner_uid = ''
     state.notes = ''
   }
-})
+}, { immediate: true })
 
 async function handleSubmit() {
   if (!state.ip_name.trim()) {
@@ -59,8 +65,9 @@ async function handleSubmit() {
   submitting.value = true
 
   try {
-    const response = await $fetch<ApiResponse<{ id: number }>>('/api/v1/ip-assets', {
+    const response = await $fetch<ApiResponse<{ id: number }>>(moduleUrl('/api/v1/ip-assets'), {
       method: 'POST',
+      headers: { 'Idempotency-Key': submissionKey.value ||= crypto.randomUUID() },
       body: {
         ip_code: state.ip_code.trim() || null,
         ip_name: state.ip_name.trim(),
@@ -77,6 +84,7 @@ async function handleSubmit() {
     })
 
     toast.add({ title: '知识产权资产已创建', description: '可以进入详情页继续关联产品和文档。', color: 'success', icon: 'i-lucide-check' })
+    surface.value?.markSaved()
     emit('created', response.data.id)
     isOpen.value = false
   } catch (error) {
@@ -89,8 +97,12 @@ async function handleSubmit() {
 </script>
 
 <template>
-  <UModal
+  <AssetFormSurface
+    ref="surface"
     v-model:open="isOpen"
+    :page="props.page"
+    :draft="JSON.stringify(state)"
+    :busy="submitting"
     title="新增知识产权资产"
     description="登记软著、商标、专利和资质证照。"
     :ui="{ content: 'sm:max-w-3xl' }"
@@ -185,5 +197,5 @@ async function handleSubmit() {
         </UButton>
       </div>
     </template>
-  </UModal>
+  </AssetFormSurface>
 </template>

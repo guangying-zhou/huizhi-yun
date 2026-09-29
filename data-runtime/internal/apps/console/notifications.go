@@ -53,6 +53,13 @@ func (a *Adapter) UserNotifications(ctx context.Context, uid string, query url.V
 		filters = append(filters, "n.source_app_code=?")
 		args = append(args, sourceApp)
 	}
+	page, pageSize, paged, err := notificationReadPagination(query)
+	if err != nil {
+		return nil, err
+	}
+	if paged {
+		return a.userNotificationsPage(ctx, filters, args, page, pageSize)
+	}
 	cursor := strings.TrimSpace(query.Get("cursor"))
 	if cursor != "" {
 		cursorID, err := strconv.ParseUint(cursor, 10, 64)
@@ -274,16 +281,19 @@ func (a *Adapter) mutateNotificationRecipient(ctx context.Context, uid string, n
 	if operation == "archive" {
 		setSQL = "read_at=COALESCE(read_at,UTC_TIMESTAMP()),archived_at=COALESCE(archived_at,UTC_TIMESTAMP()),delivery_state='archived'"
 	}
-	result, err := session.tx.ExecContext(ctx, `
+	var recipientID int64
+	if err := session.tx.QueryRowContext(ctx, "SELECT id FROM portal_notification_recipients WHERE uid=? AND notification_id=? FOR UPDATE", uid, notificationID).Scan(&recipientID); err != nil {
+		if err == sql.ErrNoRows {
+			return nil, httperror.New(http.StatusNotFound, "notification_not_found", "Notification not found")
+		}
+		return nil, err
+	}
+	_, err = session.tx.ExecContext(ctx, `
 		UPDATE portal_notification_recipients
 		SET `+setSQL+`,updated_at=UTC_TIMESTAMP()
 		WHERE uid=? AND notification_id=?`, uid, notificationID)
 	if err != nil {
 		return nil, err
-	}
-	affected, _ := result.RowsAffected()
-	if affected == 0 {
-		return nil, httperror.New(http.StatusNotFound, "notification_not_found", "Notification not found")
 	}
 	data := map[string]any{"notificationId": notificationID}
 	if operation == "archive" {

@@ -22,6 +22,7 @@ export interface ConsoleRuntimeApp {
   serviceRole?: string | null
   authMode?: string | null
   status?: string | null
+  deploymentState?: 'deployed' | 'not-deployed'
 }
 
 export interface ConsoleRuntimeConfig {

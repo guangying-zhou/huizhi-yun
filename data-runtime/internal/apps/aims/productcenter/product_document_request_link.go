@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"github.com/huizhi-yun/data-runtime/internal/integrationoperation"
 
 	"github.com/google/uuid"
 )
@@ -16,7 +17,7 @@ type ProductDocumentRequestLink struct {
 
 // The caller must first verify current Codocs access to the server-resolved
 // request document. This transaction owns only the Aims relationship.
-func LinkCreatedProductDocument(ctx context.Context, db *sql.DB, identity CommandIdentity, permit AuthorizationPermit, input ProductDocumentRequestLink) (CommandResult, error) {
+func LinkCreatedProductDocument(ctx context.Context, db *sql.DB, outbox integrationoperation.TrustedContext, identity CommandIdentity, permit AuthorizationPermit, input ProductDocumentRequestLink) (CommandResult, error) {
 	parsed, err := uuid.Parse(input.RequestBizID)
 	if identity.Action != "product_documents:link-created" || input.ExpectedRevision == 0 || err != nil || parsed == uuid.Nil || parsed.String() != input.RequestBizID {
 		return CommandResult{}, invalid("product_document_request_invalid", "文档创建请求或修订无效")
@@ -38,7 +39,7 @@ func LinkCreatedProductDocument(ctx context.Context, db *sql.DB, identity Comman
 			return nil, err
 		}
 		var valid int
-		err = tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM integration_operation WHERE operation_id=? AND source_app='aims' AND target_app='codocs' AND operation_code='aims.codocs.product-document.create.v1' AND source_biz_type='product_document_request' AND source_biz_code=? AND status='succeeded' AND target_receipt_id IS NOT NULL AND target_receipt_id<>'' AND required_capability='codocs:product-document:create' AND command_schema_version='product-document-create.v1' AND original_actor_uid=? AND JSON_UNQUOTE(JSON_EXTRACT(command_json,'$.actorUid'))=? AND target_biz_type='product_document' AND target_biz_code=? AND JSON_UNQUOTE(JSON_EXTRACT(command_json,'$.productCode'))=? AND JSON_UNQUOTE(JSON_EXTRACT(command_json,'$.documentUuid'))=?`, operationID, input.RequestBizID, creator, creator, documentID, identity.ProductCode, documentID).Scan(&valid)
+		err = tx.QueryRowContext(ctx, outbox.SQL(`SELECT COUNT(*) FROM integration_operation WHERE operation_id=? AND source_app='aims' AND target_app='codocs' AND operation_code='aims.codocs.product-document.create.v1' AND source_biz_type='product_document_request' AND source_biz_code=? AND status='succeeded' AND target_receipt_id IS NOT NULL AND target_receipt_id<>'' AND required_capability='codocs:product-document:create' AND command_schema_version='product-document-create.v1' AND original_actor_uid=? AND JSON_UNQUOTE(JSON_EXTRACT(command_json,'$.actorUid'))=? AND target_biz_type='product_document' AND target_biz_code=? AND JSON_UNQUOTE(JSON_EXTRACT(command_json,'$.productCode'))=? AND JSON_UNQUOTE(JSON_EXTRACT(command_json,'$.documentUuid'))=?`), operationID, input.RequestBizID, creator, creator, documentID, identity.ProductCode, documentID).Scan(&valid)
 		if err != nil {
 			return nil, err
 		}

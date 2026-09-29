@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useAimsModule } from '../../../layer/useAimsModule'
 import { pinyin } from 'pinyin-pro'
 import type { AccountUser } from '@hzy/foundation/app/types/account'
 import type {
@@ -7,17 +8,23 @@ import type {
   PivrStage,
   ProjectTemplateVersionDetail,
   ProjectTemplateVersionSummary
-} from '~/types/aims'
-import { pivrPhases } from '~/config/milestone'
+} from '../../types/aims'
+import { pivrPhases } from '../../config/milestone'
 import {
   normalizeListPayload,
   normalizeProjectTemplateVersion,
   type RawProjectTemplateVersion
-} from '~/utils/projectTemplateVersions'
-import { projectSecurityLevelConfig, projectSecurityLevelOptions, selectableProjectCategoryOptions, getProjectCategoryLabel, validateProjectShortName as validateShortName } from '~/config/project'
-import { toPersistedProjectModuleConfig } from '~/utils/projectModuleConfig'
-import { validateServiceYear } from '~/utils/serviceYear'
+} from '../../utils/projectTemplateVersions'
+import { projectSecurityLevelConfig, projectSecurityLevelOptions, selectableProjectCategoryOptions, getProjectCategoryLabel, validateProjectShortName as validateShortName } from '../../config/project'
+import { toPersistedProjectModuleConfig } from '../../utils/projectModuleConfig'
+import { validateServiceYear } from '../../utils/serviceYear'
+import { useAccessibleDepartments } from '../../composables/useAccessibleDepartments'
+import { usePortfolioStore } from '../../stores/portfolio'
+import { useProjectStore } from '../../stores/project'
 
+
+// 同一份代码供独立应用与企业宿主使用：非宿主模式下 moduleUrl 原样返回路径。
+const { moduleUrl } = useAimsModule()
 definePageMeta({
   layoutHeader: true,
   layoutHeaderTitle: '创建项目'
@@ -97,7 +104,9 @@ async function loadDepartmentUsers(deptCode: string) {
     const response = await $fetch<{
       code: number
       data: { items?: AccountUser[] } | AccountUser[]
-    }>('/api/directory/users', {
+    // Foundation 提供的共享端点挂在根路径，两种模式下都不加模块前缀；
+      // 包进 moduleUrl 会变成 /aims/api/directory/users 而打不中。
+      }>('/api/directory/users', {
       params: { dept_code: deptCode, pageSize: 500 }
     })
     if (requestId !== departmentUsersRequestId) return
@@ -322,7 +331,7 @@ async function loadProposalDepartmentDocuments() {
   proposalDocumentLoading.value = true
   proposalDocumentLoadError.value = ''
   try {
-    const res = await $fetch<{ code: number, data: { folders: ProposalFolderListItem[], items: ProposalDocumentListItem[] } }>('/api/v1/codocs/department-documents', {
+    const res = await $fetch<{ code: number, data: { folders: ProposalFolderListItem[], items: ProposalDocumentListItem[] } }>(moduleUrl('/api/v1/codocs/department-documents'), {
       params: { deptCode: form.value.deptCode }
     })
     if (res.code === 0) {
@@ -447,7 +456,7 @@ async function loadTemplateVersionDetail(id: number | null, category: ProjectCat
   if (!id) return
 
   try {
-    const res = await $fetch<{ code: number, data: RawProjectTemplateVersion }>(`/api/v1/project-template-versions/${id}`)
+    const res = await $fetch<{ code: number, data: RawProjectTemplateVersion }>(moduleUrl(`/api/v1/project-template-versions/${id}`))
     if (res.code === 0) {
       const detail = normalizeProjectTemplateVersion(res.data)
       if (
@@ -475,7 +484,7 @@ async function loadTemplateVersions(category: ProjectCategory) {
   selectedTemplateVersionDetail.value = null
   excludedWorkItemKeys.value = new Set()
   try {
-    const res = await $fetch<{ code: number, data: ProjectTemplateVersionSummary[] | { items?: RawProjectTemplateVersion[] } }>('/api/v1/project-template-versions', {
+    const res = await $fetch<{ code: number, data: ProjectTemplateVersionSummary[] | { items?: RawProjectTemplateVersion[] } }>(moduleUrl('/api/v1/project-template-versions'), {
       params: { category, status: 'published' }
     })
     if (requestId !== templateVersionsRequestId || effectiveProjectCategory.value !== category) return
@@ -625,7 +634,7 @@ async function checkDuplicate() {
 
   try {
     const res = await $fetch<{ code: number, data: { nameExists: boolean, codeExists: boolean } }>(
-      '/api/v1/projects/check-duplicate',
+      moduleUrl('/api/v1/projects/check-duplicate'),
       { params: { name: name || undefined, projectCode: projectCode || undefined } }
     )
     if (res.code === 0) {
@@ -766,7 +775,7 @@ async function handleSubmit() {
     const project = await projectStore.createProject(payload)
 
     // 绑定项目立项书
-    await $fetch(`/api/v1/projects/${project.id}/documents`, {
+    await $fetch(moduleUrl(`/api/v1/projects/${project.id}/documents`), {
       method: 'POST',
       body: {
         documentId: selectedProposalDocument.value.uuid,
@@ -775,7 +784,7 @@ async function handleSubmit() {
     })
 
     // 跳转到项目设置页，可直接发起立项审批
-    await navigateTo(`/projects/${project.id}/settings`)
+    await navigateTo(moduleUrl(`/projects/${project.id}/settings`))
   } catch (err: unknown) {
     toast.add({
       title: '创建项目失败',
@@ -796,7 +805,7 @@ onMounted(async () => {
   }
   if (!canCreateProjects.value) {
     toast.add({ title: '需要 AIMS 项目管理权限才可以创建项目', color: 'warning' })
-    await navigateTo('/projects', { replace: true })
+    await navigateTo(moduleUrl('/projects'), { replace: true })
     return
   }
 

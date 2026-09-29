@@ -1,0 +1,17 @@
+{
+  "schemaVersion": "enterprise-host-deployment.v1",
+  "tenant": "C000001",
+  "environment": "test",
+  "sourceCommit": "7ff892a5326f4a5f3256503d1422def8638f3ff2",
+  "builtAt": "2026-09-14T17:08:37.994145+00:00",
+  "outputFiles": 376,
+  "outputBytes": 7650683,
+  "outputManifestSha256": "89ede02e842312be3e4ab3a5ac486bf158222cc25e35f8fe2b208c34b804a47b",
+  "nodeVersion": "24.18.0",
+  "worker": "hzy-test-enterprise",
+  "testPrefix": true,
+  "deployed": true,
+  "versionId": "4fa090d2-8e01-478b-a9d4-834d253a2d25",
+  "previousVersionId": "1c21f0d7-6c27-44a0-87ba-0504c8393c0a",
+  "trafficPercent": 100
+}

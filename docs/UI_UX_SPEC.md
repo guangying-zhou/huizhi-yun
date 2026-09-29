@@ -203,6 +203,7 @@ setRefresh(() => refresh())
 - 图表配色只用语义色 + `neutral` 梯度，不引入第三方配色。
 - 每个卡片能下钻到对应列表页，并带上对应筛选参数。
 - 空数据显示 `CommonEmptyState` 而非空白图表。
+- 企业工作台（个人首页）的具体版式与区块契约见 [企业工作台设计与实现规范](./Enterprise-Workbench-Design-Spec.md)。
 
 ---
 
@@ -403,3 +404,11 @@ import { formatDate, formatDateTime, formatMoney } from '#imports'
   同时查实两个**真实缺陷**并列为 P0/P1：console 3 处 + codocs 3 处 `setRefresh`
   为死代码（layout 未把 `refresh-handler` 传给 `LayoutSidebar`）；aims 未接入
   统一刷新且 7 个页面自绘刷新按钮。
+
+### Console C1 导航归类（2026-09-26）
+
+Console系统管理的业务领域、区域管理映射Host「控制台 → 业务配置」。两项配置服务于当前企业业务分类/地理覆盖，不涉及用户身份或运维信任；manifest使用现有org_profile:view，仍由Console handler判权。当前公司只读，管理动作链接回Console；不新增Host手写权限表。
+
+### Console C2 导航归类（2026-09-26）
+
+数据运行时、应用运行状态归Host「控制台 → 集成与运行」。Console原数据运行时在运行时管理；原应用运行管理在系统管理，Host只迁安全监控摘要，因此归运行组，不暴露其原PM2控制功能。manifest分别引用data_runtime:view、runtime_apps:view（对应真实GET handler），不沿用原运维菜单system_settings:admin来授予写权限。仅整体健康摘要，所有配置/更新/启停跳回Console。

@@ -1,6 +1,6 @@
 import { nextTick, type Ref } from 'vue'
 import type { MermaidConfig } from 'mermaid'
-import { renderMermaid } from '~/utils/mermaidLoader'
+import { renderMermaid } from '../../utils/mermaidLoader'
 
 export const EDITOR_MERMAID_RENDERER_VARIANT = '2026-04-20-flowchart-svg-labels-v3'
 

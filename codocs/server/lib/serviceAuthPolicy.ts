@@ -37,12 +37,24 @@ export const ASSETS_PRODUCT_DOCUMENT_READ_SERVICE_AUTH: CodocsServiceAuthRequire
   scope: 'codocs:product-document:read', allowedApps: ['assets'], allowedClientCodes: ['assets.runtime'], exactScope: true
 }
 
+// ADR-018 physical Host identity; confined to Assets metadata, not Aims/content APIs.
+export const ENTERPRISE_ASSETS_PRODUCT_DOCUMENT_READ_SERVICE_AUTH: CodocsServiceAuthRequirement = {
+  scope: 'codocs:product-document:read', allowedApps: ['enterprise'], allowedClientCodes: ['enterprise.runtime'], exactScope: true
+}
+
 export const AIMS_PRODUCT_DOCUMENT_CREATE_SERVICE_AUTH: CodocsServiceAuthRequirement = {
   scope: 'codocs:product-document:create', allowedApps: ['aims'], allowedClientCodes: ['aims.runtime'], exactScope: true
 }
 
 export const AIMS_PROJECT_DOCUMENT_CONTENT_SERVICE_AUTH: CodocsServiceAuthRequirement = {
   scope: 'codocs:project-document:content:read', allowedApps: ['aims'], allowedClientCodes: ['aims.runtime'], exactScope: true
+}
+
+// ADR-018 物理宿主身份。与上面的 Aims 条目并列而不是放宽它：
+// 同一能力、同一 operationCode，只有允许的来源应用与客户端不同。
+// ADR-018 §3.2 要求宿主身份映射由正式契约覆盖，且不得通过放宽校验兼容。
+export const ENTERPRISE_PROJECT_DOCUMENT_CONTENT_SERVICE_AUTH: CodocsServiceAuthRequirement = {
+  scope: 'codocs:project-document:content:read', allowedApps: ['enterprise'], allowedClientCodes: ['enterprise.runtime'], exactScope: true
 }
 
 export const AIMS_DEPARTMENT_DOCUMENTS_LIST_SERVICE_AUTH: CodocsServiceAuthRequirement = {

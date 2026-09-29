@@ -98,6 +98,12 @@ func (a *Adapter) listProjectRepos(ctx context.Context, rawProjectID string, que
 }
 
 func (a *Adapter) linkProjectRepo(ctx context.Context, rawProjectID string, query url.Values, body map[string]any) (any, error) {
+	return a.scopedProjectRepoWrite(ctx, rawProjectID, query, "link", firstBodyText(body, "repoProjectCode", "repo_project_code"), func(ctx context.Context) (any, error) {
+		return a.linkProjectRepoBody(ctx, rawProjectID, query, body)
+	})
+}
+
+func (a *Adapter) linkProjectRepoBody(ctx context.Context, rawProjectID string, query url.Values, body map[string]any) (any, error) {
 	projectID, err := parseID(rawProjectID, "project_id")
 	if err != nil {
 		return nil, err
@@ -115,7 +121,7 @@ func (a *Adapter) linkProjectRepo(ctx context.Context, rawProjectID string, quer
 	}
 
 	var duplicate int64
-	if err := a.DB().QueryRowContext(ctx, `
+	if err := a.enterpriseScopedWriteDB(ctx).QueryRowContext(ctx, `
 		SELECT COUNT(*)
 		FROM aims_project_repos
 		WHERE project_id = ?
@@ -127,7 +133,7 @@ func (a *Adapter) linkProjectRepo(ctx context.Context, rawProjectID string, quer
 		return nil, httperror.New(http.StatusBadRequest, "project_repo_exists", "该仓库已关联到此项目")
 	}
 
-	if _, err := a.DB().ExecContext(ctx, `
+	if _, err := a.enterpriseScopedWriteDB(ctx).ExecContext(ctx, `
 		INSERT INTO aims_project_repos (project_id, repo_project_code)
 		VALUES (?, ?)
 	`, projectID, repoProjectCode); err != nil {
@@ -137,6 +143,16 @@ func (a *Adapter) linkProjectRepo(ctx context.Context, rawProjectID string, quer
 }
 
 func (a *Adapter) unlinkProjectRepo(ctx context.Context, rawProjectID string, query url.Values, body map[string]any) (any, error) {
+	repoCode := firstQueryText(query, "repoProjectCode", "repo_project_code")
+	if repoCode == "" {
+		repoCode = firstBodyText(body, "repoProjectCode", "repo_project_code")
+	}
+	return a.scopedProjectRepoWrite(ctx, rawProjectID, query, "unlink", repoCode, func(ctx context.Context) (any, error) {
+		return a.unlinkProjectRepoBody(ctx, rawProjectID, query, body)
+	})
+}
+
+func (a *Adapter) unlinkProjectRepoBody(ctx context.Context, rawProjectID string, query url.Values, body map[string]any) (any, error) {
 	projectID, err := parseID(rawProjectID, "project_id")
 	if err != nil {
 		return nil, err
@@ -157,7 +173,7 @@ func (a *Adapter) unlinkProjectRepo(ctx context.Context, rawProjectID string, qu
 	}
 
 	var repoID int64
-	err = a.DB().QueryRowContext(ctx, `
+	err = a.enterpriseScopedWriteDB(ctx).QueryRowContext(ctx, `
 		SELECT id
 		FROM aims_project_repos
 		WHERE project_id = ?
@@ -171,7 +187,7 @@ func (a *Adapter) unlinkProjectRepo(ctx context.Context, rawProjectID string, qu
 		return nil, err
 	}
 
-	if _, err := a.DB().ExecContext(ctx, `
+	if _, err := a.enterpriseScopedWriteDB(ctx).ExecContext(ctx, `
 		DELETE FROM aims_project_repos
 		WHERE id = ?
 	`, repoID); err != nil {

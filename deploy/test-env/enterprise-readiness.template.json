@@ -1,0 +1,107 @@
+{
+  "schemaVersion": "enterprise-test-preflight.v1",
+  "environment": "test",
+  "tenantCode": null,
+  "host": {
+    "appCode": "enterprise",
+    "clientCode": "enterprise.runtime",
+    "deploymentCode": null,
+    "workerName": null,
+    "origin": null,
+    "oidcClientId": "enterprise",
+    "logicalPrefixes": {
+      "aims": "/aims/",
+      "assets": "/assets/"
+    }
+  },
+  "console": {
+    "policyBundleCacheBackend": "runtime",
+    "deploymentCode": null,
+    "workerName": null
+  },
+  "runtime": {
+    "deploymentCode": null,
+    "authMode": "jwt",
+    "audience": null,
+    "schemaVersion": null,
+    "registryGeneration": null,
+    "taskOwnershipGeneration": null,
+    "instanceId": null,
+    "database": null,
+    "domains": {
+      "aims": {
+        "ownerDeployment": null,
+        "read": "disabled",
+        "write": "disabled",
+        "scheduler": "disabled",
+        "tables": {}
+      },
+      "assets": {
+        "ownerDeployment": null,
+        "read": "disabled",
+        "write": "disabled",
+        "scheduler": "disabled",
+        "tables": {}
+      }
+    }
+  },
+  "servicePolicy": {
+    "clientCode": "enterprise.runtime",
+    "appCode": "enterprise",
+    "capabilities": [
+      "aims:enterprise-host:execute",
+      "altoc:enterprise-host:execute",
+      "assets:enterprise-host:execute",
+      "codocs:enterprise-host:execute",
+      "console:enterprise-host:execute"
+    ],
+    "audiences": [
+      "data-runtime"
+    ]
+  },
+  "externalServicePolicies": [
+    {
+      "audience": "aims",
+      "capabilities": [
+        "aims:project-document-access:manage",
+        "aims:project-document-access:read",
+        "aims:project-document-sources:read",
+        "aims:project-documents:download",
+        "aims:project-documents:read",
+        "aims:project-documents:write"
+      ]
+    },
+    {
+      "audience": "codocs",
+      "capabilities": [
+        "codocs:product-document:read",
+        "codocs:project-document:content:read"
+      ]
+    },
+    {
+      "audience": "console",
+      "capabilities": [
+        "console:business-domain:view",
+        "console:directory-project-access:read",
+        "console:directory-users:read"
+      ]
+    }
+  ],
+  "artifacts": {
+    "releaseManifest": null,
+    "runtimeBinary": null,
+    "schemaManifest": null,
+    "pathRegistry": null
+  },
+  "evidence": {
+    "credentialAndExactGrants": null,
+    "externalServiceExactGrants": null,
+    "oidcRedirectRegistration": null,
+    "consolePersistentPolicyStore": null,
+    "runtimeSchemaAndRegistry": null,
+    "platformCompositionAndTechnicalRelease": null,
+    "rollbackAndTaskOwnership": null,
+    "assetsOwnedReceiptSchema": null,
+    "assetsProductLinkReceiptSchema": null
+  }
+}

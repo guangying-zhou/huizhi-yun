@@ -19,6 +19,8 @@ type workItemComment struct {
 	Content    string `json:"content"`
 	CreatedAt  string `json:"createdAt"`
 	UpdatedAt  string `json:"updatedAt"`
+	ReceiptID  string `json:"receiptId,omitempty"`
+	Idempotent *bool  `json:"idempotent,omitempty"`
 }
 
 func (a *Adapter) workItemComments(ctx context.Context, rawWorkItemID string, query url.Values) (map[string]any, error) {
@@ -67,6 +69,26 @@ func (a *Adapter) workItemComments(ctx context.Context, rawWorkItemID string, qu
 }
 
 func (a *Adapter) createWorkItemComment(ctx context.Context, rawWorkItemID string, query url.Values, body map[string]any) (workItemComment, error) {
+	return enterpriseScopedWorkItemWrite(a, ctx, rawWorkItemID, query, "comment", func(ctx context.Context) (workItemComment, error) {
+		return a.createWorkItemCommentBody(ctx, rawWorkItemID, query, body)
+	}, legacyWorkItemReceiptConfig[workItemComment]{Action: "comment-create", Capability: "aims:work-item-comments:edit", BizType: "work-item-comment", Command: map[string]any{"workItemId": rawWorkItemID, "payload": body}, BizCode: func(value workItemComment) string { return strconv.FormatInt(value.ID, 10) }, Replay: func(ctx context.Context, code string) (workItemComment, error) {
+		id, err := strconv.ParseInt(code, 10, 64)
+		if err != nil || id <= 0 {
+			return workItemComment{}, httperror.New(503, "work_item_receipt_corrupt", "Work item receipt is invalid")
+		}
+		workItemID, err := strconv.ParseInt(rawWorkItemID, 10, 64)
+		if err != nil {
+			return workItemComment{}, err
+		}
+		return a.workItemComment(ctx, id, workItemID)
+	}, Decorate: func(value workItemComment, receipt string, existing bool) workItemComment {
+		value.ReceiptID = receipt
+		value.Idempotent = &existing
+		return value
+	}})
+}
+
+func (a *Adapter) createWorkItemCommentBody(ctx context.Context, rawWorkItemID string, query url.Values, body map[string]any) (workItemComment, error) {
 	uid := strings.TrimSpace(query.Get("current_user"))
 	if uid == "" {
 		return workItemComment{}, httperror.New(http.StatusUnauthorized, "missing_current_user", "current_user is required")
@@ -84,7 +106,7 @@ func (a *Adapter) createWorkItemComment(ctx context.Context, rawWorkItemID strin
 		return workItemComment{}, httperror.New(http.StatusBadRequest, "missing_content", "评论内容不能为空")
 	}
 
-	result, err := a.DB().ExecContext(ctx, `
+	result, err := a.enterpriseScopedWriteDB(ctx).ExecContext(ctx, `
 		INSERT INTO work_item_comments (work_item_id, author_uid, content)
 		VALUES (?, ?, ?)
 	`, workItemID, uid, content)
@@ -99,7 +121,7 @@ func (a *Adapter) createWorkItemComment(ctx context.Context, rawWorkItemID strin
 }
 
 func (a *Adapter) workItemComment(ctx context.Context, commentID int64, workItemID int64) (workItemComment, error) {
-	rows, err := a.DB().QueryContext(ctx, `
+	rows, err := a.enterpriseScopedWriteDB(ctx).QueryContext(ctx, `
 		SELECT id, work_item_id, author_uid, content, created_at, updated_at
 		FROM work_item_comments
 		WHERE id = ? AND work_item_id = ?

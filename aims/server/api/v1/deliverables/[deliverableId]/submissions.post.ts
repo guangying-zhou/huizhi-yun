@@ -7,7 +7,7 @@ import {
 } from '~~/server/utils/codocsApi'
 import { buildAimsProjectListRuntimeAccessQuery } from '~~/server/utils/aimsProjectRuntimeAccess'
 import { callAimsRuntime } from '~~/server/utils/projectDocumentAccess'
-import { resolveProjectGovernanceRoleHolder } from '~~/server/utils/projectGovernanceRoleHolder'
+import { resolveProjectGovernanceRoleHolder } from '@hzy/foundation/server/utils/projectGovernanceRoleHolder'
 
 interface Deliverable {
   id: number

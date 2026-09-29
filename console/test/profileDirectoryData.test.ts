@@ -15,7 +15,11 @@ describe('Console profile directory data', () => {
     assert.match(profile, /currentDirectoryProfile\.value\?\.email \|\| userEmail\.value/)
     assert.match(profile, /currentDirectoryProfile\.value\?\.deptName \|\| userDepartment\.value/)
     assert.match(profile, /currentDirectoryProfile\.value\?\.deptCode \|\| userDeptCode\.value/)
-    assert.match(profile, /\{\{ profileRealName \|\| '-' \}\}/)
+    assert.match(profile, /<DirectorySelfProfileDetails/)
+    assert.match(profile, /realName: profileRealName/)
+    const details = source('../foundation/app/components/DirectorySelfProfileDetails.vue')
+    assert.match(details, /props\.profile\.realName \|\| props\.profile\.displayName/)
+    assert.match(details, /\{\{ value \|\| '—' \}\}/)
   })
 
   test('workspace greeting uses the live real name and the browser-local time period', () => {

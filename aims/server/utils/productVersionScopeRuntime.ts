@@ -9,8 +9,9 @@ import { productVersionID } from './productVersionInput'
 import { productVersionScopeInput, productVersionScopePageInput, productVersionScopeDeliveryInput } from './productVersionScopeInput'
 import { hasProductControlCharacter, productCommandKey } from './productWorkspaceInput'
 import { runtimeEnvelopeError } from './aimsRuntimeForward'
+import type { ProductCommandBridge } from './productCommandBridge'
 
-export async function handleProductVersionScope(event: H3Event, action: 'list' | 'history' | 'create' | 'edit' | 'deliver' | 'reopen' | 'legacy-criteria' | 'visibility') {
+export async function handleProductVersionScope(event: H3Event, action: 'list' | 'history' | 'create' | 'edit' | 'deliver' | 'reopen' | 'legacy-criteria' | 'visibility', bridge?: ProductCommandBridge) {
   setHeader(event, 'Cache-Control', 'no-store')
   const code = getRouterParam(event, 'productCode') || ''
   const id = productVersionID(getRouterParam(event, 'versionId'))
@@ -25,15 +26,22 @@ export async function handleProductVersionScope(event: H3Event, action: 'list' |
   const parsed = action === 'visibility' ? productVersionVisibilityInput(await readBody(event), id) : action === 'legacy-criteria' ? productVersionLegacyCriteriaInput(await readBody(event), id) : action === 'history' ? historyPage : action === 'reopen' ? productVersionArchiveInput(await readBody(event), id) : action === 'list' ? productVersionScopePageInput(getQuery(event)) : action === 'deliver' ? productVersionScopeDeliveryInput(await readBody(event), id, scopeID!) : productVersionScopeInput(await readBody(event), id, action === 'create')
   if (!parsed) throw createError({ statusCode: 400, message: '版本范围字段无效' })
   const permission = reading ? 'view' : (action === 'deliver' || action === 'reopen') ? 'accept' : 'edit'
-  const facts = await requireProductPermission(event, code, 'product_versions', permission)
-  const planning = action === 'create' || action === 'edit' ? await requireProductPermission(event, code, 'product_priorities', 'prioritize') : null
+  const facts = await requireProductPermission(event, code, 'product_versions', permission, bridge?.authorizationSource)
+  const planning = action === 'create' || action === 'edit' ? await requireProductPermission(event, code, 'product_priorities', 'prioritize', bridge?.authorizationSource) : null
+  const body = {
+    input: { ...(action === 'history' ? { page: historyPage!.page, page_size: historyPage!.page_size } : parsed), version_id: id, ...(scopeID ? { scope_id: scopeID } : {}) }, authorization: { resource: 'product_versions', action: permission, facts, expires_at: Date.now() + 15000 },
+    ...(planning ? { planning_authorization: { resource: 'product_priorities', action: 'prioritize', facts: planning, expires_at: Date.now() + 15000 } } : {})
+  }
+  if (bridge) {
+    if (!reading && !['deliver', 'reopen', 'edit', 'visibility', 'legacy-criteria'].includes(action)) throw createError({ statusCode: 503, message: '版本范围写入暂不可用' })
+    const result = await bridge.call(code, `scope-${action}`, body, key || undefined)
+    if (result.code !== 0) throw runtimeEnvelopeError(result)
+    return result
+  }
   const runtime = await maybeCallTenantRuntime<{ code: number, data: unknown }>(event, `/v1/aims/internal/products/${encodeURIComponent(code)}/versions:scope-${action}`, {
     appCode: 'aims', method: 'POST', scope: reading ? 'aims.read aims:product-versions:read' : `aims.write aims:product-versions:scope-${action}`,
     query: { current_user: facts.actor_uid }, ...(key ? { idempotencyKey: key } : {}),
-    body: {
-      input: { ...(action === 'history' ? { page: historyPage!.page, page_size: historyPage!.page_size } : parsed), version_id: id, ...(scopeID ? { scope_id: scopeID } : {}) }, authorization: { resource: 'product_versions', action: permission, facts, expires_at: Date.now() + 15000 },
-      ...(planning ? { planning_authorization: { resource: 'product_priorities', action: 'prioritize', facts: planning, expires_at: Date.now() + 15000 } } : {})
-    }
+    body
   })
   if (!runtime.handled) throw createError({ statusCode: 503, message: '产品运行服务暂不可用' })
   if (runtime.data.code !== 0) throw runtimeEnvelopeError(runtime.data)

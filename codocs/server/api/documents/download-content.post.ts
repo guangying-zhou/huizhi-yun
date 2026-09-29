@@ -109,7 +109,7 @@ async function resolveDocumentOssPath(event: H3Event, body: RequestBody) {
     throw createError({ statusCode: 400, message: '缺少 document uuid 参数' })
   }
 
-  const doc = await getCodocsDocumentMetadata(event, uuid, { actorUid: getRequestUid(event) })
+  const doc = assertLegacyBodyDocument(await getCodocsDocumentMetadata(event, uuid, { actorUid: getRequestUid(event) }))
   if (!doc.oss_path) {
     throw createError({ statusCode: 404, message: '文档内容不存在' })
   }

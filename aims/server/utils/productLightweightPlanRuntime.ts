@@ -1,3 +1,4 @@
+import type { ProductCommandBridge } from './productCommandBridge'
 import { createError, getHeader, getQuery, getRouterParam, readBody, setHeader, type H3Event } from 'h3'
 import { maybeCallTenantRuntime } from '@hzy/foundation/server/utils/tenantRuntimeClient'
 import { checkProductPermission, requireProductPermission } from './productAuthorization'
@@ -26,7 +27,7 @@ export function camelCaseRuntimeValue(value: unknown): unknown {
   return Object.fromEntries(Object.entries(value as Record<string, unknown>).map(([key, child]) => [camelCaseKey(key), camelCaseRuntimeValue(child)]))
 }
 
-export async function handleProductLightweightPlan(event: H3Event, action: PlanAction): Promise<{ code: number, data: unknown }> {
+export async function handleProductLightweightPlan(event: H3Event, action: PlanAction, bridge?: ProductCommandBridge): Promise<{ code: number, data: unknown }> {
   setHeader(event, 'Cache-Control', 'no-store')
   const code = getRouterParam(event, 'productCode') || ''
   const ids = productLightweightPlanIDs(getRouterParam(event, 'versionId'), action === 'item-edit' || action === 'item-delete' ? getRouterParam(event, 'scopeId') : undefined)
@@ -51,15 +52,15 @@ export async function handleProductLightweightPlan(event: H3Event, action: PlanA
   const input = action === 'item-list' ? { version_id: ids.versionID, ...parsed } : parsed
 
   const versionAction = reading ? 'view' : 'edit'
-  const versionFacts = await requireProductPermission(event, code, 'product_versions', versionAction)
+  const versionFacts = await requireProductPermission(event, code, 'product_versions', versionAction, bridge?.authorizationSource)
   const requestFacts = action === 'read' || action === 'item-list' || action === 'item-create'
-    ? await requireProductPermission(event, code, 'product_requests', 'view')
+    ? await requireProductPermission(event, code, 'product_requests', 'view', bridge?.authorizationSource)
     : null
   const requestDecisionFacts = action === 'item-create' && (input as { adopt_request?: unknown }).adopt_request === true
-    ? await requireProductPermission(event, code, 'product_requests', 'decide')
+    ? await requireProductPermission(event, code, 'product_requests', 'decide', bridge?.authorizationSource)
     : null
   const planningAction = action === 'item-create' ? 'edit' : action === 'confirm' ? 'prioritize' : null
-  const planningFacts = planningAction ? await requireProductPermission(event, code, 'product_priorities', planningAction) : null
+  const planningFacts = planningAction ? await requireProductPermission(event, code, 'product_priorities', planningAction, bridge?.authorizationSource) : null
   const runtimeAction = action === 'read'
     ? 'plan'
     : action === 'edit'
@@ -69,27 +70,30 @@ export async function handleProductLightweightPlan(event: H3Event, action: PlanA
         : action === 'item-create' ? 'plan-item-create' : action === 'item-edit' ? 'plan-item-edit' : action === 'item-delete' ? 'plan-item-delete' : 'plan-confirm'
   const key = reading ? undefined : productCommandKey(getHeader(event, 'Idempotency-Key'))!
   const expires = Date.now() + 15000
-  const runtime = await maybeCallTenantRuntime<{ code: number, data: unknown }>(event, `/v1/aims/internal/products/${encodeURIComponent(code)}/versions:${runtimeAction}`, {
-    appCode: 'aims', method: 'POST', scope: reading ? 'aims.read aims:product-versions:read' : 'aims.write aims:product-versions:edit',
-    query: { current_user: versionFacts.actor_uid }, ...(key ? { idempotencyKey: key } : {}),
-    body: {
-      input,
-      authorization: { resource: 'product_versions', action: versionAction, facts: versionFacts, expires_at: expires },
-      ...(requestFacts ? { request_authorization: { resource: 'product_requests', action: 'view', facts: requestFacts, expires_at: expires } } : {}),
-      ...(requestDecisionFacts ? { request_decision_authorization: { resource: 'product_requests', action: 'decide', facts: requestDecisionFacts, expires_at: expires } } : {}),
-      ...(planningFacts ? { planning_authorization: { resource: 'product_priorities', action: planningAction, facts: planningFacts, expires_at: expires } } : {})
-    }
-  })
+  const body = {
+    input,
+    authorization: { resource: 'product_versions', action: versionAction, facts: versionFacts, expires_at: expires },
+    ...(requestFacts ? { request_authorization: { resource: 'product_requests', action: 'view', facts: requestFacts, expires_at: expires } } : {}),
+    ...(requestDecisionFacts ? { request_decision_authorization: { resource: 'product_requests', action: 'decide', facts: requestDecisionFacts, expires_at: expires } } : {}),
+    ...(planningFacts ? { planning_authorization: { resource: 'product_priorities', action: planningAction, facts: planningFacts, expires_at: expires } } : {})
+  }
+  const runtime = bridge
+    ? { handled: true as const, data: await bridge.call(code, runtimeAction, body, key || undefined) }
+    : await maybeCallTenantRuntime<{ code: number, data: unknown }>(event, `/v1/aims/internal/products/${encodeURIComponent(code)}/versions:${runtimeAction}`, {
+        appCode: 'aims', method: 'POST', scope: reading ? 'aims.read aims:product-versions:read' : 'aims.write aims:product-versions:edit',
+        query: { current_user: versionFacts.actor_uid }, ...(key ? { idempotencyKey: key } : {}),
+        body
+      })
   if (!runtime.handled) throw createError({ statusCode: 503, message: '产品运行服务暂不可用' })
   if (runtime.data.code !== 0) throw runtimeEnvelopeError(runtime.data)
   const data = camelCaseRuntimeValue(runtime.data.data)
   if (action !== 'read') return { ...runtime.data, data }
   const [versionEdit, priorityEdit, priorityPrioritize, requestDecide, priorityHandoff] = await Promise.all([
-    checkProductPermission(event, code, 'product_versions', 'edit'),
-    checkProductPermission(event, code, 'product_priorities', 'edit'),
-    checkProductPermission(event, code, 'product_priorities', 'prioritize'),
-    checkProductPermission(event, code, 'product_requests', 'decide'),
-    checkProductPermission(event, code, 'product_priorities', 'handoff')
+    checkProductPermission(event, code, 'product_versions', 'edit', bridge?.authorizationSource),
+    checkProductPermission(event, code, 'product_priorities', 'edit', bridge?.authorizationSource),
+    checkProductPermission(event, code, 'product_priorities', 'prioritize', bridge?.authorizationSource),
+    checkProductPermission(event, code, 'product_requests', 'decide', bridge?.authorizationSource),
+    checkProductPermission(event, code, 'product_priorities', 'handoff', bridge?.authorizationSource)
   ])
   return {
     ...runtime.data,

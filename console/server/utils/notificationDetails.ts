@@ -18,6 +18,7 @@ import {
   IntegrationOperationDetailEligibilityError
 } from './integrationOperationNotificationDetailEligibility'
 import {
+  enterpriseNotificationSnapshotDetail,
   notificationAuthorizationDescriptor,
   notificationDetailSourceAuthorizationTarget,
   notificationDetailResponse,
@@ -309,6 +310,15 @@ export async function getUserNotificationDetail(event: H3Event, uidInput: string
 
   const envelope = await getConsoleUserNotificationDetailFact(event, notificationId)
   const row = envelope.data as unknown as NotificationDetailRow
+
+  // Runtime has already bound the persisted fact to this recipient. Enterprise
+  // Codocs messages can show that immutable snapshot, but cannot expose or
+  // navigate to a business object without a current object verifier.
+  if (normalizedAppCode(row.sourceAppCode) === 'enterprise') {
+    const snapshot = enterpriseNotificationSnapshotDetail(row)
+    if (!snapshot) throw unavailableDetail()
+    return snapshot
+  }
 
   const descriptor = notificationAuthorizationDescriptor(row)
   if (!descriptor) throw unavailableDetail()

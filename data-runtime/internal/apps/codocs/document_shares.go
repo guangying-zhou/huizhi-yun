@@ -54,6 +54,29 @@ func (a *Adapter) documentVersions(ctx context.Context, uuid string, query url.V
 	return queryPaged(ctx, a.db, "SELECT * FROM document_versions WHERE document_id = ? ORDER BY version_num DESC, id DESC", docID)
 }
 
+func (a *Adapter) documentVersion(ctx context.Context, uuid, versionID string, query url.Values) (map[string]any, error) {
+	if _, _, err := requireTrustedDocumentListActor(query); err != nil {
+		return nil, err
+	}
+	id, err := strconv.ParseInt(versionID, 10, 64)
+	if err != nil || id < 1 || strconv.FormatInt(id, 10) != versionID {
+		return nil, httperror.New(http.StatusBadRequest, "invalid_version_id", "Invalid version id")
+	}
+	doc, err := a.documentAccess(ctx, uuid, query)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := queryPaged(ctx, a.db, "SELECT * FROM document_versions WHERE id = ? AND document_id = ? LIMIT 1", id, int64Value(doc["id"]))
+	if err != nil {
+		return nil, err
+	}
+	items := rows["items"].([]map[string]any)
+	if len(items) == 0 {
+		return nil, httperror.New(http.StatusNotFound, "version_not_found", "Version not found")
+	}
+	return items[0], nil
+}
+
 func (a *Adapter) createDocumentShare(ctx context.Context, uuid string, body map[string]any) (map[string]any, error) {
 	doc, err := a.documentByUUID(ctx, uuid, false)
 	if err != nil {
@@ -123,7 +146,7 @@ func (a *Adapter) createDocumentShare(ctx context.Context, uuid string, body map
 	if err := tx.Commit(); err != nil {
 		return nil, err
 	}
-	return map[string]any{"notifiedOnly": false, "shareId": shareID}, nil
+	return map[string]any{"notifiedOnly": false, "shareId": shareID, "documentTitle": stringValue(doc["title"]), "ownerUid": ownerUID, "targetUid": targetUID, "permission": permission}, nil
 }
 
 func (a *Adapter) updateDocumentShare(ctx context.Context, uuid string, shareID string, body map[string]any) (map[string]any, error) {
@@ -161,6 +184,10 @@ func (a *Adapter) updateDocumentShare(ctx context.Context, uuid string, shareID 
 	if err := a.syncShareRelationTx(ctx, tx, docID, uuid, ownerUID, sharedToUID, int64Value(shareID), permission); err != nil {
 		return nil, err
 	}
+	// Access changed: end v2 collaboration sessions and advance the epoch.
+	if err := invalidateCollaboration(ctx, tx, uuid); err != nil {
+		return nil, err
+	}
 	if err := tx.Commit(); err != nil {
 		return nil, err
 	}
@@ -186,6 +213,10 @@ func (a *Adapter) deleteDocumentShare(ctx context.Context, uuid string, shareID 
 		return nil, err
 	}
 	if err := a.deactivateRelationsBySourceTx(ctx, tx, "document_share", shareID); err != nil {
+		return nil, err
+	}
+	// Access changed: end v2 collaboration sessions and advance the epoch.
+	if err := invalidateCollaboration(ctx, tx, uuid); err != nil {
 		return nil, err
 	}
 	if err := tx.Commit(); err != nil {

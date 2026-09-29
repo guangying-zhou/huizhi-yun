@@ -10,6 +10,7 @@ const { hasPermission } = usePermissions()
 const canManageProjects = computed(() => hasPermission('projects', 'admin') || hasPermission('admin', 'admin'))
 const canManageProducts = computed(() => hasPermission('admin', 'admin'))
 const canManageTemplates = computed(() => hasPermission('project_templates', 'admin') || hasPermission('admin', 'admin'))
+const canConfigureWeeklyReports = computed(() => hasPermission('weekly_reports', 'configure'))
 </script>
 
 <template>
@@ -42,6 +43,13 @@ const canManageTemplates = computed(() => hasPermission('project_templates', 'ad
               color="primary"
               variant="soft"
               to="/admin/project-templates"
+            />
+            <UButton
+              v-if="canConfigureWeeklyReports"
+              label="周报设置"
+              color="primary"
+              variant="soft"
+              to="/admin/weekly-reporting-settings"
             />
           </div>
         </UCard>

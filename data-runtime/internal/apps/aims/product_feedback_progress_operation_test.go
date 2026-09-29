@@ -4,10 +4,10 @@ import "testing"
 
 func TestProductFeedbackProgressOperation(t *testing.T) {
 	command := map[string]any{"ticketCode": "ST-1", "productCode": "P1", "requestBizId": "123e4567-e89b-42d3-a456-426614174000", "canonicalRequestBizId": "123e4567-e89b-42d3-a456-426614174000", "decisionStatus": "accepted", "sourceRevision": float64(3), "canonicalDecisionStatus": "accepted", "versions": []any{}}
-	if err := validateServiceTicketDeliveryOperation("altoc", productFeedbackProgressOperationCode, command); err != nil {
+	if err := validateServiceTicketDeliveryOperation("altoc", productFeedbackProgressOperationCode, "product-feedback-progress.v1", command); err != nil {
 		t.Fatal(err)
 	}
-	if err := validateServiceTicketDeliveryOperation("codocs", productFeedbackProgressOperationCode, command); err == nil {
+	if err := validateServiceTicketDeliveryOperation("codocs", productFeedbackProgressOperationCode, "product-feedback-progress.v1", command); err == nil {
 		t.Fatal("wrong target accepted")
 	}
 	kind, id := aimsIntegrationOperationExpectedTarget(productFeedbackProgressOperationCode, command)

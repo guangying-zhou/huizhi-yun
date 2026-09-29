@@ -22,6 +22,7 @@ describe('enterprise application shell URL contract', () => {
     assert.equal(isApplicationShellApplication('codocs'), true)
     assert.equal(isApplicationShellApplication('console'), false)
     assert.equal(isApplicationShellApplication('workspace'), false)
+    assert.equal(isApplicationShellApplication('enterprise'), false)
     assert.equal(isApplicationShellApplication('../aims'), false)
   })
 
@@ -38,6 +39,7 @@ describe('enterprise application shell URL contract', () => {
 
   test('keeps Console routes and cross-origin applications on direct navigation', () => {
     assert.equal(applicationShellEntryUrl('console', '/admin', origin), '/admin')
+    assert.equal(applicationShellEntryUrl('enterprise', '/aims/projects/33?tab=tasks', origin), '/aims/projects/33?tab=tasks')
     assert.equal(
       applicationShellEntryUrl('aims', 'https://another.example.test/aims/', origin),
       'https://another.example.test/aims/'

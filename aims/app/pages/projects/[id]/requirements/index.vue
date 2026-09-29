@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { statusLabel, statusColor, typeLabel, priorityColor } from '../../../../config/requirement'
 import type { TabsItem } from '@nuxt/ui'
 import { projectModuleEnabled } from '~/utils/projectModuleConfig'
 import {
@@ -422,34 +423,6 @@ onMounted(async () => {
 })
 
 onBeforeUnmount(clearRefresh)
-
-const statusLabel: Record<string, string> = {
-  draft: '草稿',
-  in_review: '评审中',
-  baselined: '已基线',
-  change_pending: '变更中',
-  deprecated: '已废弃'
-}
-
-const statusColor: Record<string, string> = {
-  draft: 'neutral',
-  in_review: 'warning',
-  baselined: 'success',
-  change_pending: 'info',
-  deprecated: 'error'
-}
-
-const typeLabel: Record<string, string> = {
-  functional: '功能',
-  non_functional: '非功能'
-}
-
-const priorityColor: Record<string, string> = {
-  P0: 'error',
-  P1: 'warning',
-  P2: 'info',
-  P3: 'neutral'
-}
 
 function openDetail(reqId: number) {
   activeReqId.value = reqId

@@ -119,6 +119,44 @@ func ipAssetScopeWhere(alias, actor string, units []assetsScopeUnit) (string, []
 	return "(" + strings.Join(branches, " OR ") + ")", args
 }
 
+// digitalAssetScopeWhere keeps the same trusted scope contract as the other
+// Assets read models, while only using relations actually stored by
+// digital_assets.  A department-constrained unit cannot match because a
+// digital asset has no department column; treating it as a broader owner or
+// project scope would widen access.
+func digitalAssetScopeWhere(alias, actor string, units []assetsScopeUnit) (string, []any) {
+	branches, args := []string{}, []any{}
+	for _, unit := range units {
+		if len(unit.DepartmentCodes) > 0 {
+			continue
+		}
+		parts := []string{}
+		if unit.DirectRelation {
+			relationWhere, relationArgs := digitalAssetRelationWhere(alias, actor, unit.RelationPredicates)
+			if relationWhere == "" {
+				// Relation and project restrictions are conjunctive within a unit.
+				// An unsupported relation cannot become project-only access.
+				continue
+			}
+			parts = append(parts, relationWhere)
+			args = append(args, relationArgs...)
+		}
+		if len(unit.ProjectCodes) > 0 {
+			parts = append(parts, alias+".project_code IN ("+placeholders(unit.ProjectCodes)+")")
+			for _, code := range unit.ProjectCodes {
+				args = append(args, code)
+			}
+		}
+		if len(parts) > 0 {
+			branches = append(branches, "("+strings.Join(parts, " AND ")+")")
+		}
+	}
+	if len(branches) == 0 {
+		return "(1=0)", args
+	}
+	return "(" + strings.Join(branches, " OR ") + ")", args
+}
+
 func normalizedAssetRelationPredicates(predicates []string) []string {
 	if len(predicates) == 0 {
 		return []string{"assigned"}
@@ -173,6 +211,23 @@ func ipAssetRelationWhere(alias, actor string, predicates []string) (string, []a
 		case "self", "owner", "assigned":
 			parts = append(parts, "("+alias+".owner_uid=? OR EXISTS (SELECT 1 FROM ip_asset_products scope_iap JOIN product_assets scope_product ON scope_product.id=scope_iap.product_asset_id WHERE scope_iap.ip_asset_id="+alias+".id AND ? IN (COALESCE(scope_product.business_owner_uid,''),COALESCE(scope_product.technical_owner_uid,''))))")
 			args = append(args, actor, actor)
+		}
+	}
+	if len(parts) == 0 {
+		return "", args
+	}
+	return "(" + strings.Join(parts, " OR ") + ")", args
+}
+
+func digitalAssetRelationWhere(alias, actor string, predicates []string) (string, []any) {
+	parts, args := []string{}, []any{}
+	for _, predicate := range normalizedAssetRelationPredicates(predicates) {
+		// digital_assets has owner_uid only.  "self" and "assigned" resolve to
+		// that persisted relationship; custodian and user never silently match.
+		switch predicate {
+		case "self", "owner", "assigned":
+			parts = append(parts, alias+".owner_uid=?")
+			args = append(args, actor)
 		}
 	}
 	if len(parts) == 0 {

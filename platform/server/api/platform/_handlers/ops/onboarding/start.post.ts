@@ -1,8 +1,11 @@
+import { requireEnterpriseEntitlementStateAccess } from '~~/server/utils/enterpriseEntitlementStateAccess'
+import { buildOpsAuthorizationSnapshot } from '~~/server/utils/platformOpsRbac'
 import { ok } from '~~/server/utils/api'
 import { startOnboarding } from '~~/server/utils/onboardingFlow'
 
 export default defineEventHandler(async (event) => {
   const body = await readBody<Record<string, unknown>>(event)
+  if (body.planCode === 'enterprise-full') await requireEnterpriseEntitlementStateAccess({ platformAccessScope: event.context.platformAccessScope, platformUid: event.context.platformUid }, buildOpsAuthorizationSnapshot)
   const result = await startOnboarding({
     tenantCode: body.tenantCode as string | null | undefined,
     tenantName: String(body.tenantName || '').trim(),

@@ -86,6 +86,12 @@ type consumedServiceClient struct {
 	ExpiresAt       sql.NullTime
 }
 
+type serviceTokenSQLRunner interface {
+	QueryRowContext(context.Context, string, ...any) *sql.Row
+	QueryContext(context.Context, string, ...any) (*sql.Rows, error)
+	ExecContext(context.Context, string, ...any) (sql.Result, error)
+}
+
 func (a *Adapter) ConsumeServiceClientCredential(ctx context.Context, body map[string]any) (map[string]any, error) {
 	clientID, err := requiredAuthString(body["clientId"], "client_id", 128)
 	if err != nil {
@@ -282,7 +288,18 @@ func (a *Adapter) authorizeServiceClientScopes(
 	audience string,
 	rawScope any,
 ) (map[string]any, error) {
-	rows, err := a.db.QueryContext(ctx, `
+	return a.authorizeServiceClientScopesUsing(ctx, a.db, subject, audience, rawScope, false)
+}
+
+func (a *Adapter) authorizeServiceClientScopesUsing(
+	ctx context.Context,
+	runner serviceTokenSQLRunner,
+	subject consumedServiceClient,
+	audience string,
+	rawScope any,
+	requireBoundAll bool,
+) (map[string]any, error) {
+	rows, err := runner.QueryContext(ctx, `
 		SELECT resource_code,action,scope_json
 		FROM service_client_grants
 		WHERE service_client_id=? AND status='active'
@@ -292,11 +309,7 @@ func (a *Adapter) authorizeServiceClientScopes(
 		return nil, err
 	}
 	defer rows.Close()
-	type grant struct {
-		scope     string
-		scopeJSON sql.NullString
-	}
-	grants := make([]grant, 0)
+	grants := make([]serviceScopeGrant, 0)
 	allowed := map[string]bool{}
 	for rows.Next() {
 		var resource, action string
@@ -305,7 +318,7 @@ func (a *Adapter) authorizeServiceClientScopes(
 			return nil, err
 		}
 		scope := resource + ":" + action
-		grants = append(grants, grant{scope: scope, scopeJSON: scopeJSON})
+		grants = append(grants, serviceScopeGrant{scope: scope, scopeJSON: scopeJSON})
 		allowed[scope] = true
 	}
 	if err := rows.Err(); err != nil {
@@ -323,40 +336,19 @@ func (a *Adapter) authorizeServiceClientScopes(
 		return nil, httperror.New(http.StatusBadRequest, "invalid_scope", "invalid_scope: no grant available for requested audience")
 	}
 	sort.Strings(requested)
-	selected := map[string]bool{}
-	for _, scope := range requested {
-		if strings.HasPrefix(scope, audience+":") {
-			if !allowed[scope] {
-				return nil, httperror.New(http.StatusForbidden, "insufficient_scope", "insufficient_scope: "+scope)
-			}
-			selected[scope] = true
-			continue
-		}
-
-		matchedGrant := ""
-		for _, grant := range grants {
-			if !grant.scopeJSON.Valid {
-				continue
-			}
-			var value map[string]any
-			if json.Unmarshal([]byte(grant.scopeJSON.String), &value) != nil ||
-				strings.TrimSpace(stringField(value["audience"])) != audience ||
-				strings.TrimSpace(stringField(value["semanticScope"])) != scope {
-				continue
-			}
-			if matchedGrant != "" && matchedGrant != grant.scope {
-				return nil, httperror.New(http.StatusForbidden, "service_grant_policy_conflict", "service grants have conflicting semantic scope bindings")
-			}
-			matchedGrant = grant.scope
-		}
-		if matchedGrant == "" {
-			return nil, httperror.New(http.StatusBadRequest, "invalid_scope", "invalid_scope: scope does not match audience")
-		}
-		selected[matchedGrant] = true
+	selected, err := mapServiceAudienceScopes(subject.ClientCode, audience, requested, grants)
+	if err != nil {
+		return nil, err
 	}
 	var policyBinding map[string]any
 	for _, grant := range grants {
-		if !selected[grant.scope] || !grant.scopeJSON.Valid {
+		if !selected[grant.scope] {
+			continue
+		}
+		if !grant.scopeJSON.Valid {
+			if requireBoundAll {
+				return nil, httperror.New(http.StatusForbidden, "console_exchange_grant_binding_invalid", "Every selected grant must bind tenant and deployment")
+			}
 			continue
 		}
 		var value map[string]any
@@ -366,6 +358,9 @@ func (a *Adapter) authorizeServiceClientScopes(
 		tenantCode := strings.TrimSpace(stringField(value["tenantCode"]))
 		deploymentCode := strings.TrimSpace(stringField(value["deploymentCode"]))
 		if tenantCode == "" && deploymentCode == "" {
+			if requireBoundAll {
+				return nil, httperror.New(http.StatusForbidden, "console_exchange_grant_binding_invalid", "Every selected grant must bind tenant and deployment")
+			}
 			continue
 		}
 		if tenantCode == "" || deploymentCode == "" {
@@ -382,7 +377,7 @@ func (a *Adapter) authorizeServiceClientScopes(
 		selectedScopes = append(selectedScopes, scope)
 	}
 	sort.Strings(selectedScopes)
-	a.touchServiceClientGrantUsage(ctx, subject.ServiceClientID, selectedScopes)
+	a.touchServiceClientGrantUsageUsing(ctx, runner, subject.ServiceClientID, selectedScopes)
 	return map[string]any{
 		"serviceClientId": subject.ServiceClientID, "credentialId": subject.CredentialID,
 		"clientId": subject.ClientID, "clientCode": subject.ClientCode,
@@ -404,6 +399,10 @@ func (a *Adapter) authorizeServiceClientScopes(
 //
 // 打点失败不影响令牌签发：可观测性不得成为授权路径的故障点。
 func (a *Adapter) touchServiceClientGrantUsage(ctx context.Context, serviceClientID uint64, scopes []string) {
+	a.touchServiceClientGrantUsageUsing(ctx, a.db, serviceClientID, scopes)
+}
+
+func (a *Adapter) touchServiceClientGrantUsageUsing(ctx context.Context, runner serviceTokenSQLRunner, serviceClientID uint64, scopes []string) {
 	if serviceClientID == 0 || len(scopes) == 0 {
 		return
 	}
@@ -412,7 +411,7 @@ func (a *Adapter) touchServiceClientGrantUsage(ctx context.Context, serviceClien
 		if err != nil {
 			continue
 		}
-		if _, err := a.db.ExecContext(ctx, `
+		if _, err := runner.ExecContext(ctx, `
 			UPDATE service_client_grants
 			SET last_used_at=UTC_TIMESTAMP()
 			WHERE service_client_id=? AND resource_code=? AND action=? AND status='active'
@@ -440,6 +439,9 @@ func (a *Adapter) IssueConsoleRuntimeServiceToken(
 		if (scope == "console:policy-bundle:read" || scope == "console:policy-bundle:write") && audience != "data-runtime" && audience != "tenant-runtime" {
 			return nil, httperror.New(http.StatusForbidden, "console_policy_audience_invalid", "Policy storage requires Runtime audience")
 		}
+		if (scope == "console:service-token:exchange" || scope == GatewayExchangeScope) && audience != "data-runtime" && audience != "tenant-runtime" {
+			return nil, httperror.New(http.StatusForbidden, "console_exchange_audience_invalid", "Token exchange requires Runtime audience")
+		}
 	}
 	if len(requestedScopes) == 0 {
 		return nil, httperror.New(http.StatusBadRequest, "console_service_token_scope_required", "scope is required")
@@ -448,18 +450,13 @@ func (a *Adapter) IssueConsoleRuntimeServiceToken(
 	if !ok || ttlSeconds < 30 || ttlSeconds > 3600 {
 		return nil, httperror.New(http.StatusBadRequest, "console_service_token_ttl_invalid", "ttlSeconds must be between 30 and 3600")
 	}
-	identity, err := a.ensureConsoleRuntimeServiceIdentity(ctx, meta.ActorID)
+	issuer, err := a.resolveOIDCSigningIssuer(body["issuer"])
 	if err != nil {
 		return nil, err
 	}
-	allowed := map[string]bool{}
-	for _, scope := range identity.Scopes {
-		allowed[scope] = true
-	}
-	for _, scope := range requestedScopes {
-		if !allowed[scope] {
-			return nil, httperror.New(http.StatusForbidden, "console_service_token_grant_inactive", "Requested Console Runtime service grant is inactive")
-		}
+	identity, err := a.ensureConsoleRuntimeServiceIdentity(ctx, meta.ActorID)
+	if err != nil {
+		return nil, err
 	}
 	sort.Strings(requestedScopes)
 	authorizedScope := strings.Join(requestedScopes, " ")
@@ -488,10 +485,6 @@ func (a *Adapter) IssueConsoleRuntimeServiceToken(
 	}
 	if deployment == "" {
 		return nil, httperror.New(http.StatusServiceUnavailable, "console_service_token_deployment_unavailable", "Authenticated Runtime deployment binding is unavailable")
-	}
-	issuer, err := requiredAuthString(body["issuer"], "issuer", 1000)
-	if err != nil {
-		return nil, err
 	}
 	claims := map[string]any{
 		"iss": issuer, "sub": "client:" + identity.ClientCode, "aud": audience,
@@ -552,6 +545,13 @@ func (a *Adapter) ensureConsoleRuntimeServiceIdentity(
 	ctx context.Context,
 	actorID string,
 ) (consoleRuntimeServiceIdentity, error) {
+	// The identity is installed once. Normal token issuance must not acquire a
+	// serializable org-profile lock or rewrite grants on every authenticated
+	// read. These queries still check the live client, credential and grants;
+	// no token or authorization decision is cached across requests.
+	if identity, installed, err := a.readConsoleRuntimeServiceIdentity(ctx); err != nil || installed {
+		return identity, err
+	}
 	materialBytes := make([]byte, 32)
 	if _, err := rand.Read(materialBytes); err != nil {
 		return consoleRuntimeServiceIdentity{}, err
@@ -753,6 +753,70 @@ func (a *Adapter) ensureConsoleRuntimeServiceIdentity(
 		ClientName: "Console Runtime", ClientType: "runtime", AppCode: "console",
 		Scopes: scopes,
 	}, nil
+}
+
+func (a *Adapter) readConsoleRuntimeServiceIdentity(ctx context.Context) (consoleRuntimeServiceIdentity, bool, error) {
+	var identity consoleRuntimeServiceIdentity
+	var status, appCode, clientType string
+	var currentCredentialID sql.NullInt64
+	err := a.db.QueryRowContext(ctx, `
+		SELECT id,status,app_code,client_type,current_credential_id
+		FROM service_clients WHERE client_code=? LIMIT 1
+	`, consoleRuntimeClientCode).Scan(&identity.ServiceClientID, &status, &appCode, &clientType, &currentCredentialID)
+	if err == sql.ErrNoRows {
+		return identity, false, nil
+	}
+	if err != nil {
+		return identity, false, err
+	}
+	if appCode != "console" || clientType != "runtime" {
+		return identity, true, httperror.New(http.StatusForbidden, "console_runtime_client_binding_invalid", "Console Runtime service identity binding is invalid")
+	}
+	if status != "active" {
+		return identity, true, httperror.New(http.StatusForbidden, "console_runtime_client_inactive", "Console Runtime service identity is inactive")
+	}
+	if !currentCredentialID.Valid {
+		return identity, true, httperror.New(http.StatusForbidden, "console_runtime_credential_inactive", "Console Runtime service credential is inactive")
+	}
+	err = a.db.QueryRowContext(ctx, `
+		SELECT scc.id
+		FROM service_client_credentials scc
+		INNER JOIN vault_secrets vs ON vs.id=scc.secret_id AND vs.status='active'
+		INNER JOIN vault_secret_versions vsv ON vsv.id=vs.current_version_id
+			AND vsv.secret_id=vs.id AND vsv.status='active'
+		WHERE scc.id=? AND scc.service_client_id=? AND scc.client_id=? AND scc.status='active'
+			AND (scc.expires_at IS NULL OR scc.expires_at>UTC_TIMESTAMP())
+	`, currentCredentialID.Int64, identity.ServiceClientID, consoleRuntimeClientCode).Scan(&identity.CredentialID)
+	if err == sql.ErrNoRows {
+		return identity, true, httperror.New(http.StatusForbidden, "console_runtime_credential_inactive", "Console Runtime service credential is inactive")
+	}
+	if err != nil {
+		return identity, true, err
+	}
+	rows, err := a.db.QueryContext(ctx, `
+		SELECT resource_code,action FROM service_client_grants
+		WHERE service_client_id=? AND status='active'
+	`, identity.ServiceClientID)
+	if err != nil {
+		return identity, true, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var resource, action string
+		if err := rows.Scan(&resource, &action); err != nil {
+			return identity, true, err
+		}
+		identity.Scopes = append(identity.Scopes, joinConsoleServiceScope(resource, action))
+	}
+	if err := rows.Err(); err != nil {
+		return identity, true, err
+	}
+	identity.ClientID = consoleRuntimeClientCode
+	identity.ClientCode = consoleRuntimeClientCode
+	identity.ClientName = "Console Runtime"
+	identity.ClientType = "runtime"
+	identity.AppCode = "console"
+	return identity, true, nil
 }
 
 func splitConsoleServiceScope(scope string) (string, string, error) {

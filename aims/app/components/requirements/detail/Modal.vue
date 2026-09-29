@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { sourceLabel } from '../../../config/requirement'
+
 const props = defineProps<{
   reqId: number
 }>()
@@ -168,14 +170,6 @@ const statusColor: Record<string, string> = {
   baselined: 'success',
   change_pending: 'info',
   deprecated: 'error'
-}
-
-const sourceLabel: Record<string, string> = {
-  customer: '客户',
-  internal: '内部',
-  compliance: '合规',
-  regulation: '法规',
-  other: '其他'
 }
 
 const accountUserNameMap = computed(() => {

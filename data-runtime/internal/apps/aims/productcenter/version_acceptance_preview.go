@@ -20,15 +20,30 @@ type ProductVersionAcceptancePreview struct {
 // A preview presents current facts; it grants no acceptance and is not an
 // authorization token. AcceptProductVersion re-reads everything under locks.
 func PreviewProductVersionAcceptance(ctx context.Context, db *sql.DB, code, uid string, permit AuthorizationPermit, versionID int64) (ProductVersionAcceptancePreview, error) {
+	if versionID <= 0 {
+		return ProductVersionAcceptancePreview{}, invalid("product_version_id_invalid", "版本标识无效")
+	}
+	tx, err := db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
+	if err != nil {
+		return ProductVersionAcceptancePreview{}, err
+	}
+	defer tx.Rollback()
+	out, err := PreviewProductVersionAcceptanceInTransaction(ctx, tx, code, uid, permit, versionID)
+	if err != nil {
+		return out, err
+	}
+	return out, tx.Commit()
+}
+
+func PreviewProductVersionAcceptanceInTransaction(ctx context.Context, tx *sql.Tx, code, uid string, permit AuthorizationPermit, versionID int64) (ProductVersionAcceptancePreview, error) {
 	var out ProductVersionAcceptancePreview
 	if versionID <= 0 {
 		return out, invalid("product_version_id_invalid", "版本标识无效")
 	}
-	tx, err := db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
-	if err != nil {
-		return out, err
+	if tx == nil {
+		return out, invalid("product_transaction_required", "版本核验需要事务")
 	}
-	defer tx.Rollback()
+	var err error
 	if err = AuthorizeWorkspaceTransaction(ctx, tx, code, uid, "product_versions", "view", permit); err != nil {
 		return out, err
 	}
@@ -60,5 +75,5 @@ func PreviewProductVersionAcceptance(ctx context.Context, db *sql.DB, code, uid 
 		return out, err
 	}
 	out.WorkspaceRevision, out.ProductStatus = permit.Facts.Revision, permit.Facts.Status
-	return out, tx.Commit()
+	return out, nil
 }

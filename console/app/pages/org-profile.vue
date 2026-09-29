@@ -71,32 +71,6 @@ const errorMessage = computed(() => {
   return detail?.message || error.value?.message || '企业资料暂时不可用'
 })
 
-const identityFields = computed(() => [
-  { label: '企业编码', value: profile.value?.tenantCode },
-  { label: '企业全称', value: profile.value?.orgName },
-  { label: '企业简称', value: profile.value?.orgShortName },
-  { label: '显示名称', value: profile.value?.displayName },
-  { label: '法定名称', value: profile.value?.legalName },
-  { label: '统一社会信用代码', value: profile.value?.unifiedSocialCreditCode }
-])
-
-const localeFields = computed(() => [
-  { label: '国家或地区', value: profile.value?.countryCode },
-  { label: '时区', value: profile.value?.timezone },
-  { label: '语言', value: profile.value?.locale },
-  { label: '币种', value: profile.value?.currencyCode },
-  { label: '行业编码', value: profile.value?.industryCode },
-  { label: '状态', value: profile.value?.status === 'active' ? '正常' : profile.value?.status }
-])
-
-const contactFields = computed(() => [
-  { label: '联系人', value: profile.value?.contactName },
-  { label: '联系邮箱', value: profile.value?.contactEmail },
-  { label: '联系电话', value: profile.value?.contactMobile },
-  { label: '网站', value: profile.value?.websiteUrl },
-  { label: '地址', value: profile.value?.addressText }
-])
-
 function formatUpdatedAt(value: string | undefined) {
   if (!value) return ''
   const date = new Date(value)
@@ -213,55 +187,7 @@ async function saveProfile() {
         </UCard>
       </div>
 
-      <div v-else-if="profile" class="grid gap-3 lg:grid-cols-3">
-        <UCard>
-          <template #header>
-            <span class="font-semibold">基础资料</span>
-          </template>
-          <dl class="space-y-3">
-            <div v-for="field in identityFields" :key="field.label" class="grid grid-cols-[8rem_1fr] gap-3 text-sm">
-              <dt class="text-muted">
-                {{ field.label }}
-              </dt>
-              <dd class="break-words text-default">
-                {{ field.value || '—' }}
-              </dd>
-            </div>
-          </dl>
-        </UCard>
-
-        <UCard>
-          <template #header>
-            <span class="font-semibold">区域与本地化</span>
-          </template>
-          <dl class="space-y-3">
-            <div v-for="field in localeFields" :key="field.label" class="grid grid-cols-[7rem_1fr] gap-3 text-sm">
-              <dt class="text-muted">
-                {{ field.label }}
-              </dt>
-              <dd class="break-words text-default">
-                {{ field.value || '—' }}
-              </dd>
-            </div>
-          </dl>
-        </UCard>
-
-        <UCard>
-          <template #header>
-            <span class="font-semibold">联系信息</span>
-          </template>
-          <dl class="space-y-3">
-            <div v-for="field in contactFields" :key="field.label" class="grid grid-cols-[6rem_1fr] gap-3 text-sm">
-              <dt class="text-muted">
-                {{ field.label }}
-              </dt>
-              <dd class="break-words text-default">
-                {{ field.value || '—' }}
-              </dd>
-            </div>
-          </dl>
-        </UCard>
-      </div>
+      <OrgProfileDetails v-else-if="profile" :profile="profile" />
     </template>
   </UDashboardPanel>
 

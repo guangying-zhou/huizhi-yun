@@ -13,6 +13,7 @@ import { requireRequestUid } from '~~/server/utils/authIdentity'
 import { fetchDirectoryData } from '~~/server/utils/directoryCompat'
 import { callCodocsTenantRuntime, createCodocsDocumentMetadata, getCodocsDocumentMetadata, updateCodocsDocumentMetadata } from '~~/server/utils/codocsRuntime'
 import type { DepartmentResponse } from '~/types/account'
+import { assertLegacyBodyDocument } from '~~/server/utils/documentBodyRef'
 
 interface DocumentRow {
   uuid: string
@@ -33,7 +34,9 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, message: '缺少参数' })
   }
 
-  const doc = await getCodocsDocumentMetadata(event, uuid, { actorUid: operatorUid }) as DocumentRow
+  const doc = await getCodocsDocumentMetadata(event, uuid, { actorUid: operatorUid }) as DocumentRow & { snapshot_generation?: number }
+  // 周报不进入协作转换；若 v2 则其 oss_path 只是派生镜像，失败关闭。
+  assertLegacyBodyDocument(doc)
   if (!doc.readonly_flag) {
     throw createError({ statusCode: 400, message: '文档当前已处于可编辑状态' })
   }

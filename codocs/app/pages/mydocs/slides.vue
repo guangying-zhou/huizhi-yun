@@ -5,11 +5,16 @@
  * 使用 Slidev Markdown 语法（--- 分隔幻灯片）
  */
 
-import type { ProjectDocsTreeItem } from '~/types'
+import type { ProjectDocsTreeItem } from '../../types'
+import { useCodocsModule } from '../../../layer/useCodocsModule'
+import { createCreationAttempt } from '../../../layer/creationAttempt.mjs'
 
 definePageMeta({ layout: 'default' })
 
 usePageTitle('演示文稿')
+const { moduleUrl, cacheKey } = useCodocsModule()
+const documentCreationAttempt = createCreationAttempt()
+const documentRecycleAttempt = createCreationAttempt()
 
 interface DocRecord {
   uuid: string
@@ -83,8 +88,9 @@ const createFolder = async () => {
   if (!newFolderName.value.trim()) return
   isCreatingFolder.value = true
   try {
-    await $fetch('/api/folders', {
+    await $fetch(moduleUrl('/api/folders'), {
       method: 'POST',
+      headers: { 'Idempotency-Key': crypto.randomUUID() },
       body: {
         name: newFolderName.value.trim(),
         folder_type: 'slide',
@@ -117,7 +123,7 @@ const openRename = () => {
 const executeRename = async () => {
   if (!selectedSlide.value || !renameValue.value.trim()) return
   try {
-    await $fetch(`/api/documents/${selectedSlide.value.uuid}`, {
+    await $fetch(moduleUrl(`/api/documents/${selectedSlide.value.uuid}`), {
       method: 'PATCH',
       body: { title: renameValue.value.trim() }
     })
@@ -137,7 +143,7 @@ const showMoveModal = ref(false)
 const onMoveConfirm = async (targetFolderId: number | null) => {
   if (!selectedSlide.value) return
   try {
-    await $fetch(`/api/documents/${selectedSlide.value.uuid}`, {
+    await $fetch(moduleUrl(`/api/documents/${selectedSlide.value.uuid}`), {
       method: 'PATCH',
       body: { folder_id: targetFolderId }
     })
@@ -153,10 +159,10 @@ const onMoveConfirm = async (targetFolderId: number | null) => {
 
 // 获取所有私有文件夹（移动时用）
 const { data: allFolders } = await useAsyncData(
-  'slides-all-folders',
+  cacheKey('slides-all-folders'),
   async () => {
     if (!user.value) return []
-    const res = await apiFetch<FolderListResponse>('/api/folders', {
+    const res = await apiFetch<FolderListResponse>(moduleUrl('/api/folders'), {
       query: { folder_type: 'slide', owner_uid: uid.value }
     })
     return res?.data?.items || []
@@ -172,7 +178,7 @@ const isDeleting = ref(false)
 // 获取演示文稿目录
 const fetchSlideFolders = async () => {
   if (!user.value) return []
-  const res = await apiFetch<FolderListResponse>('/api/folders', {
+    const res = await apiFetch<FolderListResponse>(moduleUrl('/api/folders'), {
     query: { folder_type: 'slide', owner_uid: uid.value }
   })
   return res?.data?.items || []
@@ -181,20 +187,20 @@ const fetchSlideFolders = async () => {
 // 获取所有演示文稿文档
 const fetchSlides = async () => {
   if (!user.value) return []
-  const response = await apiFetch<DocListResponse>('/api/documents', {
+    const response = await apiFetch<DocListResponse>(moduleUrl('/api/documents'), {
     query: { type: 'slide', owner: uid.value }
   })
   return response?.data?.items || []
 }
 
 const { data: slideFolders, pending: foldersPending, refresh: refreshFolders } = await useAsyncData(
-  'slide-folders',
+  cacheKey('slide-folders'),
   fetchSlideFolders,
   { watch: [user], immediate: true, getCachedData: () => undefined }
 )
 
 const { data: slides, pending: docsPending, refresh: refreshDocs } = await useAsyncData(
-  'my-slides',
+  cacheKey('my-slides'),
   fetchSlides,
   { watch: [user, slideFolders], immediate: true, getCachedData: () => undefined }
 )
@@ -287,12 +293,12 @@ const saveEdit = async () => {
   try {
     if (editingId.value.startsWith('folder-')) {
       const folderId = parseInt(editingId.value.replace('folder-', ''))
-      await $fetch(`/api/folders/${folderId}`, { method: 'PATCH', body: { name: editingName.value.trim() } })
+      await $fetch(moduleUrl(`/api/folders/${folderId}`), { method: 'PATCH', body: { name: editingName.value.trim() } })
       toast.add({ title: '文件夹已重命名', color: 'success' })
       await refreshFolders()
     } else if (editingId.value.startsWith('doc-')) {
       const docUuid = editingId.value.replace('doc-', '')
-      await $fetch(`/api/documents/${docUuid}`, { method: 'PATCH', body: { title: editingName.value.trim() } })
+      await $fetch(moduleUrl(`/api/documents/${docUuid}`), { method: 'PATCH', body: { title: editingName.value.trim() } })
       toast.add({ title: '文稿已重命名', color: 'success' })
       await refreshDocs()
     }
@@ -332,7 +338,7 @@ const onTreeDelete = (type: 'folder' | 'document', id: number | string) => {
 
 const deleteFolderById = async (folderId: number) => {
   try {
-    await $fetch(`/api/folders/${folderId}`, { method: 'DELETE' })
+    await $fetch(moduleUrl(`/api/folders/${folderId}`), { method: 'DELETE' })
     toast.add({ title: '文件夹已删除', color: 'success' })
     await refresh()
   } catch (err: unknown) {
@@ -355,7 +361,7 @@ const selectSlide = async (doc: DocRecord) => {
   panelCollapsed.value = true
 
   try {
-    const response = await $fetch<DocDetailResponse>(`/api/documents/${doc.uuid}`)
+    const response = await $fetch<DocDetailResponse>(moduleUrl(`/api/documents/${doc.uuid}`))
     if (response.success && response.data) {
       previewContent.value = response.data.content || ''
     }
@@ -388,7 +394,7 @@ const viewDemo = async () => {
   panelCollapsed.value = true
 
   try {
-    const res = await $fetch<{ success: boolean, data?: { content: string } }>('/api/slides/demo')
+    const res = await $fetch<{ success: boolean, data?: { content: string } }>(moduleUrl('/api/slides/demo'))
     if (res.success && res.data?.content) {
       previewContent.value = res.data.content
     }
@@ -447,25 +453,27 @@ const createSlide = async () => {
   try {
     const content = defaultTemplate.replace(/新建演示文稿/g, newSlideName.value.trim())
 
-    const { data, error } = await useFetch('/api/documents', {
+    const body = {
+      title: newSlideName.value.trim(),
+      doc_type: 'slide',
+      owner_uid: uid.value,
+      folder_id: null,
+      content
+    }
+    const key = documentCreationAttempt.keyFor(cacheKey('document-create'), body)
+    const data = await apiFetch<CreateDocResponse>(moduleUrl('/api/documents'), {
       method: 'POST',
-      body: {
-        title: newSlideName.value.trim(),
-        doc_type: 'slide',
-        owner_uid: uid.value,
-        folder_id: null,
-        content
-      }
+      headers: { 'Idempotency-Key': key },
+      body
     })
-
-    if (error.value) throw new Error(error.value.message || '创建失败')
+    documentCreationAttempt.complete(key)
 
     toast.add({ title: '文稿创建成功', color: 'success' })
     showNewModal.value = false
     newSlideName.value = ''
     await refresh()
 
-    const docUuid = (data.value as CreateDocResponse)?.data?.uuid
+    const docUuid = data?.data?.uuid
     if (docUuid) {
       // 选中新建的文稿
       const newDoc = (slides.value || []).find(d => d.uuid === docUuid)
@@ -487,14 +495,14 @@ const saveToOSS = async () => {
   isSaving.value = true
   try {
     // 1. 从 slidev-service 读回当前编辑内容
-    const contentRes = await $fetch<{ success: boolean, data?: { content: string } }>('/api/slides/content')
+    const contentRes = await $fetch<{ success: boolean, data?: { content: string } }>(moduleUrl('/api/slides/content'))
     if (!contentRes.success || !contentRes.data?.content) {
       toast.add({ title: '读取内容失败', color: 'error' })
       return
     }
 
     // 2. 存到 OSS
-    await $fetch(`/api/documents/${selectedSlide.value.uuid}`, {
+    await $fetch(moduleUrl(`/api/documents/${selectedSlide.value.uuid}`), {
       method: 'PUT',
       body: { content: contentRes.data.content, saveMode: 'overwrite' }
     })
@@ -520,7 +528,7 @@ const exportSlides = async (format: 'pdf' | 'pptx') => {
   if (!selectedSlide.value || !previewContent.value) return
   isExporting.value = true
   try {
-    const res = await $fetch<{ success: boolean, data?: { url: string, filename: string } }>('/api/slides/export', {
+    const res = await $fetch<{ success: boolean, data?: { url: string, filename: string } }>(moduleUrl('/api/slides/export'), {
       method: 'POST',
       body: {
         content: previewContent.value,
@@ -558,7 +566,9 @@ const executeDelete = async () => {
   if (!deleteTarget.value) return
   isDeleting.value = true
   try {
-    await $fetch(`/api/documents/${deleteTarget.value.uuid}`, { method: 'DELETE' })
+    const key = documentRecycleAttempt.keyFor(cacheKey('document-recycle'), { uuid: deleteTarget.value.uuid })
+    await $fetch(moduleUrl(`/api/documents/${deleteTarget.value.uuid}`), { method: 'DELETE', headers: { 'Idempotency-Key': key } })
+    documentRecycleAttempt.complete(key)
     toast.add({ title: '文稿已删除', color: 'success' })
     if (selectedSlide.value?.uuid === deleteTarget.value.uuid) deselectSlide()
     await refresh()

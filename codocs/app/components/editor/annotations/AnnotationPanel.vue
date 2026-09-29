@@ -28,7 +28,7 @@ const emit = defineEmits<{
   <div class="flex-1 min-h-0 h-full overflow-y-auto p-4 custom-scrollbar">
     <div
       v-if="annotations.length === 0"
-      class="flex flex-col items-center justify-center h-64 text-gray-500 dark:text-gray-400"
+      class="flex flex-col items-center justify-center h-64 text-muted"
     >
       <UIcon name="i-lucide-message-square-text" class="w-12 h-12 mb-3 opacity-30" />
       <p class="text-sm font-medium">

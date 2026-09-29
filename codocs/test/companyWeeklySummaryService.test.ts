@@ -12,6 +12,7 @@ test('Codocs verifies the exact Aims summary command before object storage and r
   const service = source('server/utils/companyWeeklySummaryService.ts')
   const route = source('server/api/v1/service/company-weekly-summaries/[summaryCommand].post.ts')
   const policy = source('server/lib/serviceAuthPolicy.ts')
+  const middleware = source('server/middleware/tenant-runtime.ts')
 
   assert.match(policy, /codocs:company-weekly-summary:publish/)
   assert.match(policy, /allowedClientCodes: \['aims\.runtime'\]/)
@@ -20,8 +21,11 @@ test('Codocs verifies the exact Aims summary command before object storage and r
   assert.match(service, /sourceDeploymentCode: binding\.sourceDeployment/)
   assert.match(service, /targetDeploymentCode: binding\.targetDeployment/)
   assert.match(service, /actualMarkdownHash !== command\.markdownSha256/)
+  assert.match(service, /matchesCompanySummaryCommandDigest\(command, envelope\.commandSha256\)/)
   assert.ok(service.indexOf('verifyServiceCommandRuntimeHeaders') < service.indexOf('uploadDocument'))
+  assert.doesNotMatch(service, /serviceCommandActor/)
   assert.match(route, /publishAimsCompanyWeeklySummary/)
+  assert.ok(middleware.includes('company-weekly-summaries\\/[^/]+:publish'))
 })
 
 test('Codocs runtime stores one read-only company document with version and receipt evidence', () => {

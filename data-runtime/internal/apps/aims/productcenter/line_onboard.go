@@ -80,13 +80,31 @@ func selectedLineItems(input LineOnboardInput, source LineSourceEvidence) []Cata
 }
 
 func OnboardProductLine(ctx context.Context, db *sql.DB, identity CommandIdentity, permit OnboardPermit, source LineSourceEvidence, directory MemberDirectoryEvidence, input LineOnboardInput) (CommandResult, error) {
+	return onboardProductLine(ctx, identity, permit, source, directory, input, nil, func(authorize AuthorizeCommand, apply ApplyCommand) (CommandResult, error) {
+		return ExecuteCommand(ctx, db, identity, input, authorize, apply)
+	})
+}
+
+// Current source is optional only to preserve the legacy owning entry. Unified
+// callers supply a registry-derived source; no projection is consulted then.
+func OnboardProductLineInTransaction(ctx context.Context, tx *sql.Tx, identity CommandIdentity, permit OnboardPermit, source LineSourceEvidence, directory MemberDirectoryEvidence, input LineOnboardInput, current *CurrentCatalogSource) (CommandResult, error) {
+	result, err := onboardProductLine(ctx, identity, permit, source, directory, input, current, func(authorize AuthorizeCommand, apply ApplyCommand) (CommandResult, error) {
+		return ExecuteCommandInTransaction(ctx, tx, identity, input, authorize, apply)
+	})
+	if err != nil && tx != nil {
+		_ = tx.Rollback()
+	}
+	return result, err
+}
+func onboardProductLine(ctx context.Context, identity CommandIdentity, permit OnboardPermit, source LineSourceEvidence, directory MemberDirectoryEvidence, input LineOnboardInput, current *CurrentCatalogSource, execute func(AuthorizeCommand, ApplyCommand) (CommandResult, error)) (CommandResult, error) {
+
 	if err := validateLineInput(input, source); err != nil {
 		return CommandResult{}, err
 	}
 	if identity.Action != "products:onboard-line" || identity.ProductCode != LineWorkspaceCode(input.LineCode) {
 		return CommandResult{}, invalid("product_command_identity_invalid", "统一管理命令不匹配")
 	}
-	return ExecuteCommand(ctx, db, identity, input, func(ctx context.Context, tx *sql.Tx) error {
+	return execute(func(ctx context.Context, tx *sql.Tx) error {
 		if permit.ProductCode != identity.ProductCode || permit.ActorUID != identity.ActorUID || permit.Resource != "products" || permit.Action != "onboard" || len(directory.ActiveUIDs) != 1 || directory.ActiveUIDs[0] != input.ManagerUID {
 			return invalid("product_authorization_invalid", "统一管理授权或负责人证据不匹配")
 		}
@@ -124,7 +142,14 @@ func OnboardProductLine(ctx context.Context, db *sql.DB, identity CommandIdentit
 			}
 		}
 		// A reserved management code cannot collide with an Assets product.
-		if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM product_catalog_projection WHERE product_code=?`, identity.ProductCode).Scan(&n); err != nil {
+		collisionQuery := `SELECT COUNT(*) FROM product_catalog_projection WHERE product_code=?`
+		if current != nil {
+			if !current.all || !currentCatalogTable.MatchString(current.products) || current.actor != identity.ActorUID {
+				return nil, invalid("product_authorization_invalid", "当前来源无效")
+			}
+			collisionQuery = "SELECT COUNT(*) FROM " + current.products + " WHERE product_code=?"
+		}
+		if err := tx.QueryRowContext(ctx, collisionQuery, identity.ProductCode).Scan(&n); err != nil {
 			return nil, err
 		}
 		if n > 0 {

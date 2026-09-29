@@ -32,13 +32,30 @@ func ValidateRequestEdit(input RequestEdit) error {
 }
 
 func EditProductRequest(ctx context.Context, db *sql.DB, identity CommandIdentity, permit AuthorizationPermit, input RequestEdit) (CommandResult, error) {
+	return editProductRequest(ctx, identity, permit, input, func(authorize AuthorizeCommand, apply ApplyCommand) (CommandResult, error) {
+		return ExecuteCommand(ctx, db, identity, input, authorize, apply)
+	})
+}
+
+// EditProductRequestInTransaction reuses the owning-domain command; the caller owns commit.
+func EditProductRequestInTransaction(ctx context.Context, tx *sql.Tx, identity CommandIdentity, permit AuthorizationPermit, input RequestEdit) (CommandResult, error) {
+	result, err := editProductRequest(ctx, identity, permit, input, func(authorize AuthorizeCommand, apply ApplyCommand) (CommandResult, error) {
+		return ExecuteCommandInTransaction(ctx, tx, identity, input, authorize, apply)
+	})
+	if err != nil && tx != nil {
+		_ = tx.Rollback()
+	}
+	return result, err
+}
+
+func editProductRequest(ctx context.Context, identity CommandIdentity, permit AuthorizationPermit, input RequestEdit, execute func(AuthorizeCommand, ApplyCommand) (CommandResult, error)) (CommandResult, error) {
 	if identity.Action != "product_requests:edit" {
 		return CommandResult{}, invalid("product_command_identity_invalid", "需求修改命令不匹配")
 	}
 	if err := ValidateRequestEdit(input); err != nil {
 		return CommandResult{}, err
 	}
-	return ExecuteCommand(ctx, db, identity, input, func(ctx context.Context, tx *sql.Tx) error {
+	return execute(func(ctx context.Context, tx *sql.Tx) error {
 		return AuthorizeWorkspaceTransaction(ctx, tx, identity.ProductCode, identity.ActorUID, "product_requests", "edit", permit)
 	}, func(ctx context.Context, tx *sql.Tx) (any, error) {
 		root, err := loadWorkspace(ctx, tx, identity.ProductCode)

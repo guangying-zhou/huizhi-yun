@@ -1,9 +1,12 @@
 <script setup lang="ts">
-import { parsePublishedAssetPath, publishedAssetShortPagePath, type PublishedAssetScope } from '~~/shared/utils/publishedAssetLink'
+import { parsePublishedAssetPath, publishedAssetShortPagePath, type PublishedAssetScope } from '../../../shared/utils/publishedAssetLink'
+import { useCodocsModule } from '../../../layer/useCodocsModule'
+import { useViewerWatermark } from '../../composables/useViewerWatermark'
 
 const props = defineProps<{ scope?: PublishedAssetScope, token?: string }>()
 const route = useRoute()
 const { resolveCurrentAppPath } = useAppUrls()
+const { hosted, moduleUrl } = useCodocsModule()
 const requestFetch = useRequestFetch()
 const { watermarkText } = useViewerWatermark()
 const resolvedPath = ref('')
@@ -30,13 +33,13 @@ async function loadDocument() {
   loading.value = true
   try {
     if (props.token !== undefined) {
-      const link = await requestFetch<{ data: { path: string } }>(resolveCurrentAppPath(`/api/published-asset-links/${props.token}`))
+      const link = await requestFetch<{ data: { path: string } }>(hosted ? moduleUrl(`/api/published-asset-links/${props.token}`) : resolveCurrentAppPath(`/api/published-asset-links/${props.token}`))
       if (id !== requestId) return
       resolvedPath.value = link.data.path
     }
     if (!asset.value) throw new Error('invalid published asset')
     const endpoint = asset.value.scope === 'company' ? '/api/company-assets/preview' : '/api/dept-assets/preview'
-    const response = await requestFetch<{ code: number, data: PreviewData }>(resolveCurrentAppPath(endpoint), {
+    const response = await requestFetch<{ code: number, data: PreviewData }>(hosted ? moduleUrl(endpoint) : resolveCurrentAppPath(endpoint), {
       params: { path: asset.value.path }
     })
     if (id !== requestId) return

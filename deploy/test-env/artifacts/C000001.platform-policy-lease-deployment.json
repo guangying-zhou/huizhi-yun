@@ -1,0 +1,24 @@
+{
+  "deployedAt": "2026-09-22T14:24:14.678Z",
+  "target": "hzy-platform-dev",
+  "database": "hzy_platform_dev",
+  "candidate": "/wiztek/hzy-test/platform-candidates/policy-lease-20260922/platform",
+  "entryHashSha256": "2844da3f3cce8ab1d400f6dfc8b0cf39649b299e107d3a1086010b0c5de2200c",
+  "sourceHashesSha256": {
+    "server/utils/currentPolicyEnvelope.ts": "b41141dac75a0002095e3dce22584a53803d48bf141854318e2e82a9e4b404c6",
+    "server/utils/policyEnvelopeDelivery.ts": "6fb547ae2f0326af3f09105215407d193d0bb1da991d9e04e7a0011890475c94",
+    "test/policyEnvelopeDelivery.test.ts": "9972a592ac70b038133cf33a453ae359999f04687f227218b18be841bba35a4a"
+  },
+  "bundleVersion": "pv_test_20260914161219_0014",
+  "policyRevision": 14,
+  "signedLifetimeMs": 93600000,
+  "healthStatus": 200,
+  "anonymousStatus": 403,
+  "historicalFormatStatus": 400,
+  "gatewayManualSync": { "ready": true, "elapsedMs": 8533 },
+  "browser": { "authenticatedMenu": true, "projectList": true, "reloadMenu": true, "reloadProjectList": true, "errorConsoleMessages": 0 },
+  "runtime": { "service": "cn.wiztek.hzy-test-runtime", "healthStatus": 200, "policyMaxAgeMs": 93600000 },
+  "otherPlatformPm2ProcessesUnchanged": true,
+  "platformPm2TargetPersisted": true,
+  "notes": "C000001/test only; not G1 or revocation-matrix approval. Original Runtime config and remote Platform rollback config retained."
+}

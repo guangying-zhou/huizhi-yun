@@ -530,6 +530,9 @@ func TestLinkWorkItemCommitRequiresProjectMemberOrScopedAdmin(t *testing.T) {
 	mock.ExpectQuery("SELECT COUNT\\(\\*\\).*FROM aims_projects p").
 		WithArgs("u1", int64(42), "u1", "dept-a").
 		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(int64(1)))
+	mock.ExpectQuery("SELECT id FROM gitlab_commits WHERE id=\\? AND project_id=\\? FOR UPDATE").
+		WithArgs(int64(77), int64(42)).
+		WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(int64(77)))
 	mock.ExpectExec("UPDATE gitlab_commits SET work_item_id = \\? WHERE id = \\? AND project_id = \\?").
 		WithArgs(int64(10), int64(77), int64(42)).
 		WillReturnResult(sqlmock.NewResult(0, 1))
@@ -632,6 +635,9 @@ func TestUpdateWorkItemCommitFilesChangedRequiresProjectMemberOrScopedAdmin(t *t
 	mock.ExpectQuery("SELECT COUNT\\(\\*\\).*FROM aims_projects p").
 		WithArgs("u1", int64(42), "u1", "dept-a").
 		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(int64(1)))
+	mock.ExpectQuery("SELECT id FROM gitlab_commits WHERE id=\\? AND work_item_id=\\? AND project_id=\\? FOR UPDATE").
+		WithArgs(int64(77), int64(10), int64(42)).
+		WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(int64(77)))
 	mock.ExpectExec("UPDATE gitlab_commits\\s+SET files_changed = \\?\\s+WHERE id = \\? AND work_item_id = \\? AND project_id = \\?").
 		WithArgs(int64(5), int64(77), int64(10), int64(42)).
 		WillReturnResult(sqlmock.NewResult(0, 1))
@@ -696,9 +702,13 @@ func TestUpdateWorkItemDeliverableRequiresProjectMemberOrScopedAdmin(t *testing.
 	mock.ExpectQuery("(?s)SELECT COALESCE\\(d\\.milestone_owner_id, matter\\.milestone_id, target\\.milestone_id\\).*FROM deliverables d").
 		WithArgs(int64(77)).
 		WillReturnRows(sqlmock.NewRows([]string{"milestone_id"}).AddRow(nil))
+	mock.ExpectBegin()
+	mock.ExpectQuery("SELECT id FROM aims_projects WHERE id = \\? FOR UPDATE").WithArgs(int64(42)).WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(int64(42)))
+	mock.ExpectQuery("SELECT target_id,matter_id FROM deliverables WHERE id=\\? AND project_id=\\?").WithArgs(int64(77), int64(42)).WillReturnRows(sqlmock.NewRows([]string{"target_id", "matter_id"}).AddRow(int64(10), nil))
 	mock.ExpectExec("UPDATE deliverables SET status = \\?, submitted_by = \\?, submitted_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = \\?").
 		WithArgs("submitted", "u1", int64(77)).
 		WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectCommit()
 	mock.ExpectQuery("(?s)SELECT id, target_id, matter_id, name, description, acceptance_criteria, deliverable_type,.*FROM deliverables").
 		WithArgs("10", "10").
 		WillReturnRows(sqlmock.NewRows([]string{
@@ -940,16 +950,19 @@ func TestLinkWorkItemDocumentRequiresProjectMemberOrScopedAdmin(t *testing.T) {
 	mock.ExpectQuery("SELECT id\\s+FROM project_documents").
 		WithArgs(int64(10), "doc-1", "doc-1").
 		WillReturnRows(sqlmock.NewRows([]string{"id"}))
-	mock.ExpectQuery("SELECT uuid, title, doc_category, oss_path, codocs_uuid, content_size").
+	mock.ExpectQuery("SELECT d\\.uuid, d\\.project_id, COALESCE\\(p\\.project_code,d\\.project_code\\), d\\.document_source").
 		WithArgs("doc-1", "doc-1", "doc-1").
 		WillReturnRows(sqlmock.NewRows([]string{
 			"uuid",
+			"project_id",
+			"project_code",
+			"document_source",
 			"title",
 			"doc_category",
 			"oss_path",
 			"codocs_uuid",
 			"content_size",
-		}).AddRow("source-uuid", "需求文档", "requirement", nil, "doc-1", int64(123)))
+		}).AddRow("source-uuid", int64(42), "proj-a", "codocs", "需求文档", "requirement", nil, "doc-1", int64(123)))
 	mock.ExpectExec("INSERT INTO project_documents").
 		WithArgs(sqlmock.AnyArg(), int64(42), "proj-a", int64(10), "需求文档", "requirement", nil, "doc-1", int64(123), "u1", "u1").
 		WillReturnResult(sqlmock.NewResult(88, 1))
@@ -1729,7 +1742,7 @@ func TestWorkItemDecomposeSubmitRequiresProjectManagerOrScopedAdminBeforeTransac
 	content := string(contentBytes)
 	guardIndex := strings.Index(content, "requireProjectManagerOrScopedAdmin")
 	templateIndex := strings.Index(content, "allowedDecomposeTemplateKeys")
-	txIndex := strings.Index(content, "BeginTx")
+	txIndex := strings.Index(content, "beginDeliverableWrite")
 
 	if guardIndex == -1 {
 		t.Fatal("expected decompose submit to require project manager or scoped admin")
@@ -1808,7 +1821,7 @@ func TestWorkItemCloneFromTemplateRequiresProjectManagerOrScopedAdminBeforeTrans
 	segment := content[startIndex : startIndex+endIndex]
 	guardIndex := strings.Index(segment, "requireProjectManagerOrScopedAdmin")
 	templateIndex := strings.Index(segment, `source.templateKey.String != "requirement_change"`)
-	txIndex := strings.Index(segment, "BeginTx")
+	txIndex := strings.Index(segment, "beginDeliverableWrite")
 	if guardIndex == -1 {
 		t.Fatal("expected clone from template to require project manager or scoped admin")
 	}

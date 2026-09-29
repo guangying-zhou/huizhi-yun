@@ -238,7 +238,7 @@ HZY_CONSOLE_VAULT_MASTER_KEY=<platform-generated-stable-random-key>
 策略：
 
 - 同一 Console deployment 只生成一次，后续重新下载 `console.env` 时复用原值。
-- Console license 的签名 payload 写入 `vault.masterKeyFingerprint`，只保存指纹不保存明文；Console 启动时用当前 `HZY_CONSOLE_VAULT_MASTER_KEY` 计算指纹并校验，避免 `.env` 被误改后继续写入不可恢复凭证。
+- Platform 仍持有 Console Vault 主密钥的旧部署，Console license 签名 payload 写入 `vault.masterKeyFingerprint`，只保存指纹不保存明文。`deployment_bootstrap_secrets` 标记为 `migrated` 的客户侧持钥部署，签发时不读取或重新生成主密钥，payload 省略 `vault` 字段；Console 的 env artifact 始终不含 `HZY_CONSOLE_VAULT_MASTER_KEY`。
 - 该表只服务部署交付材料重建，不进入普通 deployment 配置查询和业务应用 bundle。
 - Console 中 GitLab、企业微信、AI Provider、OSS 等系统集成凭证后续默认以 `db_encrypted` 写入 Console vault，不再要求租户在 Console `.env` 中逐项配置业务集成 secret。
 

@@ -4,6 +4,8 @@
  * 管理文档的共享设置
  */
 import { ref, computed } from 'vue'
+import { useAccountStore } from '@hzy/foundation/app/stores/account'
+import { useCodocsModule } from '../../../layer/useCodocsModule'
 
 interface ShareUser {
   id: number
@@ -37,6 +39,11 @@ interface AccountUserOption {
   email?: string | null
 }
 
+interface ShareListResponse {
+  code: number
+  data?: RawShareUser[]
+}
+
 interface Props {
   documentId?: string
   loading?: boolean
@@ -64,6 +71,7 @@ const emit = defineEmits<{
 
 // 使用 Account Store
 const accountStore = useAccountStore()
+const { moduleUrl } = useCodocsModule()
 
 // 共享用户列表
 const sharedUsers = ref<ShareUser[]>([])
@@ -144,7 +152,7 @@ const loadShares = async () => {
 
   loadingShares.value = true
   try {
-    const response = await $fetch(`/api/documents/${props.documentId}/shares`)
+    const response = await $fetch<ShareListResponse>(moduleUrl(`/api/documents/${props.documentId}/shares`))
     if (response.code === 0) {
       const rows = Array.isArray(response.data) ? response.data as RawShareUser[] : []
       sharedUsers.value = rows.map(row => ({
@@ -265,10 +273,10 @@ defineExpose({
 <template>
   <div class="flex flex-col h-full">
     <!-- 添加共享表单（仅发起人可见） -->
-    <div v-if="canManage" class="shrink-0 p-4 border-b border-gray-200 dark:border-gray-700">
+    <div v-if="canManage" class="shrink-0 p-4 border-b border-default">
       <div class="space-y-3">
         <div class="user-search-container relative">
-          <label class="text-xs font-medium text-gray-700 dark:text-gray-300 mb-1 block">
+          <label class="text-xs font-medium text-default mb-1 block">
             用户名
           </label>
           <div class="relative">
@@ -277,27 +285,27 @@ defineExpose({
               v-model="userSearchQuery"
               type="text"
               placeholder="输入用户名或 @uid"
-              class="w-full px-3 py-2 pr-8 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-primary-500"
+              class="w-full px-3 py-2 pr-8 text-sm border border-default rounded-md bg-default text-default placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-primary-500"
               @input="handleInputChange"
               @focus="showDropdown = searchResults.length > 0"
               @keydown.enter="handleShare"
               @keydown.escape="showDropdown = false"
             >
             <div class="absolute right-2 top-1/2 -translate-y-1/2">
-              <UIcon name="i-lucide-search" class="w-4 h-4 text-gray-400" />
+              <UIcon name="i-lucide-search" class="w-4 h-4 text-dimmed" />
             </div>
           </div>
 
           <!-- 用户搜索下拉框 -->
           <div
             v-if="showDropdown && searchResults.length > 0"
-            class="absolute z-50 w-full mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md shadow-lg max-h-60 overflow-y-auto"
+            class="absolute z-50 w-full mt-1 bg-default border border-default rounded-md shadow-lg max-h-60 overflow-y-auto"
           >
             <button
               v-for="user in searchResults"
               :key="user.uid"
               type="button"
-              class="w-full px-3 py-2 text-left hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors flex items-center gap-2"
+              class="w-full px-3 py-2 text-left hover:bg-muted transition-colors flex items-center gap-2"
               @click="selectUser(user)"
             >
               <div
@@ -306,10 +314,10 @@ defineExpose({
                 {{ getInitial(user.realName || user.uid) }}
               </div>
               <div class="flex-1 min-w-0">
-                <div class="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
+                <div class="text-sm font-medium text-default truncate">
                   {{ user.realName }}
                 </div>
-                <div class="text-xs text-gray-500 dark:text-gray-400 truncate">
+                <div class="text-xs text-muted truncate">
                   @{{ user.uid }}
                 </div>
               </div>
@@ -318,13 +326,13 @@ defineExpose({
         </div>
 
         <div>
-          <label class="text-xs font-medium text-gray-700 dark:text-gray-300 mb-1 block">
+          <label class="text-xs font-medium text-default mb-1 block">
             权限
           </label>
           <select
             v-model="shareForm.permission"
             :disabled="forceReadOnly"
-            class="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-primary-500 disabled:opacity-50 disabled:cursor-not-allowed"
+            class="w-full px-3 py-2 text-sm border border-default rounded-md bg-default text-default focus:outline-none focus:ring-2 focus:ring-primary-500 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <option value="read">
               只读
@@ -333,7 +341,7 @@ defineExpose({
               可编辑
             </option>
           </select>
-          <p v-if="forceReadOnly" class="text-xs text-gray-500 dark:text-gray-400 mt-1">
+          <p v-if="forceReadOnly" class="text-xs text-muted mt-1">
             {{ readonly ? '只读文档仅支持只读共享' : '项目文档仅支持只读共享' }}
           </p>
         </div>
@@ -361,7 +369,7 @@ defineExpose({
         <div
           v-for="user in sharedUsers"
           :key="user.id"
-          class="flex items-start gap-3 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700"
+          class="flex items-start gap-3 p-3 bg-default rounded-lg border border-default"
         >
           <!-- 头像 -->
           <div
@@ -373,12 +381,12 @@ defineExpose({
           <!-- 用户信息 -->
           <div class="flex-1 min-w-0">
             <div class="flex items-center justify-between mb-1">
-              <div class="font-medium text-sm text-gray-900 dark:text-gray-100 truncate">
+              <div class="font-medium text-sm text-default truncate">
                 {{ user.realName || user.uid }}
               </div>
               <UButton
                 v-if="canManage"
-                class="text-gray-400 hover:text-red-500"
+                class="text-dimmed hover:text-error"
                 icon="i-lucide-x"
                 size="xs"
                 variant="ghost"
@@ -394,7 +402,7 @@ defineExpose({
                 v-if="canManage"
                 :value="user.permission"
                 :disabled="forceReadOnly"
-                class="text-xs px-2 py-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-primary-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                class="text-xs px-2 py-1 border border-default rounded bg-default text-default focus:outline-none focus:ring-1 focus:ring-primary-500 disabled:opacity-50 disabled:cursor-not-allowed"
                 @change="handlePermissionChange(user.id, $event)"
               >
                 <option value="read">
@@ -406,7 +414,7 @@ defineExpose({
               </select>
               <span
                 v-else
-                class="text-xs px-2 py-0.5 rounded bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300"
+                class="text-xs px-2 py-0.5 rounded bg-muted text-muted"
               >
                 {{ user.permission === 'write' ? '可编辑' : '只读' }}
               </span>
@@ -427,7 +435,7 @@ defineExpose({
             </div>
 
             <!-- 分享时间 -->
-            <div class="text-xs text-gray-400 dark:text-gray-500 mt-1">
+            <div class="text-xs text-dimmed mt-1">
               分享于 {{ formatTime(user.createdAt) }}
             </div>
           </div>
@@ -436,11 +444,11 @@ defineExpose({
 
       <!-- 空状态 -->
       <div v-else class="flex flex-col items-center justify-center py-10 text-center">
-        <UIcon name="i-lucide-users" class="w-12 h-12 text-gray-400 mb-3" />
-        <p class="text-sm text-gray-500 dark:text-gray-400">
+        <UIcon name="i-lucide-users" class="w-12 h-12 text-dimmed mb-3" />
+        <p class="text-sm text-muted">
           尚未共享给任何人
         </p>
-        <p v-if="canManage" class="text-xs text-gray-400 dark:text-gray-500 mt-1">
+        <p v-if="canManage" class="text-xs text-dimmed mt-1">
           在上方添加用户来共享此文档
         </p>
       </div>

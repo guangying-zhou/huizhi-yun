@@ -2,6 +2,7 @@ import { resolveConsoleAuthWithSessionBridge } from '../utils/consoleSessionBrid
 import { getHeader, getRequestURL, setResponseStatus } from 'h3'
 import type { H3Event } from 'h3'
 import { decodeJwt } from 'jose'
+import { matchConsoleUserApiRoute } from '../../shared/utils/consoleUserApiRoutes'
 
 function stringValue(value: unknown) {
   return String(value || '').trim()
@@ -93,8 +94,11 @@ function getBearerApplicationAccessToken(event: H3Event) {
   }
 }
 
-function acceptsConsoleApplicationAccessToken(pathname: string) {
-  return pathname === '/api/v1/console/user/applications'
+function acceptsConsoleApplicationAccessToken(pathname: string, method: string) {
+  // Registered Console user APIs (consoleUserApiRoutes) verify the app access
+  // token in the handler with Console's own keys, like the routes below.
+  return matchConsoleUserApiRoute(method, pathname) !== null
+    || pathname === '/api/v1/console/user/applications'
     || pathname === '/api/v1/console/user/permissions'
     || pathname === '/api/v1/console/user/scoped-authorization'
     || pathname === '/api/v1/console/notifications'
@@ -136,13 +140,36 @@ function isServiceTokenIntrospectionPath(pathname: string) {
 }
 
 export default defineEventHandler(async (event) => {
-  const pathname = getRequestURL(event).pathname
+  const requestPath = getRequestURL(event).pathname
+  // Nitro Dev retains the configured app base in getRequestURL. Match the
+  // same handler-owned auth boundaries as the root-mounted Worker; never
+  // infer the prefix from an untrusted forwarded header or a suffix match.
+  const runtimeConfig = useRuntimeConfig(event) as { app?: { baseURL?: string, buildAssetsDir?: string } }
+  const base = String(runtimeConfig.app?.baseURL || '/').replace(/\/$/, '')
+  const pathname = base && base.startsWith('/') && !base.startsWith('//') && requestPath.startsWith(`${base}/`)
+    ? requestPath.slice(base.length)
+    : requestPath
+  if (pathname === '/_hzy0_worker_health'
+    || requestPath === '/enterprise/_hzy0_worker_health'
+    || requestPath === '/console/_hzy0_worker_health') return
+  // Public build artifacts and generated icons do not consume user identity.
+  // They were already readable without cookies; a cookie must not turn each
+  // Vite module into a live session/policy request. Business APIs stay below.
+  const assets = runtimeConfig.app?.buildAssetsDir || '/_nuxt/'
+  const publicAsset = assets.startsWith('/') && assets.endsWith('/') && assets !== '/'
+    && pathname.startsWith(assets)
+  // The Enterprise Host serves the same Nuxt Icon endpoint at its own prefix.
+  const publicIcon = /^\/(?:api|enterprise)\/_nuxt_icon\/[a-z0-9-]+\.json$/.test(pathname)
+  if (['GET', 'HEAD'].includes(event.method) && (publicAsset || publicIcon)) return
   const isAuthApi = isAuthApiPath(pathname)
   // Introspection is itself the service-token verification boundary. Running
   // the generic auth middleware first would require introspection in order to
   // enter introspection, creating an internal recursion (or an edge 522 when
   // dispatched through the Console Worker's public custom domain).
   const bypassConsoleAuth = isServiceTokenIntrospectionPath(pathname)
+    // The token handler authenticates each grant itself. Keep this exact:
+    // /oauth/tokenized and other OAuth routes retain generic authentication.
+    || pathname === '/oauth/token'
     // Dedicated handler authenticates the signed Gateway scheduler request.
     || pathname === '/api/internal/policy-bundle/sync'
     || shouldBypassConsoleAuth(pathname, configuredBypassPaths(event))
@@ -154,7 +181,7 @@ export default defineEventHandler(async (event) => {
 
   const bearerServiceToken = getBearerServiceToken(event)
   const bearerApplicationAccessToken = getBearerApplicationAccessToken(event)
-  if (bearerApplicationAccessToken && acceptsConsoleApplicationAccessToken(pathname)) {
+  if (bearerApplicationAccessToken && acceptsConsoleApplicationAccessToken(pathname, event.method)) {
     event.context.consoleAuth = {
       authenticated: false,
       reason: 'bypass',

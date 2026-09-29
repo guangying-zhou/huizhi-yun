@@ -30,6 +30,26 @@ func (a *Adapter) activateContractDelivery(ctx context.Context, contractCode str
 	}
 	defer tx.Rollback()
 
+	result, err := a.ActivateContractDeliveryInTransaction(ctx, tx, contractCode, body)
+	if err != nil {
+		return nil, err
+	}
+	if err = tx.Commit(); err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
+// ActivateContractDeliveryInTransaction preserves the original contract lock and frozen outbox commands.
+// No network delivery occurs here; the caller owns commit and rollback.
+func (a *Adapter) ActivateContractDeliveryInTransaction(ctx context.Context, tx *sql.Tx, contractCode string, body map[string]any, sources ...integrationoperation.TrustedContext) (map[string]any, error) {
+	contractCode = strings.TrimSpace(contractCode)
+	if contractCode == "" {
+		return nil, httperror.New(400, "missing_contract_code", "contractCode is required")
+	}
+	if tx == nil {
+		return nil, httperror.New(503, "contract_activation_transaction_required", "Caller transaction required")
+	}
 	contract, err := altocQueryOneMap(ctx, tx, `
 		SELECT
 		  ct.*,
@@ -127,14 +147,11 @@ func (a *Adapter) activateContractDelivery(ctx context.Context, contractCode str
 	if err != nil {
 		return nil, err
 	}
-	integrationOperations, err := a.freezeContractActivationOperationsTx(ctx, tx, contract, body, operator)
+	integrationOperations, err := a.freezeContractActivationOperationsTx(ctx, tx, contract, body, operator, sources...)
 	if err != nil {
 		return nil, err
 	}
 
-	if err := tx.Commit(); err != nil {
-		return nil, err
-	}
 	return map[string]any{
 		"contract":               contract,
 		"paymentTerms":           terms,

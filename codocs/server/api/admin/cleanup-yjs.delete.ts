@@ -12,6 +12,8 @@
 import { createOSSClient, createProjectsOSSClient } from '~~/server/utils/oss'
 import { requirePermission } from '~~/server/utils/checkPermission'
 
+const SNAPSHOT_PREFIX = 'codocs/snapshots/'
+
 interface OSSListV2Result {
   objects?: { name: string, size: number, lastModified: string }[]
   isTruncated: boolean
@@ -36,7 +38,9 @@ async function listYjsFiles(client: OSSClientWithListV2, prefix: string): Promis
 
     if (result.objects) {
       for (const obj of result.objects) {
-        if (obj.name.endsWith('.yjs')) {
+        // v2 快照对象（含配对的 state.yjs）是写一次的权威正文，绝不属于“历史遗留”：
+        // 即便被选中，Foundation 写一次守卫也会让整批删除失败，因此在扫描时就排除。
+        if (obj.name.endsWith('.yjs') && !obj.name.startsWith(SNAPSHOT_PREFIX)) {
           files.push(obj)
         }
       }

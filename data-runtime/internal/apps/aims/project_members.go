@@ -158,11 +158,19 @@ func (a *Adapter) requireProjectReadAccess(ctx context.Context, rawProjectID str
 	if currentUser == "" {
 		return httperror.New(http.StatusUnauthorized, "missing_current_user", "current_user is required")
 	}
-	if currentUserIsProjectAdmin(query) {
+	if currentUserIsProjectAdmin(query) && ctx.Value(enterpriseProjectReadScopeKey{}) == nil {
 		return nil
 	}
 
 	visibilityWhere, visibilityArgs := projectVisibilityWhere(query, "p", currentUser)
+	if ctx.Value(enterpriseProjectReadScopeKey{}) != nil {
+		scopeWhere, scopeArgs, err := enterpriseProjectReadScopeWhere(ctx, currentUser)
+		if err != nil {
+			return httperror.New(503, "enterprise_project_scope_unavailable", "Project scope facts unavailable")
+		}
+		visibilityWhere = "(" + visibilityWhere + ") AND (" + scopeWhere + ")"
+		visibilityArgs = append(visibilityArgs, scopeArgs...)
+	}
 	args := append([]any{projectID}, visibilityArgs...)
 	var id int64
 	err = a.DB().QueryRowContext(ctx, `
@@ -176,4 +184,9 @@ func (a *Adapter) requireProjectReadAccess(ctx context.Context, rawProjectID str
 		return httperror.New(http.StatusForbidden, "project_access_denied", "project access required")
 	}
 	return err
+}
+
+// Only the authenticated Enterprise server installs the scope context.
+func (a *Adapter) EnterpriseProjectReadAccess(ctx context.Context, projectID string, query url.Values) error {
+	return a.requireProjectReadAccess(ctx, projectID, query)
 }

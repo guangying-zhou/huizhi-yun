@@ -27,6 +27,7 @@ export async function loadSubjectScopedAuthorizationByService(input: {
   purpose: string
   resourceCode: string
   action: string
+  timeoutMs?: number
 }): Promise<SubjectScopedAuthorizationResult> {
   const runtime = await getConsoleRuntimeConfig({ event: input.event })
   const appCode = String(runtime.app.appCode || '').trim()
@@ -37,10 +38,18 @@ export async function loadSubjectScopedAuthorizationByService(input: {
   const response = await requestWithServiceAccessToken<{ code: number, data?: SubjectScopedAuthorizationResult }>({
     event: input.event, audience: 'console', scope: 'console:subject-authorization:read',
     request: token => fetchConsoleServiceJson(input.event, `${baseUrl}/api/v1/console/service/authorization/subject-scoped`, {
-      method: 'POST', timeout: 10000,
+      // Fresh-policy authorization may refresh a signed bundle (bounded at
+      // 90 seconds in test). Do not cancel it before its own deadline.
+      method: 'POST', timeout: input.timeoutMs ?? 10000,
       headers: { ...trustedServiceRequestHeaders(input.event), authorization: `Bearer ${token}` },
       body: { subjectUid: input.subjectUid, purpose: input.purpose }
     })
+  }).catch((error: unknown) => {
+    const name = (error as { name?: string })?.name
+    if (name === 'TimeoutError' || name === 'AbortError') {
+      throw createError({ statusCode: 503, message: 'subject_scoped_authorization_timeout' })
+    }
+    throw error
   })
   const data = response?.data
   if (response?.code !== 0 || !data || data.uid !== input.subjectUid || data.appCode !== appCode

@@ -1,0 +1,8 @@
+# Install as /etc/systemd/system/hzy-data-runtime.service.d/g4-config.conf.
+# The installer-generated unit already reads /etc/hzy-data-runtime/.env.
+[Unit]
+After=mysqld.service
+Wants=mysqld.service
+
+[Service]
+EnvironmentFile=/etc/hzy/runtime.env

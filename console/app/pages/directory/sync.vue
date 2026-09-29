@@ -1,28 +1,8 @@
 <script setup lang="ts">
-import { h, resolveComponent } from 'vue'
-import type { TableColumn } from '@nuxt/ui'
+import type { DirectorySyncJob } from '@hzy/foundation/app/types/consoleDirectorySync'
 import { dashboardPanelUi } from '~/utils/dashboardPanel'
 
 usePageTitle('目录同步')
-
-interface DirectorySyncJob {
-  jobCode: string
-  providerCode: string
-  syncType: string
-  objectScope: string
-  status: string
-  startedAt: string | null
-  finishedAt: string | null
-  requestedBy: string | null
-  totalCount: number
-  createdCount: number
-  updatedCount: number
-  deletedCount: number
-  skippedCount: number
-  errorCount: number
-  errorMessage: string | null
-  createdAt: string
-}
 
 interface ApiResponse<T> {
   code: number
@@ -33,8 +13,6 @@ const toast = useToast()
 const { loaded: permissionsLoaded, loadPermissions, hasPermission } = usePermissions()
 const running = ref(false)
 const runningProvider = ref<string | null>(null)
-const UBadge = resolveComponent('UBadge')
-const UButton = resolveComponent('UButton')
 
 if (!permissionsLoaded.value) {
   await loadPermissions()
@@ -48,60 +26,6 @@ const { data, pending, error, refresh } = await useFetch<ApiResponse<DirectorySy
 const jobs = computed(() => data.value?.data || [])
 const canRunSync = computed(() => permissionsLoaded.value && hasPermission('directory_sync', 'edit'))
 const canRebuildSubjectExports = computed(() => permissionsLoaded.value && hasPermission('directory_sync', 'admin'))
-
-function statusMeta(status: string) {
-  if (status === 'success') return { label: '成功', color: 'success' as const }
-  if (status === 'running') return { label: '运行中', color: 'warning' as const }
-  if (status === 'failed') return { label: '失败', color: 'error' as const }
-  if (status === 'partial_success') return { label: '部分成功', color: 'warning' as const }
-  return { label: status, color: 'neutral' as const }
-}
-
-const jobColumns: TableColumn<DirectorySyncJob>[] = [
-  {
-    accessorKey: 'jobCode',
-    header: '任务',
-    cell: ({ row }) => h('div', [
-      h(UButton, {
-        to: `/directory/sync/${row.original.jobCode}`,
-        variant: 'link',
-        color: 'primary',
-        class: 'p-0 font-medium'
-      }, () => row.original.jobCode),
-      row.original.errorMessage
-        ? h('p', { class: 'text-xs text-error' }, row.original.errorMessage)
-        : null
-    ])
-  },
-  {
-    id: 'provider',
-    header: 'Provider',
-    cell: ({ row }) => h('span', { class: 'text-muted' }, `${row.original.providerCode} / ${row.original.syncType}`)
-  },
-  {
-    accessorKey: 'objectScope',
-    header: '范围',
-    cell: ({ row }) => h('span', { class: 'text-muted' }, row.original.objectScope)
-  },
-  {
-    accessorKey: 'status',
-    header: '状态',
-    cell: ({ row }) => {
-      const meta = statusMeta(row.original.status)
-      return h(UBadge, { color: meta.color, variant: 'soft' }, () => meta.label)
-    }
-  },
-  {
-    id: 'counts',
-    header: '数量',
-    cell: ({ row }) => h('span', { class: 'text-muted' }, `${row.original.totalCount} total / ${row.original.errorCount} errors`)
-  },
-  {
-    id: 'time',
-    header: '时间',
-    cell: ({ row }) => h('span', { class: 'text-muted' }, row.original.finishedAt || row.original.startedAt || row.original.createdAt)
-  }
-]
 
 async function rebuildSubjectExports() {
   if (!canRebuildSubjectExports.value) {
@@ -272,18 +196,7 @@ async function runProviderSync(providerCode: 'ldap') {
           class="mb-3"
         />
 
-        <UTable
-          sticky
-          :data="jobs"
-          :columns="jobColumns"
-          :loading="pending"
-          empty="暂无同步任务"
-          class="flex-1 max-h-[calc(100svh-26rem)] rounded-lg border border-default"
-        >
-          <template #empty>
-            <CommonEmptyState icon="i-lucide-refresh-cw" title="暂无同步任务" description="配置目录源并启动同步后会显示在这里。" />
-          </template>
-        </UTable>
+        <DirectorySyncJobsTable :jobs="jobs" :loading="pending" />
       </UCard>
     </template>
   </UDashboardPanel>

@@ -10,6 +10,7 @@ import type {
   UserProjects,
   ApiResponse
 } from '../types/account'
+import { sharedApiPath } from '../utils/sharedApiPath'
 
 const normalizeDirectoryUser = (user: AccountUser): AccountUser => {
   return {
@@ -73,7 +74,7 @@ export const useDirectoryStore = defineStore('directory', {
         const response = await $fetch<ApiResponse<{
           items: AccountUser[]
           tree: unknown[]
-        }>>('/api/directory/users', { params })
+        }>>(sharedApiPath('/api/directory/users'), { params })
 
         if (response.code === 0 && response.data) {
           response.data.items.forEach((user: AccountUser) => {
@@ -97,7 +98,7 @@ export const useDirectoryStore = defineStore('directory', {
 
       try {
         const response = await $fetch<ApiResponse<AccountUser>>(
-          `/api/directory/users/${encodeURIComponent(uid)}`
+          `${sharedApiPath('/api/directory/users')}/${encodeURIComponent(uid)}`
         )
         if (response.code === 0 && response.data) {
           const normalized = normalizeDirectoryUser(response.data)
@@ -119,7 +120,7 @@ export const useDirectoryStore = defineStore('directory', {
 
       try {
         const response = await $fetch<ApiResponse<AccountUser[]>>(
-          '/api/directory/users/batch',
+          sharedApiPath('/api/directory/users/batch'),
           { method: 'POST', body: { uids: uncachedUids } }
         )
         if (response.code === 0 && response.data) {
@@ -141,7 +142,7 @@ export const useDirectoryStore = defineStore('directory', {
       this.departmentsLoading = true
       try {
         const response = await $fetch<ApiResponse<DepartmentResponse>>(
-          '/api/directory/departments'
+          sharedApiPath('/api/directory/departments')
         )
         if (response.code === 0 && response.data) {
           this.departments = response.data
@@ -168,7 +169,7 @@ export const useDirectoryStore = defineStore('directory', {
         const response = await $fetch<ApiResponse<{
           items: Project[]
           total: number
-        }>>('/api/directory/projects', { params })
+        }>>(sharedApiPath('/api/directory/projects'), { params })
 
         if (response.code === 0 && response.data) {
           const flattenProjects = (projects: Project[]) => {
@@ -198,7 +199,7 @@ export const useDirectoryStore = defineStore('directory', {
 
       try {
         const response = await $fetch<ApiResponse<UserProjects>>(
-          `/api/directory/users/${encodeURIComponent(uid)}/projects`
+          `${sharedApiPath('/api/directory/users')}/${encodeURIComponent(uid)}/projects`
         )
         if (response.code === 0 && response.data) {
           this.userProjects.set(uid, response.data)

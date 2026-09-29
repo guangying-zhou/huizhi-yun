@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/url"
 	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/DATA-DOG/go-sqlmock"
@@ -62,6 +63,31 @@ func TestConsoleDirectoryMutationBatchesAreBounded(t *testing.T) {
 		},
 	}); err == nil {
 		t.Fatal("expected duplicate committee leadership to be rejected")
+	}
+}
+
+func TestEnterpriseSelfDepartmentsUsesOnlyActorMembershipsAndMinimalFields(t *testing.T) {
+	database, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherRegexp))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer database.Close()
+	mock.ExpectQuery(`(?s)FROM directory_user_departments ud.*WHERE ud.uid=\? AND ud.status='active'.*LIMIT 101`).
+		WithArgs("person-a").WillReturnRows(sqlmock.NewRows([]string{"dept_code", "dept_name", "org_type", "relation_type", "is_primary", "manager_uid", "leader_uid"}).
+		AddRow("dept-a", "Team", "department", "member", true, "manager-a", "leader-a"))
+	got, err := (&Adapter{db: database}).EnterpriseSelfDepartments(context.Background(), "person-a")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got["primaryDeptCode"] != "dept-a" {
+		t.Fatalf("wrong primary department: %#v", got)
+	}
+	rows := got["departments"].([]map[string]any)
+	if len(rows) != 1 || len(rows[0]) != 5 || rows[0]["managerId"] != "manager-a" || rows[0]["leaderId"] != "leader-a" {
+		t.Fatalf("unexpected projection: %#v", rows)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
 	}
 }
 
@@ -143,5 +169,59 @@ func TestConsoleUserProjectsRejectsInvalidParentProjectCode(t *testing.T) {
 		"parent_id": {"invalid project code"},
 	}); err == nil {
 		t.Fatal("expected invalid parent project code to fail before database access")
+	}
+}
+
+func TestConsoleAccessibleDepartmentsIncludesManagedAndOwnSubtreesOnly(t *testing.T) {
+	columns := []string{"id", "dept_code", "dept_name", "parent_dept_code", "level_no", "sort_order", "manager_uid", "manager_name", "leader_uid", "leader_name", "org_type", "dept_category", "description", "status"}
+	tree := func() *sqlmock.Rows {
+		return sqlmock.NewRows(columns).
+			AddRow(1, "root", "Company", nil, 1, 0, "ceo", "CEO", nil, nil, "department", nil, nil, "active").
+			AddRow(2, "rd", "R&D", "root", 2, 1, "manager-rd", "M", "leader-rd", "L", "department", nil, nil, "active").
+			AddRow(3, "rd-1", "R&D 1", "rd", 3, 2, nil, nil, nil, nil, "department", nil, nil, "active").
+			AddRow(4, "rd-1-a", "R&D 1A", "rd-1", 4, 3, nil, nil, nil, nil, "department", nil, nil, "active").
+			AddRow(5, "rd-2", "R&D 2", "rd", 3, 4, nil, nil, nil, nil, "department", nil, nil, "active").
+			AddRow(6, "rd-committee", "Committee", "rd", 3, 5, nil, nil, nil, nil, "committee", nil, nil, "active").
+			AddRow(7, "sales", "Sales", "root", 2, 6, nil, nil, nil, nil, "department", nil, nil, "active")
+	}
+	for _, tc := range []struct {
+		uid         string
+		memberships []string
+		want        []string
+	}{
+		{uid: "manager-rd", want: []string{"rd", "rd-1", "rd-1-a", "rd-2"}},
+		{uid: "leader-rd", want: []string{"rd", "rd-1", "rd-1-a", "rd-2"}},
+		{uid: "member", memberships: []string{"rd-1"}, want: []string{"rd-1", "rd-1-a"}},
+		{uid: "outsider", want: []string{}},
+		// A root membership still excludes the parentless root itself.
+		{uid: "ceo", want: []string{"rd", "rd-1", "rd-1-a", "rd-2", "sales"}},
+	} {
+		t.Run(tc.uid, func(t *testing.T) {
+			database, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherRegexp))
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer database.Close()
+			mock.ExpectQuery(`(?s)FROM directory_departments d.*WHERE d.status=\?`).WithArgs("active").WillReturnRows(tree())
+			memberships := sqlmock.NewRows([]string{"dept_code"})
+			for _, code := range tc.memberships {
+				memberships.AddRow(code)
+			}
+			mock.ExpectQuery(`SELECT dept_code FROM directory_user_departments\s+WHERE uid=\? AND status='active'`).WithArgs(tc.uid).WillReturnRows(memberships)
+			rows, err := (&Adapter{db: database}).ConsoleAccessibleDepartments(context.Background(), tc.uid)
+			if err != nil {
+				t.Fatal(err)
+			}
+			got := make([]string, 0, len(rows))
+			for _, row := range rows {
+				got = append(got, row["deptCode"].(string))
+			}
+			if strings.Join(got, ",") != strings.Join(tc.want, ",") {
+				t.Fatalf("got %v, want %v", got, tc.want)
+			}
+			if err := mock.ExpectationsWereMet(); err != nil {
+				t.Fatal(err)
+			}
+		})
 	}
 }

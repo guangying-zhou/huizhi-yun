@@ -1,8 +1,20 @@
 <script setup lang="ts">
-import { projectStatusConfig } from '~/config/project'
-import type { ProjectMember } from '~/types/aims'
+import ContentPageHeader from '../../../foundation/app/components/ContentPageHeader.vue'
+import { useAimsModule } from '../../layer/useAimsModule'
+import { projectStatusConfig } from '../config/project'
+import type { ProjectMember } from '../types/aims'
+import { getDefaultWeeklyReportWeek } from '../composables/useWeeklyReportDefaultWeek'
+import { useProjectStore } from '../stores/project'
+import { useTimeEntryReadPage } from '../composables/useTimeEntryPage'
+import { isWeeklySummaryPage } from '../utils/weeklyReportSummaryPage'
+import { isoWeekDateRange, normalizeIsoWeekInput, shiftIsoWeek } from '../utils/isoWeek'
+import CompanyWeeklySummaryPanel from '../components/CompanyWeeklySummaryPanel.vue'
+import { aimsApiErrorCode, isWeeklyPeriodNotReady, weeklyReportingErrorMessage } from '../utils/weeklyReportingError'
 
+// 同一份代码供独立应用与企业宿主使用：非宿主模式下 moduleUrl 原样返回路径。
+const { moduleUrl, hosted } = useAimsModule()
 definePageMeta({
+  hostContentInset: false,
   layoutHeader: true,
   layoutHeaderTitle: '周报汇总',
   layoutHeaderProjectSwitcher: false
@@ -58,14 +70,6 @@ interface WeeklyReportSummaryItem {
   workItems?: WeeklyReportWorkItem[]
 }
 
-interface ListPayload<T> {
-  items?: T[]
-  meta?: {
-    weekStart?: string
-    weekEnd?: string
-  }
-}
-
 interface OverviewRankRow {
   projectId: number
   name: string
@@ -108,11 +112,24 @@ const defaultReportWeek = getDefaultWeeklyReportWeek()
 
 const selectedYear = ref(defaultReportWeek.year)
 const selectedWeek = ref(defaultReportWeek.week)
-const search = ref('')
+// 输入框只编辑草稿：停止输入后（或回车/失焦）才切换所选周并加载一次，
+// 不会逐字符请求，也不会停留在未加载的中间周。
+const yearInput = ref(String(defaultReportWeek.year))
+const weekInput = ref(String(defaultReportWeek.week))
+const page = ref(1)
+const pageSize = 20
+const { search, debounced, flush } = useDebouncedSearch({ onChange: () => {
+  page.value = 1
+} })
+const summaryRead = useTimeEntryReadPage(isWeeklySummaryPage<WeeklyReportSummaryItem>)
+const listTotal = computed(() => summaryRead.data.value?.total || 0)
 const loading = ref(false)
 const periodGenerating = ref(false)
 const directorWorkbenchLoading = ref(false)
 const directorPeriodReady = ref(true)
+// 生成被业务状态阻断时的说明（例如周报设置未配置），切换周或生成成功后清空。
+const periodBlockedMessage = ref('')
+const periodBlockedByConfiguration = ref(false)
 const directorWorkbenchItems = ref<DirectorWorkbenchItem[]>([])
 const reviewingAction = ref<'approve' | 'return' | 'approve_with_corrective_action' | null>(null)
 const reviewComment = ref('')
@@ -125,8 +142,6 @@ const membersLoading = ref(false)
 const { users: accountUsers } = useAccountUsers({ pageSize: 1000 })
 const { departments } = useAccountDepartments()
 const items = ref<WeeklyReportSummaryItem[]>([])
-const weekStart = ref('')
-const weekEnd = ref('')
 const editing = ref<WeeklyReportSummaryItem | null>(null)
 const projectMembers = ref<ProjectMember[]>([])
 const workloadChartEl = shallowRef<HTMLElement | null>(null)
@@ -149,7 +164,9 @@ const workItemPlanTypeOptions = [
   { label: '本周工作', value: 'this_week' },
   { label: '下周计划', value: 'next_week' }
 ]
+let chartGeneration = 0
 let membersRequestSeq = 0
+let workbenchRequestSeq = 0
 let echartsApi: typeof import('echarts') | null = null
 let workloadChart: ReturnType<typeof import('echarts').init> | null = null
 let memberChart: ReturnType<typeof import('echarts').init> | null = null
@@ -181,77 +198,17 @@ const projectMemberOptions = computed(() => {
     }))
 })
 
-const filteredItems = computed(() => {
-  const keyword = search.value.trim().toLowerCase()
-  if (!keyword) return items.value
-  return items.value.filter(item => [
-    item.projectName,
-    item.projectCode,
-    item.internalCode,
-    item.departmentName,
-    displayDepartmentName(item),
-    item.projectManagerName,
-    displayProjectLeaderName(item),
-    item.leaderUid
-  ].some(value => String(value || '').toLowerCase().includes(keyword)))
-})
-
-const summaryStats = computed(() => {
-  const filled = items.value.filter(item => item.reportId).length
-  const currentDays = items.value.reduce((sum, item) => sum + hoursToDays(item.totalHours), 0)
-  const actualDays = items.value.reduce((sum, item) => sum + hoursToDays(item.actualHours), 0)
-  return { total: items.value.length, filled, currentDays: round2(currentDays), actualDays: round2(actualDays) }
-})
-
-const overviewStats = computed(() => {
-  const previousDays = items.value.reduce((sum, item) => sum + hoursToDays(item.previousTotalHours), 0)
-  const memberSlots = items.value.reduce((sum, item) => sum + Number(item.memberCount || 0), 0)
-  const cumulativeDays = items.value.reduce((sum, item) => sum + Number(item.cumulativeLaborCost || 0), 0)
-  return {
-    previousDays: round2(previousDays),
-    deltaDays: round2(summaryStats.value.currentDays - previousDays),
-    memberSlots,
-    cumulativeDays: round2(cumulativeDays)
-  }
-})
-
-const workloadChartRows = computed(() => {
-  return items.value
-    .map(item => overviewRow(item, hoursToDays(item.totalHours)))
-    .filter(row => row.value > 0)
-    .sort((left, right) => right.value - left.value)
-})
-
-const memberChartRows = computed(() => {
-  return items.value
-    .map(item => overviewRow(item, Number(item.memberCount || 0)))
-    .filter(row => row.value > 0)
-    .sort((left, right) => right.value - left.value)
-})
-
-const changeChartRows = computed(() => {
-  return items.value
-    .map((item) => {
-      const current = hoursToDays(item.totalHours)
-      const previous = hoursToDays(item.previousTotalHours)
-      return {
-        ...overviewRow(item, round2(current - previous)),
-        previousValue: round2(previous),
-        delta: round2(current - previous)
-      }
-    })
-    .filter(row => row.previousValue || row.value)
-    .sort((left, right) => Math.abs(right.value) - Math.abs(left.value))
-})
-
-const cumulativeChartRows = computed(() => {
-  return items.value
-    .map(item => overviewRow(item, Number(item.cumulativeLaborCost || 0)))
-    .filter(row => row.value > 0)
-    .sort((left, right) => right.value - left.value)
-})
+const filteredItems = computed(() => items.value)
+const summaryStats = computed(() => summaryRead.data.value?.summary || { total: 0, filled: 0, currentDays: 0, actualDays: 0 })
+const overviewStats = computed(() => summaryRead.data.value?.summary || { previousDays: 0, deltaDays: 0, memberSlots: 0, cumulativeLaborCost: 0 })
+const workloadChartRows = computed(() => summaryRead.data.value?.charts.workload || [])
+const memberChartRows = computed(() => summaryRead.data.value?.charts.members || [])
+const changeChartRows = computed(() => summaryRead.data.value?.charts.change || [])
+const cumulativeChartRows = computed(() => summaryRead.data.value?.charts.cost || [])
 
 const canReviewWeeklyReports = computed(() => hasPermission('weekly_reports', 'review'))
+const canConfigureWeeklyReports = computed(() => hasPermission('weekly_reports', 'configure'))
+const weeklySettingsPath = computed(() => moduleUrl('/admin/weekly-reporting-settings'))
 const periodKey = computed(() => `${selectedYear.value}-W${String(selectedWeek.value).padStart(2, '0')}`)
 const directorWorkbenchMap = computed(() => new Map(directorWorkbenchItems.value.map(item => [item.projectId, item])))
 const directorWorkbenchStats = computed(() => ({
@@ -266,6 +223,10 @@ const weekLabel = computed(() => {
   const weekText = String(selectedWeek.value).padStart(2, '0')
   return `${selectedYear.value}年 第${weekText}周`
 })
+// 起止日期由所选 ISO 周直接推算（与 Runtime isoWeekRange 相同），切换周即更新，
+// 不依赖上一周列表响应的 meta。
+const weekRange = computed(() => isoWeekDateRange(selectedYear.value, selectedWeek.value))
+const weekRangeLabel = computed(() => `${weekRange.value.start} ~ ${weekRange.value.end}`)
 
 const exportHref = computed(() => {
   const base = String(runtimeConfig.app.baseURL || '/').replace(/\/?$/, '/')
@@ -273,75 +234,97 @@ const exportHref = computed(() => {
 })
 
 async function loadReports() {
+  chartGeneration++
   loading.value = true
-  try {
-    const res = await $fetch<{ code: number, data: ListPayload<WeeklyReportSummaryItem> }>('/api/v1/weekly-reports', {
-      query: {
-        year: selectedYear.value,
-        week: selectedWeek.value,
-        includeWorkItems: '1'
-      }
-    })
-    if (res.code === 0) {
-      items.value = res.data.items || []
-      weekStart.value = res.data.meta?.weekStart || ''
-      weekEnd.value = res.data.meta?.weekEnd || ''
-      if (editing.value) {
-        const next = items.value.find(item => item.projectId === editing.value?.projectId)
-        if (next) selectItem(next)
-      }
-      await nextTick()
-      await renderOverviewCharts()
-    }
+  items.value = []
+  editing.value = null
+  projectMembers.value = []
+  const data = await summaryRead.read(moduleUrl('/api/v1/weekly-reports'), {
+    year: selectedYear.value, week: selectedWeek.value, page: page.value, pageSize,
+    includeWorkItems: '1', search: debounced.value || undefined
+  })
+  if (data) {
+    items.value = data.items
+    await nextTick()
+    await renderOverviewCharts()
     await loadDirectorWorkbench()
-  } catch (error) {
-    console.error('[WeeklyReports] load failed:', error)
-    toast.add({ title: '加载周报汇总失败', color: 'error' })
-  } finally {
-    loading.value = false
   }
+  loading.value = summaryRead.loading.value
 }
 
 async function loadDirectorWorkbench() {
+  // Multiple report reads can settle during one week transition. Keep one
+  // request for the same week and authorization fingerprint, including a
+  // confirmed "period not ready" result; only transient failures may retry.
+  const requestKey = `${periodKey.value}:${summaryRead.fingerprint.value}`
+  if (directorWorkbenchLoadedKey === requestKey) return
+  if (directorWorkbenchInFlight?.key === requestKey) return await directorWorkbenchInFlight.promise
+  const promise = loadDirectorWorkbenchOnce()
+  directorWorkbenchInFlight = { key: requestKey, promise }
+  try {
+    if (await promise) directorWorkbenchLoadedKey = requestKey
+  } finally {
+    if (directorWorkbenchInFlight?.promise === promise) directorWorkbenchInFlight = null
+  }
+}
+
+let directorWorkbenchInFlight: { key: string, promise: Promise<boolean> } | null = null
+let directorWorkbenchLoadedKey = ''
+async function loadDirectorWorkbenchOnce(): Promise<boolean> {
+  const sequence = ++workbenchRequestSeq
+  const identity = summaryRead.fingerprint.value
+  const key = periodKey.value
   if (!canReviewWeeklyReports.value) {
     directorWorkbenchItems.value = []
-    return
+    return true
   }
   directorWorkbenchLoading.value = true
   try {
     const res = await $fetch<{ code: number, data: { items?: DirectorWorkbenchItem[] } }>(
-      `/api/v1/weekly-reporting-periods/${periodKey.value}/director-workbench`
+      moduleUrl(`/api/v1/weekly-reporting-periods/${periodKey.value}/director-workbench`)
     )
+    if (sequence !== workbenchRequestSeq || identity !== summaryRead.fingerprint.value || key !== periodKey.value) return false
     directorPeriodReady.value = true
     directorWorkbenchItems.value = res.data.items || []
+    return true
   } catch (error: unknown) {
+    if (sequence !== workbenchRequestSeq || identity !== summaryRead.fingerprint.value || key !== periodKey.value) return false
     directorWorkbenchItems.value = []
-    const status = (error as { statusCode?: number, status?: number })?.statusCode
-      || (error as { statusCode?: number, status?: number })?.status
-    if (status === 404 || status === 409) {
+    // 周期不存在（409 weekly_reporting_period_required）表示本周应报清单未生成，
+    // 提供生成入口；其余失败按业务码提示，不再把任意 409 当作“未生成”。
+    if (isWeeklyPeriodNotReady(error)) {
       directorPeriodReady.value = false
-      return
+      return true
     }
     console.error('[WeeklyReports] load director workbench failed:', error)
-    toast.add({ title: '加载项目总监审阅责任清单失败', color: 'error' })
+    toast.add({ title: weeklyReportingErrorMessage(error, '加载项目总监审阅责任清单失败'), color: 'error' })
+    return false
   } finally {
-    directorWorkbenchLoading.value = false
+    if (sequence === workbenchRequestSeq) directorWorkbenchLoading.value = false
   }
 }
 
 async function generateReportingPeriod() {
   if (!canReviewWeeklyReports.value) return
   periodGenerating.value = true
+  periodBlockedMessage.value = ''
+  periodBlockedByConfiguration.value = false
   try {
-    await $fetch(`/api/v1/weekly-reporting-periods/${periodKey.value}:generate`, {
+    await $fetch(moduleUrl(`/api/v1/weekly-reporting-periods/${periodKey.value}:generate`), {
       method: 'POST'
     })
     directorPeriodReady.value = true
     toast.add({ title: `${periodKey.value} 应报责任清单已生成`, color: 'success' })
+    directorWorkbenchLoadedKey = ''
     await loadReports()
   } catch (error: unknown) {
     console.error('[WeeklyReports] generate reporting period failed:', error)
-    const message = (error as { data?: { message?: string } })?.data?.message || '生成应报责任清单失败'
+    const message = weeklyReportingErrorMessage(error, '生成应报责任清单失败')
+    const code = aimsApiErrorCode(error)
+    if (code === 'weekly_reporting_not_configured' || code === 'weekly_reporting_disabled') {
+      periodBlockedMessage.value = message
+      periodBlockedByConfiguration.value = true
+    }
     toast.add({ title: message, color: 'error' })
   } finally {
     periodGenerating.value = false
@@ -411,7 +394,7 @@ async function reviewEditing(action: 'approve' | 'return' | 'approve_with_correc
   }
   reviewingAction.value = action
   try {
-    const res = await $fetch<{ code: number }>(`/api/v1/weekly-reports/${editing.value.reportId}:review`, {
+    const res = await $fetch<{ code: number }>(moduleUrl(`/api/v1/weekly-reports/${editing.value.reportId}:review`), {
       method: 'POST',
       body: {
         action,
@@ -442,7 +425,7 @@ async function openCorrectionDraft() {
   if (!editing.value?.reportId || editing.value.status !== 'frozen' || !correctionReason.value.trim()) return
   correctionOpening.value = true
   try {
-    await $fetch(`/api/v1/weekly-reports/${editing.value.reportId}:open-correction`, {
+    await $fetch(moduleUrl(`/api/v1/weekly-reports/${editing.value.reportId}:open-correction`), {
       method: 'POST',
       body: { reason: correctionReason.value.trim() }
     })
@@ -476,20 +459,34 @@ async function loadProjectMembers(projectId: number) {
   }
 }
 
+function selectWeek(year: number, week: number) {
+  yearInput.value = String(year)
+  weekInput.value = String(week)
+  // The [selectedYear, selectedWeek] watcher resets paging and loads once.
+  selectedYear.value = year
+  selectedWeek.value = week
+}
+
 function prevWeek() {
-  const { start } = getWeekRange(selectedYear.value, selectedWeek.value)
-  start.setDate(start.getDate() - 7)
-  selectedYear.value = getISOWeekYear(start)
-  selectedWeek.value = getISOWeekNumber(start)
-  loadReports()
+  const target = shiftIsoWeek(selectedYear.value, selectedWeek.value, -1)
+  selectWeek(target.year, target.week)
 }
 
 function nextWeek() {
-  const { start } = getWeekRange(selectedYear.value, selectedWeek.value)
-  start.setDate(start.getDate() + 7)
-  selectedYear.value = getISOWeekYear(start)
-  selectedWeek.value = getISOWeekNumber(start)
-  loadReports()
+  const target = shiftIsoWeek(selectedYear.value, selectedWeek.value, 1)
+  selectWeek(target.year, target.week)
+}
+
+function applyWeekInput() {
+  const target = normalizeIsoWeekInput(yearInput.value, weekInput.value)
+  if (target) selectWeek(target.year, target.week)
+}
+
+function commitWeekInput() {
+  // Blur/Enter: apply a valid draft now; an invalid one reverts to the current week.
+  const target = normalizeIsoWeekInput(yearInput.value, weekInput.value)
+  if (target) selectWeek(target.year, target.week)
+  else selectWeek(selectedYear.value, selectedWeek.value)
 }
 
 function newWorkItem(): WeeklyReportWorkItem {
@@ -528,6 +525,10 @@ function round2(value: number) {
   return Math.round(Number(value || 0) * 100) / 100
 }
 
+function formatCost(value: number) {
+  return Number(value || 0).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+}
+
 function formatDays(value: number) {
   return `${round2(value)} 人天`
 }
@@ -537,15 +538,6 @@ function formatSignedDays(value: number) {
   if (rounded > 0) return `+${rounded} 人天`
   if (rounded < 0) return `${rounded} 人天`
   return '0 人天'
-}
-
-function overviewRow(item: WeeklyReportSummaryItem, value: number): OverviewRankRow {
-  return {
-    projectId: item.projectId,
-    name: item.projectName || item.internalCode || item.projectCode || `项目 ${item.projectId}`,
-    code: item.internalCode || item.projectCode || String(item.projectId),
-    value: round2(value)
-  }
 }
 
 function memberName(member: ProjectMember) {
@@ -597,38 +589,12 @@ function statusColor(status: string | undefined) {
   return 'warning'
 }
 
-function getISOWeekNumber(date: Date) {
-  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()))
-  const dayNum = d.getUTCDay() || 7
-  d.setUTCDate(d.getUTCDate() + 4 - dayNum)
-  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1))
-  return Math.ceil((((d.getTime() - yearStart.getTime()) / 86400000) + 1) / 7)
-}
-
-function getISOWeekYear(date: Date) {
-  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()))
-  const dayNum = d.getUTCDay() || 7
-  d.setUTCDate(d.getUTCDate() + 4 - dayNum)
-  return d.getUTCFullYear()
-}
-
-function getWeekRange(year: number, week: number) {
-  const jan4 = new Date(year, 0, 4)
-  const dayOfWeek = jan4.getDay() || 7
-  const week1Monday = new Date(jan4)
-  week1Monday.setDate(jan4.getDate() - dayOfWeek + 1)
-  const start = new Date(week1Monday)
-  start.setDate(week1Monday.getDate() + (week - 1) * 7)
-  const end = new Date(start)
-  end.setDate(start.getDate() + 6)
-  return { start, end }
-}
-
 function chartRows(rows: OverviewRankRow[], limit = 14) {
   return rows.slice(0, limit)
 }
 
 function pieRows(rows: OverviewRankRow[], limit = 10) {
+  if (rows.some(row => row.projectId === 0)) return rows
   const topRows = rows.slice(0, limit)
   const restRows = rows.slice(limit)
   const restValue = restRows.reduce((sum, row) => sum + Number(row.value || 0), 0)
@@ -655,7 +621,7 @@ function tooltipHtml(params: ChartTooltipParam[] | ChartTooltipParam, unit: stri
   const lines = [
     `<div style="font-weight:600;margin-bottom:4px;">${param.name || ''}</div>`,
     `<div style="color:#71717a;margin-bottom:2px;">${data.code || ''}</div>`,
-    `<div>${param.marker || ''}数值：${round2(value)} ${unit}</div>`
+    `<div>${param.marker || ''}数值：${unit === '成本' ? formatCost(value) : round2(value)} ${unit}</div>`
   ]
   if (previous !== undefined) {
     lines.push(`<div>上周：${round2(Number(previous))} ${unit}</div>`)
@@ -788,7 +754,7 @@ function rankBarOption(rows: OverviewRankRow[], unit: string, color: string) {
           position: 'right',
           color: '#52525b',
           fontSize: 11,
-          formatter: (params: ChartTooltipParam) => `${round2(Number(params.value || 0))}`
+          formatter: (params: ChartTooltipParam) => unit === '成本' ? formatCost(Number(params.value || 0)) : `${round2(Number(params.value || 0))}`
         }
       }
     ]
@@ -866,7 +832,10 @@ async function renderChart(
     currentChart?.dispose()
     return null
   }
+  const generation = chartGeneration
+  const identity = summaryRead.fingerprint.value
   const api = await ensureEcharts()
+  if (generation !== chartGeneration || identity !== summaryRead.fingerprint.value) return currentChart
   if (!api) return currentChart
   let chart = currentChart
   if (chart && chart.getDom() !== chartEl) {
@@ -880,13 +849,18 @@ async function renderChart(
 
 async function renderOverviewCharts() {
   if (editing.value) return
+  const generation = chartGeneration
   workloadChart = await renderChart(workloadChartEl.value, workloadChart, workloadPieOption(workloadChartRows.value))
+  if (generation !== chartGeneration) return
   memberChart = await renderChart(memberChartEl.value, memberChart, rankBarOption(memberChartRows.value, '人', '#0891b2'))
+  if (generation !== chartGeneration) return
   changeChart = await renderChart(changeChartEl.value, changeChart, changeBarOption(changeChartRows.value))
-  cumulativeChart = await renderChart(cumulativeChartEl.value, cumulativeChart, rankBarOption(cumulativeChartRows.value, '人天', '#7c3aed'))
+  if (generation !== chartGeneration) return
+  cumulativeChart = await renderChart(cumulativeChartEl.value, cumulativeChart, rankBarOption(cumulativeChartRows.value, '成本', '#7c3aed'))
 }
 
 function disposeOverviewCharts() {
+  chartGeneration++
   for (const chart of [workloadChart, memberChart, changeChart, cumulativeChart]) {
     chart?.dispose()
   }
@@ -895,6 +869,37 @@ function disposeOverviewCharts() {
   changeChart = null
   cumulativeChart = null
 }
+
+watch([debounced, page], () => {
+  loadReports()
+})
+watch([selectedYear, selectedWeek], () => {
+  directorWorkbenchLoadedKey = ''
+  summaryRead.clear()
+  items.value = []
+  editing.value = null
+  periodBlockedMessage.value = ''
+  periodBlockedByConfiguration.value = false
+  // Every week change loads exactly once: resetting a later page triggers the
+  // page watcher, otherwise load here.
+  if (page.value !== 1) page.value = 1
+  else loadReports()
+})
+watchDebounced([yearInput, weekInput], () => {
+  // Arrow navigation mirrors the selected week into both inputs. This is not
+  // another user edit and must not replay the same week transition.
+  if (String(yearInput.value) === String(selectedYear.value) && String(weekInput.value) === String(selectedWeek.value)) return
+  applyWeekInput()
+}, { debounce: 600 })
+watch(summaryRead.fingerprint, () => {
+  items.value = []
+  editing.value = null
+  projectMembers.value = []
+  workbenchRequestSeq++
+  directorWorkbenchLoading.value = false
+  directorWorkbenchItems.value = []
+  disposeOverviewCharts()
+}, { flush: 'sync' })
 
 watch([workloadChartRows, memberChartRows, changeChartRows, cumulativeChartRows, editing], () => {
   if (editing.value) return
@@ -925,15 +930,80 @@ onBeforeUnmount(() => {
 <template>
   <UDashboardPanel id="weekly-reports-summary" :ui="{ body: 'flex flex-col flex-1 min-h-0 p-0 overflow-hidden' }">
     <template #body>
-      <div class="flex h-full min-h-0 flex-col">
-        <div class="border-b border-default bg-default px-6 py-4">
+      <div class="flex h-full min-h-0 flex-col weekly-reports-container" style="container-type: inline-size">
+        <div v-if="hosted" class="shrink-0 border-b border-default px-4 py-4 sm:px-6">
+          <ContentPageHeader
+            :hosted="hosted"
+            title="周报汇总"
+            :description="`${weekLabel}（${weekRangeLabel}）`"
+            breadcrumb="交付与服务 / 执行协同"
+          >
+            <template #actions>
+              <UButton
+                icon="i-lucide-chevron-left"
+                variant="outline"
+                color="neutral"
+                @click="prevWeek"
+              />
+              <UInput
+                v-model="yearInput"
+                type="number"
+                aria-label="年份"
+                class="w-24"
+                @keyup.enter="commitWeekInput"
+                @blur="commitWeekInput"
+              />
+              <UInput
+                v-model="weekInput"
+                type="number"
+                min="1"
+                max="53"
+                aria-label="周次"
+                class="w-20"
+                @keyup.enter="commitWeekInput"
+                @blur="commitWeekInput"
+              />
+              <UButton
+                icon="i-lucide-chevron-right"
+                variant="outline"
+                color="neutral"
+                @click="nextWeek"
+              />
+              <UButton
+                v-if="canReviewWeeklyReports && !directorPeriodReady"
+                icon="i-lucide-calendar-plus"
+                label="生成应报清单"
+                color="warning"
+                variant="soft"
+                :loading="periodGenerating"
+                @click="generateReportingPeriod"
+              />
+              <UButton
+                v-if="canReviewWeeklyReports && directorPeriodReady"
+                icon="i-lucide-files"
+                label="公司汇总"
+                color="primary"
+                variant="soft"
+                @click="companySummaryOpen = true"
+              />
+              <UButton
+                icon="i-lucide-download"
+                label="导出汇总表"
+                color="primary"
+                :to="exportHref"
+                external
+              />
+            </template>
+          </ContentPageHeader>
+        </div>
+        <div v-else class="shrink-0 border-b border-default bg-default px-6 py-4">
           <div class="flex flex-wrap items-center justify-between gap-3">
             <div>
               <h1 class="text-xl font-semibold text-highlighted">
                 项目周报汇总
               </h1>
               <p class="text-sm text-muted">
-                {{ weekLabel }} <span v-if="weekStart && weekEnd">({{ weekStart }} ~ {{ weekEnd }})</span>
+                {{ weekLabel }} <span data-testid="weekly-report-week-range">({{ weekRangeLabel }})</span>
               </p>
             </div>
             <div class="flex flex-wrap items-center gap-2">
@@ -943,13 +1013,23 @@ onBeforeUnmount(() => {
                 color="neutral"
                 @click="prevWeek"
               />
-              <UInput v-model="selectedYear" type="number" class="w-24" />
               <UInput
-                v-model="selectedWeek"
+                v-model="yearInput"
+                type="number"
+                aria-label="年份"
+                class="w-24"
+                @keyup.enter="commitWeekInput"
+                @blur="commitWeekInput"
+              />
+              <UInput
+                v-model="weekInput"
                 type="number"
                 min="1"
                 max="53"
+                aria-label="周次"
                 class="w-20"
+                @keyup.enter="commitWeekInput"
+                @blur="commitWeekInput"
               />
               <UButton
                 icon="i-lucide-chevron-right"
@@ -985,8 +1065,13 @@ onBeforeUnmount(() => {
           </div>
         </div>
 
-        <div class="grid min-h-0 flex-1 overflow-hidden xl:grid-cols-[minmax(18rem,22rem)_minmax(0,1fr)]">
-          <aside class="flex min-h-0 flex-col border-b border-default bg-default/80 xl:border-r xl:border-b-0">
+        <div
+          class="grid min-h-0 flex-1 overflow-hidden xl:grid-cols-[minmax(18rem,22rem)_minmax(0,1fr)] weekly-reports-grid"
+          :class="hosted ? 'is-hosted' : ''"
+        >
+          <aside
+            class="flex min-h-0 flex-col border-b border-default bg-default/80 xl:border-r xl:border-b-0"
+          >
             <div class="border-b border-default px-4 py-3">
               <div class="flex items-start justify-between gap-3">
                 <div class="min-w-0">
@@ -1008,7 +1093,7 @@ onBeforeUnmount(() => {
               </div>
 
               <div class="mt-3 grid grid-cols-2 gap-2 text-xs">
-                <div class="rounded-lg border border-default bg-default px-3 py-2">
+                <div class="rounded-lg border border-default bg-default p-2">
                   <div class="text-muted">
                     本周人天
                   </div>
@@ -1016,7 +1101,7 @@ onBeforeUnmount(() => {
                     {{ summaryStats.currentDays }}
                   </div>
                 </div>
-                <div class="rounded-lg border border-default bg-default px-3 py-2">
+                <div class="rounded-lg border border-default bg-default p-2">
                   <div class="text-muted">
                     成员填报
                   </div>
@@ -1029,16 +1114,34 @@ onBeforeUnmount(() => {
               <UInput
                 v-model="search"
                 icon="i-lucide-search"
-                placeholder="搜索项目、编号、部门、项目负责人"
+                placeholder="搜索项目名/编码、周报部门/负责人快照、UID"
                 class="mt-3 w-full"
+                @keydown.enter="flush"
               />
             </div>
 
             <div class="min-h-0 flex-1 overflow-y-auto p-3">
               <div v-if="loading" class="space-y-2">
-                <USkeleton v-for="index in 6" :key="index" class="h-32 rounded-lg" />
+                <USkeleton v-for="index in 6" :key="index" class="h-20 rounded-lg" />
               </div>
 
+              <UAlert
+                v-else-if="summaryRead.error.value && summaryRead.errorStatus.value === 403"
+                color="warning"
+                icon="i-lucide-shield-alert"
+                title="无权查看周报汇总"
+                description="当前账号没有周报查看权限，请联系管理员开通。"
+              />
+              <UAlert
+                v-else-if="summaryRead.error.value"
+                color="error"
+                title="加载周报汇总失败"
+                description="请重试；统计与图表不会使用旧数据。"
+              >
+                <template #actions>
+                  <UButton label="重试" @click="loadReports" />
+                </template>
+              </UAlert>
               <div v-else-if="filteredItems.length === 0" class="rounded-lg border border-dashed border-default px-4 py-10 text-center text-sm text-muted">
                 <UIcon name="i-lucide-folder-open" class="mx-auto mb-2 size-8" />
                 暂无周报项目
@@ -1049,13 +1152,13 @@ onBeforeUnmount(() => {
                   v-for="item in filteredItems"
                   :key="item.projectId"
                   type="button"
-                  class="w-full rounded-lg border p-3 text-left transition hover:bg-elevated"
+                  class="w-full rounded-lg border p-2 text-left transition hover:bg-elevated"
                   :class="editing?.projectId === item.projectId ? 'border-primary bg-primary/10' : 'border-default bg-default'"
                   @click="selectItem(item)"
                 >
                   <div class="flex items-start justify-between gap-1">
                     <div class="min-w-0">
-                      <div class="line-clamp-2 text-sm font-medium text-highlighted">
+                      <div class="truncate text-sm font-medium text-highlighted">
                         {{ item.projectName }}
                       </div>
                       <div class="mt-1 truncate font-mono text-xs text-muted">
@@ -1088,14 +1191,9 @@ onBeforeUnmount(() => {
                     </UBadge>
                   </div>
 
-                  <div class="mt-1 space-y-1 text-xs text-muted flex items-center justify-between gap-2">
-                    <div>
-                      <span class="truncate text-right">{{ displayDepartmentName(item) }}</span>
-                    </div>
-                    <div>
-                      <span class="shrink-0">项目经理: </span>
-                      <span class="truncate text-right">{{ displayProjectLeaderName(item) }}</span>
-                    </div>
+                  <div class="mt-1 flex min-w-0 items-center gap-2 truncate text-xs text-muted">
+                    <span class="shrink-0">{{ displayDepartmentName(item) }}</span>
+                    <span class="truncate">· {{ displayProjectLeaderName(item) }}</span>
                   </div>
 
                   <div class="mt-1 grid grid-cols-2 gap-2 text-xs">
@@ -1119,19 +1217,36 @@ onBeforeUnmount(() => {
                 </button>
               </div>
             </div>
+            <div class="flex shrink-0 flex-wrap items-center justify-between gap-2 border-t border-default p-3">
+              <span class="text-xs text-muted">共 {{ listTotal }} 条</span>
+              <UPagination
+                v-model:page="page"
+                :items-per-page="pageSize"
+                :total="listTotal"
+                :sibling-count="0"
+              />
+            </div>
           </aside>
 
-          <main class="min-h-0 min-w-0 overflow-y-auto bg-elevated/20 p-4">
-            <div v-if="!editing" class="mx-auto w-full max-w-[96rem] space-y-4">
+          <main class="min-h-0 min-w-0 overflow-y-auto bg-elevated/20 p-4" style="container-type: inline-size">
+            <div v-if="!editing" class="w-full space-y-4">
               <UAlert
                 v-if="canReviewWeeklyReports && !directorPeriodReady"
                 color="warning"
                 variant="subtle"
                 icon="i-lucide-calendar-x"
                 title="本周尚未生成应报责任清单"
-                description="先生成责任清单，系统才会冻结本周应报项目和项目经理/代理责任快照。"
+                :description="periodBlockedMessage || '先生成责任清单，系统才会冻结本周应报项目和项目经理/代理责任快照。'"
               >
                 <template #actions>
+                  <UButton
+                    v-if="periodBlockedByConfiguration && canConfigureWeeklyReports"
+                    label="前往周报设置"
+                    icon="i-lucide-settings"
+                    color="neutral"
+                    variant="outline"
+                    :to="weeklySettingsPath"
+                  />
                   <UButton
                     label="生成应报清单"
                     color="warning"
@@ -1143,7 +1258,7 @@ onBeforeUnmount(() => {
               </UAlert>
               <section
                 v-else-if="canReviewWeeklyReports"
-                class="grid gap-3 sm:grid-cols-2 xl:grid-cols-5"
+                class="weekly-summary-metrics"
               >
                 <div class="rounded-lg border border-default bg-default p-3">
                   <div class="text-xs text-muted">
@@ -1192,7 +1307,7 @@ onBeforeUnmount(() => {
                     周报总览
                   </h2>
                   <p class="mt-1 text-xs text-muted">
-                    {{ weekLabel }} <span v-if="weekStart && weekEnd">({{ weekStart }} ~ {{ weekEnd }})</span>
+                    {{ weekLabel }} <span data-testid="weekly-report-week-range">({{ weekRangeLabel }})</span>
                   </p>
                 </div>
                 <UBadge color="primary" variant="subtle" size="sm">
@@ -1200,7 +1315,7 @@ onBeforeUnmount(() => {
                 </UBadge>
               </div>
 
-              <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+              <div class="weekly-summary-metrics">
                 <div class="rounded-lg border border-default bg-default px-4 py-3">
                   <div class="flex items-center justify-between gap-2 text-xs text-muted">
                     <span>本周认定</span>
@@ -1242,16 +1357,16 @@ onBeforeUnmount(() => {
                 </div>
                 <div class="rounded-lg border border-default bg-default px-4 py-3">
                   <div class="flex items-center justify-between gap-2 text-xs text-muted">
-                    <span>累计投入</span>
+                    <span>累计人力成本</span>
                     <UIcon name="i-lucide-database" class="size-4" />
                   </div>
                   <div class="mt-2 text-xl font-semibold text-highlighted">
-                    {{ formatDays(overviewStats.cumulativeDays) }}
+                    {{ formatCost(overviewStats.cumulativeLaborCost) }}
                   </div>
                 </div>
               </div>
 
-              <div class="grid gap-4 2xl:grid-cols-2">
+              <div class="weekly-summary-charts">
                 <section class="rounded-lg border border-default bg-default p-4">
                   <div class="flex items-start justify-between gap-3">
                     <div>
@@ -1269,9 +1384,9 @@ onBeforeUnmount(() => {
                   <div
                     v-if="workloadChartRows.length"
                     ref="workloadChartEl"
-                    class="mt-3 h-80 w-full"
+                    class="weekly-chart-canvas mt-3 h-80 w-full"
                   />
-                  <div v-else class="mt-3 flex h-80 items-center justify-center rounded-lg border border-dashed border-default text-sm text-muted">
+                  <div v-else class="weekly-chart-canvas mt-3 flex h-80 items-center justify-center rounded-lg border border-dashed border-default text-sm text-muted">
                     暂无本周投入数据
                   </div>
                 </section>
@@ -1293,9 +1408,9 @@ onBeforeUnmount(() => {
                   <div
                     v-if="memberChartRows.length"
                     ref="memberChartEl"
-                    class="mt-3 h-80 w-full"
+                    class="weekly-chart-canvas mt-3 h-80 w-full"
                   />
-                  <div v-else class="mt-3 flex h-80 items-center justify-center rounded-lg border border-dashed border-default text-sm text-muted">
+                  <div v-else class="weekly-chart-canvas mt-3 flex h-80 items-center justify-center rounded-lg border border-dashed border-default text-sm text-muted">
                     暂无参与人员数据
                   </div>
                 </section>
@@ -1317,9 +1432,9 @@ onBeforeUnmount(() => {
                   <div
                     v-if="changeChartRows.length"
                     ref="changeChartEl"
-                    class="mt-3 h-80 w-full"
+                    class="weekly-chart-canvas mt-3 h-80 w-full"
                   />
-                  <div v-else class="mt-3 flex h-80 items-center justify-center rounded-lg border border-dashed border-default text-sm text-muted">
+                  <div v-else class="weekly-chart-canvas mt-3 flex h-80 items-center justify-center rounded-lg border border-dashed border-default text-sm text-muted">
                     暂无较上周变化数据
                   </div>
                 </section>
@@ -1331,7 +1446,7 @@ onBeforeUnmount(() => {
                         项目累计人力投入
                       </h3>
                       <p class="mt-1 text-xs text-muted">
-                        按累计工作量排序
+                        按累计人力成本排序
                       </p>
                     </div>
                     <UBadge color="neutral" variant="subtle" size="xs">
@@ -1341,10 +1456,10 @@ onBeforeUnmount(() => {
                   <div
                     v-if="cumulativeChartRows.length"
                     ref="cumulativeChartEl"
-                    class="mt-3 h-80 w-full"
+                    class="weekly-chart-canvas mt-3 h-80 w-full"
                   />
-                  <div v-else class="mt-3 flex h-80 items-center justify-center rounded-lg border border-dashed border-default text-sm text-muted">
-                    暂无累计投入数据
+                  <div v-else class="weekly-chart-canvas mt-3 flex h-80 items-center justify-center rounded-lg border border-dashed border-default text-sm text-muted">
+                    暂无累计人力成本数据
                   </div>
                 </section>
               </div>
@@ -1491,10 +1606,10 @@ onBeforeUnmount(() => {
                       class="w-full"
                     />
                   </UFormField>
-                  <UFormField label="累计工作量">
+                  <UFormField label="累计人力成本">
                     <UInput
-                      v-model="editForm.cumulativeLaborCost"
-                      type="number"
+                      :model-value="formatCost(editForm.cumulativeLaborCost || 0)"
+                      type="text"
                       min="0"
                       disabled
                       class="w-full"
@@ -1659,3 +1774,48 @@ onBeforeUnmount(() => {
     </template>
   </UDashboardPanel>
 </template>
+
+<style scoped>
+.weekly-chart-canvas {
+  height: 20rem;
+  min-width: 0;
+}
+
+.weekly-summary-metrics {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.weekly-summary-charts {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 1rem;
+}
+
+@container (min-width: 40rem) {
+  .weekly-summary-metrics {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+
+  .weekly-summary-charts {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.weekly-reports-grid.is-hosted {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+@container (min-width: 56rem) {
+  .weekly-reports-grid.is-hosted {
+    grid-template-columns: minmax(18rem, 22rem) minmax(0, 1fr);
+  }
+
+  .weekly-reports-grid.is-hosted > aside {
+    border-right: 1px solid var(--ui-border);
+    border-bottom-width: 0;
+  }
+}
+</style>

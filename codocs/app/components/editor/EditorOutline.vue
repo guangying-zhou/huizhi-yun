@@ -174,7 +174,7 @@ const hasContent = computed(() => headings.value.length > 0)
       <div v-for="heading in headings" :key="heading.id" class="mb-1">
         <!-- 一级标题 -->
         <button
-          class="w-full text-left px-3 py-1.5 rounded text-sm transition-colors duration-150 hover:bg-gray-100 dark:hover:bg-gray-800 focus:outline-none focus:ring-1 focus:ring-primary-500"
+          class="w-full text-left px-3 py-1.5 rounded text-sm transition-colors duration-150 hover:bg-muted focus:outline-none focus:ring-1 focus:ring-primary-500"
           :class="{
             'bg-primary-50 dark:bg-primary-900/20 text-primary-600 dark:text-primary-400': activeId === heading.id,
             'font-semibold': heading.level === 1
@@ -195,7 +195,7 @@ const hasContent = computed(() => headings.value.length > 0)
         <template v-if="heading.children && heading.children.length > 0">
           <div v-for="child in heading.children" :key="child.id">
             <button
-              class="w-full text-left px-3 py-1.5 rounded text-sm transition-colors duration-150 hover:bg-gray-100 dark:hover:bg-gray-800 focus:outline-none focus:ring-1 focus:ring-primary-500"
+              class="w-full text-left px-3 py-1.5 rounded text-sm transition-colors duration-150 hover:bg-muted focus:outline-none focus:ring-1 focus:ring-primary-500"
               :class="{
                 'bg-primary-50 dark:bg-primary-900/20 text-primary-600 dark:text-primary-400': activeId === child.id,
                 [getIndentClass(child.level)]: true
@@ -212,14 +212,14 @@ const hasContent = computed(() => headings.value.length > 0)
               <button
                 v-for="subChild in child.children"
                 :key="subChild.id"
-                class="w-full text-left px-3 py-1.5 rounded text-sm transition-colors duration-150 hover:bg-gray-100 dark:hover:bg-gray-800 focus:outline-none focus:ring-1 focus:ring-primary-500"
+                class="w-full text-left px-3 py-1.5 rounded text-sm transition-colors duration-150 hover:bg-muted focus:outline-none focus:ring-1 focus:ring-primary-500"
                 :class="{
                   'bg-primary-50 dark:bg-primary-900/20 text-primary-600 dark:text-primary-400': activeId === subChild.id,
                   [getIndentClass(subChild.level)]: true
                 }"
                 @click="scrollToHeading(subChild)"
               >
-                <span class="block truncate text-xs text-gray-600 dark:text-gray-400">
+                <span class="block truncate text-xs text-muted">
                   {{ subChild.text }}
                 </span>
               </button>
@@ -230,7 +230,7 @@ const hasContent = computed(() => headings.value.length > 0)
     </div>
 
     <div v-else class="flex items-center justify-center p-8">
-      <p class="text-xs text-gray-400 dark:text-gray-600">
+      <p class="text-xs text-dimmed">
         暂无大纲
       </p>
     </div>

@@ -74,6 +74,7 @@ export type WorkflowEntityType = 'project' | 'milestone' | 'task' | 'bug'
 export type PortfolioStatus = 'active' | 'archived'
 
 export interface ProjectPortfolio {
+  canDelete?: boolean
   id: number
   code: string
   name: string
@@ -158,6 +159,7 @@ export interface AimsProject {
   /** 当前登录用户是否可进入该项目 */
   canAccess?: boolean
   /** 当前登录用户在项目内的角色；无项目成员权限时为 null */
+  canEditProject?: boolean
   currentUserRole?: ProjectRole | null
   /** 当前登录用户是否拥有该项目的管理授权，例如项目总监或系统管理员 */
   currentUserIsProjectAdmin?: boolean
@@ -807,7 +809,7 @@ export interface WorkItemListQuery {
   status?: string
   priority?: Priority
   severity?: Severity
-  milestoneId?: number
+  milestoneId?: number | '__null__'
   assigneeUid?: string
   reporterUid?: string
   parentId?: number | null

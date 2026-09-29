@@ -54,7 +54,7 @@ const hasChildren = computed(() => props.folder.children && props.folder.childre
       </div>
 
       <!-- Folder icon -->
-      <UIcon name="i-lucide-folder" class="w-4 h-4 text-amber-500 shrink-0" />
+      <UIcon name="i-lucide-folder" class="w-4 h-4 text-warning shrink-0" />
 
       <!-- Name -->
       <span class="text-sm flex-1 truncate">{{ folder.name }}</span>

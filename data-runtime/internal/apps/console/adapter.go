@@ -20,12 +20,16 @@ import (
 var requiredTables = schemaRequiredTables()
 
 type Adapter struct {
-	db             *sql.DB
-	dbName         string
-	tenant         string
-	vaultMasterKey string
-	vaultKeyMu     sync.RWMutex
-	ownsDB         bool
+	db                            *sql.DB
+	dbName                        string
+	tenant                        string
+	vaultMasterKey                string
+	vaultKeyMu                    sync.RWMutex
+	ownsDB                        bool
+	oidcSigningIssuerMu           sync.RWMutex
+	oidcSigningIssuerSource       func() string
+	oidcSigningRuntimeDeployment  string
+	oidcSigningDeploymentBindings map[string]string
 }
 
 func normalizeVaultMasterKey(value string) []byte {

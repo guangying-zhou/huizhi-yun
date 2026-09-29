@@ -1,4 +1,8 @@
 <script setup lang="ts">
+import ProductsVersionTools from '../../../components/products/VersionTools.vue'
+import ProductsVersionPicker from '../../../components/products/VersionPicker.vue'
+import ProductsVersionDeliverySummary from '../../../components/products/VersionDeliverySummary.vue'
+
 definePageMeta({ layoutHeader: true, layoutHeaderTitle: '跨版本项目汇总', layoutHeaderProjectSwitcher: false })
 const route = useRoute()
 const code = computed(() => String(route.params.productCode || ''))

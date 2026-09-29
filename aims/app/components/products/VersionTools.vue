@@ -1,9 +1,12 @@
 <script setup lang="ts">
-import { getProductPerspectives, productNavTo } from '~/config/productNavigation'
+import { useAimsModule } from '../../../layer/useAimsModule'
+import { getProductPerspectives, productNavTo } from '../../../layer/productNavigation'
+
+const { moduleUrl } = useAimsModule()
 
 const props = defineProps<{ productCode: string, index?: boolean }>()
 const route = useRoute()
-const base = computed(() => `/products/${encodeURIComponent(props.productCode)}`)
+const base = computed(() => moduleUrl(`/products/${encodeURIComponent(props.productCode)}`))
 const perspective = computed(() => route.query.view === 'gtm' ? 'gtm' as const : 'rd' as const)
 function link(path: string) {
   return productNavTo(getProductPerspectives(props.productCode), perspective.value, `${base.value}/${path}`)

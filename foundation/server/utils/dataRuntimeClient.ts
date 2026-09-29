@@ -3,6 +3,7 @@ import { readRequestBodyCompat } from './requestBody'
 import { $fetch as fetchExternal } from 'ofetch'
 import { requestServiceAccessToken } from './serviceOidc'
 import { isTenantRuntimeProfile, resolveDeploymentProfile } from './deploymentProfile'
+import { resolveSelfHostedRuntimeDialEndpoint } from './selfHostedServiceTransport'
 
 export type DataRuntimeMethod = 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE'
 
@@ -206,7 +207,9 @@ export async function maybeCallDataRuntime<T>(
     return { handled: false }
   }
 
-  const url = new URL(path, endpoint.endsWith('/') ? endpoint : `${endpoint}/`)
+  // Self-hosted: only the TCP dial moves to loopback; the canonical endpoint stays the binding.
+  const dialEndpoint = resolveSelfHostedRuntimeDialEndpoint(endpoint)
+  const url = new URL(path, dialEndpoint.endsWith('/') ? dialEndpoint : `${dialEndpoint}/`)
   appendQuery(url, options.query || getQuery(event))
   const method = normalizeMethod(options.method)
   const token = await resolveBearerToken(event, options, config)

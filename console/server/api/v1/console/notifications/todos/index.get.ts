@@ -1,22 +1,11 @@
-import { getQuery } from 'h3'
+import { createError, getQuery, setHeader } from 'h3'
+import { todoReadQuery } from '@hzy/foundation/shared/utils/todoReadQuery'
 import { listUserPendingActionables, requireNotificationUserUid } from '~~/server/utils/notifications'
 
-function value(input: unknown) {
-  return String(Array.isArray(input) ? input[0] || '' : input || '').trim()
-}
-
 export default defineEventHandler(async (event) => {
+  setHeader(event, 'Cache-Control', 'private, no-store')
   await requireNotificationUserUid(event)
-  const query = getQuery(event)
-  return {
-    code: 0,
-    message: 'success',
-    data: await listUserPendingActionables(event, {
-      todoKind: value(query.todoKind || query.todo_kind),
-      category: value(query.category),
-      sourceAppCode: value(query.sourceAppCode || query.source_app_code),
-      limit: query.limit,
-      cursor: value(query.cursor)
-    })
-  }
+  let query: Record<string, unknown>
+  try { query = todoReadQuery(getQuery(event)) } catch { throw createError({ statusCode: 400, message: 'Invalid todo query' }) }
+  return { code: 0, message: 'success', data: await listUserPendingActionables(event, query) }
 })

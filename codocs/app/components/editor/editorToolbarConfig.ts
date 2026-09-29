@@ -160,6 +160,8 @@ const insertDividerBlock = (ctx: Ctx) => {
 }
 
 interface CreateEditorToolbarConfigOptions {
+  aiEnabled?: boolean
+  cloudClipboardEnabled?: boolean
   isAnnotationDialogOpen: Ref<boolean>
   aiMenuVisible: Ref<boolean>
   pasteFromCloudClipboard: () => void
@@ -178,6 +180,8 @@ interface CreateEditorToolbarConfigOptions {
 }
 
 export const createEditorToolbarConfig = ({
+  aiEnabled = true,
+  cloudClipboardEnabled = true,
   isAnnotationDialogOpen,
   aiMenuVisible,
   pasteFromCloudClipboard,
@@ -231,7 +235,7 @@ export const createEditorToolbarConfig = ({
         .addItem('quote', { label: '引用', icon: blockEditIcons.quote, onRun: (ctx: Ctx) => { setQuoteBlock(ctx) } })
         .addItem('divider', { label: '分隔线', icon: blockEditIcons.divider, onRun: (ctx: Ctx) => { insertDividerBlock(ctx) } })
 
-      builder.addGroup('cloud', '汇智云').addItem('cloudPaste', {
+      if (cloudClipboardEnabled) builder.addGroup('cloud', '汇智云').addItem('cloudPaste', {
         label: '从汇智云粘贴',
         icon: '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" style="fill: none !important;" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-cloud-download"><path d="M12 13v8"/><path d="m4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242"/><path d="m8 17 4 4 4-4"/></svg>',
         onRun: () => { pasteFromCloudClipboard() }
@@ -283,13 +287,13 @@ export const createEditorToolbarConfig = ({
           onRun: () => { openAnnotationDialog() },
           active: () => isAnnotationDialogOpen.value
         })
-        .addItem('cloudCopy', {
+      if (cloudClipboardEnabled) builder.getGroup('annotation').addItem('cloudCopy', {
           icon: '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" style="fill: none !important;" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-cloud-upload"><path d="M12 13v8"/><path d="m4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242"/><path d="m8 17 4-4 4 4"/></svg>',
           onRun: () => { copyToCloudClipboard() },
           active: () => false
         })
 
-      builder.addGroup('ai', 'AI')
+      if (aiEnabled) builder.addGroup('ai', 'AI')
         .addItem('aiMenu', {
           icon: '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" style="fill: none !important;" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-sparkles"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/><path d="M5 3v4"/><path d="M19 17v4"/><path d="M3 5h4"/><path d="M17 19h4"/></svg>',
           onRun: () => { openAiMenu() },

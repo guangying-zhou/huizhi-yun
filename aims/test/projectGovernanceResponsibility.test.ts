@@ -40,7 +40,7 @@ const runtimeTimeEntryGovernance = readFileSync(
   'utf8'
 )
 const roleHolderGuard = readFileSync(
-  new URL('../server/utils/projectGovernanceRoleHolder.ts', import.meta.url),
+  new URL('../../foundation/server/utils/projectGovernanceRoleHolder.ts', import.meta.url),
   'utf8'
 )
 

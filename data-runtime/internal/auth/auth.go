@@ -25,13 +25,15 @@ import (
 )
 
 type Requirement struct {
-	StrictServiceClaims bool
-	AppCode             string
-	Scope               string
-	SourceAppCode       string
+	StrictServiceClaims      bool
+	RequireDeploymentBinding bool
+	AppCode                  string
+	Scope                    string
+	SourceAppCode            string
 }
 
 type Context struct {
+	Audience     string
 	ClientID     string
 	CredentialID int64
 	Tenant       string
@@ -91,6 +93,14 @@ type claims struct {
 
 func New(cfg config.Config) *Authenticator {
 	return &Authenticator{cfg: cfg}
+}
+
+// TrustedJWTIssuer is the same live trust value used by JWT authentication.
+// Reading it through the mutex also follows an accepted bootstrap update.
+func (a *Authenticator) TrustedJWTIssuer() string {
+	a.jwksMutex.Lock()
+	defer a.jwksMutex.Unlock()
+	return a.cfg.Auth.JWT.Issuer
 }
 
 func (a *Authenticator) UpdateJWTTrust(trust config.JWTConfig) {
@@ -329,6 +339,9 @@ func (a *Authenticator) authenticateJWT(r *http.Request, required Requirement) (
 		log.Printf("[auth] reject reason=tenant_mismatch method=%s path=%s token.tenant=%q cfg.tenant=%q sub=%q", r.Method, r.URL.Path, tenant, a.cfg.Tenant, subject)
 		return Context{}, httperror.New(http.StatusForbidden, "tenant_mismatch", "Token tenant is not enrolled on this Agent")
 	}
+	if required.RequireDeploymentBinding && strings.TrimSpace(a.cfg.DeploymentBindings[appCode]) == "" {
+		return Context{}, httperror.New(http.StatusForbidden, "deployment_binding_required", "An explicit application deployment binding is required")
+	}
 	expectedDeployment := a.cfg.DeploymentForApp(appCode)
 	if deployment != "" && deployment != expectedDeployment {
 		log.Printf("[auth] reject reason=deployment_mismatch method=%s path=%s token.deployment=%q cfg.deployment=%q source.appCode=%q sub=%q", r.Method, r.URL.Path, deployment, expectedDeployment, appCode, subject)
@@ -344,6 +357,7 @@ func (a *Authenticator) authenticateJWT(r *http.Request, required Requirement) (
 	}
 
 	return Context{
+		Audience:     jwtTrust.Audience,
 		Tenant:       tenant,
 		Deployment:   deployment,
 		AppCode:      appCode,

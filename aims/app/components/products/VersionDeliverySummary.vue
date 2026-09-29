@@ -1,5 +1,8 @@
 <script setup lang="ts">
+import { useAimsModule } from '../../../layer/useAimsModule'
 import type { TableColumn } from '@nuxt/ui'
+
+const { moduleUrl, cacheKey, hosted } = useAimsModule()
 
 const props = defineProps<{ productCode: string, versionId: number }>()
 const code = computed(() => props.productCode)
@@ -9,9 +12,9 @@ type Coordination = Totals & { product_code: string, version_id: number, workspa
 const page = ref(1)
 const keys = ['target_count', 'incomplete_target_count', 'open_defect_count', 'total_weight', 'completed_weight'] as const
 const validTotals = (value: Totals) => value && keys.every(key => Number.isSafeInteger(value[key]) && value[key] >= 0) && value.incomplete_target_count <= value.target_count && value.completed_weight <= value.total_weight && value.no_execution_plan === (value.total_weight === 0)
-const { data, status, error, refresh } = await useAsyncData(() => `version-delivery:${code.value}:${props.versionId}`, async () => {
+const { data, status, error, refresh } = await useAsyncData(() => cacheKey(`version-delivery:${code.value}:${props.versionId}`), async () => {
   const productCode = code.value, versionId = props.versionId, requestedPage = page.value
-  const response = await $fetch<{ code: number, data: Coordination }, string>(`/api/v1/products/${encodeURIComponent(productCode)}/roadmaps/execution-coordination`, { query: { versionId, page: requestedPage, pageSize: 20 }, timeout: 15000 })
+  const response = await $fetch<{ code: number, data: Coordination }, string>(moduleUrl(`/api/v1/products/${encodeURIComponent(productCode)}/roadmaps/execution-coordination`), { query: { versionId, page: requestedPage, pageSize: 20 }, timeout: 15000 })
   const value = response.data
   if (response.code !== 0 || !value || value.product_code !== productCode || value.version_id !== versionId || !Number.isSafeInteger(value.workspace_revision) || value.workspace_revision < 1 || value.defect_coverage !== 'linked-descendants-only' || !validTotals(value) || ![value.total, value.restricted_project_count].every(n => Number.isSafeInteger(n) && n >= 0) || value.page !== requestedPage || value.pageSize !== 20 || !Array.isArray(value.projects) || value.projects.length !== Math.min(20, Math.max(0, value.total - (requestedPage - 1) * 20)) || value.projects.some((project, index) => !validTotals(project) || !Number.isSafeInteger(project.project_id) || project.project_id < 1 || (index > 0 && project.project_id <= value.projects[index - 1]!.project_id)) || keys.some(key => value.projects.reduce((sum, project) => sum + BigInt(project[key]), 0n) > BigInt(value[key]))) throw new Error('协调汇总响应不完整')
   return value
@@ -79,7 +82,8 @@ watch([code, () => props.versionId], () => {
           :loading="busy"
         >
           <template #project-cell="{ row }">
-            <UButton :to="`/projects/${row.original.project_id}/work-items`" variant="link">
+            <span v-if="hosted">项目 {{ row.original.project_id }}</span>
+            <UButton v-else :to="`/projects/${row.original.project_id}/work-items`" variant="link">
               项目 {{ row.original.project_id }}
             </UButton>
           </template>

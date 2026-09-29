@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
-import { POLICY_MAX_AGE_MS, readPolicyBundle, storePolicyBundle, type PolicyObjectStore } from '../server/utils/persistentPolicyBundle.ts'
+import { POLICY_MAX_AGE_MS, TEST_POLICY_MAX_AGE_MS, boundedPolicyMaxAgeMs, readPolicyBundle, storePolicyBundle, type PolicyObjectStore } from '../server/utils/persistentPolicyBundle.ts'
 
 function bucket() {
   const values = new Map<string, { body: string, etag: string }>()
@@ -31,6 +31,16 @@ test('persistent record survives a fresh reader, expires at five minutes, and is
   assert.equal(await readPolicyBundle(store, 'test:tenant-b', 'key', 1001), null)
   assert.equal(await readPolicyBundle(store, 'test:tenant-a', 'key', 1000 + POLICY_MAX_AGE_MS), null)
   assert.equal(await readPolicyBundle(store, 'test:tenant-a', 'key', 999), null)
+})
+
+test('test freshness override is bounded at twenty-six hours while the default remains five minutes', async () => {
+  const { store } = bucket()
+  await storePolicyBundle(store, 'test:tenant-a', 'key', { version: 1 }, 1_000)
+  assert.equal(boundedPolicyMaxAgeMs('93600000'), TEST_POLICY_MAX_AGE_MS)
+  assert.equal(boundedPolicyMaxAgeMs(String(TEST_POLICY_MAX_AGE_MS + 1)), POLICY_MAX_AGE_MS)
+  assert.deepEqual((await readPolicyBundle(store, 'test:tenant-a', 'key', 1_000 + TEST_POLICY_MAX_AGE_MS - 1, TEST_POLICY_MAX_AGE_MS))?.value, { version: 1 })
+  assert.equal(await readPolicyBundle(store, 'test:tenant-a', 'key', 1_000 + TEST_POLICY_MAX_AGE_MS, TEST_POLICY_MAX_AGE_MS), null)
+  assert.equal(await readPolicyBundle(store, 'test:tenant-a', 'key', 1_000 + POLICY_MAX_AGE_MS), null)
 })
 
 test('tampering and wrong integrity key fail closed', async () => {
@@ -81,8 +91,14 @@ test('policy reads coalesce only within one request and scope, and failures can 
   const request = {}
   let calls = 0
   let release!: () => void
-  const gate = new Promise<void>(resolve => { release = resolve })
-  const read = async () => { calls++; await gate; return calls }
+  const gate = new Promise<void>((resolve) => {
+    release = resolve
+  })
+  const read = async () => {
+    calls++
+    await gate
+    return calls
+  }
   const first = coalescePolicyRead(request, 'tenant-a', read)
   assert.equal(coalescePolicyRead(request, 'tenant-a', read), first)
   const separateRequest = coalescePolicyRead({}, 'tenant-a', read)
@@ -91,6 +107,74 @@ test('policy reads coalesce only within one request and scope, and failures can 
   assert.equal(calls, 3)
   release()
   await Promise.all([first, separateRequest, separateScope])
-  await assert.rejects(coalescePolicyRead(request, 'tenant-a', async () => { throw Error('unavailable') }), /unavailable/)
+  await assert.rejects(coalescePolicyRead(request, 'tenant-a', async () => {
+    throw Error('unavailable')
+  }), /unavailable/)
   assert.equal(await coalescePolicyRead(request, 'tenant-a', async () => 4), 4)
+})
+
+function enterpriseBundle(revision: number, policyRevision: number, status = 'active', tenantCode = 'A') {
+  return { tenantCode, payload: { policyRevision, generatedAt: '2026-09-13T00:00:00Z',
+    enterpriseEntitlement: { schemaVersion: 'enterprise-entitlement.v1', productCode: 'enterprise-full', tenantCode,
+      revision, status: 'active', effectiveStatus: status, effectiveFrom: '2026-09-01T00:00:00Z', end: { kind: 'unlimited', evidenceReference: 'migration-1' } },
+    roles: [{ roleCode: 'viewer' }]
+  } }
+}
+
+test('durable enterprise watermark survives fresh client and expired read TTL', async () => {
+  const { store } = bucket()
+  await storePolicyBundle(store, 'A', 'key', enterpriseBundle(2, 12), 1000)
+  assert.equal(await readPolicyBundle(store, 'A', 'key', 1000 + POLICY_MAX_AGE_MS), null)
+  // Recreate the storage client with no memory state; the old sealed row remains authoritative.
+  const restarted = { get: store.get, put: store.put }
+  await assert.rejects(storePolicyBundle(restarted, 'A', 'key', enterpriseBundle(1, 13), 999999), /rollback/)
+  await assert.rejects(storePolicyBundle(restarted, 'A', 'key', enterpriseBundle(2, 11), 999999), /rollback/)
+  await assert.rejects(storePolicyBundle(restarted, 'A', 'key', { payload: {} }, 999999), /rollback/)
+  await storePolicyBundle(restarted, 'B', 'key', enterpriseBundle(1, 1, 'active', 'B'), 999999)
+  await assert.rejects(storePolicyBundle(restarted, 'A', 'key', enterpriseBundle(3, 13, 'active', 'B'), 999999), /rollback/)
+})
+
+test('same enterprise revision permits derived status only with a newer signed policy revision', async () => {
+  const { store } = bucket()
+  await storePolicyBundle(store, 'A', 'key', enterpriseBundle(2, 12), 1000)
+  await assert.rejects(storePolicyBundle(store, 'A', 'key', enterpriseBundle(2, 12, 'suspended'), 2000), /policy revision content conflict/)
+  await storePolicyBundle(store, 'A', 'key', enterpriseBundle(2, 13, 'suspended'), 2000)
+  const changed = enterpriseBundle(2, 14, 'suspended')
+  changed.payload.enterpriseEntitlement.end.evidenceReference = 'changed'
+  await assert.rejects(storePolicyBundle(store, 'A', 'key', changed, 3000), /qualification conflict/)
+  const regenerated = enterpriseBundle(2, 13, 'suspended')
+  regenerated.payload.generatedAt = '2026-09-14T00:00:00Z'
+  await storePolicyBundle(store, 'A', 'key', regenerated, 3000)
+})
+
+test('CAS retry reevaluates current durable watermark after a concurrent winner', async () => {
+  const { store } = bucket()
+  await storePolicyBundle(store, 'A', 'key', enterpriseBundle(1, 1), 1000)
+  let raced = false
+  const racer: PolicyObjectStore = { ...store, async put(key, body, options) {
+    if (!raced) {
+      raced = true
+      await storePolicyBundle(store, 'A', 'key', enterpriseBundle(3, 3), 3000)
+      return null
+    }
+    return store.put(key, body, options)
+  } }
+  await assert.rejects(storePolicyBundle(racer, 'A', 'key', enterpriseBundle(2, 2), 4000), /rollback/)
+  assert.equal((await readPolicyBundle<ReturnType<typeof enterpriseBundle>>(store, 'A', 'key', 3001))?.value.payload.enterpriseEntitlement.revision, 3)
+})
+
+test('integrity failure cannot erase a persisted watermark using a new key', async () => {
+  const { store } = bucket()
+  await storePolicyBundle(store, 'A', 'old-key', enterpriseBundle(2, 2), 1000)
+  await assert.rejects(storePolicyBundle(store, 'A', 'new-key', enterpriseBundle(1, 3), 2000), /integrity/)
+  assert.equal((await readPolicyBundle<ReturnType<typeof enterpriseBundle>>(store, 'A', 'old-key', 1001))?.value.payload.enterpriseEntitlement.revision, 2)
+})
+
+test('same millisecond higher signed policy revision replaces the previous persisted facts', async () => {
+  const { store } = bucket()
+  await storePolicyBundle(store, 'A', 'key', enterpriseBundle(2, 12), 1000)
+  const result = await storePolicyBundle(store, 'A', 'key', enterpriseBundle(2, 13, 'suspended'), 1000)
+  assert.equal(result.value.payload.policyRevision, 13)
+  assert.equal((await readPolicyBundle<ReturnType<typeof enterpriseBundle>>(store, 'A', 'key', 1000))?.value.payload.policyRevision, 13)
+  await assert.rejects(storePolicyBundle(store, 'A', 'key', enterpriseBundle(2, 12), 1000), /rollback/)
 })

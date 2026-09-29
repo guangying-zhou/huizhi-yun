@@ -38,13 +38,27 @@ func ValidateProductVersionScopeDelivery(input ProductVersionScopeDelivery) erro
 // Confirming a scope is an explicit user acceptance, separate from project
 // completion, overall version acceptance, publication and feature activation.
 func ConfirmProductVersionScopeDelivery(ctx context.Context, db *sql.DB, identity CommandIdentity, permit AuthorizationPermit, input ProductVersionScopeDelivery, sourceContext ...integrationoperation.TrustedContext) (CommandResult, error) {
+	return confirmProductVersionScopeDelivery(ctx, identity, permit, input, func(payload any, authorize AuthorizeCommand, apply ApplyCommand) (CommandResult, error) {
+		return ExecuteCommand(ctx, db, identity, payload, authorize, apply)
+	}, sourceContext...)
+}
+
+// ConfirmProductVersionScopeDeliveryInTransaction shares the registry-fenced Enterprise write transaction while
+// retaining the owning-domain receipt, revision and release-lock checks.
+func ConfirmProductVersionScopeDeliveryInTransaction(ctx context.Context, tx *sql.Tx, identity CommandIdentity, permit AuthorizationPermit, input ProductVersionScopeDelivery, sourceContext ...integrationoperation.TrustedContext) (CommandResult, error) {
+	return confirmProductVersionScopeDelivery(ctx, identity, permit, input, func(payload any, authorize AuthorizeCommand, apply ApplyCommand) (CommandResult, error) {
+		return ExecuteCommandInTransaction(ctx, tx, identity, payload, authorize, apply)
+	}, sourceContext...)
+}
+
+func confirmProductVersionScopeDelivery(ctx context.Context, identity CommandIdentity, permit AuthorizationPermit, input ProductVersionScopeDelivery, execute func(any, AuthorizeCommand, ApplyCommand) (CommandResult, error), sourceContext ...integrationoperation.TrustedContext) (CommandResult, error) {
 	if identity.Action != "product_versions:scope-deliver" {
 		return CommandResult{}, invalid("product_command_identity_invalid", "范围交付确认命令不匹配")
 	}
 	if err := ValidateProductVersionScopeDelivery(input); err != nil {
 		return CommandResult{}, err
 	}
-	return ExecuteCommand(ctx, db, identity, input, func(ctx context.Context, tx *sql.Tx) error {
+	return execute(input, func(ctx context.Context, tx *sql.Tx) error {
 		return AuthorizeWorkspaceTransaction(ctx, tx, identity.ProductCode, identity.ActorUID, "product_versions", "accept", permit)
 	}, func(ctx context.Context, tx *sql.Tx) (any, error) {
 		root, err := loadWorkspace(ctx, tx, identity.ProductCode)

@@ -30,6 +30,23 @@ type handoffIntent struct {
 }
 
 func HandoffPlanningItem(ctx context.Context, db *sql.DB, identity CommandIdentity, planningPermit, requestPermit AuthorizationPermit, input PlanningHandoffInput, target PlanningHandoffTarget) (CommandResult, error) {
+	return handoffPlanningItem(ctx, identity, planningPermit, requestPermit, input, target, func(authorize AuthorizeCommand, apply ApplyCommand) (CommandResult, error) {
+		return ExecuteCommand(ctx, db, identity, input, authorize, apply)
+	})
+}
+
+// HandoffPlanningItemInTransaction shares the owning-domain command with a caller-owned transaction.
+func HandoffPlanningItemInTransaction(ctx context.Context, tx *sql.Tx, identity CommandIdentity, planningPermit, requestPermit AuthorizationPermit, input PlanningHandoffInput, target PlanningHandoffTarget) (CommandResult, error) {
+	result, err := handoffPlanningItem(ctx, identity, planningPermit, requestPermit, input, target, func(authorize AuthorizeCommand, apply ApplyCommand) (CommandResult, error) {
+		return ExecuteCommandInTransaction(ctx, tx, identity, input, authorize, apply)
+	})
+	if err != nil && tx != nil {
+		_ = tx.Rollback()
+	}
+	return result, err
+}
+
+func handoffPlanningItem(ctx context.Context, identity CommandIdentity, planningPermit, requestPermit AuthorizationPermit, input PlanningHandoffInput, target PlanningHandoffTarget, execute func(AuthorizeCommand, ApplyCommand) (CommandResult, error)) (CommandResult, error) {
 	if identity.Action != "product_priorities:handoff" {
 		return CommandResult{}, invalid("product_command_identity_invalid", "规划转交命令不匹配")
 	}
@@ -40,7 +57,7 @@ func HandoffPlanningItem(ctx context.Context, db *sql.DB, identity CommandIdenti
 		return CommandResult{}, invalid("product_command_configuration", "转交缺少项目授权或需求事务处理器")
 	}
 	var projectID int64
-	return ExecuteCommand(ctx, db, identity, input, func(ctx context.Context, tx *sql.Tx) error {
+	return execute(func(ctx context.Context, tx *sql.Tx) error {
 		if err := AuthorizeWorkspaceTransaction(ctx, tx, identity.ProductCode, identity.ActorUID, "product_priorities", "handoff", planningPermit); err != nil {
 			return err
 		}

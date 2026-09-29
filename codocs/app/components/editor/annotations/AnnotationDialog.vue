@@ -38,12 +38,12 @@ const handleClose = (closeFn: () => void) => {
 
     <template #body>
       <!-- Selected Text Preview -->
-      <div class="p-3 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 mb-4">
-        <div class="text-xs text-gray-500 dark:text-gray-400 mb-1 font-medium">
+      <div class="p-3 bg-default rounded-lg border border-default mb-4">
+        <div class="text-xs text-muted mb-1 font-medium">
           选中文本:
         </div>
         <div
-          class="text-sm text-gray-700 dark:text-gray-300 italic line-clamp-3 border-l-2 border-primary-500 pl-2"
+          class="text-sm text-default italic line-clamp-3 border-l-2 border-primary-500 pl-2"
         >
           "{{ selectedText }}"
         </div>

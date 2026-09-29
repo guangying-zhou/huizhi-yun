@@ -1,7 +1,16 @@
 <script setup lang="ts">
-import { PROJECT_ROLE_COLORS, PROJECT_ROLE_LABELS } from '~/utils/projectRoles'
-import type { ProjectMember, ProjectRole } from '~/types/aims'
+import { useAimsModule } from '../../../../layer/useAimsModule'
+import { PROJECT_ROLE_COLORS, PROJECT_ROLE_LABELS } from '../../../utils/projectRoles'
+import type { ProjectMember, ProjectRole } from '../../../types/aims'
+import { getDefaultWeeklyReportWeek } from '../../../composables/useWeeklyReportDefaultWeek'
+import { useMilestoneStore } from '../../../stores/milestone'
+import { useProjectStore } from '../../../stores/project'
+import { useTimeEntryReadPage } from '../../../composables/useTimeEntryPage'
+import { isWeeklyPeriodPage, weeklyDraftTotals, weeklyDraftWorkload, type WeeklyHistory } from '../../../utils/projectWeeklyReportPagination'
+import ProjectNavbar from '../../../components/project/ProjectNavbar.vue'
 
+// 同一份代码供独立应用与企业宿主使用：非宿主模式下 moduleUrl 原样返回路径。
+const { moduleUrl } = useAimsModule()
 definePageMeta({
   layoutHeader: true,
   layoutHeaderTitle: '项目周报',
@@ -149,12 +158,6 @@ interface RawProjectWeeklyReport {
 
 type WeeklyReportStatus = 'draft' | 'submitted' | 'returned' | 'reviewed' | 'frozen' | 'correction_draft'
 
-interface WeeklyReportPeriodPayload {
-  periodKey: string
-  editableByCurrentUser: boolean
-  report: RawProjectWeeklyReport | null
-}
-
 interface ListPayload<T> {
   items?: T[]
 }
@@ -167,11 +170,6 @@ interface AllocationRow {
   allocationPercent: number
   hours: number
   actualHours: number
-}
-
-interface RawTimeEntry {
-  uid?: string
-  hours?: number | string
 }
 
 interface WorkCalendarDay {
@@ -198,6 +196,7 @@ interface CalendarWeekDay {
 
 const route = useRoute()
 const toast = useToast()
+const { confirm } = useConfirm()
 const projectStore = useProjectStore()
 const milestoneStore = useMilestoneStore()
 const { users: accountUsers } = useAccountUsers()
@@ -235,6 +234,26 @@ const summaryFields = reactive({
   coordinationNeeds: '',
   remarks: ''
 })
+const detailPageSize = 20
+const entriesPage = ref(1)
+const workPage = ref(1)
+const periodListPage = ref(1)
+const periodListTotal = ref(0)
+const periodListItems = ref<RawProjectWeeklyReport[]>([])
+const calendarRows = ref<Map<string, RawProjectWeeklyReport>>(new Map())
+const entryUIDs = ref<string[]>([])
+const workIDs = ref<number[]>([])
+const completeBaselineReady = ref(false)
+const allocationBaseline = ref<AllocationRow[]>([])
+const workBaseline = ref<WeeklyReportWorkItem[]>([])
+const workloadBaselineTotal = ref(0)
+const draftFactsChanged = ref(false)
+const history = ref<WeeklyHistory | null>(null)
+const initialRead = useTimeEntryReadPage(isWeeklyPeriodPage<RawProjectWeeklyReport>)
+const memberRead = useTimeEntryReadPage(isWeeklyPeriodPage<RawProjectWeeklyReport>)
+const workRead = useTimeEntryReadPage(isWeeklyPeriodPage<RawProjectWeeklyReport>)
+let calendarGeneration = 0
+let selectedGeneration = 0
 const allocationRows = ref<AllocationRow[]>([])
 const workItems = ref<WeeklyReportWorkItem[]>([])
 const actualHoursByUid = ref<Map<string, number>>(new Map())
@@ -298,7 +317,7 @@ const canManage = computed(() => {
 })
 
 const selectedKey = computed(() => reportKey(selectedWeekYear.value, selectedWeek.value))
-const currentReport = computed(() => reports.value.get(selectedKey.value) || selectedReport.value)
+const currentReport = computed(() => selectedReport.value || reports.value.get(selectedKey.value))
 
 const selectedWeekLabel = computed(() => {
   const { start, end } = getWeekRange(selectedWeekYear.value, selectedWeek.value)
@@ -337,7 +356,7 @@ const selectedWeekIsFuture = computed(() => {
 
 const canSave = computed(() => {
   const status = currentReport.value?.status || 'draft'
-  return canManage.value
+  return completeBaselineReady.value && !draftFactsChanged.value && !memberRead.error.value && !workRead.error.value && canManage.value
     && !selectedWeekIsFuture.value
     && allocationRows.value.length > 0
     && ['draft', 'returned', 'correction_draft'].includes(status)
@@ -346,7 +365,7 @@ const canSave = computed(() => {
 })
 const canEdit = computed(() => {
   const status = currentReport.value?.status || 'draft'
-  return canManage.value
+  return completeBaselineReady.value && !draftFactsChanged.value && !memberRead.error.value && !workRead.error.value && canManage.value
     && !selectedWeekIsFuture.value
     && ['draft', 'returned', 'correction_draft'].includes(status)
     && !saving.value
@@ -354,7 +373,7 @@ const canEdit = computed(() => {
 })
 const canSubmit = computed(() => {
   const status = currentReport.value?.status
-  return canManage.value
+  return completeBaselineReady.value && !draftFactsChanged.value && !memberRead.error.value && !workRead.error.value && canManage.value
     && Boolean(currentReport.value)
     && (status === 'draft' || status === 'correction_draft')
     && !saving.value
@@ -364,13 +383,19 @@ const selectedPeriodKey = computed(() =>
   `${selectedWeekYear.value}-W${String(selectedWeek.value).padStart(2, '0')}`
 )
 
-const totalHours = computed(() => roundHours(allocationRows.value.reduce((sum, row) => sum + Number(row.hours || 0), 0)))
-const totalActualHours = computed(() => roundHours(allocationRows.value.reduce((sum, row) => sum + Number(row.actualHours || 0), 0)))
-const totalWorkloadDays = computed(() => roundHours(workItems.value.reduce((sum, row) => sum + Number(row.workloadDays || 0), 0)))
-const averagePercent = computed(() => {
-  if (allocationRows.value.length === 0) return 0
-  return roundHours(allocationRows.value.reduce((sum, row) => sum + Number(row.allocationPercent || 0), 0) / allocationRows.value.length)
+const draftTotals = computed(() => weeklyDraftTotals(allocationBaseline.value, allocationRows.value))
+const totalHours = computed(() => draftTotals.value.hours)
+const totalActualHours = computed(() => draftTotals.value.actual)
+const totalWorkloadDays = computed(() => weeklyDraftWorkload(workloadBaselineTotal.value, workBaseline.value, workItems.value))
+const averagePercent = computed(() => draftTotals.value.averagePercent)
+const visibleAllocations = computed(() => allocationRows.value.filter(row => entryUIDs.value.includes(row.uid)))
+const workStructureChanged = computed(() => workItems.value.length !== workBaseline.value.length || workItems.value.some((item, index) => item.id !== workBaseline.value[index]?.id || !item.id))
+const visibleWorkItems = computed(() => {
+  if (workRead.error.value) return []
+  const all = workItems.value.map((item, index) => ({ item, index }))
+  return workStructureChanged.value ? all.slice((workPage.value - 1) * detailPageSize, workPage.value * detailPageSize) : all.filter(({ item }) => Boolean(item.id && workIDs.value.includes(item.id)))
 })
+
 const selectedWeekRange = computed(() => getWeekRange(selectedWeekYear.value, selectedWeek.value))
 const inferredCurrentMilestone = computed(() => {
   const weekStart = startOfDay(selectedWeekRange.value.start)
@@ -398,7 +423,7 @@ const previousProgressDisplay = computed(() => {
   const prefix = snapshot.weeksAgo === 1 ? '上周' : `${snapshot.weeksAgo}周前`
   return `${prefix} ${formatPercent(snapshot.value)}`
 })
-const previousLaborCost = computed(() => previousReportWithLaborCost()?.cumulativeLaborCost ?? 0)
+const previousLaborCost = computed(() => history.value?.cumulativeLaborCost ?? 0)
 const previousLaborCostDisplay = computed(() => formatCurrency(previousLaborCost.value))
 
 const calendarWeeks = computed(() => {
@@ -545,37 +570,31 @@ function normalizeWorkCalendarDay(raw: Record<string, unknown>): WorkCalendarDay
 
 async function fetchReportCalendar() {
   if (!projectId.value) return
+  const generation = ++calendarGeneration
+  const identity = initialRead.fingerprint.value
+  const id = projectId.value
   reportsLoading.value = true
   try {
     const years = new Set<number>([calendarYear.value])
     if (calendarMonth.value === 1) years.add(calendarYear.value - 1)
     if (calendarMonth.value === 12) years.add(calendarYear.value + 1)
-
-    const next = new Map(reports.value)
-    for (const [key] of next) {
-      const keyYear = Number(key.split('-')[0])
-      if (years.has(keyYear)) next.delete(key)
-    }
-
+    const next = new Map(calendarRows.value)
+    for (const [key] of next) if (years.has(Number(key.split('-')[0]))) next.delete(key)
     for (const year of years) {
-      const res = await $fetch<{ code: number, data: ListPayload<RawProjectWeeklyReport> }>(
-        `/api/v1/projects/${projectId.value}/weekly-reports`,
-        { query: { year } }
-      )
-      if (res.code === 0) {
-        for (const item of res.data.items || []) {
-          const report = normalizeReport(item)
-          next.set(reportKey(report.reportYear, report.reportWeek), report)
-        }
+      const res = await $fetch<{ code: number, data: { items: RawProjectWeeklyReport[], calendar: RawProjectWeeklyReport[], total: number } }>(moduleUrl(`/api/v1/projects/${id}/weekly-reports`), { query: { year, page: year === calendarYear.value ? periodListPage.value : 1, pageSize: detailPageSize } })
+      if (generation !== calendarGeneration || id !== projectId.value || identity !== initialRead.fingerprint.value) return
+      if (res.code !== 0 || !Array.isArray(res.data.calendar)) throw new Error('Invalid report calendar')
+      for (const item of res.data.calendar) next.set(reportKey(Number(item.reportYear), Number(item.reportWeek)), item)
+      if (year === calendarYear.value) {
+        periodListItems.value = res.data.items
+        periodListTotal.value = res.data.total
       }
     }
-    reports.value = next
-  } catch (error) {
-    console.error('[ProjectWeeklyReports] fetch calendar failed:', error)
-    toast.add({ title: '加载周报日历失败', color: 'error' })
-  } finally {
-    reportsLoading.value = false
-  }
+    calendarRows.value = next
+    reports.value = new Map(Array.from(next, ([key, item]) => [key, normalizeReport(item)]))
+  } catch {
+    if (generation === calendarGeneration) toast.add({ title: '加载周报日历失败', color: 'error' })
+  } finally { if (generation === calendarGeneration) reportsLoading.value = false }
 }
 
 async function fetchWorkCalendarDays() {
@@ -590,7 +609,7 @@ async function fetchWorkCalendarDays() {
 
     for (const yearMonth of missingMonths) {
       const res = await $fetch<{ code: number, data: ListPayload<Record<string, unknown>> }>(
-        '/api/work-calendars/CN/days',
+        moduleUrl('/api/work-calendars/CN/days'),
         { query: { yearMonth } }
       )
       if (res.code === 0) {
@@ -613,57 +632,105 @@ async function fetchWorkCalendarDays() {
   }
 }
 
+function clearSelectedDraft() {
+  mainWork.value = ''
+  overallProgress.value = ''
+  Object.assign(summaryFields, { departmentName: '', projectTypeName: '', projectManagerName: '', initiationStatus: '', currentStage: '', progressStatus: '', completionPercent: null, contractStatus: '', contractAmount: null, paymentStatus: '', cumulativeLaborCost: null, majorRisks: '', coordinationNeeds: '', remarks: '' })
+  actualHoursByUid.value = new Map()
+}
+
+async function reloadBaseline() {
+  if (!await confirm({ title: '重新加载周报', message: `重新加载「${projectStore.currentProject?.name || projectId.value} / ${selectedPeriodKey.value}」会丢弃当前未保存草稿。`, tone: 'warning', confirmLabel: '丢弃草稿并重新加载' })) return
+  await loadSelectedReport()
+}
+
 async function loadSelectedReport() {
   if (!projectId.value || selectedWeek.value === null) return
+  const generation = ++selectedGeneration
   reportLoading.value = true
+  clearSelectedDraft()
+  completeBaselineReady.value = false
+  draftFactsChanged.value = false
   selectedReport.value = null
+  history.value = null
+  editableByCurrentUser.value = false
+  allocationRows.value = []
+  workItems.value = []
+  entriesPage.value = 1
+  workPage.value = 1
+  memberRead.clear()
+  workRead.clear()
   try {
+    // Actual hours retain their independent timesheet:view permission and scope;
+    // the weekly_reports permit never gains access to raw time-entry facts.
     await fetchActualHours()
-    const res = await $fetch<{ code: number, data: WeeklyReportPeriodPayload }>(
-      `/api/v1/projects/${projectId.value}/weekly-reports/${selectedPeriodKey.value}`
-    )
-    editableByCurrentUser.value = Boolean(res.data.editableByCurrentUser)
-    const report = res.code === 0 && res.data.report
-      ? normalizeReport(res.data.report)
-      : null
+    if (generation !== selectedGeneration) return
+    const data = await initialRead.read(moduleUrl(`/api/v1/projects/${projectId.value}/weekly-reports/${selectedPeriodKey.value}`), { page: 1, pageSize: detailPageSize, includeBaseline: '1' })
+    if (!data || generation !== selectedGeneration || data.periodKey !== selectedPeriodKey.value || !('baseline' in data)) throw new Error('Report initialization unavailable')
+    editableByCurrentUser.value = data.editableByCurrentUser
+    history.value = data.history
+    const report = data.baseline ? normalizeReport(data.baseline) : null
     selectedReport.value = report
-    if (report) {
-      const next = new Map(reports.value)
-      next.set(reportKey(report.reportYear, report.reportWeek), report)
-      reports.value = next
-    }
     resetForm(report)
-  } catch (error) {
-    console.error('[ProjectWeeklyReports] load report failed:', error)
-    toast.add({ title: '加载周报失败', color: 'error' })
-    resetForm(null)
-    editableByCurrentUser.value = false
-  } finally {
-    reportLoading.value = false
+    if (data.entriesPage.total !== allocationRows.value.length) throw new Error('Incomplete member initialization')
+    workloadBaselineTotal.value = data.summary.persistedWorkloadDays
+    entryUIDs.value = data.entriesPage.items
+    workIDs.value = data.workItemsPage.items
+    completeBaselineReady.value = true
+  } catch {
+    if (generation === selectedGeneration) {
+      editableByCurrentUser.value = false
+      toast.add({ title: '加载周报失败，请重试', color: 'error' })
+    }
+  } finally { if (generation === selectedGeneration) reportLoading.value = false }
+}
+
+async function readDetailPage(kind: 'entries' | 'work') {
+  if (!completeBaselineReady.value) return
+  const reader = kind === 'entries' ? memberRead : workRead
+  if (kind === 'entries') entryUIDs.value = []
+  else workIDs.value = []
+  const data = await reader.read(moduleUrl(`/api/v1/projects/${projectId.value}/weekly-reports/${selectedPeriodKey.value}`), { page: kind === 'entries' ? entriesPage.value : workPage.value, pageSize: detailPageSize })
+  if (!data || data.periodKey !== selectedPeriodKey.value) {
+    if ([401, 403].includes(reader.errorStatus.value || 0)) {
+      clearSelectedDraft()
+      completeBaselineReady.value = false
+      editableByCurrentUser.value = false
+      selectedReport.value = null
+      allocationRows.value = []
+      allocationBaseline.value = []
+      workItems.value = []
+      workBaseline.value = []
+      workloadBaselineTotal.value = 0
+      periodListTotal.value = 0
+      selectedGeneration++
+      calendarGeneration++
+      initialRead.clear()
+      memberRead.clear()
+      workRead.clear()
+      history.value = null
+      reports.value = new Map()
+      calendarRows.value = new Map()
+      periodListItems.value = []
+    }
+    return
   }
+  if (data.entriesPage.total !== allocationBaseline.value.length || (data.report?.updatedAt && selectedReport.value?.updatedAt && data.report.updatedAt !== selectedReport.value.updatedAt)) {
+    draftFactsChanged.value = true
+    return
+  }
+  if (kind === 'entries') entryUIDs.value = data.entriesPage.items
+  else workIDs.value = data.workItemsPage.items
 }
 
 async function fetchActualHours() {
+  const id = projectId.value, key = selectedPeriodKey.value, identity = initialRead.fingerprint.value, generation = selectedGeneration
   actualHoursByUid.value = new Map()
   const { start, end } = getWeekRange(selectedWeekYear.value, selectedWeek.value)
-  const res = await $fetch<{ code: number, data: ListPayload<RawTimeEntry> }>(
-    `/api/v1/projects/${projectId.value}/time-entries`,
-    {
-      query: {
-        startDate: formatDate(start),
-        endDate: formatDate(end)
-      }
-    }
-  )
-  if (res.code !== 0) return
-
-  const next = new Map<string, number>()
-  for (const entry of res.data.items || []) {
-    const uid = String(entry.uid || '').trim()
-    if (!uid) continue
-    next.set(uid, roundHours((next.get(uid) || 0) + Number(entry.hours || 0)))
-  }
-  actualHoursByUid.value = next
+  const res = await $fetch<{ code: number, data: { summary: { uidHours?: { uid: string, hours: number }[] } } }>(moduleUrl(`/api/v1/projects/${id}/time-entries`), { query: { startDate: formatDate(start), endDate: formatDate(end), page: 1, pageSize: 1, includeUidHours: '1' } })
+  if (generation !== selectedGeneration || id !== projectId.value || key !== selectedPeriodKey.value || identity !== initialRead.fingerprint.value) return
+  if (res.code !== 0 || !res.data.summary || (res.data.summary.uidHours !== undefined && !Array.isArray(res.data.summary.uidHours))) throw new Error('Actual hour summary unavailable')
+  actualHoursByUid.value = new Map((res.data.summary.uidHours || []).map(entry => [entry.uid.trim(), roundHours(entry.hours)]))
 }
 
 function resetForm(report: ProjectWeeklyReport | null) {
@@ -718,6 +785,11 @@ function resetForm(report: ProjectWeeklyReport | null) {
   }
 
   allocationRows.value = rows
+  allocationBaseline.value = rows.map(row => ({ ...row }))
+  workBaseline.value = workItems.value.map(item => ({ ...item }))
+  entriesPage.value = Math.min(entriesPage.value, Math.max(1, Math.ceil(rows.length / detailPageSize)))
+  workPage.value = Math.min(workPage.value, Math.max(1, Math.ceil(workItems.value.length / detailPageSize)))
+  workloadBaselineTotal.value = roundHours(workBaseline.value.reduce((sum, item) => sum + Number(item.workloadDays || 0), 0))
 }
 
 async function saveReport() {
@@ -725,7 +797,7 @@ async function saveReport() {
   saving.value = true
   try {
     const res = await $fetch<{ code: number, data: RawProjectWeeklyReport }>(
-      `/api/v1/projects/${projectId.value}/weekly-reports/${selectedPeriodKey.value}/draft`,
+      moduleUrl(`/api/v1/projects/${projectId.value}/weekly-reports/${selectedPeriodKey.value}/draft`),
       {
         method: 'PUT',
         body: {
@@ -762,6 +834,8 @@ async function saveReport() {
       next.set(reportKey(report.reportYear, report.reportWeek), report)
       reports.value = next
       resetForm(report)
+      await readDetailPage('entries')
+      await readDetailPage('work')
       toast.add({ title: '周报已保存', color: 'success' })
     }
   } catch (error) {
@@ -777,7 +851,7 @@ async function submitReport() {
   submitting.value = true
   try {
     const res = await $fetch<{ code: number }>(
-      `/api/v1/projects/${projectId.value}/weekly-reports/${selectedPeriodKey.value}:submit`,
+      moduleUrl(`/api/v1/projects/${projectId.value}/weekly-reports/${selectedPeriodKey.value}:submit`),
       { method: 'POST', body: {} }
     )
     if (res.code === 0) {
@@ -881,10 +955,12 @@ function newWorkItem(): WeeklyReportWorkItem {
 
 function addWorkItem() {
   workItems.value.push(newWorkItem())
+  workPage.value = Math.max(1, Math.ceil(workItems.value.length / detailPageSize))
 }
 
 function removeWorkItem(index: number) {
   workItems.value.splice(index, 1)
+  workPage.value = Math.min(workPage.value, Math.max(1, Math.ceil(workItems.value.length / detailPageSize)))
   if (workItems.value.length === 0) {
     workItems.value.push(newWorkItem())
   }
@@ -914,43 +990,10 @@ function reportKey(year: number, week: number) {
   return `${year}-${week}`
 }
 
-function reportWeekStart(report: Pick<ProjectWeeklyReport, 'reportYear' | 'reportWeek'>) {
-  return getWeekRange(report.reportYear, report.reportWeek).start
-}
-
-function previousReports() {
-  const selectedStart = selectedWeekRange.value.start
-  return Array.from(reports.value.values())
-    .filter(report => reportWeekStart(report) < selectedStart)
-    .sort((left, right) => reportWeekStart(right).getTime() - reportWeekStart(left).getTime())
-}
-
-function previousReportWithLaborCost() {
-  return previousReports().find(report => report.cumulativeLaborCost !== null && report.cumulativeLaborCost !== undefined) || null
-}
-
 function resolvePreviousChangedProgress() {
-  const reportsWithProgress = previousReports()
-    .filter(report => report.completionPercent !== null && report.completionPercent !== undefined)
-
-  for (let index = 0; index < reportsWithProgress.length; index++) {
-    const report = reportsWithProgress[index]
-    if (!report) continue
-    const older = reportsWithProgress[index + 1]
-    if (!older || !samePercent(report.completionPercent, older.completionPercent)) {
-      return {
-        value: Number(report.completionPercent),
-        weeksAgo: weeksBetween(reportWeekStart(report), selectedWeekRange.value.start)
-      }
-    }
-  }
-
-  return null
-}
-
-function samePercent(left: number | null, right: number | null) {
-  if (left === null || right === null) return left === right
-  return Math.round(Number(left) * 100) === Math.round(Number(right) * 100)
+  const h = history.value
+  if (!h || h.progressPercent === null) return null
+  return { value: h.progressPercent, weeksAgo: weeksBetween(getWeekRange(h.progressYear, h.progressWeek).start, selectedWeekRange.value.start) }
 }
 
 function weeksBetween(previousStart: Date, currentStart: Date) {
@@ -1191,13 +1234,55 @@ watch([calendarYear, calendarMonth], () => {
 })
 
 watch(activeMembers, () => {
-  resetForm(selectedReport.value)
+  if (!completeBaselineReady.value) resetForm(selectedReport.value)
 })
+watch(entriesPage, () => {
+  readDetailPage('entries')
+})
+watch(workPage, () => {
+  readDetailPage('work')
+})
+watch(periodListPage, fetchReportCalendar)
+watch(projectId, async () => {
+  completeBaselineReady.value = false
+  clearSelectedDraft()
+  await projectStore.fetchProject(projectId.value)
+  await projectStore.fetchMembers(projectId.value)
+  await milestoneStore.fetchMilestones(projectId.value)
+  await fetchReportCalendar()
+  await loadSelectedReport()
+})
+watch(calendarYear, () => {
+  periodListPage.value = 1
+})
+watch(initialRead.fingerprint, () => {
+  selectedGeneration++
+  calendarGeneration++
+  clearSelectedDraft()
+  completeBaselineReady.value = false
+  editableByCurrentUser.value = false
+  selectedReport.value = null
+  allocationRows.value = []
+  allocationBaseline.value = []
+  workBaseline.value = []
+  workloadBaselineTotal.value = 0
+  periodListTotal.value = 0
+  workItems.value = []
+  reports.value = new Map()
+  calendarRows.value = new Map()
+  periodListItems.value = []
+  history.value = null
+}, { flush: 'sync' })
 
 watch(inferredCurrentStage, (stage) => {
   if (stage) {
     summaryFields.currentStage = stage
   }
+})
+
+onScopeDispose(() => {
+  selectedGeneration++
+  calendarGeneration++
 })
 
 onMounted(async () => {
@@ -1314,10 +1399,47 @@ onMounted(async () => {
                 </div>
               </div>
             </div>
+            <div class="space-y-2 border-t border-default p-3">
+              <UButton
+                v-for="item in periodListItems"
+                :key="item.id"
+                size="xs"
+                variant="soft"
+                :label="`${item.reportYear}-W${item.reportWeek}`"
+                @click="selectWeek(Number(item.reportYear), Number(item.reportWeek))"
+              />
+              <span class="text-xs text-muted">共 {{ periodListTotal }} 条</span>
+              <UPagination
+                v-model:page="periodListPage"
+                :items-per-page="detailPageSize"
+                :total="periodListTotal"
+                :sibling-count="0"
+              />
+            </div>
           </aside>
 
           <main class="min-h-0 min-w-0 overflow-y-auto bg-elevated/20 px-4 py-4 pb-12">
             <div class="mx-auto w-full max-w-[104rem] space-y-4">
+              <UAlert
+                v-if="draftFactsChanged"
+                color="warning"
+                title="周报或成员已变化"
+                description="草稿仍保留；请重新加载完整基线后再保存或提交。重新加载会丢弃当前草稿。"
+              >
+                <template #actions>
+                  <UButton label="重新加载" @click="reloadBaseline" />
+                </template>
+              </UAlert>
+              <UAlert
+                v-if="!reportLoading && !completeBaselineReady"
+                color="error"
+                title="周报尚未完整加载"
+                description="请重试；完整基线加载前不能保存或提交。"
+              >
+                <template #actions>
+                  <UButton label="重试" @click="loadSelectedReport" />
+                </template>
+              </UAlert>
               <div class="rounded-lg border border-default bg-default px-4 py-4">
                 <div class="flex flex-wrap items-start justify-between gap-3">
                   <div class="min-w-0">
@@ -1644,9 +1766,19 @@ onMounted(async () => {
                     </div>
                   </div>
 
+                  <div class="flex flex-wrap items-center justify-between gap-2 p-3">
+                    <span class="text-xs text-muted">共 {{ workItems.length }} 条</span>
+                    <UPagination
+                      v-model:page="workPage"
+                      :items-per-page="detailPageSize"
+                      :total="workItems.length"
+                      :sibling-count="0"
+                    />
+                    <UButton v-if="workRead.error.value" label="重试工作项页" @click="readDetailPage('work')" />
+                  </div>
                   <div class="space-y-3 p-4">
                     <div
-                      v-for="(item, index) in workItems"
+                      v-for="{ item, index } in visibleWorkItems"
                       :key="`${index}-${item.id || 'new'}`"
                       class="rounded-lg border border-default bg-elevated/30 p-3"
                     >
@@ -1761,6 +1893,16 @@ onMounted(async () => {
                     </div>
                   </div>
 
+                  <div class="flex flex-wrap items-center justify-between gap-2 p-3">
+                    <span class="text-xs text-muted">共 {{ allocationRows.length }} 条</span>
+                    <UPagination
+                      v-model:page="entriesPage"
+                      :items-per-page="detailPageSize"
+                      :total="allocationRows.length"
+                      :sibling-count="0"
+                    />
+                    <UButton v-if="memberRead.error.value" label="重试成员页" @click="readDetailPage('entries')" />
+                  </div>
                   <div v-if="allocationRows.length === 0" class="px-4 py-12 text-center text-muted">
                     暂无项目成员
                   </div>
@@ -1774,7 +1916,7 @@ onMounted(async () => {
                     </div>
 
                     <div
-                      v-for="row in allocationRows"
+                      v-for="row in visibleAllocations"
                       :key="row.uid"
                       class="grid gap-3 rounded-lg border border-default bg-elevated/30 p-3 md:grid-cols-[minmax(0,1fr)_10rem_10rem_9rem] md:items-center"
                     >

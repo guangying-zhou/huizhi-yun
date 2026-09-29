@@ -20,9 +20,37 @@
   },
   "resources": [
     {
+      "code": "policy-bundle",
+      "name": "策略快照服务",
+      "description": "既有 console:policy-bundle:read|write 精确服务能力；旧封包存储和显式启用的完整签名快照接口共用，不授予浏览器或普通角色权限",
+      "actions": ["read", "write"],
+      "sortOrder": 0
+    },
+    {
+      "code": "directory-project-access",
+      "name": "项目目录服务读取",
+      "description": "既有 Service API 的精确读取能力；调用方须具备 Console grant，不授予人员项目管理权限",
+      "actions": ["read"],
+      "sortOrder": 0
+    },
+    {
+      "code": "business-domain",
+      "name": "业务域字典服务读取",
+      "description": "既有业务域 Service API 读取能力；不包含字典写入或人员管理权限",
+      "actions": ["view"],
+      "sortOrder": 0
+    },
+    {
       "code": "subject-authorization",
       "name": "固定用途用户范围授权服务",
       "description": "服务能力 console:subject-authorization:read：按登记用途查询有效用户的当前合并范围授权，不授予用户角色",
+      "actions": ["read"],
+      "sortOrder": 0
+    },
+    {
+      "code": "directory-users",
+      "name": "目录用户服务读取",
+      "description": "服务能力 console:directory-users:read：供已授权调用方读取目录投影与显式UID活跃状态，不授予人员管理权限",
       "actions": ["read"],
       "sortOrder": 0
     },
@@ -377,5 +405,126 @@
   "capabilitiesRequired": [
     "platform:app-registry",
     "platform:credential-vault"
-  ]
+  ],
+  "hostNavigation": {
+    "schemaVersion": 1,
+    "placement": "host-native",
+    "pages": [
+      "/enterprise/notifications",
+      "/enterprise/notifications/:notificationId",
+      "/enterprise/todos",
+      "/enterprise/org-profile",
+      "/enterprise/directory/users",
+      "/enterprise/directory/departments",
+      "/enterprise/directory/departments-new",
+      "/enterprise/directory/departments-edit",
+      "/enterprise/directory/projects",
+      "/enterprise/directory/projects-new",
+      "/enterprise/directory/projects-edit",
+      "/enterprise/directory/projects-members",
+      "/enterprise/directory/committees",
+      "/enterprise/work-calendar",
+      "/enterprise/directory/sync",
+      "/enterprise/directory/sync/:jobCode",
+      "/enterprise/admin/business-domains",
+      "/enterprise/admin/regions",
+      "/enterprise/data-runtime",
+      "/enterprise/admin/runtime-apps"
+    ],
+    "entries": [
+      {
+        "id": "console.enterprise.org-profile",
+        "area": "console",
+        "group": "enterprise",
+        "label": "企业资料",
+        "to": "/enterprise/org-profile",
+        "order": 10,
+        "access": {
+          "kind": "permission",
+          "resource": "org_profile",
+          "action": "view"
+        }
+      },
+      {
+        "id": "console.enterprise.users",
+        "area": "console",
+        "group": "enterprise",
+        "label": "用户",
+        "to": "/enterprise/directory/users",
+        "order": 20,
+        "access": {
+          "kind": "permission",
+          "resource": "directory_users",
+          "action": "view"
+        }
+      },
+      {
+        "id": "console.enterprise.departments",
+        "area": "console",
+        "group": "enterprise",
+        "label": "部门",
+        "to": "/enterprise/directory/departments",
+        "order": 30,
+        "access": {
+          "kind": "permission",
+          "resource": "directory_departments",
+          "action": "view"
+        }
+      },
+      {
+        "id": "console.enterprise.projects",
+        "area": "console",
+        "group": "enterprise",
+        "label": "项目注册表",
+        "to": "/enterprise/directory/projects",
+        "order": 40,
+        "access": {
+          "kind": "permission",
+          "resource": "directory_projects",
+          "action": "view"
+        }
+      },
+      {
+        "id": "console.enterprise.committees",
+        "area": "console",
+        "group": "enterprise",
+        "label": "委员会",
+        "to": "/enterprise/directory/committees",
+        "order": 50,
+        "access": {
+          "kind": "permission",
+          "resource": "directory_departments",
+          "action": "view"
+        }
+      },
+      {
+        "id": "console.workspace.notifications",
+        "area": "workspace",
+        "group": "self",
+        "label": "通知",
+        "to": "/enterprise/notifications",
+        "order": 0,
+        "access": {
+          "kind": "authenticated-self"
+        }
+      },
+      {
+        "id": "console.workspace.todos",
+        "area": "workspace",
+        "group": "self",
+        "label": "我的待办",
+        "to": "/enterprise/todos",
+        "order": 1,
+        "access": {
+          "kind": "authenticated-self"
+        }
+      },
+      { "id": "console.config.work-calendar", "area": "console", "group": "config", "label": "节假日管理", "to": "/enterprise/work-calendar", "order": 20, "access": { "kind": "permission", "resource": "system_settings", "action": "view" } },
+      {"id": "console.config.business-domains", "area": "console", "group": "config", "label": "业务领域", "to": "/enterprise/admin/business-domains", "order": 30, "access": {"kind": "permission", "resource": "org_profile", "action": "view"}},
+      {"id": "console.config.regions", "area": "console", "group": "config", "label": "区域管理", "to": "/enterprise/admin/regions", "order": 40, "access": {"kind": "permission", "resource": "org_profile", "action": "view"}},
+      {"id": "console.integration.data-runtime", "area": "console", "group": "integration", "label": "数据运行时", "to": "/enterprise/data-runtime", "order": 20, "access": {"kind": "permission", "resource": "data_runtime", "action": "view"}},
+      {"id": "console.integration.runtime-apps", "area": "console", "group": "integration", "label": "应用运行状态", "to": "/enterprise/admin/runtime-apps", "order": 30, "access": {"kind": "permission", "resource": "runtime_apps", "action": "view"}},
+      { "id": "console.integration.directory-sync", "area": "console", "group": "integration", "label": "目录同步", "to": "/enterprise/directory/sync", "order": 10, "access": { "kind": "permission", "resource": "directory_sync", "action": "view" } }
+    ]
+  }
 }

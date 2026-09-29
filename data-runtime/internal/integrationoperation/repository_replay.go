@@ -65,12 +65,12 @@ func (r *Repository) Replay(ctx context.Context, input ReplayInput) (RecordResul
 	defer rollback(tx)
 
 	nextVersion := input.ExpectedVersion + 1
-	if err := markLatestDeadLetterGenerationClosure(ctx, tx, input.OperationID, input.ExpectedVersion, "cancelled", nextVersion, input.Now); err != nil {
+	if err := r.markLatestDeadLetterGenerationClosure(ctx, tx, input.OperationID, input.ExpectedVersion, "cancelled", nextVersion, input.Now); err != nil {
 		return RecordResult{}, err
 	}
 	result, err := tx.ExecContext(
 		ctx,
-		replayOperationSQL,
+		r.sql(replayOperationSQL),
 		input.Now,
 		input.ActorUID,
 		safeReason,

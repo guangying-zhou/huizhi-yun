@@ -19,14 +19,57 @@ type projectListPage struct {
 }
 
 func (a *Adapter) memberProjects(ctx context.Context, query url.Values) (map[string]any, error) {
+	page, paged, err := timeEntryPagination(query)
+	if err != nil {
+		return nil, err
+	}
+	if !paged && query.Get("projection") != "" {
+		return nil, httperror.New(400, "project_page_required", "Projection requires pagination")
+	}
+	tx, err := a.DB().BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelRepeatableRead, ReadOnly: true})
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+	var out map[string]any
+	if query.Get("projection") == "portfolios" {
+		out, err = projectPortfolioProjection(ctx, tx, query, page)
+	} else if query.Get("projection") == "" || query.Get("projection") == "projects" || query.Get("projection") == "candidates" || query.Get("projection") == "switcher" {
+		out, err = a.memberProjectsWithDB(ctx, tx, query)
+	} else {
+		return nil, httperror.New(400, "project_projection_invalid", "Invalid projection")
+	}
+	if err != nil {
+		return nil, err
+	}
+	if err = tx.Commit(); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (a *Adapter) memberProjectsWithDB(ctx context.Context, db weeklyReportReadDB, query url.Values) (map[string]any, error) {
 	currentUser := strings.TrimSpace(query.Get("current_user"))
 	if currentUser == "" {
 		return nil, httperror.New(http.StatusUnauthorized, "missing_current_user", "current_user is required")
 	}
 
 	page := memberProjectsPage(query)
+	if query.Get("projection") != "" || query.Has("page") || query.Has("pageSize") {
+		parsed, _, err := timeEntryPagination(query)
+		if err != nil {
+			return nil, err
+		}
+		page = projectListPage{page: parsed.page, pageSize: parsed.size, offset: (parsed.page - 1) * parsed.size}
+	}
 	where, args := memberProjectsWhere(query, currentUser)
 	visibilityWhere, visibilityArgs := projectVisibilityWhere(query, "p", currentUser)
+	scopeWhere, scopeArgs, scopeErr := enterpriseProjectReadScopeWhere(ctx, currentUser)
+	if scopeErr != nil {
+		return nil, scopeErr
+	}
+	visibilityWhere = "(" + visibilityWhere + ") AND (" + scopeWhere + ")"
+	visibilityArgs = append(visibilityArgs, scopeArgs...)
 	where = append(where, visibilityWhere)
 	args = append(args, visibilityArgs...)
 	countArgs := append([]any{currentUser}, args...)
@@ -34,7 +77,7 @@ func (a *Adapter) memberProjects(ctx context.Context, query url.Values) (map[str
 	whereSQL := "WHERE " + strings.Join(where, " AND ")
 
 	var total int64
-	if err := a.DB().QueryRowContext(ctx, `
+	if err := db.QueryRowContext(ctx, `
 		SELECT COUNT(DISTINCT p.id)
 		FROM aims_projects p
 		LEFT JOIN aims_project_members cm
@@ -45,7 +88,12 @@ func (a *Adapter) memberProjects(ctx context.Context, query url.Values) (map[str
 		return nil, err
 	}
 
-	rows, err := a.DB().QueryContext(ctx, `
+	orderBy := "p.updated_at DESC,p.id DESC"
+	if query.Get("projection") == "switcher" {
+		orderBy = "EXISTS(SELECT 1 FROM user_favorite_projects sort_f WHERE sort_f.project_id=p.id AND sort_f.uid=?) DESC,p.name ASC,p.id ASC"
+		listArgs = append(listArgs, currentUser)
+	}
+	rows, err := db.QueryContext(ctx, `
 		SELECT
 			p.id,
 			p.project_code,
@@ -185,7 +233,7 @@ func (a *Adapter) memberProjects(ctx context.Context, query url.Values) (map[str
 			GROUP BY document_sources.project_id
 		) dc ON dc.project_id = p.id
 			`+whereSQL+`
-			ORDER BY p.updated_at DESC, p.id DESC
+			ORDER BY `+orderBy+`
 			LIMIT ? OFFSET ?
 		`, append(listArgs, page.pageSize, page.offset)...)
 	if err != nil {
@@ -205,12 +253,21 @@ func (a *Adapter) memberProjects(ctx context.Context, query url.Values) (map[str
 		return nil, err
 	}
 
-	return map[string]any{
+	rows.Close()
+	result := map[string]any{
 		"items":    items,
 		"total":    total,
 		"page":     page.page,
 		"pageSize": page.pageSize,
-	}, nil
+	}
+	if query.Get("projection") == "projects" || query.Get("projection") == "candidates" || query.Get("projection") == "switcher" {
+		summary, err := projectReadSummary(ctx, db, query)
+		if err != nil {
+			return nil, err
+		}
+		result["summary"] = summary
+	}
+	return result, nil
 }
 
 func (a *Adapter) projectDetail(ctx context.Context, projectID string, query url.Values) (map[string]any, error) {
@@ -220,6 +277,12 @@ func (a *Adapter) projectDetail(ctx context.Context, projectID string, query url
 	}
 
 	visibilityWhere, visibilityArgs := projectVisibilityWhere(query, "p", currentUser)
+	scopeWhere, scopeArgs, scopeErr := enterpriseProjectReadScopeWhere(ctx, currentUser)
+	if scopeErr != nil {
+		return nil, scopeErr
+	}
+	visibilityWhere = "(" + visibilityWhere + ") AND (" + scopeWhere + ")"
+	visibilityArgs = append(visibilityArgs, scopeArgs...)
 	args := append([]any{currentUser, currentUser, projectID}, visibilityArgs...)
 	rows, err := a.DB().QueryContext(ctx, `
 		SELECT
@@ -478,6 +541,15 @@ func (a *Adapter) projectDetailRepos(ctx context.Context, projectID string) ([]m
 func memberProjectsWhere(query url.Values, currentUser string) ([]string, []any) {
 	where := []string{}
 	args := []any{}
+	if query.Get("projection") == "switcher" && projectQueryBool(query, "favoritesOnly") {
+		where = append(where, "EXISTS(SELECT 1 FROM user_favorite_projects read_f WHERE read_f.project_id=p.id AND read_f.uid=?)")
+		args = append(args, currentUser)
+	}
+
+	if query.Get("projection") == "candidates" {
+		where = append(where, "(p.leader_uid=? OR EXISTS(SELECT 1 FROM aims_project_members candidate_pm WHERE candidate_pm.project_id=p.id AND candidate_pm.uid=? AND candidate_pm.status='active' AND candidate_pm.role IN ('manager','member')))")
+		args = append(args, currentUser, currentUser)
+	}
 
 	if productCode := strings.TrimSpace(query.Get("product_code")); productCode != "" {
 		where = append(where, "EXISTS (SELECT 1 FROM aims_project_products hpp WHERE hpp.project_id = p.id AND BINARY hpp.product_code = ?)")

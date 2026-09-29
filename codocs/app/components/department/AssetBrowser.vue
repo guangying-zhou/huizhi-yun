@@ -1,9 +1,14 @@
 <script setup lang="ts">
+import { useCodocsModule } from '../../../layer/useCodocsModule'
+import { useResizablePanel } from '../../composables/useResizablePanel'
+import { useViewerWatermark } from '../../composables/useViewerWatermark'
+import { useUserDepartmentsCache } from '../../composables/useUserDepartmentsCache'
 /**
  * 部门资产浏览器 — 部门选择 + 左侧目录/文件列表 + 右侧文档预览
  * Props: subdir (OSS departments/{deptCode}/ 下的子目录名), title (页面标题)
  */
 const props = defineProps<{ subdir: string, title: string }>()
+const { hosted, moduleUrl } = useCodocsModule()
 
 usePageTitle(props.title)
 
@@ -33,12 +38,14 @@ interface AssetItem {
 }
 
 interface AssetListResponse {
-  data?: AssetItem[]
+  data?: AssetItem[] | { items: AssetItem[], total: number, page: number, pageSize: number }
 }
 
 interface AssetPreviewResponse {
   data?: {
     content?: string
+    preview_url?: string
+    file_ext?: string
   }
 }
 
@@ -94,7 +101,16 @@ const hasMultipleDepts = computed(() => {
 })
 
 const initDeptCode = async () => {
-  if (!user.value) return
+  if (!hosted && !user.value) return
+
+  if (hosted) {
+    try {
+      const res = await $fetch<UserDepartmentsResponse>(moduleUrl('/api/dept-assets/departments'))
+      userDepartments.value = res.data?.departments || []
+      deptCode.value = res.data?.primaryDeptCode || userDepartments.value[0]?.deptCode || ''
+    } catch { toast.add({ title: '部门目录暂不可用', color: 'error' }) }
+    return
+  }
 
   const cachedDepartments = departmentsCache.value
   if (cachedDepartments?.departments?.length) {
@@ -147,6 +163,7 @@ const switchDepartment = (id: string) => {
   pathStack.value = []
   selectedFile.value = null
   previewContent.value = ''
+  previewUrl.value = ''
   outsideFileLevel.value = null
   outsideReviewId.value = null
   outsideExecutionStatus.value = null
@@ -155,21 +172,35 @@ const switchDepartment = (id: string) => {
 // 目录浏览
 const pathStack = ref<{ name: string, path: string }[]>([])
 const currentRelPath = computed(() => pathStack.value.map(p => p.name).join('/'))
+const page = ref(1)
+const pageSize = 20
+const total = ref(0)
+watch([deptCode, currentRelPath], () => {
+  page.value = 1
+})
 
 const { data: items, pending, refresh } = useAsyncData(
   `dept-assets-${props.subdir}`,
   () => {
     if (!deptCode.value) return Promise.resolve([])
-    return $fetch<AssetListResponse>('/api/dept-assets/list', {
-      params: { deptCode: deptCode.value, subdir: props.subdir, path: currentRelPath.value || undefined }
-    }).then(r => r.data || [])
+    return $fetch<AssetListResponse>(moduleUrl('/api/dept-assets/list'), {
+      params: { deptCode: deptCode.value, subdir: props.subdir, path: currentRelPath.value || undefined, ...(hosted ? { page: page.value, pageSize } : {}) }
+    }).then((r) => {
+      if (Array.isArray(r.data)) {
+        total.value = r.data.length
+        return r.data
+      }
+      total.value = r.data?.total || 0
+      return r.data?.items || []
+    })
   },
-  { watch: [deptCode, currentRelPath] }
+  { watch: [deptCode, currentRelPath, page] }
 )
 
 // 文件选择与预览
 const selectedFile = ref<AssetItem | null>(null)
 const previewContent = ref('')
+const previewUrl = ref('')
 const previewLoading = ref(false)
 const outsideFileLevel = ref<'general' | 'important' | 'critical' | null>(null)
 const outsideReviewId = ref<number | null>(null)
@@ -190,7 +221,7 @@ const loadOutsideExportPolicy = async (ossPath: string) => {
   outsideExecutionStatus.value = null
   outsideSenderUid.value = null
   try {
-    const res = await $fetch<PublishRecordResponse>('/api/reviews/by-oss-path', {
+    const res = await $fetch<PublishRecordResponse>(moduleUrl(hosted ? '/api/dept-assets/export-policy' : '/api/reviews/by-oss-path'), {
       params: { path: ossPath }
     })
     const level = res.data?.extra?.outsideFileLevel
@@ -219,6 +250,7 @@ const selectFile = async (item: AssetItem) => {
     pathStack.value = [...pathStack.value, { name: item.name, path: item.path }]
     selectedFile.value = null
     previewContent.value = ''
+    previewUrl.value = ''
     outsideFileLevel.value = null
     outsideReviewId.value = null
     outsideExecutionStatus.value = null
@@ -228,10 +260,12 @@ const selectFile = async (item: AssetItem) => {
   selectedFile.value = item
   previewLoading.value = true
   try {
-    const res = await $fetch<AssetPreviewResponse>('/api/dept-assets/preview', { params: { path: item.path } })
+    const res = await $fetch<AssetPreviewResponse>(moduleUrl('/api/dept-assets/preview'), { params: { path: item.path } })
     previewContent.value = res.data?.content || ''
+    previewUrl.value = res.data?.preview_url || ''
   } catch {
     previewContent.value = ''
+    previewUrl.value = ''
     toast.add({ title: '无法加载文件内容', color: 'error' })
   } finally {
     previewLoading.value = false
@@ -245,7 +279,7 @@ const showPublishRecord = ref(false)
 const showSendConfirm = ref(false)
 const showReceiveConfirm = ref(false)
 
-const canExport = computed(() => props.subdir === 'outsides')
+const canExport = computed(() => props.subdir === 'outsides' && (!hosted || hasPermission('departments', 'export')))
 const canExportEditableFormats = computed(() => outsideFileLevel.value === 'general')
 const canConfirmSend = computed(() => {
   return props.subdir === 'outsides'
@@ -271,7 +305,7 @@ const handleExportDocx = async () => {
   if (!selectedFile.value || exportingDocx.value) return
   exportingDocx.value = true
   try {
-    const blob = await $fetch<Blob>('/api/dept-assets/export-docx', {
+    const blob = await $fetch<Blob>(moduleUrl('/api/dept-assets/export-docx'), {
       method: 'POST',
       body: { path: selectedFile.value.path, filename: selectedFile.value.name },
       responseType: 'blob'
@@ -323,18 +357,23 @@ const exportMenuItems = computed(() => [
 // Admin: 归档（将已发布文档移至 archives 目录）
 const showArchiveConfirm = ref(false)
 const archiving = ref(false)
+const archiveKeys = new Map<string, string>()
 const archiveFile = async () => {
   if (!selectedFile.value) return
   archiving.value = true
+  const sourcePath = selectedFile.value.path
+  if (!archiveKeys.has(sourcePath)) archiveKeys.set(sourcePath, crypto.randomUUID())
   try {
-    await $fetch('/api/dept-assets/archive', {
+    await $fetch(moduleUrl('/api/dept-assets/archive'), {
       method: 'POST',
-      body: { deptCode: deptCode.value, subdir: props.subdir, sourcePath: selectedFile.value.path }
+      body: { deptCode: deptCode.value, subdir: props.subdir, sourcePath, ...(hosted ? { operationId: archiveKeys.get(sourcePath) } : {}) }
     })
+    archiveKeys.delete(sourcePath)
     toast.add({ title: '文件已归档', color: 'success' })
     showArchiveConfirm.value = false
     selectedFile.value = null
     previewContent.value = ''
+    previewUrl.value = ''
     refresh()
   } catch (e: unknown) {
     const err = e as { data?: { message?: string } }
@@ -348,6 +387,7 @@ const navigateTo_ = (index: number) => {
   pathStack.value = pathStack.value.slice(0, index)
   selectedFile.value = null
   previewContent.value = ''
+  previewUrl.value = ''
   outsideFileLevel.value = null
   outsideReviewId.value = null
   outsideExecutionStatus.value = null
@@ -429,10 +469,12 @@ const handleReceiveSuccess = async () => {
             暂无内容
           </div>
           <template v-else>
-            <div
+            <button
               v-for="item in items"
               :key="item.path"
-              class="group flex items-center gap-2 px-2 py-1.5 rounded-md cursor-pointer hover:bg-elevated"
+              type="button"
+              :aria-label="`${item.isDirectory ? '打开目录' : '预览文件'}：${item.name}`"
+              class="group flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left hover:bg-elevated focus-visible:outline-2 focus-visible:outline-primary"
               :class="{ 'bg-primary/10 text-primary font-medium': selectedFile?.path === item.path }"
               @click="selectFile(item)"
             >
@@ -444,8 +486,16 @@ const handleReceiveSuccess = async () => {
               <span v-if="!item.isDirectory" class="text-xs text-muted">
                 {{ item.lastModified ? new Date(item.lastModified).toLocaleDateString() : '' }}
               </span>
-            </div>
+            </button>
           </template>
+        </div>
+        <div v-if="hosted && total > pageSize" class="border-t border-default p-2 flex justify-center">
+          <UPagination
+            v-model:page="page"
+            :total="total"
+            :items-per-page="pageSize"
+            size="sm"
+          />
         </div>
       </aside>
       <!-- 拖拽调整宽度把手 -->
@@ -480,7 +530,7 @@ const handleReceiveSuccess = async () => {
               发布记录
             </UButton>
             <UButton
-              v-if="canConfirmSend"
+              v-if="!hosted && canConfirmSend"
               size="sm"
               icon="i-lucide-send"
               variant="outline"
@@ -490,7 +540,7 @@ const handleReceiveSuccess = async () => {
               确认发送
             </UButton>
             <UButton
-              v-if="canConfirmReceive"
+              v-if="!hosted && canConfirmReceive"
               size="sm"
               icon="i-lucide-mail-check"
               variant="outline"
@@ -534,8 +584,9 @@ const handleReceiveSuccess = async () => {
             <UIcon name="i-lucide-loader-2" class="w-8 h-8 animate-spin text-primary" />
           </div>
           <div v-else class="max-w-4xl mx-auto bg-white dark:bg-gray-900 shadow-sm rounded-lg min-h-full">
+            <PublishedPdfViewer v-if="previewUrl" :src="previewUrl" :title="selectedFile.name" />
             <EditorDocLazyPreview
-              v-if="previewContent"
+              v-else-if="previewContent"
               :content="previewContent"
               :watermark-text="watermarkText"
               disable-selection
@@ -574,14 +625,14 @@ const handleReceiveSuccess = async () => {
     <!-- 发布记录 Modal -->
     <ReviewPublishRecordModal v-model:open="showPublishRecord" :oss-path="selectedFile?.path || ''" />
     <ReviewSendConfirmModal
-      v-if="outsideReviewId"
+      v-if="!hosted && outsideReviewId"
       v-model:open="showSendConfirm"
       :review-id="outsideReviewId"
       :doc-title="selectedFile?.name"
       @success="handleSendSuccess"
     />
     <ReviewReceiveConfirmModal
-      v-if="outsideReviewId"
+      v-if="!hosted && outsideReviewId"
       v-model:open="showReceiveConfirm"
       :review-id="outsideReviewId"
       :doc-title="selectedFile?.name"

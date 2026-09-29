@@ -1,12 +1,17 @@
 <script setup lang="ts">
+import { useDocumentPreviewBootstrap } from '../../composables/useDocumentPreviewBootstrap'
+import { useResizablePanel } from '../../composables/useResizablePanel'
+import { useCodocsModule } from '../../../layer/useCodocsModule'
+import { createCreationAttempt } from '../../../layer/creationAttempt.mjs'
+
 /**
  * 工作日志页面
  * 左侧日历选择日期，右侧查看/编辑日志
  */
 
-definePageMeta({ layout: 'default' })
-
 usePageTitle('工作日志')
+const { moduleUrl, documentUrl, cacheKey } = useCodocsModule()
+const worklogCreationAttempt = createCreationAttempt()
 
 interface WorklogListItem {
   uuid: string
@@ -60,7 +65,7 @@ const getErrorMessage = (error: unknown, fallback: string) => {
 }
 
 const toast = useToast()
-const { user, userRealname, userDeptCode } = useAuth()
+const { user, userRealname } = useAuth()
 const { setPayload: setDocumentPreviewBootstrap } = useDocumentPreviewBootstrap()
 const uid = computed(() => user.value || 'user1')
 const { panelWidth, panelCollapsed, onResizeStart, showPanel } = useResizablePanel(288)
@@ -169,11 +174,10 @@ const submitLog = async () => {
   if (!selectedLog.value) return
   isSubmitting.value = true
   try {
-    await $fetch(`/api/documents/${selectedLog.value.uuid}`, {
+    await $fetch(moduleUrl(`/api/documents/${selectedLog.value.uuid}`), {
       method: 'PATCH',
       body: {
-        readonly_flag: true,
-        dept_code: userDeptCode.value || undefined
+        readonly_flag: true
       }
     })
     selectedLog.value.readonly_flag = 1
@@ -191,8 +195,8 @@ const fetchMonthLogs = async () => {
   if (!uid.value) return
   monthLogsLoading.value = true
   try {
-    const res = await $fetch<WorklogListResponse>('/api/worklogs/list', {
-      query: { owner: uid.value, year: calendarYear.value, month: calendarMonth.value }
+    const res = await $fetch<WorklogListResponse>(moduleUrl('/api/worklogs/list'), {
+      query: { year: calendarYear.value, month: calendarMonth.value }
     })
     applyMonthLogs(res.success ? (res.data?.items || []) : [])
   } catch {
@@ -391,14 +395,14 @@ const loadLog = async () => {
   previewLoading.value = true
   try {
     // 重新查询列表（确保获取最新状态，避免已删除文档残留）
-    const res = await $fetch<WorklogListResponse>('/api/worklogs/list', {
-      query: { owner: uid.value, year: calendarYear.value, month: calendarMonth.value }
+    const res = await $fetch<WorklogListResponse>(moduleUrl('/api/worklogs/list'), {
+      query: { year: calendarYear.value, month: calendarMonth.value }
     })
     applyMonthLogs(res.success ? (res.data?.items || []) : [])
     const item = res.data?.items?.find(i => i.date === selectedDate.value)
     if (item) {
       // 加载内容
-      const docRes = await $fetch<DocumentContentResponse>(`/api/documents/${item.uuid}`, {
+      const docRes = await $fetch<DocumentContentResponse>(moduleUrl(`/api/documents/${item.uuid}`), {
         params: { uid: uid.value }
       })
       if (docRes.success && docRes.data) {
@@ -425,17 +429,20 @@ const createLog = async () => {
   isCreating.value = true
   try {
     const dateKey = toDateKey(selectedDate.value)
-    const res = await $fetch<CreateWorklogResponse>('/api/worklogs/create', {
+    const attemptKey = worklogCreationAttempt.keyFor(cacheKey('worklog-create'), { date: dateKey })
+    const res = await $fetch<CreateWorklogResponse>(moduleUrl('/api/worklogs/create'), {
       method: 'POST',
-      body: { owner_uid: uid.value, owner_realname: userRealname.value || '', date: dateKey }
+      headers: { 'Idempotency-Key': attemptKey },
+      body: { date: dateKey }
     })
 
     if (res.success && res.data) {
+      worklogCreationAttempt.complete(attemptKey)
       // 刷新日志列表
       await fetchMonthLogs()
       // 直接跳转到编辑页面
       const query = res.data.existed ? {} : { new: '1' }
-      navigateTo({ path: `/documents/${res.data.uuid}`, query })
+      navigateTo({ path: documentUrl(res.data.uuid), query })
     }
   } catch (err: unknown) {
     toast.add({ title: getErrorMessage(err, '创建日志失败'), color: 'error' })
@@ -452,7 +459,7 @@ const editLog = () => {
         content: previewContent.value
       })
     }
-    navigateTo(`/documents/${selectedLog.value.uuid}`)
+    navigateTo(documentUrl(selectedLog.value.uuid))
   }
 }
 </script>

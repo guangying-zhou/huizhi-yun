@@ -1,5 +1,6 @@
 import { setResponseStatus } from 'h3'
-import { forwardAimsRuntimePost } from '~~/server/utils/aimsRuntimeForward'
+import { forwardAimsMilestoneReceivableWorkflowCallback, forwardAimsRuntimePost } from '~~/server/utils/aimsRuntimeForward'
+import { selectMilestoneReceivableDispatch, selectWorkflowCallbackRuntime } from '~~/server/utils/milestoneReceivableCallbackSelection'
 import { requireServiceScope } from '~~/server/utils/serviceAuth'
 import { dispatchMilestoneReceivableOperation } from '~~/server/utils/serviceTicketDeliveryOperation'
 
@@ -49,23 +50,30 @@ function callbackBody(raw: Record<string, unknown>) {
   }
 }
 
+function milestoneReceivableCoordinationEnabled() {
+  const config = useRuntimeConfig() as unknown as { hzy?: { enterprise?: { enableMilestoneReceivable?: unknown } } }
+  return process.env.HZY_AIMS_ENTERPRISE_ENABLE_MILESTONE_RECEIVABLE === 'true'
+    || config.hzy?.enterprise?.enableMilestoneReceivable === true
+}
+
 export default defineEventHandler(async (event) => {
   await requireServiceScope(event, { scope: 'workflow:callback', allowedApps: ['workflow'] })
   const raw = await readBody<Record<string, unknown>>(event).catch(() => ({}))
-  const data = await forwardAimsRuntimePost<CallbackResult>(
-    event,
-    '/v1/aims/service/workflow/callback',
-    {
-      uid: 'workflow',
-      query: { workflow_callback_verified: '1' },
-      body: callbackBody(raw)
-    }
-  )
+  const body = callbackBody(raw)
+  const options = { uid: 'workflow', query: { workflow_callback_verified: '1' }, body }
+  const data = selectWorkflowCallbackRuntime({
+    enabled: milestoneReceivableCoordinationEnabled(),
+    resourceCode: body.resource_code,
+    actionCode: body.action_code
+  }) === 'milestone-receivable'
+    ? await forwardAimsMilestoneReceivableWorkflowCallback<CallbackResult>(event, options)
+    : await forwardAimsRuntimePost<CallbackResult>(event, '/v1/aims/service/workflow/callback', options)
   const operationKey = text(data.receivableBillable?.operationKey)
   const operationStatus = text(data.receivableBillable?.operationStatus)
-  const receivableBillable = !operationKey
+  const dispatchSelection = selectMilestoneReceivableDispatch({ operationKey, operationStatus })
+  const receivableBillable = dispatchSelection === 'none'
     ? null
-    : operationStatus === 'succeeded'
+    : dispatchSelection === 'already-succeeded'
       ? { linked: true, synced: true, pending: false, operation: data.receivableBillable }
       : await dispatchMilestoneReceivableOperation(event, operationKey)
   if (receivableBillable?.pending) setResponseStatus(event, 202)

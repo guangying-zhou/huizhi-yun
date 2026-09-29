@@ -1,0 +1,212 @@
+{
+  "description": "Shared TS/Go vectors for the optional envelope body field serviceKeys. Each case is added to the platform-envelope.json body and re-signed.",
+  "cases": [
+    {
+      "name": "one console key",
+      "serviceKeys": [
+        {
+          "deployment": "console-test",
+          "kid": "csk_ae216c2ef5247a37",
+          "publicKey": "AQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyA",
+          "notAfter": 1000001
+        }
+      ],
+      "valid": true
+    },
+    {
+      "name": "two keys for rotation",
+      "serviceKeys": [
+        {
+          "deployment": "console-test",
+          "kid": "csk_ae216c2ef5247a37",
+          "publicKey": "AQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyA",
+          "notAfter": 1000001
+        },
+        {
+          "deployment": "console-test",
+          "kid": "csk_7eee5800ddcd3b3c",
+          "publicKey": "ISIjJCUmJygpKissLS4vMDEyMzQ1Njc4OTo7PD0-P0A",
+          "notAfter": 1000005
+        }
+      ],
+      "valid": true
+    },
+    {
+      "name": "key for another listed deployment",
+      "serviceKeys": [
+        {
+          "deployment": "enterprise-test",
+          "kid": "csk_ae216c2ef5247a37",
+          "publicKey": "AQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyA",
+          "notAfter": 1000001
+        }
+      ],
+      "valid": true
+    },
+    {
+      "name": "empty list must be omitted instead",
+      "serviceKeys": [],
+      "valid": false
+    },
+    {
+      "name": "not an array",
+      "serviceKeys": {
+        "deployment": "console-test",
+        "kid": "csk_ae216c2ef5247a37",
+        "publicKey": "AQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyA",
+        "notAfter": 1000001
+      },
+      "valid": false
+    },
+    {
+      "name": "deployment not in envelope",
+      "serviceKeys": [
+        {
+          "deployment": "other",
+          "kid": "csk_ae216c2ef5247a37",
+          "publicKey": "AQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyA",
+          "notAfter": 1000001
+        }
+      ],
+      "valid": false
+    },
+    {
+      "name": "kid not derived from key",
+      "serviceKeys": [
+        {
+          "deployment": "console-test",
+          "kid": "csk_7eee5800ddcd3b3c",
+          "publicKey": "AQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyA",
+          "notAfter": 1000001
+        }
+      ],
+      "valid": false
+    },
+    {
+      "name": "duplicate kid",
+      "serviceKeys": [
+        {
+          "deployment": "console-test",
+          "kid": "csk_ae216c2ef5247a37",
+          "publicKey": "AQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyA",
+          "notAfter": 1000001
+        },
+        {
+          "deployment": "console-test",
+          "kid": "csk_ae216c2ef5247a37",
+          "publicKey": "AQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyA",
+          "notAfter": 1000001
+        }
+      ],
+      "valid": false
+    },
+    {
+      "name": "short key",
+      "serviceKeys": [
+        {
+          "deployment": "console-test",
+          "kid": "csk_ae216c2ef5247a37",
+          "publicKey": "AQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHy",
+          "notAfter": 1000001
+        }
+      ],
+      "valid": false
+    },
+    {
+      "name": "padded key",
+      "serviceKeys": [
+        {
+          "deployment": "console-test",
+          "kid": "csk_ae216c2ef5247a37",
+          "publicKey": "AQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyA=",
+          "notAfter": 1000001
+        }
+      ],
+      "valid": false
+    },
+    {
+      "name": "notAfter not after issuance",
+      "serviceKeys": [
+        {
+          "deployment": "console-test",
+          "kid": "csk_ae216c2ef5247a37",
+          "publicKey": "AQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyA",
+          "notAfter": 1000000
+        }
+      ],
+      "valid": false
+    },
+    {
+      "name": "fractional notAfter",
+      "serviceKeys": [
+        {
+          "deployment": "console-test",
+          "kid": "csk_ae216c2ef5247a37",
+          "publicKey": "AQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyA",
+          "notAfter": 1000000.5
+        }
+      ],
+      "valid": false
+    },
+    {
+      "name": "extra key field",
+      "serviceKeys": [
+        {
+          "deployment": "console-test",
+          "kid": "csk_ae216c2ef5247a37",
+          "publicKey": "AQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyA",
+          "notAfter": 1000001,
+          "extra": 1
+        }
+      ],
+      "valid": false
+    },
+    {
+      "name": "missing key field",
+      "serviceKeys": [
+        {
+          "deployment": "console-test",
+          "kid": "csk_ae216c2ef5247a37",
+          "publicKey": "AQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyA"
+        }
+      ],
+      "valid": false
+    },
+    {
+      "name": "too many keys",
+      "serviceKeys": [
+        {
+          "deployment": "console-test",
+          "kid": "csk_ae216c2ef5247a37",
+          "publicKey": "AQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyA",
+          "notAfter": 1000001
+        },
+        {
+          "deployment": "console-test",
+          "kid": "csk_7eee5800ddcd3b3c",
+          "publicKey": "ISIjJCUmJygpKissLS4vMDEyMzQ1Njc4OTo7PD0-P0A",
+          "notAfter": 1000001
+        },
+        {
+          "deployment": "console-test",
+          "kid": "csk_4bb06f8e4e3a7715",
+          "publicKey": "BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc",
+          "notAfter": 1000001
+        },
+        {
+          "deployment": "console-test",
+          "kid": "csk_2578ccf8645b2d1d",
+          "publicKey": "CAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAg",
+          "notAfter": 1000001
+        },
+        {
+          "deployment": "console-test",
+          "kid": "csk_8c0cc17a04942cc4",
+          "publicKey": "CQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQk",
+          "notAfter": 1000001
+        }
+      ],
+      "valid": false
+    }
+  ]
+}

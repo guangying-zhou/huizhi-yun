@@ -2,12 +2,79 @@ package aims
 
 import (
 	"context"
+	"errors"
+	"net/http"
 	"net/url"
 	"strings"
 	"testing"
 
 	"github.com/DATA-DOG/go-sqlmock"
+	"github.com/huizhi-yun/data-runtime/internal/httperror"
 )
+
+func TestListDeliverablesPaginatedCountUsesSameVisibilityAndFilters(t *testing.T) {
+	adapter, mock, cleanup := newAimsSQLMockAdapter(t)
+	defer cleanup()
+	query := url.Values{"current_user": {"u1"}, "project_id": {"42"}, "status": {"submitted"}, "page": {"2"}, "pageSize": {"2"}}
+	mock.ExpectQuery(`(?s)SELECT COUNT\(\*\) FROM deliverables d JOIN aims_projects p.*WHERE.*d.project_id = \?.*d.status = \?`).
+		WithArgs(int64(42), "submitted", "u1", "u1", "u1", "u1").
+		WillReturnRows(sqlmock.NewRows([]string{"total"}).AddRow(int64(3)))
+	mock.ExpectQuery(`(?s)SELECT\s+d.id,.*ORDER BY.*d.id ASC\s+LIMIT \? OFFSET \?`).
+		WithArgs(int64(42), "submitted", "u1", "u1", "u1", "u1", int64(2), int64(2)).
+		WillReturnRows(sqlmock.NewRows([]string{"id"}))
+	result, err := adapter.listDeliverables(context.Background(), query)
+	if err != nil {
+		t.Fatal(err)
+	}
+	page, ok := result.(map[string]any)
+	if !ok {
+		t.Fatalf("paginated shape = %T", result)
+	}
+	items, ok := page["items"].([]deliverableListItem)
+	if !ok || len(items) != 0 || page["total"] != int64(3) || page["page"] != int64(2) || page["pageSize"] != int64(2) {
+		t.Fatalf("page = %#v", page)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestProjectListPaginationRejectsInvalidParametersBeforeSQL(t *testing.T) {
+	adapter, mock, cleanup := newAimsSQLMockAdapter(t)
+	defer cleanup()
+	for _, scenario := range []struct {
+		query    url.Values
+		page     int64
+		pageSize int64
+	}{
+		{query: url.Values{"page": {"2"}}, page: 2, pageSize: 20},
+		{query: url.Values{"pageSize": {"5"}}, page: 1, pageSize: 5},
+	} {
+		page, err := parseOptionalProjectListPage(scenario.query)
+		if err != nil || !page.enabled || page.page != scenario.page || page.pageSize != scenario.pageSize {
+			t.Fatalf("optional query %v: page = %#v, error = %v", scenario.query, page, err)
+		}
+	}
+	for _, query := range []url.Values{
+		{"page": {"0"}}, {"page": {"-1"}}, {"page": {"1.5"}},
+		{"page": {"1", "2"}}, {"page": {"0001"}}, {"page": {""}},
+		{"pageSize": {"101"}}, {"pageSize": {"1e2"}},
+		{"page": {"9223372036854775807"}, "pageSize": {"100"}},
+	} {
+		_, err := adapter.listDeliverables(context.Background(), query)
+		var httpErr httperror.Error
+		if !errors.As(err, &httpErr) || httpErr.Status != http.StatusBadRequest || httpErr.Code != "invalid_pagination" {
+			t.Fatalf("query %v: error = %v", query, err)
+		}
+		_, err = adapter.listProjectReleases(context.Background(), "42", query)
+		if !errors.As(err, &httpErr) || httpErr.Status != http.StatusBadRequest || httpErr.Code != "invalid_pagination" {
+			t.Fatalf("release query %v: error = %v", query, err)
+		}
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
 
 func TestListDeliverablesPreservesLegacyShapeAndProjectVisibility(t *testing.T) {
 	adapter, mock, cleanup := newAimsSQLMockAdapter(t)
@@ -89,12 +156,16 @@ func TestListDeliverablesPreservesLegacyShapeAndProjectVisibility(t *testing.T) 
 			"2026-06-30 10:00:00",
 		))
 
-	items, err := adapter.listDeliverables(
+	result, err := adapter.listDeliverables(
 		context.Background(),
 		url.Values{"current_user": {"u1"}, "project_id": {"42"}},
 	)
 	if err != nil {
 		t.Fatalf("expected deliverables list to pass, got %v", err)
+	}
+	items, ok := result.([]deliverableListItem)
+	if !ok {
+		t.Fatalf("legacy list shape = %T, want []deliverableListItem", result)
 	}
 	if len(items) != 1 {
 		t.Fatalf("items = %#v, want one item", items)
@@ -127,9 +198,13 @@ func TestUpdateDirectDeliverableUsesTrustedActorAndScopedAdmin(t *testing.T) {
 	mock.ExpectQuery("(?s)SELECT COALESCE\\(d\\.milestone_owner_id, matter\\.milestone_id, target\\.milestone_id\\).*FROM deliverables d").
 		WithArgs(int64(77)).
 		WillReturnRows(sqlmock.NewRows([]string{"milestone_id"}).AddRow(nil))
+	mock.ExpectBegin()
+	mock.ExpectQuery("SELECT id FROM aims_projects WHERE id = \\? FOR UPDATE").WithArgs(int64(42)).WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(int64(42)))
+	mock.ExpectQuery("SELECT target_id,matter_id FROM deliverables WHERE id=\\? AND project_id=\\?").WithArgs(int64(77), int64(42)).WillReturnRows(sqlmock.NewRows([]string{"target_id", "matter_id"}).AddRow(int64(10), nil))
 	mock.ExpectExec("UPDATE deliverables SET status = \\?, submitted_by = \\?, submitted_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = \\?").
 		WithArgs("submitted", "u1", int64(77)).
 		WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectCommit()
 
 	data, err := adapter.updateDirectDeliverable(
 		context.Background(),
@@ -168,6 +243,7 @@ func TestUpdateDirectDeliverableRejectsDuplicateNameForSameTarget(t *testing.T) 
 	mock.ExpectQuery("SELECT id FROM aims_projects WHERE id = \\? FOR UPDATE").
 		WithArgs(int64(257)).
 		WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(int64(257)))
+	mock.ExpectQuery("SELECT target_id,matter_id FROM deliverables WHERE id=\\? AND project_id=\\?").WithArgs(int64(214), int64(257)).WillReturnRows(sqlmock.NewRows([]string{"target_id", "matter_id"}).AddRow(int64(276), int64(288)))
 	mock.ExpectQuery("(?s)SELECT project_owner_id, milestone_owner_id, target_id, matter_id.*FROM deliverables.*FOR UPDATE").
 		WithArgs(int64(214), int64(257)).
 		WillReturnRows(sqlmock.NewRows([]string{"project_owner_id", "milestone_owner_id", "target_id", "matter_id"}).
@@ -207,9 +283,13 @@ func TestDeleteDirectDeliverableAllowsUserCreatedRequiredPendingItem(t *testing.
 	mock.ExpectQuery("(?s)SELECT COALESCE\\(d\\.milestone_owner_id, matter\\.milestone_id, target\\.milestone_id\\).*FROM deliverables d").
 		WithArgs(int64(77)).
 		WillReturnRows(sqlmock.NewRows([]string{"milestone_id"}).AddRow(nil))
+	mock.ExpectBegin()
+	mock.ExpectQuery("SELECT id FROM aims_projects WHERE id = \\? FOR UPDATE").WithArgs(int64(42)).WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(int64(42)))
+	mock.ExpectQuery("SELECT target_id,matter_id FROM deliverables WHERE id=\\? AND project_id=\\?").WithArgs(int64(77), int64(42)).WillReturnRows(sqlmock.NewRows([]string{"target_id", "matter_id"}).AddRow(int64(10), nil))
 	mock.ExpectExec("DELETE FROM deliverables WHERE id = \\?").
 		WithArgs(int64(77)).
 		WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectCommit()
 
 	data, err := adapter.deleteDirectDeliverable(
 		context.Background(),

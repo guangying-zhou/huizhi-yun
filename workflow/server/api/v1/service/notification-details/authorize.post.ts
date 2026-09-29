@@ -24,9 +24,13 @@ export default defineEventHandler(async (event) => {
     {
       scope: 'workflow.read',
       method: 'POST',
-      body: {
-        descriptor: request.descriptor,
-        current_user: caller.subjectUid
+      // The viewer is carried as a signed actor delegation; Runtime ignores a
+      // viewer named in the body and would otherwise check the service identity.
+      body: { descriptor: request.descriptor },
+      notificationDetailActor: {
+        uid: caller.subjectUid,
+        tenantId: caller.tenantId,
+        deploymentId: caller.deploymentId
       }
     }
   )

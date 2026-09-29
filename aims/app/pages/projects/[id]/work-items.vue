@@ -1,8 +1,21 @@
 <script setup lang="ts">
+import CommonEmptyState from '../../../../../foundation/app/components/common/EmptyState.vue'
+import WorkItemCreateSurface from '../../../components/work-item/WorkItemCreateSurface.vue'
+import { useAimsModule } from '../../../../layer/useAimsModule'
+import MarkdownContent from '../../../components/MarkdownContent.vue'
+import ProjectNavbar from '../../../components/project/ProjectNavbar.vue'
+import TargetEditModal from '../../../components/target/TargetEditModal.vue'
+import TargetInfoModal from '../../../components/target/TargetInfoModal.vue'
+import { useProjectStore } from '../../../stores/project'
+import { useMilestoneStore } from '../../../stores/milestone'
+import { useWorkItemStore } from '../../../stores/workItem'
+import { workItemAncestorPath } from '../../../utils/workItemAncestors'
+import { createCommandIntents } from '../../../utils/commandIntent'
+import { useAccessibleDepartments } from '../../../composables/useAccessibleDepartments'
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 import type { Department } from '@hzy/foundation/app/types/account'
-import type { WorkItem, WorkItemType, Priority, Severity, CreateWorkItemRequest, WorkItemListQuery } from '~/types/aims'
+import type { WorkItem, WorkItemType, Priority, Severity, CreateWorkItemRequest, WorkItemListQuery } from '../../../types/aims'
 import {
   typeConfig,
   priorityConfig,
@@ -10,13 +23,17 @@ import {
   getStatusLabel,
   getStatusColor,
   transitionLabels
-} from '~/config/work-item'
+} from '../../../config/work-item'
 
 definePageMeta({
   layoutHeader: true,
   layoutHeaderTitle: '目标',
   layoutHeaderProjectSwitcher: true
 })
+
+// 同一份代码供独立应用与企业宿主使用：非宿主模式下 moduleUrl 原样返回路径。
+const { moduleUrl, hosted } = useAimsModule()
+const legacyWorkItemIntents = createCommandIntents()
 
 const route = useRoute()
 const projectId = computed(() => Number(route.params.id))
@@ -30,7 +47,13 @@ const milestoneStore = useMilestoneStore()
 const toast = useToast()
 const { users: accountUsers } = useAccountUsers()
 const { isApprovalMode } = useApprovalMode()
-const { accessibleDepartments: routineDepartments } = useAccessibleDepartments()
+const {
+  accessibleDepartments: routineDepartments,
+  loading: routineDepartmentsLoading,
+  error: routineDepartmentsError,
+  errorMessage: routineDepartmentsErrorMessage,
+  refresh: refreshRoutineDepartments
+} = useAccessibleDepartments()
 const routineDepartmentTree = computed<Department[]>(() => routineDepartments.value)
 const isRoutineProject = computed(() => projectStore.currentProject?.category === 'routine')
 
@@ -76,7 +99,7 @@ async function reconcileCompletionReviewStatuses(items: WorkItem[]): Promise<num
       const nextStatus = mapCompletionWorkflowStatusToWorkItemStatus(wfStatus)
       if (!nextStatus || nextStatus === item.status) return false
 
-      await $fetch(`/api/v1/work-items/${item.id}`, {
+      await $fetch(moduleUrl(`/api/v1/work-items/${item.id}`), {
         method: 'PUT',
         body: { status: nextStatus }
       })
@@ -158,13 +181,27 @@ const filterAssignee = ref<string>('')
 const filterPriority = ref<string>('all')
 const filterSeverity = ref<string>('all')
 const filterVersionId = ref<string>('all')
+const listPage = ref(1)
+const listPageSize = 20
 const { search: searchText, debounced: debouncedSearchText } = useDebouncedSearch()
 
 const versionOptions = ref<WorkItemVersionOption[]>([])
 
 // 新建弹窗
 const showCreateModal = ref(false)
+const createSurface = ref<InstanceType<typeof WorkItemCreateSurface> | null>(null)
+const hostCreate = computed(() => hosted && route.query.create === '1' && canCreateWorkItem.value)
+async function closeCreate() {
+  if (hostCreate.value) {
+    const { create: _create, returnTo: _returnTo, ...query } = route.query
+    const boardPath = moduleUrl(`/projects/${projectId.value}/board`)
+    await navigateTo(route.query.returnTo === boardPath ? boardPath : { path: route.path, query })
+    if (route.query.create !== '1') showCreateModal.value = false
+  } else showCreateModal.value = false
+}
 const creating = ref(false)
+const createFailure = ref('')
+let createRetry: { payload: string, key: string } | undefined
 
 // 新建表单
 const createForm = ref<CreateWorkItemRequest>({
@@ -245,6 +282,20 @@ const boardColumns = [
 ]
 
 const columnData = ref<Record<string, WorkItem[]>>({})
+const boardPages = ref<Record<string, number>>({})
+function boardColumnTotal(key: string) {
+  return workItemStore.boardTotals[key] || 0
+}
+function changeBoardPage(key: string, page: number) {
+  boardPages.value = { ...boardPages.value, [key]: page }
+  loadBoard()
+}
+function listAncestorPath(item: WorkItem) {
+  return workItemAncestorPath(item.parentId, workItemStore.listAncestors)
+}
+function boardAncestorPath(item: WorkItem) {
+  return workItemAncestorPath(item.parentId, workItemStore.boardAncestors)
+}
 const columnValueRefs: Record<string, Ref<WorkItem[]>> = {}
 for (const col of boardColumns) {
   columnValueRefs[col.key] = ref<WorkItem[]>([])
@@ -305,7 +356,7 @@ function versionLabel(versionId: number | null | undefined) {
 
 async function loadVersions() {
   try {
-    const res = await $fetch<{ code: number, data: { items?: any[] } }>(`/api/v1/projects/${projectId.value}/releases`)
+    const res = await $fetch<{ code: number, data: { items?: any[] } }>(moduleUrl(`/api/v1/projects/${projectId.value}/releases`))
     versionOptions.value = (res.data.items || []).map(item => ({
       id: Number(item.id) || 0,
       productCode: String(item.product_code || item.productCode || ''),
@@ -447,12 +498,17 @@ async function loadItems() {
     ? '__null__'
     : filterVersionId.value !== 'all' ? Number(filterVersionId.value) : undefined
   const query: WorkItemListQuery = {
+    page: listPage.value,
+    pageSize: listPageSize,
     type: typeFilter,
     status: filterStatus.value !== 'all' ? filterStatus.value : undefined,
     assigneeUid: filterAssignee.value || undefined,
     priority: (filterPriority.value !== 'all' ? filterPriority.value : undefined) as Priority | undefined,
     severity: (activeTab.value === 'bug' && filterSeverity.value !== 'all' ? filterSeverity.value : undefined) as Severity | undefined,
     versionId,
+    milestoneId: activeMilestoneId.value === 'none'
+      ? '__null__'
+      : activeMilestoneId.value !== 'all' ? Number(activeMilestoneId.value) : undefined,
     search: debouncedSearchText.value || undefined,
     tier: isRoutineProject.value ? 'matter' : 'target'
   }
@@ -465,15 +521,13 @@ async function loadItems() {
   }
 }
 
-// 根据里程碑过滤列表数据
-const filteredItems = computed(() => {
-  if (activeMilestoneId.value === 'all') return workItemStore.items
-  if (activeMilestoneId.value === 'none') {
-    return workItemStore.items.filter(item => !item.milestoneId)
-  }
-  const mid = Number(activeMilestoneId.value)
-  return workItemStore.items.filter(item => item.milestoneId === mid)
-})
+const filteredItems = computed(() => workItemStore.items)
+
+function changeListPage(page: number) {
+  listPage.value = page
+  selectedIds.value = []
+  loadItems()
+}
 
 // ========================
 // 看板视图逻辑
@@ -514,34 +568,37 @@ function getSwimlanColumnItems(colKey: string, swimlaneKey: string): WorkItem[] 
 function isWipExceeded(colKey: string): boolean {
   const limit = wipLimits.value[colKey]
   if (!limit) return false
-  return (columnValueRefs[colKey]?.value?.length || 0) > limit
+  return boardColumnTotal(colKey) > limit
 }
 
 async function loadBoard() {
   const typeFilter = activeTab.value === 'all' ? undefined : activeTab.value
   const boardQuery = { type: typeFilter, tier: isRoutineProject.value ? 'matter' : 'target' }
 
-  await workItemStore.fetchBoardItems(projectId.value, boardQuery)
+  await workItemStore.fetchBoardPages(projectId.value, {
+    ...boardQuery,
+    milestoneId: activeMilestoneId.value === 'none'
+      ? '__null__'
+      : activeMilestoneId.value !== 'all' ? Number(activeMilestoneId.value) : undefined,
+    pages: boardPages.value
+  })
 
   const reconciledCount = await reconcileCompletionReviewStatuses(
     Object.values(workItemStore.boardColumns).flat()
   )
   if (reconciledCount > 0) {
-    await workItemStore.fetchBoardItems(projectId.value, boardQuery)
+    await workItemStore.fetchBoardPages(projectId.value, {
+      ...boardQuery,
+      milestoneId: activeMilestoneId.value === 'none'
+        ? '__null__'
+        : activeMilestoneId.value !== 'all' ? Number(activeMilestoneId.value) : undefined,
+      pages: boardPages.value
+    })
   }
 
   const data: Record<string, WorkItem[]> = {}
   for (const col of boardColumns) {
-    let items = workItemStore.boardColumns[col.key] || []
-    // 里程碑筛选
-    if (activeMilestoneId.value !== 'all') {
-      if (activeMilestoneId.value === 'none') {
-        items = items.filter(item => !item.milestoneId)
-      } else {
-        const mid = Number(activeMilestoneId.value)
-        items = items.filter(item => item.milestoneId === mid)
-      }
-    }
+    const items = workItemStore.boardColumns[col.key] || []
     data[col.key] = items
     columnValueRefs[col.key]!.value = [...items]
   }
@@ -581,7 +638,7 @@ function buildDragBlockedReasons(item: WorkItem, fromColKey: string, allowedTarg
       continue
     }
     const limit = wipLimits.value[col.key]
-    const count = columnValueRefs[col.key]?.value.length || 0
+    const count = boardColumnTotal(col.key)
     if (limit && count >= limit) {
       nextReasons[col.key] = 'WIP 已满'
       continue
@@ -612,7 +669,7 @@ async function prefetchDropValidation(item: WorkItem, fromColKey: string) {
   dragBlockedReasons.value = {}
   try {
     const res = await $fetch<{ code: number, data: { toStatus: string, transitionKey: string }[] }>(
-      `/api/v1/work-items/${item.id}/transitions`
+      moduleUrl(`/api/v1/work-items/${item.id}/transitions`)
     )
     if (token !== dragValidationToken || !dragState.value || dragState.value.item.id !== item.id) return
     const allowedTargets = res.code === 0 ? res.data.map(t => t.toStatus) : []
@@ -704,7 +761,7 @@ async function validatePlanningToTodo(item: WorkItem): Promise<{ ok: boolean, is
   // 成果要求必须至少 1 条
   try {
     const res = await $fetch<{ code: number, data: { id: number }[] }>(
-      '/api/v1/deliverables',
+      moduleUrl('/api/v1/deliverables'),
       { params: { entity_type: 'work_item', entity_id: item.id } }
     )
     if (res.code === 0 && res.data.length === 0) {
@@ -809,7 +866,7 @@ const timeEntryForm = ref({
 
 async function loadTimeEntries(itemId: number) {
   try {
-    const res = await $fetch<{ code: number, data: any[] }>(`/api/v1/work-items/${itemId}/time-entries`)
+    const res = await $fetch<{ code: number, data: any[] }>(moduleUrl(`/api/v1/work-items/${itemId}/time-entries`))
     if (res.code === 0) {
       timeEntries.value = res.data
     }
@@ -823,7 +880,7 @@ async function saveTimeEntry() {
   if (!targetId) return
   savingTimeEntry.value = true
   try {
-    await $fetch(`/api/v1/work-items/${targetId}/time-entries`, {
+    await $fetch(moduleUrl(`/api/v1/work-items/${targetId}/time-entries`), {
       method: 'POST',
       body: timeEntryForm.value
     })
@@ -848,7 +905,7 @@ const linkedDocs = ref<{ id: number, documentId: string }[]>([])
 
 async function loadLinkedDocs(itemId: number) {
   try {
-    const res = await $fetch<{ code: number, data: any[] }>(`/api/v1/work-items/${itemId}/documents`)
+    const res = await $fetch<{ code: number, data: any[] }>(moduleUrl(`/api/v1/work-items/${itemId}/documents`))
     if (res.code === 0) {
       linkedDocs.value = res.data
     }
@@ -860,10 +917,13 @@ async function loadLinkedDocs(itemId: number) {
 async function linkDocument() {
   const targetId = viewMode.value === 'board' ? selectedItem.value?.id : selectedItemId.value
   if (!targetId || !docIdToLink.value) return
-  await $fetch(`/api/v1/work-items/${targetId}/documents`, {
+  const body = { documentId: docIdToLink.value }
+  const intent = `document-link:${targetId}`
+  await $fetch(moduleUrl(`/api/v1/work-items/${targetId}/documents`), {
     method: 'POST',
-    body: { documentId: docIdToLink.value }
+    body, headers: legacyWorkItemIntents.headers(intent, body), retry: 0
   })
+  legacyWorkItemIntents.complete(intent)
   showLinkDoc.value = false
   docIdToLink.value = ''
   await loadLinkedDocs(targetId)
@@ -872,9 +932,11 @@ async function linkDocument() {
 async function unlinkDocument(documentId: string) {
   const targetId = viewMode.value === 'board' ? selectedItem.value?.id : selectedItemId.value
   if (!targetId) return
-  await $fetch(`/api/v1/work-items/${targetId}/documents/${documentId}`, {
-    method: 'DELETE'
+  const intent = `document-unlink:${targetId}:${documentId}`
+  await $fetch(moduleUrl(`/api/v1/work-items/${targetId}/documents/${documentId}`), {
+    method: 'DELETE', headers: legacyWorkItemIntents.headers(intent), retry: 0
   })
+  legacyWorkItemIntents.complete(intent)
   await loadLinkedDocs(targetId)
 }
 
@@ -889,7 +951,7 @@ const viewingTarget = ref<WorkItem | null>(null)
 function openTargetByStatus(item: WorkItem) {
   // 需求工作项（基线 / 变更）→ 跳转需求页，按 workItemId 过滤
   if (item.type === 'requirement') {
-    navigateTo(`/projects/${projectId.value}/requirements?workItemId=${item.id}`)
+    navigateTo(moduleUrl(`/projects/${projectId.value}/requirements?workItemId=${item.id}`))
     return
   }
   if (item.status === 'planning') {
@@ -900,7 +962,7 @@ function openTargetByStatus(item: WorkItem) {
   if (item.status === 'todo') {
     const isDecomposeContainer = item.templateKey === 'requirement_breakdown' || item.templateKey === 'requirement_change'
     const subPath = isDecomposeContainer ? 'decompose' : 'breakdown'
-    navigateTo(`/projects/${projectId.value}/work-items/${item.id}/${subPath}`)
+    navigateTo(moduleUrl(`/projects/${projectId.value}/work-items/${item.id}/${subPath}`))
     return
   }
   // in_progress / in_review / completed → 只读信息弹窗
@@ -921,7 +983,7 @@ function openDetail(item: WorkItem) {
 async function openBoardDetail(item: WorkItem) {
   // 泳道卡片：执行中/确认中/已完成统一进入任务分解页
   if (['in_progress', 'in_review', 'completed'].includes(item.status)) {
-    navigateTo(`/projects/${projectId.value}/work-items/${item.id}/breakdown`)
+    navigateTo(moduleUrl(`/projects/${projectId.value}/work-items/${item.id}/breakdown`))
     return
   }
   openTargetByStatus(item)
@@ -981,6 +1043,7 @@ async function handleCreate() {
   createFormTouched.value = true
   if (Object.keys(createFormErrors.value).length > 0) return
   creating.value = true
+  createFailure.value = ''
   try {
     const versionId = createForm.value.tier === 'target' ? createForm.value.versionId || null : null
     const featureId = createForm.value.tier === 'target' ? createForm.value.featureId || null : null
@@ -989,10 +1052,30 @@ async function handleCreate() {
       createPayload.type = 'task'
       createPayload.milestoneId = null
       createPayload.tier = 'matter'
+    } else if (hosted) {
+      // Legacy defaults are routine-only; the enterprise Runtime rejects them
+      // on a product development project even when their values are empty.
+      delete createPayload.routineScope
+      delete createPayload.beneficiaryDeptCode
+      delete createPayload.isUnplanned
     }
     delete createPayload.versionId
     delete createPayload.featureId
-    const newItem = await workItemStore.createItem(projectId.value, createPayload)
+    // Enterprise Host writes require a stable key and return a receipt wrapper.
+    // Keep the standalone Aims response contract unchanged.
+    const newItem = hosted
+      ? await (async () => {
+          const payload = JSON.stringify({ projectId: projectId.value, input: createPayload })
+          if (createRetry?.payload !== payload) createRetry = { payload, key: crypto.randomUUID() }
+          const response = await $fetch<{ code: number, data?: { result?: { id?: string | number } } }>(
+            moduleUrl(`/api/v1/projects/${projectId.value}/work-items`),
+            { method: 'POST', body: createPayload, headers: { 'Idempotency-Key': createRetry.key }, retry: 0 }
+          )
+          const id = Number(response.data?.result?.id)
+          if (response.code !== 0 || !Number.isSafeInteger(id) || id < 1) throw new Error('工作目标创建回执无效，请使用原操作标识重试')
+          return { id }
+        })()
+      : await workItemStore.createItem(projectId.value, createPayload)
     // 批量关联文档
     console.log('[WorkItems] Created item:', newItem, 'pendingDocs:', pendingDocIds.value)
     const itemId = newItem?.id
@@ -1002,16 +1085,22 @@ async function handleCreate() {
     if (itemId && pendingDocIds.value.length > 0) {
       for (const docId of pendingDocIds.value) {
         try {
-          await $fetch(`/api/v1/work-items/${itemId}/documents`, {
+          const body = { documentId: docId }
+          const intent = `create-document-link:${itemId}:${docId}`
+          await $fetch(moduleUrl(`/api/v1/work-items/${itemId}/documents`), {
             method: 'POST',
-            body: { documentId: docId }
+            body, headers: legacyWorkItemIntents.headers(intent, body), retry: 0
           })
+          legacyWorkItemIntents.complete(intent)
         } catch (err: any) {
           console.error(`[WorkItems] Failed to link doc ${docId} to item ${itemId}:`, err?.data || err)
         }
       }
     }
+    createSurface.value?.markSaved()
     showCreateModal.value = false
+    if (hostCreate.value) closeCreate()
+    createRetry = undefined
     pendingDocIds.value = []
     newDocId.value = ''
     createForm.value = {
@@ -1030,9 +1119,11 @@ async function handleCreate() {
       beneficiaryDeptCode: null,
       isUnplanned: false
     }
-    if (viewMode.value === 'board') {
+    if (hosted || viewMode.value === 'board') {
       await loadBoard()
     }
+  } catch (cause) {
+    createFailure.value = cause instanceof Error ? cause.message : '创建失败，请重试'
   } finally {
     creating.value = false
   }
@@ -1085,6 +1176,7 @@ const _swimlaneOptions = [
 const createTitleInput = ref<{ inputRef: HTMLInputElement } | null>(null)
 
 function openCreateModal(type?: 'task' | 'bug' | 'requirement') {
+  if (!canCreateWorkItem.value) return
   createForm.value.type = type || (activeTab.value === 'bug' ? 'bug' : activeTab.value === 'requirement' ? 'requirement' : 'task')
   createForm.value.tier = isRoutineProject.value ? 'matter' : 'target'
   const mid = activeMilestoneId.value
@@ -1108,7 +1200,10 @@ function openCreateModal(type?: 'task' | 'bug' | 'requirement') {
     : null
   createForm.value.featureId = null
   createFormTouched.value = false
+  createFailure.value = ''
+  createRetry = undefined
   showCreateModal.value = true
+  if (hosted && !hostCreate.value) void navigateTo({ path: route.path, query: { ...route.query, create: '1' } })
   // 如果里程碑已选定，自动聚焦标题输入框
   if (isRoutineProject.value || (createForm.value.milestoneId || 0) > 0) {
     nextTick(() => {
@@ -1132,7 +1227,14 @@ onMounted(async () => {
   ])
 
   if (isRoutineProject.value) {
-    await navigateTo(`/projects/${projectId.value}/board`, { replace: true })
+    // 宿主的“新建事务”从看板跳到本页 ?create=1 的页面表单；此时直接打开表单，
+    // 否则会被重定向回看板而让入口无反应。其余访问仍回到看板。
+    if (hostCreate.value) {
+      initialLoading.value = false
+      openCreateModal()
+      return
+    }
+    await navigateTo(moduleUrl(`/projects/${projectId.value}/board`), { replace: true })
     return
   }
 
@@ -1195,7 +1297,10 @@ watch(viewMode, async (mode) => {
 // 里程碑切换时刷新数据
 watch(activeMilestoneId, async () => {
   if (!boardMounted.value) return
+  boardPages.value = {}
   if (viewMode.value === 'list') {
+    listPage.value = 1
+    selectedIds.value = []
     await loadItems()
   } else {
     await loadBoard()
@@ -1205,7 +1310,9 @@ watch(activeMilestoneId, async () => {
 // 类型 tab 变化时刷新
 watch(activeTab, () => {
   selectedIds.value = []
+  boardPages.value = {}
   if (viewMode.value === 'list') {
+    listPage.value = 1
     loadItems()
   } else {
     loadBoard()
@@ -1216,6 +1323,7 @@ watch(activeTab, () => {
 watch([filterStatus, filterAssignee, filterPriority, filterSeverity, filterVersionId, debouncedSearchText], () => {
   if (viewMode.value !== 'list') return
   selectedIds.value = []
+  listPage.value = 1
   loadItems()
 })
 
@@ -1236,7 +1344,7 @@ watch(childRouteActive, async (active, wasActive) => {
   <UDashboardPanel v-else id="project-work-items" :ui="{ root: 'relative flex flex-col min-w-0 h-full shrink-0', body: 'flex flex-col flex-1 min-h-0 p-0 overflow-hidden' }">
     <template #body>
       <div class="flex flex-col h-full min-h-0">
-        <ProjectNavbar>
+        <ProjectNavbar v-if="!hostCreate">
           <template v-if="!isApprovalMode" #actions>
             <UButton
               v-if="canCreateWorkItem"
@@ -1248,9 +1356,9 @@ watch(childRouteActive, async (active, wasActive) => {
             />
           </template>
         </ProjectNavbar>
-        <div class="flex-1 min-h-0 overflow-y-auto px-4 pt-4 pb-12 space-y-4">
+        <div :class="hostCreate ? 'flex-1 min-h-0 overflow-y-auto' : 'flex-1 min-h-0 overflow-y-auto px-4 pt-4 pb-12 space-y-4'">
           <!-- 里程碑页签 -->
-          <div v-if="milestoneStore.milestones.length > 0" class="flex items-center gap-1 overflow-x-auto pb-1">
+          <div v-if="!hostCreate && milestoneStore.milestones.length > 0" class="flex items-center gap-1 overflow-x-auto pb-1">
             <button
               v-for="mt in milestonesTabs"
               :key="mt.value"
@@ -1275,7 +1383,7 @@ watch(childRouteActive, async (active, wasActive) => {
           </div>
 
           <!-- 类型 Tab + 视图切换 -->
-          <div class="flex items-center justify-between border-b border-default">
+          <div v-if="!hostCreate" class="flex items-center justify-between border-b border-default">
             <div v-if="!initialLoading && !isRoutineProject" class="flex items-center gap-1">
               <button
                 v-for="tab in typeTabs"
@@ -1310,7 +1418,7 @@ watch(childRouteActive, async (active, wasActive) => {
           <!-- ==================== -->
           <!-- 看板视图 -->
           <!-- ==================== -->
-          <template v-if="viewMode === 'board'">
+          <template v-if="!hostCreate && viewMode === 'board'">
             <!-- 看板工具栏 -->
             <!-- <div class="flex items-center gap-3 flex-wrap">
               <USelect v-model="swimlaneMode" :items="swimlaneOptions" class="w-36" />
@@ -1319,6 +1427,16 @@ watch(childRouteActive, async (active, wasActive) => {
             <!-- 加载中 -->
             <div v-if="initialLoading || workItemStore.loading" class="flex justify-center py-12">
               <UIcon name="i-lucide-loader-2" class="w-8 h-8 animate-spin text-muted" />
+            </div>
+            <div v-else-if="workItemStore.boardError" class="rounded-lg border border-error/30 p-4 text-sm text-error">
+              {{ workItemStore.boardError }}
+              <UButton
+                label="重试"
+                variant="soft"
+                size="xs"
+                class="ml-2"
+                @click="loadBoard"
+              />
             </div>
 
             <!-- 无泳道模式 -->
@@ -1353,7 +1471,7 @@ watch(childRouteActive, async (active, wasActive) => {
                       variant="subtle"
                       size="xs"
                     >
-                      {{ columnValueRefs[col.key]!.value.length }}
+                      {{ boardColumnTotal(col.key) }}
                       <span v-if="wipLimits[col.key]"> / {{ wipLimits[col.key] }}</span>
                     </UBadge>
                   </div>
@@ -1397,6 +1515,9 @@ watch(childRouteActive, async (active, wasActive) => {
                     <p class="text-sm font-medium line-clamp-2 mb-2">
                       {{ item.title }}
                     </p>
+                    <p v-if="boardAncestorPath(item)" class="mb-2 truncate text-xs text-muted" :title="boardAncestorPath(item)">
+                      {{ boardAncestorPath(item) }}
+                    </p>
                     <div class="flex items-center justify-between">
                       <UBadge :color="(priorityConfig[item.priority as keyof typeof priorityConfig]?.color as any)" variant="subtle" size="xs">
                         {{ item.priority }}
@@ -1410,6 +1531,14 @@ watch(childRouteActive, async (active, wasActive) => {
                   <div v-if="columnValueRefs[col.key]!.value.length === 0" class="text-center py-8 text-xs text-muted">
                     暂无
                   </div>
+                  <UPagination
+                    v-if="boardColumnTotal(col.key) > 20"
+                    :page="boardPages[col.key] || 1"
+                    :total="boardColumnTotal(col.key)"
+                    :items-per-page="20"
+                    size="xs"
+                    @update:page="changeBoardPage(col.key, $event)"
+                  />
                 </div>
               </div>
             </div>
@@ -1426,7 +1555,7 @@ watch(childRouteActive, async (active, wasActive) => {
                   <UIcon v-else name="i-lucide-signal" class="w-4 h-4" />
                   {{ lane.label }}
                   <UBadge color="neutral" variant="subtle" size="xs">
-                    {{ boardColumns.reduce((sum, col) => sum + getSwimlanColumnItems(col.key, lane.key).length, 0) }}
+                    本页 {{ boardColumns.reduce((sum, col) => sum + getSwimlanColumnItems(col.key, lane.key).length, 0) }}
                   </UBadge>
                 </div>
 
@@ -1463,6 +1592,19 @@ watch(childRouteActive, async (active, wasActive) => {
                     </div>
                   </div>
                 </div>
+              </div>
+            </div>
+            <div v-if="swimlanes" class="flex flex-wrap gap-3">
+              <div v-for="col in boardColumns" :key="col.key" class="min-w-40 text-xs text-muted">
+                {{ col.label }} · 共 {{ boardColumnTotal(col.key) }} 条
+                <UPagination
+                  v-if="boardColumnTotal(col.key) > 20"
+                  :page="boardPages[col.key] || 1"
+                  :total="boardColumnTotal(col.key)"
+                  :items-per-page="20"
+                  size="xs"
+                  @update:page="changeBoardPage(col.key, $event)"
+                />
               </div>
             </div>
 
@@ -1680,7 +1822,7 @@ watch(childRouteActive, async (active, wasActive) => {
           <!-- ==================== -->
           <!-- 列表视图 -->
           <!-- ==================== -->
-          <template v-if="viewMode === 'list'">
+          <template v-if="!hostCreate && viewMode === 'list'">
             <!-- 筛选栏 -->
             <div class="flex flex-wrap items-center gap-3">
               <USelect
@@ -1742,31 +1884,12 @@ watch(childRouteActive, async (active, wasActive) => {
               />
             </div>
 
-            <!-- 加载中 -->
-            <div v-if="workItemStore.loading" class="flex justify-center py-12">
-              <UIcon name="i-lucide-loader-2" class="w-8 h-8 animate-spin text-muted" />
-            </div>
-
-            <!-- 空状态 -->
-            <div v-else-if="filteredItems.length === 0" class="text-center py-12 text-muted">
-              <UIcon name="i-lucide-inbox" class="w-12 h-12 mx-auto mb-3" />
-              <p>暂无工作项</p>
-              <UButton
-                v-if="canCreateWorkItem"
-                label="创建工作项"
-                color="primary"
-                variant="soft"
-                class="mt-3"
-                @click="openCreateModal()"
-              />
-            </div>
-
             <!-- 工作项表格 -->
             <UTable
-              v-else
               :data="filteredItems"
               :columns="columns"
               class="w-full"
+              :loading="workItemStore.loading"
             >
               <template #select-header>
                 <input
@@ -1805,6 +1928,9 @@ watch(childRouteActive, async (active, wasActive) => {
                   @click="openDetail(row.original)"
                 >
                   {{ row.original.title }}
+                  <span v-if="listAncestorPath(row.original)" class="block truncate text-xs text-muted" :title="listAncestorPath(row.original)">
+                    {{ listAncestorPath(row.original) }}
+                  </span>
                 </span>
               </template>
               <template #status-cell="{ row }">
@@ -1871,7 +1997,26 @@ watch(childRouteActive, async (active, wasActive) => {
               <template #dueDate-cell="{ row }">
                 {{ formatDate(row.original.dueDate) }}
               </template>
+              <template #empty>
+                <CommonEmptyState icon="i-lucide-inbox" title="暂无工作项" description="当前筛选下没有工作项。" />
+                <UButton
+                  v-if="canCreateWorkItem"
+                  label="创建工作项"
+                  variant="soft"
+                  @click="openCreateModal()"
+                />
+              </template>
             </UTable>
+            <div class="flex flex-wrap items-center justify-between gap-3 text-sm text-muted">
+              <span>共 {{ workItemStore.total }} 条</span>
+              <UPagination
+                v-if="workItemStore.total > listPageSize"
+                :page="listPage"
+                :total="workItemStore.total"
+                :items-per-page="listPageSize"
+                @update:page="changeListPage"
+              />
+            </div>
 
             <!-- 工作项详情侧边栏 -->
             <USlideover v-model:open="showDetail">
@@ -2065,15 +2210,25 @@ watch(childRouteActive, async (active, wasActive) => {
             </USlideover>
           </template>
 
-          <!-- 新建工作项弹窗（共用） -->
-          <UModal v-model:open="showCreateModal">
-            <template #header>
-              <h3 class="text-lg font-semibold">
-                {{ isRoutineProject ? '新建日常事务' : '新建工作目标' }}
-              </h3>
-            </template>
+          <!-- 新建工作项表单：独立 Aims 保持弹窗，Host 使用页面内容区 -->
+          <WorkItemCreateSurface
+            v-if="!hostCreate || showCreateModal"
+            ref="createSurface"
+            :open="showCreateModal"
+            :page="hostCreate"
+            :title="isRoutineProject ? '新建日常事务' : '新建工作目标'"
+            :draft="JSON.stringify({ form: createForm, docs: pendingDocIds })"
+            :busy="creating"
+            @update:open="!$event && closeCreate()"
+          >
             <template #body>
               <div class="space-y-4 p-4">
+                <UAlert
+                  v-if="createFailure"
+                  color="error"
+                  title="创建失败"
+                  :description="createFailure"
+                />
                 <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <UFormField
                     v-if="!isRoutineProject"
@@ -2128,7 +2283,19 @@ watch(childRouteActive, async (active, wasActive) => {
                     required
                     :error="createFormErrors.beneficiaryDeptCode"
                   >
-                    <div class="max-h-52 overflow-y-auto rounded-lg border border-default bg-default p-2">
+                    <UAlert
+                      v-if="routineDepartmentsError"
+                      :color="routineDepartmentsError === 'forbidden' ? 'warning' : 'error'"
+                      variant="subtle"
+                      icon="i-lucide-triangle-alert"
+                      :title="routineDepartmentsError === 'forbidden' ? '无权读取可选部门' : '可选部门加载失败'"
+                      :description="routineDepartmentsErrorMessage"
+                      :actions="routineDepartmentsError === 'unavailable' ? [{ label: '重试', color: 'neutral', variant: 'outline', loading: routineDepartmentsLoading, onClick: refreshRoutineDepartments }] : undefined"
+                    />
+                    <div v-else class="max-h-52 overflow-y-auto rounded-lg border border-default bg-default p-2">
+                      <p v-if="!routineDepartmentsLoading && routineDepartmentTree.length === 0" class="px-2 py-1 text-sm text-muted">
+                        暂无可选部门
+                      </p>
                       <DeptTreeSelector
                         v-for="department in routineDepartmentTree"
                         :key="department.deptCode"
@@ -2275,7 +2442,7 @@ watch(childRouteActive, async (active, wasActive) => {
                   label="取消"
                   color="neutral"
                   variant="ghost"
-                  @click="showCreateModal = false"
+                  @click="closeCreate"
                 />
                 <UButton
                   label="创建"
@@ -2285,10 +2452,11 @@ watch(childRouteActive, async (active, wasActive) => {
                 />
               </div>
             </template>
-          </UModal>
+          </WorkItemCreateSurface>
 
           <!-- 目标编辑弹窗（目标规划列） -->
           <TargetEditModal
+            v-if="!hostCreate"
             v-model:open="showTargetEditModal"
             :work-item="editingTarget"
             :milestones="milestoneStore.milestones"
@@ -2297,6 +2465,7 @@ watch(childRouteActive, async (active, wasActive) => {
 
           <!-- 目标只读信息弹窗（执行中/确认中/已完成列） -->
           <TargetInfoModal
+            v-if="!hostCreate"
             v-model:open="showTargetInfoModal"
             :work-item="viewingTarget"
           />

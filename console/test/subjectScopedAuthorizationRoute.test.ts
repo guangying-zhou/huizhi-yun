@@ -12,7 +12,7 @@ test('subject scoped route authorizes before reading body or loading policy', as
   for (const mode of ['valid', 'unauthorized', 'query', 'purpose', 'override']) {
     const exports: Record<string, (event: unknown) => Promise<{ code: number }>> = {}
     const calls: string[] = []
-    runInNewContext(code, { exports, defineEventHandler: (handler: unknown) => handler, require: (name: string) => {
+    runInNewContext(code, { exports, process: { env: {} }, defineEventHandler: (handler: unknown) => handler, require: (name: string) => {
       if (name === 'h3') return { createError, setHeader: () => {}, getQuery: () => mode === 'query' ? { subjectUid: 'other' } : {}, readBody: async () => {
         calls.push('body')
         return { subjectUid: 'U1', purpose: mode === 'purpose' ? 'unknown' : 'product_feedback_create', ...(mode === 'override' ? { action: 'admin' } : {}) }
@@ -25,6 +25,8 @@ test('subject scoped route authorizes before reading body or loading policy', as
         if (mode === 'unauthorized') throw createError({ statusCode: 403 })
         return { actorType: 'service', actorId: 'client', appCode: 'aims', tenantCode: 'T', deploymentCode: 'D' }
       } }
+      if (name.endsWith('/platformRuntime')) return { loadConsoleRuntimeMode: () => ({ activationMode: 'managed-cloud-multitenant' }), isTrustedTenantGatewayRequest: () => true }
+      if (name.endsWith('/localAimsDocumentBinding')) return { localAimsDocumentBinding: (input: { binding: unknown }) => input.binding }
       if (name.endsWith('/consoleRuntimeBinding')) return { resolveConsoleRuntimeBinding: () => ({ tenantId: 'T', deploymentId: 'D' }) }
       if (name.endsWith('/subjectScopedAuthorizationContract')) return { resolveSubjectScopedAuthorizationRequest }
       if (name.endsWith('/subjectEligibilityContract')) return { SubjectEligibilityError }

@@ -5,17 +5,35 @@
  * 集成 Milkdown 编辑器和实时协同功能
  */
 
-definePageMeta({
-  layout: 'default'
-})
+import { createCreationAttempt } from '../../../layer/creationAttempt.mjs'
+import { departmentCollaborationDisabledStatus, departmentCollaborationFailureText, departmentCollaborationView, hostCollaborationTicketRequest, versionHistoryRequests } from '../../../layer/departmentCollaboration.mjs'
+import { isPrivateUnsharedEditorCandidate } from '../../../layer/documentEditingBoundary.mjs'
+import { documentLoadErrorMessage } from '../../utils/departmentDocumentWriteError'
+import { useCodocsModule } from '../../../layer/useCodocsModule'
+import { useCollaboration } from '../../composables/useCollaboration'
+import { useDocumentPreviewBootstrap } from '../../composables/useDocumentPreviewBootstrap'
+import { useEditorTheme } from '../../composables/useEditorTheme'
+import { useViewerWatermark } from '../../composables/useViewerWatermark'
 
 usePageTitle('文档编辑')
 
 const route = useRoute()
 const router = useRouter()
 const toast = useToast()
+const { moduleUrl, cacheKey, hosted } = useCodocsModule()
+// Stage B: in the Enterprise Host, shared v2 documents co-edit through Collab
+// with a one-time ticket from the Host (docs/Codocs-Document-Write-Coordination.md).
+const hostedCollaborationV2 = hosted && useRuntimeConfig().public.codocsCollaborationV2 === true
+// Department documents co-edit only with their own switch on; the Host and
+// Runtime re-check it, this only decides whether the page offers the entry.
+const hostedDepartmentCollaborationV2 = hosted && useRuntimeConfig().public.codocsDepartmentCollaborationV2 === true
 const { getPayload: getDocumentPreviewBootstrap, consumePayload: consumeDocumentPreviewBootstrap, clearPayload: clearDocumentPreviewBootstrap } = useDocumentPreviewBootstrap()
 const { user: authUser, userRealname: authRealName } = useAuth()
+const annotationAttempt = createCreationAttempt()
+const documentAttempt = createCreationAttempt()
+// Saves have their own pending command; read/share actions must not evict its
+// key while a transport error leaves the save outcome uncertain.
+const saveAttempt = createCreationAttempt()
 const { watermarkText } = useViewerWatermark()
 const authUserId = computed(() => authUser.value || '')
 const disableShareTab = computed(() => route.query.fromShare === '1')
@@ -84,6 +102,11 @@ interface DocumentResponseData {
   oss_path?: string
   publish_info?: string
   ai_abstract?: string
+  snapshot_generation?: number
+  snapshot_epoch?: number
+  dept_code?: string
+  // Host hint for department documents: whether this user may open a session.
+  department_collaboration?: { can_edit?: boolean }
 }
 
 interface PublishReviewRecord {
@@ -190,6 +213,7 @@ const needsUnsavedGuard = computed(() => {
   if (isLeavingDocumentPage.value) return false
   if (docState.value.readonly_flag) return false
   if (isEditingLockedByCollaborationFallback.value) return false
+  if (hosted && !isPrivateUnsharedDoc.value) return false
   if (isRealtimeCollaboration.value) return false
   if (!isPageReady.value) return false
   return hasUnsavedChanges.value || hasPendingContentFlush.value
@@ -205,7 +229,10 @@ function promptUnsavedGuard(): Promise<'save' | 'discard' | 'cancel'> {
 async function handleUnsavedGuardAction(action: 'save' | 'discard' | 'cancel') {
   unsavedGuardOpen.value = false
   if (action === 'save') {
-    await saveDocument({ forceContent: true })
+    if (await saveDocument({ forceContent: true }) !== true) {
+      unsavedGuardOpen.value = true
+      return
+    }
   }
   if (unsavedGuardResolve) {
     unsavedGuardResolve(action)
@@ -222,8 +249,7 @@ async function handleUnsavedGuardAction(action: 'save' | 'discard' | 'cancel') {
 
 onBeforeRouteLeave(async (to) => {
   if (!needsUnsavedGuard.value) {
-    await flushDocumentBeforeRouteLeave()
-    return true
+    return await flushDocumentBeforeRouteLeave()
   }
   pendingNavigationPath = to.fullPath
   const action = await promptUnsavedGuard()
@@ -235,14 +261,28 @@ const goBack = () => {
   if (window.history.length > 1) {
     router.back()
   } else {
-    router.push('/mydocs')
+    router.push(moduleUrl('/mydocs'))
   }
 }
 
 // 文档 ID
 const documentId = computed(() => route.params.uuid as string)
 const routeQueryText = (value: unknown) => String(Array.isArray(value) ? value[0] : value || '').trim()
-const documentDeptCode = computed(() => routeQueryText(route.query.dept_code || route.query.deptCode))
+// Entries without a department link (notifications, search, share links) load the
+// document through the generic read; the Host then resolves it as a department
+// document server-side and this response value takes over as the department scene.
+// It is only a routing hint: every department call is re-authorized by the server.
+const responseDept = ref({ uuid: '', code: '' })
+const responseDeptCode = computed(() => responseDept.value.uuid === documentId.value ? responseDept.value.code : '')
+const documentDeptCode = computed(() => routeQueryText(route.query.dept_code || route.query.deptCode) || responseDeptCode.value)
+// A department list link carries dept_code. It only selects the department read
+// route; the server re-derives the department relation and the person permission
+// on every call, so a forged code cannot widen access.
+const isDepartmentRead = computed(() => hosted && Boolean(documentDeptCode.value))
+const { hasPermission } = usePermissions()
+// Download and PDF export are client-side copies of the body, so they follow the
+// server-side departments:export action (UI hint; the department download route enforces).
+const canExportDepartmentBody = computed(() => !isDepartmentRead.value || hasPermission('departments', 'export'))
 
 // 是否是新建的工作日志（通过 ?new=1 标记，且文档类型为 private/工作日志）
 const isNewWorklog = computed(() => route.query.new === '1' && docState.value.doc_type === 'private' && (docState.value.title.startsWith('工作日志_') || docState.value.title.endsWith('工作日志')))
@@ -285,7 +325,15 @@ const projectMetadata = ref({
 })
 
 // 状态
+const { confirm } = useConfirm()
+const documentLoadFailure = ref<'forbidden' | 'unavailable' | null>(null)
+const documentLoadFailureMessage = ref('')
+// 首次读取完成前不渲染编辑器外壳，避免默认“未命名文档”与协作状态条闪现。
+const initialLoadPending = ref(true)
 const loading = ref(true)
+// OSS body reads can take seconds; show a hint on the skeleton after this delay.
+const slowLoadHint = ref(false)
+const slowLoadHintDelayMs = 2000
 const saving = ref(false)
 const lastSaved = ref<Date | null>(null)
 const isPageReady = ref(false)
@@ -297,14 +345,17 @@ const showVersionHistory = ref(false)
 const showSharePanel = ref(false)
 const versionsLoading = ref(false)
 const versions = ref<VersionSummary[]>([])
+const versionsError = ref('')
 const showPublishRecord = ref(false)
 const publishReviewRecord = ref<PublishReviewRecord | null>(null)
 
 // 标注数据
 const annotations = ref<AnnotationItem[]>([])
 const fetchAnnotations = async () => {
+  // Annotations and shares are personal-document routes authorized by ownership or sharing.
+  if (isDepartmentRead.value) return
   try {
-    const response = await $fetch<ApiSuccessResponse<AnnotationItem[]>>(`/api/documents/${documentId.value}/annotations`)
+    const response = await $fetch<ApiSuccessResponse<AnnotationItem[]>>(moduleUrl(`/api/documents/${documentId.value}/annotations`))
     if (response.success) {
       annotations.value = response.data
     }
@@ -316,20 +367,22 @@ const fetchAnnotations = async () => {
 // 标注操作
 const handleCreateAnnotation = async (data: { selectedText: string, contextBefore: string, contextAfter: string, positionHint: number, content: string }) => {
   try {
-    const response = await $fetch<{ success: boolean, data: { id: number } }>(`/api/documents/${documentId.value}/annotations`, {
+    const payload = {
+      selected_text: data.selectedText,
+      context_before: data.contextBefore,
+      context_after: data.contextAfter,
+      position_hint: data.positionHint,
+      content: data.content,
+      mentioned_users: []
+    }
+    const attemptKey = annotationAttempt.keyFor(cacheKey('annotation-create'), payload)
+    const response = await $fetch<{ success: boolean, data: { id: number } }>(moduleUrl(`/api/documents/${documentId.value}/annotations`), {
       method: 'POST',
-      body: {
-        selected_text: data.selectedText,
-        context_before: data.contextBefore,
-        context_after: data.contextAfter,
-        position_hint: data.positionHint,
-        content: data.content,
-        mentioned_users: [], // TODO: implement mentions
-        author_id: authUserId.value || docState.value.owner_uid || '0',
-        author_name: authRealName.value || '我' // TODO: get real name
-      }
+      body: payload,
+      headers: { 'Idempotency-Key': attemptKey }
     })
     if (response.success) {
+      annotationAttempt.complete(attemptKey)
       await fetchAnnotations()
       toast.add({ title: '标注已创建', color: 'success' })
     }
@@ -341,16 +394,15 @@ const handleCreateAnnotation = async (data: { selectedText: string, contextBefor
 
 const handleReplyAnnotation = async (id: number, content: string) => {
   try {
-    const response = await $fetch(`/api/documents/${documentId.value}/annotations/${id}/replies`, {
+    const payload = { content, mentioned_users: [] }
+    const attemptKey = annotationAttempt.keyFor(cacheKey('annotation-reply'), { annotationId: id, ...payload })
+    const response = await $fetch<ApiSuccessResponse<unknown>>(moduleUrl(`/api/documents/${documentId.value}/annotations/${id}/replies`), {
       method: 'POST',
-      body: {
-        content,
-        mentioned_users: [],
-        author_id: authUserId.value || docState.value.owner_uid || '0',
-        author_name: authRealName.value || '我'
-      }
+      body: payload,
+      headers: { 'Idempotency-Key': attemptKey }
     })
     if (response?.success) {
+      annotationAttempt.complete(attemptKey)
       await fetchAnnotations()
     }
   } catch (error) {
@@ -361,14 +413,15 @@ const handleReplyAnnotation = async (id: number, content: string) => {
 
 const handleResolveAnnotation = async (id: number) => {
   try {
-    const response = await $fetch(`/api/documents/${documentId.value}/annotations/${id}`, {
+    const payload = { status: 'resolved' }
+    const attemptKey = annotationAttempt.keyFor(cacheKey('annotation-update'), { annotationId: id, ...payload })
+    const response = await $fetch<ApiSuccessResponse<unknown>>(moduleUrl(`/api/documents/${documentId.value}/annotations/${id}`), {
       method: 'PATCH',
-      body: {
-        status: 'resolved',
-        resolved_by: authUserId.value
-      }
+      body: payload,
+      headers: { 'Idempotency-Key': attemptKey }
     })
     if (response?.success) {
+      annotationAttempt.complete(attemptKey)
       await fetchAnnotations()
     }
   } catch (error) {
@@ -377,15 +430,20 @@ const handleResolveAnnotation = async (id: number) => {
 }
 
 const handleDeleteAnnotation = async (id: number) => {
+  const document = documentId.value
+  const owner = authUserId.value
+  if (!await confirm({ title: '删除标注', message: `确认删除文档「${docState.value.title || '当前文档'}」的标注 #${id}？标注将从文档中移除，无法在标注面板恢复。`, tone: 'danger', confirmLabel: '删除' })) return
+  if (documentId.value !== document || authUserId.value !== owner) return
   try {
-    const response = await $fetch(`/api/documents/${documentId.value}/annotations/${id}`, {
+    const payload = { status: 'deleted' }
+    const attemptKey = annotationAttempt.keyFor(cacheKey('annotation-update'), { annotationId: id, ...payload })
+    const response = await $fetch<ApiSuccessResponse<unknown>>(moduleUrl(`/api/documents/${documentId.value}/annotations/${id}`), {
       method: 'PATCH',
-      body: {
-        status: 'deleted',
-        deleted_by: authUserId.value
-      }
+      body: payload,
+      headers: { 'Idempotency-Key': attemptKey }
     })
     if (response?.success) {
+      annotationAttempt.complete(attemptKey)
       await fetchAnnotations()
       toast.add({ title: '标注已删除', color: 'success' })
     }
@@ -395,11 +453,18 @@ const handleDeleteAnnotation = async (id: number) => {
 }
 
 const handleDeleteReply = async (annotationId: number, replyId: number) => {
+  const document = documentId.value
+  const owner = authUserId.value
+  if (!await confirm({ title: '删除标注回复', message: `确认删除文档「${docState.value.title || '当前文档'}」的标注回复 #${replyId}？回复将从讨论中移除，无法在标注面板恢复。`, tone: 'danger', confirmLabel: '删除' })) return
+  if (documentId.value !== document || authUserId.value !== owner) return
   try {
-    const response = await $fetch(`/api/documents/${documentId.value}/annotations/${annotationId}/replies/${replyId}`, {
-      method: 'DELETE'
+    const attemptKey = annotationAttempt.keyFor(cacheKey('annotation-reply-delete'), { annotationId, replyId })
+    const response = await $fetch<ApiSuccessResponse<unknown>>(moduleUrl(`/api/documents/${documentId.value}/annotations/${annotationId}/replies/${replyId}`), {
+      method: 'DELETE',
+      headers: { 'Idempotency-Key': attemptKey }
     })
     if (response?.success) {
+      annotationAttempt.complete(attemptKey)
       await fetchAnnotations()
     }
   } catch (error) {
@@ -423,6 +488,10 @@ const savedState = ref({
   title: '',
   content: ''
 })
+// The version of the bytes currently in the editor. A later head read must
+// never silently rebase this draft before its save command is decided.
+const snapshotBase = ref<{ generation: number, epoch: number } | null>(null)
+let pendingContentSave: { documentId: string, title: string, content: string, mode: string, payload: Record<string, unknown> } | null = null
 const needsCollaborationPreviewSnapshotFlush = ref(false)
 
 // 是否有未保存的变更
@@ -431,7 +500,8 @@ const hasUnsavedChanges = computed(() => {
     || (shouldPersistContentViaHttp.value && editorContent.value !== savedState.value.content)
 })
 const hasPendingTitleChange = computed(() => docState.value.title !== savedState.value.title)
-const hasPendingContentFlush = computed(() => editorContent.value !== savedState.value.content || needsCollaborationPreviewSnapshotFlush.value)
+const hasPendingContentFlush = computed(() => !(hosted && !isPrivateUnsharedDoc.value)
+  && (editorContent.value !== savedState.value.content || needsCollaborationPreviewSnapshotFlush.value))
 
 const shouldShowReadonlyWatermark = computed(() => {
   if (!docState.value.readonly_flag && !viewingVersion.value) return false
@@ -454,9 +524,31 @@ const getCurrentEditorMarkdown = () => {
     return editorContent.value
   }
 }
+// Department collaboration state (UI only; the server decides who may write).
+const departmentCanEdit = ref(false)
+const departmentConverted = ref(false)
+const departmentRequested = ref(false)
+const departmentPhase = ref<'idle' | 'converting' | 'ready' | 'failed'>('idle')
+const departmentFailure = ref('')
+const isDepartmentDoc = computed(() => hostedDepartmentCollaborationV2 && docState.value.doc_type === 'department')
 const collaboration = useCollaboration({
   documentId,
   deptCode: documentDeptCode,
+  ...(hostedCollaborationV2 || hostedDepartmentCollaborationV2
+    ? {
+        resolveToken: async () => {
+          const request = hostCollaborationTicketRequest(isDepartmentDoc.value ? 'department' : 'private', documentId.value, documentDeptCode.value)
+          try {
+            const response = await $fetch<{ data?: { token?: string } }>(moduleUrl(request.path), { method: 'POST', ...(request.query ? { query: request.query } : {}) })
+            return String(response.data?.token || '')
+          } catch (error) {
+            // Keep the reason (not a writer, session full, ...) for the status bar.
+            if (isDepartmentDoc.value) departmentFailure.value = departmentCollaborationFailureText(error)
+            throw error
+          }
+        }
+      }
+    : {}),
   user: computed(() => ({
     id: authUserId.value || 'anonymous',
     name: authRealName.value || authUserId.value || '匿名用户'
@@ -464,14 +556,31 @@ const collaboration = useCollaboration({
 })
 const isDocumentOwner = computed(() => Boolean(authUserId.value) && authUserId.value === docState.value.owner_uid)
 const isRepositorySyncDoc = computed(() => docState.value.doc_type === 'git-project')
-const supportsCollaboration = computed(() => !isRepositorySyncDoc.value)
-const isRealtimeCollaboration = computed(() => collaboration.isConnected.value && !viewingVersion.value)
+// 企业/知识库/产品文档是只读发布物：不加入协作，也不展示协作状态。
+const isStaticReadonlyDoc = computed(() => ['company', 'knowledge', 'product'].includes(docState.value.doc_type))
+const supportsCollaboration = computed(() => (!hosted || hostedCollaborationV2 || isDepartmentDoc.value) && !isRepositorySyncDoc.value && !isStaticReadonlyDoc.value)
+const isRealtimeCollaboration = computed(() => collaboration.isConnected.value && !viewingVersion.value && (!hosted || collaboration.synced.value))
 const isCollaborationConnecting = computed(() => collaboration.isConnecting.value)
-const isPrivateUnsharedDoc = computed(() => docState.value.doc_type === 'private' && !isSharedDoc.value && shareMembers.value.length === 0)
-const shouldLoadFromCollaboration = computed(() => supportsCollaboration.value && Boolean(authUserId.value) && !viewingVersion.value && !isPrivateUnsharedDoc.value)
+const isPrivateUnsharedDoc = computed(() => isPrivateUnsharedEditorCandidate({
+  hosted,
+  docType: docState.value.doc_type,
+  ownerUid: docState.value.owner_uid,
+  actorUid: authUserId.value,
+  sharesVerified: shareMembersLoaded.value,
+  shareCount: shareMembers.value.length
+}))
+// A department session starts only after the user asks for it (reading never
+// converts or connects) and stops for good once Collab withdraws access.
+const departmentSessionWanted = computed(() => isDepartmentDoc.value && departmentCanEdit.value && departmentRequested.value
+  && departmentPhase.value === 'ready' && !collaboration.closeKind.value)
+// In the Host, join collaboration only for verified shared documents: an open
+// session blocks normal saves, so an unshared document must never start one.
+const shouldLoadFromCollaboration = computed(() => supportsCollaboration.value && !documentLoadFailure.value && Boolean(authUserId.value) && !viewingVersion.value && !isPrivateUnsharedDoc.value
+  && (!hosted || (docState.value.doc_type === 'private' && shareMembersLoaded.value && shareMembers.value.length > 0) || departmentSessionWanted.value))
 const isLeavingDocumentPage = ref(false)
 const collaborationFallbackMode = ref<'none' | 'owner-edit' | 'viewer-readonly'>('none')
 const collaborationFallbackLoaded = ref(false)
+const hasSyncedCollaboration = ref(false)
 const isOwnerHttpFallbackMode = computed(() => collaborationFallbackMode.value === 'owner-edit')
 const isViewerReadonlyFallbackMode = computed(() => collaborationFallbackMode.value === 'viewer-readonly')
 const isWaitingForCollaborationSync = computed(() =>
@@ -483,13 +592,21 @@ const isWaitingForCollaborationSync = computed(() =>
 const hasRemoteCollaborators = computed(() => collaboration.collaborators.value.length > 0)
 const isCollaborationReadonlyScope = computed(() => collaboration.scope.value === 'readonly')
 const isEditingLockedByCollaborationFallback = computed(() => isViewerReadonlyFallbackMode.value)
+// Runtime reports a document as read-only for anyone who is neither owner nor a
+// write sharee, which would hide a manager's edit right; the Host hint is exact.
+const isDocumentReadonlyForEditing = computed(() => !!docState.value.readonly_flag && !(isDepartmentDoc.value && departmentCanEdit.value))
 const isEditingDisabled = computed(() =>
-  !!docState.value.readonly_flag
+  isDocumentReadonlyForEditing.value
   || !!viewingVersion.value
+  // Host: shared documents are editable only inside a synced v2 collaboration session.
+  || (hosted && !isPrivateUnsharedDoc.value && !(shouldLoadFromCollaboration.value && collaboration.isConnected.value && collaboration.synced.value && collaboration.scope.value === 'read-write' && !collaboration.error.value))
   || isWaitingForCollaborationSync.value
   || isEditingLockedByCollaborationFallback.value
 )
-const canViewShares = computed(() => supportsCollaboration.value && !disableShareTab.value)
+// The nested shares list is owner-only in Runtime. A sharee can read the
+// document and mark their own share as opened, but cannot list other sharees.
+// Department scenes never use the personal share APIs (list/create/update/delete).
+const canViewShares = computed(() => !isRepositorySyncDoc.value && !disableShareTab.value && isDocumentOwner.value && !isDepartmentScene.value)
 const canManageShares = computed(() => canViewShares.value && !docState.value.readonly_flag && isDocumentOwner.value)
 const collaborationEditorEnabled = computed(() => !isLeavingDocumentPage.value && collaboration.synced.value && !viewingVersion.value)
 const editorInstanceKey = computed(() => {
@@ -510,6 +627,7 @@ interface ShareMemberInfo {
   permission: 'read' | 'write'
 }
 const shareMembers = ref<ShareMemberInfo[]>([])
+const shareMembersLoaded = ref(false)
 const isSharedDoc = computed(() => authUserId.value !== docState.value.owner_uid && authUserId.value !== '')
 const ownerName = ref('')
 const documentSourceDisplayName = computed(() => {
@@ -545,12 +663,17 @@ const onlineCollaborationMembers = computed(() => {
 })
 
 const fetchShareMembers = async () => {
-  if (!documentId.value) return
+  if (!documentId.value || !isDocumentOwner.value || isDepartmentScene.value) {
+    shareMembers.value = []
+    shareMembersLoaded.value = false
+    return
+  }
+  if (hosted) shareMembersLoaded.value = false
   try {
     const res = await $fetch<{ code: number, data?: Array<{ shared_to_uid: string, real_name: string, permission: string }> }>(
-      `/api/documents/${documentId.value}/shares`
+      moduleUrl(`/api/documents/${documentId.value}/shares`)
     )
-    if (res.code === 0 && res.data) {
+    if (res.code === 0 && Array.isArray(res.data)) {
       // 收集所有需要查询姓名的 uid（共享成员 + 文档所有者）
       const uidsToResolve = new Set<string>()
       for (const s of res.data) uidsToResolve.add(s.shared_to_uid)
@@ -563,7 +686,7 @@ const fetchShareMembers = async () => {
       if (uidsToResolve.size > 0) {
         try {
           const userRes = await $fetch<{ code: number, data?: Array<{ uid: string, realName?: string }> }>(
-            '/api/account/users/batch',
+            hosted ? sharedApiPath('/api/directory/users/batch') : '/api/account/users/batch',
             { method: 'POST', body: { uids: [...uidsToResolve] } }
           )
           if (userRes.data) {
@@ -579,6 +702,7 @@ const fetchShareMembers = async () => {
         realName: nameMap.get(s.shared_to_uid) || s.real_name || s.shared_to_uid,
         permission: s.permission as 'read' | 'write'
       }))
+      shareMembersLoaded.value = true
 
       // 设置文档所有者姓名
       if (docState.value.owner_uid && docState.value.owner_uid !== authUserId.value) {
@@ -588,8 +712,8 @@ const fetchShareMembers = async () => {
   } catch { /* ignore */ }
 }
 
-const shouldShowCollaborationStatusBar = computed(() => (
-  supportsCollaboration.value && (
+const shouldShowCollaborationStatusBar = computed(() => !isStaticReadonlyDoc.value && !documentLoadFailure.value && (
+  (hosted && !isPrivateUnsharedDoc.value) || (supportsCollaboration.value && (
     isCollaborationReadonlyScope.value
     || isCollaborationConnecting.value
     || Boolean(collaboration.error.value)
@@ -597,14 +721,83 @@ const shouldShowCollaborationStatusBar = computed(() => (
     || isSharedDoc.value
     || shareMembers.value.length > 0
     || collaboration.isConnected.value
-  )
+  ))
 ))
+const departmentView = computed(() => departmentCollaborationView({
+  enabled: isDepartmentDoc.value && hasLoadedDocument.value,
+  canEdit: departmentCanEdit.value,
+  converted: departmentConverted.value,
+  requested: departmentRequested.value,
+  phase: departmentPhase.value === 'ready' ? 'idle' : departmentPhase.value,
+  failure: departmentFailure.value,
+  connecting: collaboration.isConnecting.value,
+  connected: collaboration.isConnected.value,
+  synced: collaboration.synced.value,
+  scope: collaboration.scope.value,
+  hasError: Boolean(collaboration.error.value),
+  closeKind: collaboration.closeKind.value,
+  collaborators: collaboration.collaborators.value.length
+}))
+const isDepartmentCollaborationScene = computed(() => departmentView.value.status !== null)
+const departmentEntryLabel = computed(() => {
+  if (departmentView.value.entry === 'busy') return departmentPhase.value === 'converting' ? '正在转换…' : '连接中…'
+  return departmentView.value.entry === 'retry' ? '重试' : '协作编辑'
+})
+
+const startDepartmentCollaboration = async () => {
+  if (departmentPhase.value === 'converting' || !departmentCanEdit.value) return
+  departmentFailure.value = ''
+  departmentRequested.value = true
+  if (!departmentConverted.value) {
+    departmentPhase.value = 'converting'
+    try {
+      // The Host converts a v1 document once (generation 0 -> 1) and answers
+      // with the new generation; reading a document never reaches this call.
+      const response = await $fetch<{ data?: { converted?: boolean } }>(
+        moduleUrl(`/api/departments/documents/${documentId.value}/collaboration/convert`),
+        { method: 'POST', query: { dept_code: documentDeptCode.value } }
+      )
+      if (response.data?.converted !== true) throw new Error('conversion not confirmed')
+      departmentConverted.value = true
+      // Re-read the published body so the editor starts from the converted version.
+      await fetchDocument({ forceContent: true })
+    } catch (error) {
+      departmentPhase.value = 'failed'
+      departmentFailure.value = departmentCollaborationFailureText(error)
+      return
+    }
+  }
+  departmentPhase.value = 'ready'
+  if (collaboration.error.value || (!collaboration.isConnected.value && !collaboration.isConnecting.value)) collaboration.connect()
+}
+
+// Department documents never enter the personal share-verification flow: in the
+// Host their editing goes only through department collaboration.
+const isDepartmentScene = computed(() => isDepartmentRead.value || (hosted && docState.value.doc_type === 'department'))
 const collaborationStatus = computed(() => {
+  if (departmentView.value.status) return departmentView.value.status
+  if (isDepartmentScene.value && !hostedDepartmentCollaborationV2) return departmentCollaborationDisabledStatus()
   if (docState.value.readonly_flag) {
     return {
       tone: 'neutral' as const,
       label: '只读文档',
       description: '当前文档不可编辑'
+    }
+  }
+
+  if (hosted && !isDepartmentScene.value && !shareMembersLoaded.value && isDocumentOwner.value) {
+    return {
+      tone: 'warning' as const,
+      label: '共享状态待核验',
+      description: '暂时无法确认文档是否已共享，编辑已暂停；请重试核验'
+    }
+  }
+
+  if (hosted && !isDepartmentScene.value && !isPrivateUnsharedDoc.value && !shouldLoadFromCollaboration.value) {
+    return {
+      tone: 'warning' as const,
+      label: '协作不可用',
+      description: '当前文档仅可查看；共享文档编辑需使用协作通道'
     }
   }
 
@@ -682,7 +875,8 @@ const collaborationStatus = computed(() => {
 })
 const hasShownCollaborationConnectedToast = ref(false)
 const hasShownCollaborationErrorToast = ref(false)
-const shouldPersistContentViaHttp = computed(() => !shouldLoadFromCollaboration.value || isOwnerHttpFallbackMode.value)
+const shouldPersistContentViaHttp = computed(() => !(hosted && !isPrivateUnsharedDoc.value)
+  && (!shouldLoadFromCollaboration.value || isOwnerHttpFallbackMode.value))
 const shouldMirrorMarkdownToCollaboration = computed(() =>
   supportsCollaboration.value
   && collaboration.synced.value
@@ -722,13 +916,13 @@ const loadPublishReviewRecord = async () => {
 
   try {
     if (docState.value.publish_info) {
-      const response = await $fetch<ApiCodeResponse<PublishReviewRecord | null>>(`/api/reviews/by-document/${documentId.value}`)
+      const response = await $fetch<ApiCodeResponse<PublishReviewRecord | null>>(moduleUrl(`/api/reviews/by-document/${documentId.value}`))
       publishReviewRecord.value = response.data || null
       return
     }
 
     if (docState.value.readonly_flag) {
-      const response = await $fetch<ApiCodeResponse<PublishReviewRecord | null>>('/api/reviews/by-oss-path', {
+      const response = await $fetch<ApiCodeResponse<PublishReviewRecord | null>>(moduleUrl('/api/reviews/by-oss-path'), {
         params: { path: docState.value.oss_path }
       })
       publishReviewRecord.value = response.data || null
@@ -746,15 +940,31 @@ let saveTimer: ReturnType<typeof setTimeout> | null = null
 const fetchDocument = async (options?: { forceContent?: boolean }) => {
   loading.value = true
   hasLoadedDocument.value = false
+  documentLoadFailure.value = null
+  slowLoadHint.value = false
+  const slowLoadTimer = setTimeout(() => {
+    slowLoadHint.value = true
+  }, slowLoadHintDelayMs)
   try {
     const previewBootstrap = !options?.forceContent ? getDocumentPreviewBootstrap(documentId.value) : undefined
     const query: Record<string, string> = {}
-    if (previewBootstrap) query.skip_content = '1'
+    if (previewBootstrap && !hosted) query.skip_content = '1'
     if (documentDeptCode.value) query.dept_code = documentDeptCode.value
-    const response = await $fetch<ApiSuccessResponse<DocumentResponseData>>(`/api/documents/${documentId.value}`, { query })
+    // In the Host a department document has its own read route: the department
+    // relation, not personal ownership, authorizes it, and its body comes from
+    // the exact published snapshot once it has been converted.
+    const departmentRead = isDepartmentRead.value
+    const response = await $fetch<ApiSuccessResponse<DocumentResponseData>>(
+      moduleUrl(departmentRead ? `/api/departments/documents/${documentId.value}` : `/api/documents/${documentId.value}`),
+      { query: departmentRead ? { dept_code: documentDeptCode.value } : query }
+    )
 
     if (response.success && response.data) {
-      const bootstrapContent = previewBootstrap?.content || ''
+      // Derive the department scene from the response, never from client input.
+      if (!departmentRead) {
+        responseDept.value = { uuid: documentId.value, code: hosted && response.data.doc_type === 'department' ? String(response.data.dept_code || '').trim() : '' }
+      }
+      const bootstrapContent = hosted ? '' : previewBootstrap?.content || ''
       const responseContent = response.data.content || ''
       const baseContent = bootstrapContent || responseContent
       const resolvedContent = shouldLoadFromCollaboration.value && collaboration.synced.value && !options?.forceContent
@@ -836,6 +1046,12 @@ const fetchDocument = async (options?: { forceContent?: boolean }) => {
         title: docState.value.title,
         content: resolvedContent
       }
+      departmentCanEdit.value = response.data.department_collaboration?.can_edit === true
+      departmentConverted.value = Number(response.data.snapshot_generation) > 0
+      snapshotBase.value = hosted && Number.isSafeInteger(response.data.snapshot_generation)
+        && Number.isSafeInteger(response.data.snapshot_epoch)
+        ? { generation: response.data.snapshot_generation!, epoch: response.data.snapshot_epoch! }
+        : null
       hasLoadedDocument.value = true
 
       // 初始化最后保存时间
@@ -844,12 +1060,14 @@ const fetchDocument = async (options?: { forceContent?: boolean }) => {
       }
 
       // Fallback: mark shared doc as read when opened from any entry.
-      if (authUserId.value && authUserId.value !== docState.value.owner_uid) {
+      if (!isDepartmentRead.value && authUserId.value && authUserId.value !== docState.value.owner_uid) {
         try {
-          await $fetch(`/api/documents/${documentId.value}/read`, {
+          const attemptKey = documentAttempt.keyFor(cacheKey(`document-read:${documentId.value}`), { documentId: documentId.value })
+          await $fetch(moduleUrl(`/api/documents/${documentId.value}/read`), {
             method: 'POST',
-            body: { uid: authUserId.value }
+            headers: { 'Idempotency-Key': attemptKey }
           })
+          documentAttempt.complete(attemptKey)
         } catch (error) {
           console.error('Failed to mark document as read on open:', error)
         }
@@ -858,18 +1076,38 @@ const fetchDocument = async (options?: { forceContent?: boolean }) => {
   } catch (error: unknown) {
     clearDocumentPreviewBootstrap(documentId.value)
     console.error('Failed to fetch document:', error)
-    toast.add({
-      title: '加载失败',
-      description: getErrorMessage(error, '无法加载文档，请稍后重试'),
-      color: 'error'
-    })
+    const failure = error as { statusCode?: number, status?: number, response?: { status?: number } }
+    const failureStatus = failure?.statusCode || failure?.status || failure?.response?.status
+    documentLoadFailure.value = failureStatus === 403 ? 'forbidden' : 'unavailable'
+    documentLoadFailureMessage.value = documentLoadErrorMessage({ ...(error as object), statusCode: failureStatus })
+    collaboration.disconnect()
   } finally {
+    clearTimeout(slowLoadTimer)
+    slowLoadHint.value = false
     loading.value = false
+    initialLoadPending.value = false
     // 注意：这里不设为 ready，等待编辑器 Ready 事件
   }
 }
 
 // 保存文档
+const documentSavePayload = (title: string, content?: string, saveMode: 'overwrite' | 'recovery' | 'import' = 'overwrite') => {
+  if (content !== undefined && pendingContentSave?.documentId === documentId.value
+    && pendingContentSave.title === title && pendingContentSave.content === content && pendingContentSave.mode === saveMode) {
+    return pendingContentSave.payload
+  }
+  const payload: Record<string, unknown> = { title }
+  if (content !== undefined) {
+    Object.assign(payload, { content, saveMode })
+    if (hosted && isPrivateUnsharedDoc.value) {
+      if (snapshotBase.value) Object.assign(payload, { expectedGeneration: snapshotBase.value.generation, expectedEpoch: snapshotBase.value.epoch })
+      payload.titleChanged = title !== savedState.value.title
+    }
+  }
+  if (content !== undefined) pendingContentSave = { documentId: documentId.value, title, content, mode: saveMode, payload }
+  return payload
+}
+
 const saveDocument = async (options?: {
   contentOverride?: string
   saveMode?: 'metadata' | 'overwrite' | 'recovery' | 'import'
@@ -877,6 +1115,7 @@ const saveDocument = async (options?: {
 }) => {
   // 如果页面还没准备好（加载中或编辑器初始化中），不保存
   if (!hasLoadedDocument.value || !isPageReady.value || saving.value) return
+  if (hosted && !isPrivateUnsharedDoc.value) return false
   if (isEditingLockedByCollaborationFallback.value) return
   if (isCollaborationReadonlyScope.value) return false
 
@@ -895,13 +1134,23 @@ const saveDocument = async (options?: {
 
   saving.value = true
   try {
-    await $fetch(`/api/documents/${documentId.value}`, {
+    const payload = documentSavePayload(docState.value.title, shouldSaveContent ? contentToSave : undefined,
+      options?.saveMode === 'recovery' || options?.saveMode === 'import' ? options.saveMode : 'overwrite')
+    const attempt = shouldSaveContent ? saveAttempt : documentAttempt
+    const attemptKey = attempt.keyFor(cacheKey(`document-save:${documentId.value}`), payload)
+    const result = await $fetch<ApiSuccessResponse<{ generation?: number, epoch?: number }>>(moduleUrl(`/api/documents/${documentId.value}`), {
       method: 'PUT',
-      body: {
-        title: docState.value.title,
-        ...(shouldSaveContent ? { content: contentToSave, saveMode: options?.saveMode || 'overwrite' } : {})
-      }
+      headers: { 'Idempotency-Key': attemptKey },
+      body: payload
     })
+    if (result?.success !== true) throw new Error('文档保存结果无效')
+    if (hosted && isPrivateUnsharedDoc.value && shouldSaveContent && snapshotBase.value) {
+      if (!Number.isSafeInteger(result.data?.generation) || result.data.generation! < snapshotBase.value.generation + 1
+        || result.data.epoch !== snapshotBase.value.epoch) throw new Error('文档保存版本回执无效')
+      snapshotBase.value = { generation: result.data.generation!, epoch: result.data.epoch! }
+    }
+    attempt.complete(attemptKey)
+    if (shouldSaveContent && pendingContentSave?.payload === payload) pendingContentSave = null
 
     lastSaved.value = new Date()
 
@@ -916,6 +1165,14 @@ const saveDocument = async (options?: {
     return true
   } catch (error: unknown) {
     console.error('Failed to save document:', error)
+    if (isDocumentChangedElsewhere(error)) {
+      toast.add({
+        title: '文档已在别处更新',
+        description: '本次修改未保存，内容仍保留在编辑器中。请先复制需要的内容，刷新页面后再保存。',
+        color: 'warning'
+      })
+      return false
+    }
     toast.add({
       title: '保存失败',
       description: getErrorMessage(error, '无法保存文档，请稍后重试'),
@@ -927,9 +1184,16 @@ const saveDocument = async (options?: {
   }
 }
 
-async function flushDocumentBeforeRouteLeave() {
-  if (!documentId.value || !hasLoadedDocument.value || !isPageReady.value) return
-  if (viewingVersion.value || docState.value.readonly_flag || isEditingLockedByCollaborationFallback.value || isCollaborationReadonlyScope.value) return
+async function flushDocumentBeforeRouteLeave(): Promise<boolean> {
+  if (!documentId.value || !hasLoadedDocument.value || !isPageReady.value) return true
+  if (hosted && !isPrivateUnsharedDoc.value) {
+    flushCollaborationMarkdownMirror(getCurrentEditorMarkdown())
+    return true
+  }
+  if (viewingVersion.value || docState.value.readonly_flag || isEditingLockedByCollaborationFallback.value || isCollaborationReadonlyScope.value) return true
+  // Milkdown can serialize the loaded Markdown differently without an edit.
+  // Do not turn a plain "close" into an unauthorized write in that case.
+  if (!hasPendingTitleChange.value && !hasPendingContentFlush.value) return true
 
   const contentToSave = getCurrentEditorMarkdown()
   if (contentToSave !== editorContent.value) {
@@ -937,24 +1201,28 @@ async function flushDocumentBeforeRouteLeave() {
   }
 
   if (!hasPendingTitleChange.value && !hasPendingContentFlush.value && contentToSave === savedState.value.content) {
-    return
+    return true
   }
 
   if (hasPendingContentFlush.value && !contentToSave && savedState.value.content) {
     console.warn('检测到离开页面前 flush 试图将非空文档保存为空，已拦截。')
-    return
+    return false
   }
 
   flushCollaborationMarkdownMirror(contentToSave)
-  await saveDocument({
+  return await saveDocument({
     contentOverride: contentToSave,
     forceContent: hasPendingContentFlush.value,
     saveMode: 'overwrite'
-  })
+  }) === true
 }
 
 const flushDocumentOnExit = () => {
   if (!import.meta.client || !documentId.value || !hasLoadedDocument.value || !isPageReady.value) return
+  if (hosted && !isPrivateUnsharedDoc.value) {
+    flushCollaborationMarkdownMirror(getCurrentEditorMarkdown())
+    return
+  }
   if (viewingVersion.value || docState.value.readonly_flag || isEditingLockedByCollaborationFallback.value || isCollaborationReadonlyScope.value) return
   if (isNewWorklog.value && !userEdited.value) return
 
@@ -975,33 +1243,37 @@ const flushDocumentOnExit = () => {
     return
   }
 
-  const payload = {
-    title: titleToSave,
-    ...(shouldSaveContent ? { content: contentToSave, saveMode: 'overwrite' as const } : {})
-  }
+  const payload = documentSavePayload(titleToSave, shouldSaveContent ? contentToSave : undefined)
   const body = JSON.stringify(payload)
-  const url = `/api/documents/${documentId.value}`
+  const url = moduleUrl(`/api/documents/${documentId.value}`)
+  const attempt = shouldSaveContent ? saveAttempt : documentAttempt
+  const attemptKey = attempt.keyFor(cacheKey(`document-save:${documentId.value}`), payload)
 
   try {
     void fetch(url, {
       method: 'PUT',
       body,
       headers: {
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
+        'Idempotency-Key': attemptKey
       },
       credentials: 'same-origin',
       keepalive: true
+    }).then(async (response) => {
+      if (!response.ok) return
+      const result = await response.json().catch(() => null) as ApiSuccessResponse<{ generation?: number, epoch?: number }> | null
+      if (result?.success !== true) return
+      if (hosted && isPrivateUnsharedDoc.value && shouldSaveContent && snapshotBase.value) {
+        if (!Number.isSafeInteger(result?.data?.generation) || result?.data?.epoch !== snapshotBase.value.epoch) return
+        snapshotBase.value = { generation: result!.data.generation!, epoch: result!.data.epoch! }
+      }
+      attempt.complete(attemptKey)
+      if (shouldSaveContent && pendingContentSave?.payload === payload) pendingContentSave = null
+      savedState.value = { title: titleToSave, content: shouldSaveContent ? contentToSave : savedState.value.content }
+      if (shouldSaveContent) needsCollaborationPreviewSnapshotFlush.value = false
     }).catch((error) => {
       console.error('Failed to flush document on exit:', error)
     })
-
-    savedState.value = {
-      title: titleToSave,
-      content: shouldSaveContent ? contentToSave : savedState.value.content
-    }
-    if (shouldSaveContent) {
-      needsCollaborationPreviewSnapshotFlush.value = false
-    }
   } catch (error) {
     console.error('Failed to flush document on exit:', error)
   }
@@ -1031,7 +1303,7 @@ const handleContentChange = (content: string) => {
 
   editorContent.value = content
   mirrorCollaborationMarkdown(content)
-  if (shouldLoadFromCollaboration.value && collaboration.synced.value && !shouldPersistContentViaHttp.value && content !== savedState.value.content) {
+  if (!hosted && shouldLoadFromCollaboration.value && collaboration.synced.value && !shouldPersistContentViaHttp.value && content !== savedState.value.content) {
     needsCollaborationPreviewSnapshotFlush.value = true
   }
 
@@ -1046,6 +1318,11 @@ const handleContentChange = (content: string) => {
   // 如果是只读文档，不仅不自动保存，理论上也不应该触发这里（除非代码更改）
   // 但为了安全起见，直接返回，不启动定时器
   if (docState.value.readonly_flag) {
+    return
+  }
+  if (hosted && !isPrivateUnsharedDoc.value) {
+    if (saveTimer) clearTimeout(saveTimer)
+    saveTimer = null
     return
   }
 
@@ -1087,17 +1364,26 @@ const formatSaveTime = (date: Date | null) => {
   return `${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`
 }
 
+// Department documents have a read-only history (list + exact version) on their
+// own Host endpoints; no restore, delete or diff.
+const historyRequests = computed(() => versionHistoryRequests(isDepartmentDoc.value ? 'department' : 'private', documentId.value, documentDeptCode.value))
+
 // 获取版本历史
 const fetchVersionHistory = async () => {
   versionsLoading.value = true
+  versionsError.value = ''
   try {
-    const response = await $fetch<ApiSuccessResponse<VersionSummary[]>>(`/api/documents/${documentId.value}/versions`)
+    const response = await $fetch<ApiSuccessResponse<VersionSummary[]>>(moduleUrl(historyRequests.value.list.path), { query: historyRequests.value.list.query })
     if (response.success) {
       versions.value = response.data
     }
   } catch (error: unknown) {
     console.error('Failed to fetch version history:', error)
-    toast.add({ title: '获取版本历史失败', color: 'error' })
+    const status = (error as { status?: number, statusCode?: number }).status
+      || (error as { status?: number, statusCode?: number }).statusCode
+    versionsError.value = status === 403
+      ? '当前无法读取版本历史；请确认版本服务授权后重试'
+      : status === 503 ? '版本服务暂不可用，请稍后重试' : '版本历史加载失败，请重试'
   } finally {
     versionsLoading.value = false
   }
@@ -1115,8 +1401,31 @@ const toggleVersionHistory = async () => {
 const viewingVersion = ref<VersionDetail | null>(null)
 const originalContent = ref('')
 
+// A save based on an older generation, or an old-style save of a document that
+// moved to snapshot saving, is refused with one of these codes (HTTP 409).
+const isDocumentChangedElsewhere = (error: unknown) => {
+  const body = (error as { data?: { code?: string, data?: { code?: string } } })?.data
+  const code = body?.data?.code ?? body?.code
+  return code === 'snapshot_generation_conflict' || code === 'snapshot_key_conflict'
+    || code === 'snapshot_precondition_required' || code === 'document_on_snapshot_v2'
+}
+
+// Storage keeps superseded versions for 30 days after they are replaced; the
+// server answers 410 codocs_version_expired for older ones.
+const isVersionExpired = (error: unknown) => {
+  const body = (error as { data?: { code?: string, data?: { code?: string } } })?.data
+  return (body?.data?.code ?? body?.code) === 'codocs_version_expired'
+}
+const versionFetchFailed = (error: unknown) => {
+  if (isVersionExpired(error)) {
+    toast.add({ title: '该历史版本已不可用', description: '超过 30 天的历史版本已按存储保留策略清理，无法查看或恢复。', color: 'warning' })
+    return
+  }
+  toast.add({ title: '获取版本内容失败', color: 'error' })
+}
+
 const handleViewVersion = async (versionId: number) => {
-  if (isEditingDisabled.value) {
+  if (isEditingDisabled.value && !historyRequests.value.readOnly) {
     toast.add({
       title: '当前文档为只读',
       description: '只读状态下不可查看历史版本内容',
@@ -1126,7 +1435,8 @@ const handleViewVersion = async (versionId: number) => {
   }
 
   try {
-    const response = await $fetch<ApiSuccessResponse<VersionDetail>>(`/api/documents/${documentId.value}/versions/${versionId}`)
+    const request = historyRequests.value.view(versionId)
+    const response = await $fetch<ApiSuccessResponse<VersionDetail>>(moduleUrl(request.path), { query: request.query })
     if (response.success && response.data) {
       // 首次进入版本预览时保存当前内容
       if (!viewingVersion.value) {
@@ -1138,7 +1448,7 @@ const handleViewVersion = async (versionId: number) => {
     }
   } catch (error: unknown) {
     console.error('Failed to view version:', error)
-    toast.add({ title: '获取版本内容失败', color: 'error' })
+    versionFetchFailed(error)
   }
 }
 
@@ -1155,6 +1465,8 @@ const showDiffModal = ref(false)
 const diffVersionData = ref<DiffVersionData | null>(null)
 
 const handleDiffVersion = async (versionId: number) => {
+  // The department history is view-only (the sidebar offers no diff).
+  if (historyRequests.value.readOnly) return
   if (isEditingDisabled.value) {
     toast.add({
       title: '当前文档为只读',
@@ -1165,14 +1477,15 @@ const handleDiffVersion = async (versionId: number) => {
   }
 
   try {
-    const response = await $fetch<ApiSuccessResponse<VersionDetail>>(`/api/documents/${documentId.value}/versions/${versionId}`)
+    const response = await $fetch<ApiSuccessResponse<VersionDetail>>(moduleUrl(`/api/documents/${documentId.value}/versions/${versionId}`))
     if (response.success && response.data) {
-      diffVersionData.value = { ...response.data }
+      // Keep the selected version id: the detail DTO does not have to carry it.
+      diffVersionData.value = { ...response.data, id: versionId }
       showDiffModal.value = true
     }
   } catch (error: unknown) {
     console.error('Failed to fetch version for diff:', error)
-    toast.add({ title: '获取版本内容失败', color: 'error' })
+    versionFetchFailed(error)
   }
 }
 
@@ -1198,16 +1511,20 @@ const handleRestoreFromDiff = async () => {
   mirrorCollaborationMarkdown(content)
 
   if (!isRealtimeCollaboration.value) {
-    await saveDocument({
+    const saved = await saveDocument({
       contentOverride: content,
       saveMode: 'recovery'
     })
+    // saveDocument already reported a conflict/failure and kept the draft;
+    // an unsaved restore must neither delete history nor claim success.
+    if (saved !== true) return
   }
 
   // 删除已恢复的历史版本
   try {
-    await $fetch(`/api/documents/${documentId.value}/versions/${versionId}`, {
-      method: 'DELETE'
+    await $fetch(moduleUrl(`/api/documents/${documentId.value}/versions/${versionId}`), {
+      method: 'DELETE',
+      headers: { 'Idempotency-Key': `codocs:version-delete:${documentId.value}:${versionId}` }
     })
   } catch (error) {
     console.error('Failed to delete version:', error)
@@ -1232,10 +1549,14 @@ const handleShare = async (data: { uid: string, permission: 'read' | 'write' }) 
   }
 
   try {
-    const response = await $fetch<ApiCodeResponse<{ notifiedOnly?: boolean }>>(`/api/documents/${documentId.value}/shares`, {
+    const payload = { sharedToUid: data.uid, permission: data.permission, message: null }
+    const attemptKey = documentAttempt.keyFor(cacheKey(`document-share:${documentId.value}:${data.uid}`), payload)
+    const response = await $fetch<ApiCodeResponse<{ notifiedOnly?: boolean }>>(moduleUrl(`/api/documents/${documentId.value}/shares`), {
       method: 'POST',
-      body: data
+      headers: { 'Idempotency-Key': attemptKey },
+      body: payload
     })
+    documentAttempt.complete(attemptKey)
 
     if (response.code === 0) {
       if (response.data?.notifiedOnly) {
@@ -1276,9 +1597,12 @@ const handleRemoveShare = async (shareId: number) => {
   }
 
   try {
-    const response = await $fetch<ApiCodeResponse>(`/api/documents/${documentId.value}/shares/${shareId}`, {
-      method: 'DELETE'
+    const payload = { documentId: documentId.value, shareId }
+    const attemptKey = documentAttempt.keyFor(cacheKey(`document-share-revoke:${documentId.value}:${shareId}`), payload)
+    const response = await $fetch<ApiCodeResponse>(moduleUrl(`/api/documents/${documentId.value}/shares/${shareId}`), {
+      method: 'DELETE', headers: { 'Idempotency-Key': attemptKey }
     })
+    documentAttempt.complete(attemptKey)
 
     if (response.code === 0) {
       toast.add({
@@ -1310,10 +1634,13 @@ const handleUpdatePermission = async (data: { shareId: number, permission: 'read
   }
 
   try {
-    const response = await $fetch<ApiCodeResponse>(`/api/documents/${documentId.value}/shares/${data.shareId}`, {
+    const payload = { permission: data.permission }
+    const attemptKey = documentAttempt.keyFor(cacheKey(`document-share-update:${documentId.value}:${data.shareId}`), payload)
+    const response = await $fetch<ApiCodeResponse>(moduleUrl(`/api/documents/${documentId.value}/shares/${data.shareId}`), {
       method: 'PATCH',
-      body: { permission: data.permission }
+      headers: { 'Idempotency-Key': attemptKey }, body: payload
     })
+    documentAttempt.complete(attemptKey)
 
     if (response.code === 0) {
       toast.add({
@@ -1373,6 +1700,7 @@ const handleEditorReady = () => {
 const handleKeydown = (e: KeyboardEvent) => {
   if ((e.ctrlKey || e.metaKey) && e.key === 's') {
     e.preventDefault()
+    if (hosted && !isPrivateUnsharedDoc.value) return
     if (isEditingLockedByCollaborationFallback.value) return
     // 源码模式下强制保存内容（协同可能未连接）
     if (viewMode.value === 'source') {
@@ -1384,6 +1712,7 @@ const handleKeydown = (e: KeyboardEvent) => {
 }
 
 const handleManualSave = () => {
+  if (hosted && !isPrivateUnsharedDoc.value) return
   if (viewMode.value === 'source') {
     saveDocument({ forceContent: true })
   } else {
@@ -1398,7 +1727,7 @@ onMounted(async () => {
   await fetchShareMembers()
   fetchAnnotations()
   // 私人且未共享的文档不启动协同，直接走 HTTP 保存
-  if (supportsCollaboration.value && authUserId.value && !isPrivateUnsharedDoc.value) {
+  if (shouldLoadFromCollaboration.value) {
     collaboration.connect()
   }
   window.addEventListener('keydown', handleKeydown)
@@ -1407,29 +1736,14 @@ onMounted(async () => {
   document.addEventListener('visibilitychange', handleVisibilityChange)
 })
 
-watch(authUserId, (uid) => {
+watch(shouldLoadFromCollaboration, (shouldConnect) => {
   if (isLeavingDocumentPage.value) return
-  if (!supportsCollaboration.value) return
-  // 私人且未共享的文档不启动协同（与 onMounted 保持一致）
-  if (isPrivateUnsharedDoc.value) return
-  if (uid && !collaboration.isConnected.value && !collaboration.isConnecting.value) {
-    collaboration.connect()
+  if (!shouldConnect) {
+    collaboration.disconnect()
+    return
   }
-})
-
-// 分享状态变化时：未共享→已共享 要补连协同；已共享→未共享 要断开
-watch(isPrivateUnsharedDoc, (isPrivateUnshared) => {
-  if (isLeavingDocumentPage.value) return
-  if (!supportsCollaboration.value) return
-  if (!authUserId.value) return
-  if (isPrivateUnshared) {
-    if (collaboration.isConnected.value || collaboration.isConnecting.value) {
-      collaboration.disconnect()
-    }
-  } else {
-    if (!collaboration.isConnected.value && !collaboration.isConnecting.value) {
-      collaboration.connect()
-    }
+  if (hasLoadedDocument.value && !collaboration.isConnected.value && !collaboration.isConnecting.value) {
+    collaboration.connect()
   }
 })
 
@@ -1452,12 +1766,13 @@ watch(
     if (isLeavingDocumentPage.value) return
     if (!supportsCollaboration.value) return
     if (!synced || viewingVersion.value) return
+    hasSyncedCollaboration.value = true
 
     if (isOwnerHttpFallbackMode.value) {
       const localContent = editorContent.value
       collaboration.setTextContent(localContent)
       docState.value.content = localContent
-      if (localContent !== savedState.value.content && !isCollaborationReadonlyScope.value) {
+      if (!hosted && localContent !== savedState.value.content && !isCollaborationReadonlyScope.value) {
         needsCollaborationPreviewSnapshotFlush.value = true
       }
       collaborationFallbackMode.value = 'none'
@@ -1477,7 +1792,7 @@ watch(
     }
     editorContent.value = syncedContent
     docState.value.content = syncedContent
-    if (syncedContent !== savedState.value.content && !isCollaborationReadonlyScope.value) {
+    if (!hosted && syncedContent !== savedState.value.content && !isCollaborationReadonlyScope.value) {
       needsCollaborationPreviewSnapshotFlush.value = true
     }
   }
@@ -1539,6 +1854,13 @@ watch(
     }
 
     if (!collaboration.synced.value && !collaborationFallbackLoaded.value) {
+      // Preserve the local Y.Doc on a Host disconnect; HTTP content may be stale.
+      if (hosted) {
+        // Initial admission may fail before the editor receives its content.
+        // A later disconnect must leave local Y.Doc edits intact for recovery.
+        if (!hasSyncedCollaboration.value) editorContent.value = docState.value.content
+        return
+      }
       collaborationFallbackMode.value = isDocumentOwner.value ? 'owner-edit' : 'viewer-readonly'
       collaborationFallbackLoaded.value = true
       await fetchDocument({ forceContent: true })
@@ -1608,7 +1930,9 @@ onBeforeUnmount(async () => {
           date: deletedDate
         }))
       }
-      await $fetch(`/api/documents/${documentId.value}`, { method: 'DELETE' })
+      const attemptKey = documentAttempt.keyFor(cacheKey(`document-delete:${documentId.value}`), { documentId: documentId.value })
+      await $fetch(moduleUrl(`/api/documents/${documentId.value}`), { method: 'DELETE', headers: { 'Idempotency-Key': attemptKey } })
+      documentAttempt.complete(attemptKey)
       console.log('已自动删除未编辑的空白工作日志')
     } catch (e) {
       if (import.meta.client) {
@@ -1626,7 +1950,43 @@ onBeforeUnmount(async () => {
 </script>
 
 <template>
-  <UDashboardPanel grow>
+  <UDashboardPanel v-if="documentLoadFailure" grow>
+    <template #body>
+      <CommonEmptyState
+        :icon="documentLoadFailure === 'forbidden' ? 'i-lucide-lock-keyhole' : 'i-lucide-file-warning'"
+        :title="documentLoadFailure === 'forbidden' ? '无权限查看此文档' : '文档暂时不可用'"
+        :description="documentLoadFailureMessage || (documentLoadFailure === 'forbidden' ? '你没有查看此文档正文的权限，请返回文档列表' : '文档加载失败，请稍后重试')"
+      />
+      <div class="flex justify-center gap-2">
+        <UButton
+          label="返回"
+          icon="i-lucide-arrow-left"
+          color="neutral"
+          variant="outline"
+          @click="goBack"
+        />
+        <UButton
+          v-if="documentLoadFailure === 'unavailable'"
+          label="重试"
+          icon="i-lucide-refresh-cw"
+          :loading="loading"
+          @click="fetchDocument()"
+        />
+      </div>
+    </template>
+  </UDashboardPanel>
+  <UDashboardPanel v-else-if="initialLoadPending" grow>
+    <template #body>
+      <div class="space-y-3 p-2">
+        <USkeleton class="h-8 w-1/3" />
+        <USkeleton class="h-64 w-full" />
+        <p v-if="slowLoadHint" class="text-sm text-muted" data-testid="document-slow-load-hint">
+          正在加载文档正文…
+        </p>
+      </div>
+    </template>
+  </UDashboardPanel>
+  <UDashboardPanel v-else grow>
     <!-- 顶部工具栏 -->
     <div class="flex items-center gap-1.5 px-4 py-2 border-b border-default bg-default">
       <div class="flex items-center gap-2 min-w-0 flex-1">
@@ -1636,12 +1996,12 @@ onBeforeUnmount(async () => {
             type="text"
             class="flex-1 min-w-0 text-base sm:text-lg font-semibold bg-transparent border-none outline-none text-highlighted placeholder:text-muted focus:ring-0 px-0 disabled:opacity-50 disabled:cursor-not-allowed"
             placeholder="输入文档标题..."
-            :disabled="isEditingDisabled"
+            :disabled="isEditingDisabled || (hosted && !isPrivateUnsharedDoc)"
             @input="handleTitleChange"
           >
           <div
             v-if="docState.publish_info || publishReviewRecord"
-            class="flex items-center gap-1.5 text-xs text-purple-600 dark:text-purple-400"
+            class="flex items-center gap-1.5 text-xs text-info"
           >
             <UIcon name="i-lucide-archive" class="w-3 h-3" />
             <span>{{ getPublishedInfoText(docState.publish_info, publishReviewRecord) }}</span>
@@ -1651,13 +2011,13 @@ onBeforeUnmount(async () => {
 
       <div class="flex items-center gap-1.5">
         <!-- 保存状态 -->
-        <div class="hidden lg:flex items-center gap-1.5 text-sm text-gray-500 dark:text-gray-400 mr-1">
-          <template v-if="docState.readonly_flag || isEditingLockedByCollaborationFallback">
-            <UIcon name="i-lucide-lock" class="w-4 h-4 text-gray-500" />
-            <span class="hidden xl:inline">只读</span>
+        <div class="hidden lg:flex items-center gap-1.5 text-sm text-muted mr-1">
+          <template v-if="docState.readonly_flag || isEditingLockedByCollaborationFallback || (hosted && !isPrivateUnsharedDoc && !isRealtimeCollaboration)">
+            <UIcon name="i-lucide-lock" class="w-4 h-4 text-muted" />
+            <span class="hidden xl:inline">{{ hosted && !isPrivateUnsharedDoc && !isDepartmentScene && !docState.readonly_flag && !isStaticReadonlyDoc ? '协作未连接' : '只读' }}</span>
           </template>
           <template v-else-if="isRealtimeCollaboration">
-            <UIcon name="i-lucide-cloud" class="w-4 h-4 text-green-500" />
+            <UIcon name="i-lucide-cloud" class="w-4 h-4 text-success" />
             <span class="hidden xl:inline">自动同步保存</span>
           </template>
           <template v-else-if="saving">
@@ -1665,11 +2025,11 @@ onBeforeUnmount(async () => {
             <span class="hidden xl:inline">保存中...</span>
           </template>
           <template v-else-if="hasUnsavedChanges">
-            <UIcon name="i-lucide-circle" class="w-2 h-2 text-yellow-500" />
+            <UIcon name="i-lucide-circle" class="w-2 h-2 text-warning" />
             <span class="hidden xl:inline">未保存</span>
           </template>
           <template v-else>
-            <UIcon name="i-lucide-check" class="w-4 h-4 text-green-500" />
+            <UIcon name="i-lucide-check" class="w-4 h-4 text-success" />
             <span class="hidden xl:inline">已保存 {{ formatSaveTime(lastSaved) }}</span>
           </template>
         </div>
@@ -1699,7 +2059,7 @@ onBeforeUnmount(async () => {
 
         <!-- AI 助手入口 -->
         <UButton
-          v-if="!isEditingDisabled"
+          v-if="!hosted && !isEditingDisabled"
           icon="i-lucide-sparkles"
           variant="ghost"
           size="xs"
@@ -1720,10 +2080,10 @@ onBeforeUnmount(async () => {
 
         <!-- 操作按钮（协同模式下内容自动同步，无需手动保存；源码模式始终显示） -->
         <UButton
-          v-if="!isEditingDisabled && (!isRealtimeCollaboration || viewMode === 'source')"
+          v-if="!isEditingDisabled && !(hosted && !isPrivateUnsharedDoc) && (!isRealtimeCollaboration || viewMode === 'source')"
           icon="i-lucide-save"
           :loading="saving"
-          :disabled="editorContent === savedState.content"
+          :disabled="!hasPendingTitleChange && editorContent === savedState.content"
           size="xs"
           @click="handleManualSave"
         >
@@ -1732,8 +2092,12 @@ onBeforeUnmount(async () => {
 
         <UDropdownMenu
           :items="[
-            { label: '下载', icon: 'i-lucide-download', onSelect: handleExportMarkdown },
-            { label: '导出 PDF', icon: 'i-lucide-printer', onSelect: handleExportPdf },
+            ...(canExportDepartmentBody
+              ? [
+                { label: '下载', icon: 'i-lucide-download', onSelect: handleExportMarkdown },
+                { label: '导出 PDF', icon: 'i-lucide-printer', onSelect: handleExportPdf }
+              ]
+              : [{ label: '下载（缺少部门文档导出权限）', icon: 'i-lucide-download', disabled: true }]),
             ...(canManageShares ? [{ label: '共享', icon: 'i-lucide-share-2', onSelect: () => { showSharePanel = !showSharePanel } }] : []),
             { label: '历史版本', icon: 'i-lucide-history', onSelect: toggleVersionHistory }
           ]"
@@ -1767,7 +2131,17 @@ onBeforeUnmount(async () => {
             当前账号仅可查看
           </span>
           <UButton
-            v-if="!isRealtimeCollaboration && !isCollaborationConnecting && !docState.readonly_flag"
+            v-if="hosted && !isDepartmentScene && !shareMembersLoaded && isDocumentOwner && !docState.readonly_flag"
+            icon="i-lucide-refresh-cw"
+            color="neutral"
+            variant="ghost"
+            size="xs"
+            @click="fetchShareMembers()"
+          >
+            重试核验
+          </UButton>
+          <UButton
+            v-if="shouldLoadFromCollaboration && !isRealtimeCollaboration && !isCollaborationConnecting && !docState.readonly_flag && !isDepartmentCollaborationScene"
             icon="i-lucide-refresh-cw"
             color="neutral"
             variant="ghost"
@@ -1775,6 +2149,19 @@ onBeforeUnmount(async () => {
             @click="collaboration.connect()"
           >
             重连协同
+          </UButton>
+          <UButton
+            v-if="departmentView.entry !== 'hidden'"
+            :icon="departmentView.entry === 'retry' ? 'i-lucide-refresh-cw' : 'i-lucide-users'"
+            color="primary"
+            :variant="departmentView.entry === 'start' ? 'solid' : 'soft'"
+            size="xs"
+            :loading="departmentView.entry === 'busy'"
+            :disabled="departmentView.entry === 'busy'"
+            data-test="department-collaboration-entry"
+            @click="startDepartmentCollaboration"
+          >
+            {{ departmentEntryLabel }}
           </UButton>
         </div>
 
@@ -1787,7 +2174,7 @@ onBeforeUnmount(async () => {
             已共享给 {{ shareMembers.length }} 人
           </span>
           <template v-if="onlineCollaborationMembers.length > 0">
-            <span v-if="documentSourceDisplayName || shareMembers.length > 0" class="text-gray-300 dark:text-gray-600">|</span>
+            <span v-if="documentSourceDisplayName || shareMembers.length > 0" class="text-dimmed">|</span>
             <div class="flex items-center gap-3">
               <span class="text-xs text-muted whitespace-nowrap">在线成员</span>
               <div
@@ -1796,7 +2183,7 @@ onBeforeUnmount(async () => {
                 class="flex items-center gap-1.5"
                 :title="`${member.uid === authUserId ? '我' : member.name} · 在线`"
               >
-                <span class="inline-block h-2 w-2 rounded-full shrink-0 bg-green-500" />
+                <span class="inline-block h-2 w-2 rounded-full shrink-0 bg-success/10" />
                 <span
                   class="text-xs whitespace-nowrap"
                   :class="member.uid === authUserId ? 'text-primary font-medium' : 'text-default'"
@@ -1808,6 +2195,20 @@ onBeforeUnmount(async () => {
           </template>
         </div>
       </div>
+    </div>
+
+    <div
+      v-if="!loading && !viewingVersion && departmentView.notice"
+      class="border-b border-default/60 px-4 py-2"
+    >
+      <UAlert
+        :color="departmentView.notice.tone"
+        variant="soft"
+        icon="i-lucide-triangle-alert"
+        :title="departmentView.notice.title"
+        :description="departmentView.notice.description"
+        data-test="department-collaboration-notice"
+      />
     </div>
 
     <!-- 版本预览提示栏 -->
@@ -1841,7 +2242,7 @@ onBeforeUnmount(async () => {
     >
       <div class="flex items-center gap-2 text-sm text-warning-700 dark:text-warning-300">
         <UIcon name="i-lucide-triangle-alert" class="w-4 h-4" />
-        <span>源码模式下保存会直接覆盖文档内容，可能影响其他正在协同编辑的用户</span>
+        <span>{{ hosted ? '源码模式修改会通过协作通道同步' : '源码模式下保存会直接覆盖文档内容，可能影响其他正在协同编辑的用户' }}</span>
       </div>
       <UButton
         size="xs"
@@ -1854,10 +2255,15 @@ onBeforeUnmount(async () => {
     </div>
 
     <!-- 编辑器主体 -->
-    <main class="flex min-h-0 w-full flex-1 overflow-hidden bg-gray-50 dark:bg-gray-950">
+    <main class="flex min-h-0 w-full flex-1 overflow-hidden bg-default">
       <!-- 加载中 -->
       <div v-if="loading" class="flex min-h-0 flex-1 items-center justify-center">
-        <UIcon name="i-lucide-loader-2" class="w-8 h-8 animate-spin text-primary" />
+        <div class="flex flex-col items-center gap-2">
+          <UIcon name="i-lucide-loader-2" class="w-8 h-8 animate-spin text-primary" />
+          <p v-if="slowLoadHint" class="text-sm text-muted">
+            正在加载文档正文…
+          </p>
+        </div>
       </div>
 
       <!-- 编辑器区域 -->
@@ -1875,6 +2281,7 @@ onBeforeUnmount(async () => {
             :document-id="documentId"
             :versions="versions"
             :versions-loading="versionsLoading"
+            :versions-error="versionsError"
             :show-version-history="showVersionHistory"
             :show-share-panel="showSharePanel"
             :doc-type="docState.doc_type"
@@ -1885,7 +2292,10 @@ onBeforeUnmount(async () => {
             :allow-share="canViewShares"
             :can-manage-shares="canManageShares"
             :active-version-num="viewingVersion?.versionNum ?? null"
+            :version-history-read-only="historyRequests.readOnly"
             :ai-abstract="docState.ai_abstract"
+            :ai-enabled="!hosted"
+            :cloud-clipboard-enabled="!hosted"
             :collaboration-doc="collaboration.getYDoc()"
             :collaboration-awareness="collaboration.getAwareness() || null"
             :collaboration-enabled="collaborationEditorEnabled"

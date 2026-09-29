@@ -1,0 +1,154 @@
+{
+  "sourceReviewHash": "5404dd29e3374a66cb7180670a2850ade0e61414ae250464775e58c16c5eda97",
+  "sourceArtifactSha256": "5aca7c7ff2b60eae1b8b72c442e951dace7de6245d5f07b87660522222e2e84b",
+  "candidateOnly": true,
+  "targetVerified": false,
+  "installed": false,
+  "domains": {
+    "aims": [
+      "aims_project_members",
+      "aims_project_products",
+      "aims_projects",
+      "company_weekly_summaries",
+      "company_weekly_summary_items",
+      "company_weekly_summary_versions",
+      "product_activity_logs",
+      "product_catalog_control",
+      "product_command_receipts",
+      "product_component_sources",
+      "product_components",
+      "product_features",
+      "product_feedback_bindings",
+      "product_line_workspaces",
+      "product_members",
+      "product_planning_cycle_items",
+      "product_planning_cycles",
+      "product_planning_dependencies",
+      "product_planning_item_requests",
+      "product_planning_items",
+      "product_release_events",
+      "product_release_records",
+      "product_request_delivery_links",
+      "product_request_features",
+      "product_request_sources",
+      "product_requests",
+      "product_version_acceptances",
+      "product_version_features",
+      "product_version_plan_confirmations",
+      "product_version_plan_scopes",
+      "product_version_plans",
+      "product_versions",
+      "product_workspaces",
+      "project_documents",
+      "project_management_fact_snapshots",
+      "project_weekly_report_versions",
+      "requirement_contents",
+      "requirement_item_contents",
+      "requirement_items",
+      "time_entries",
+      "time_entry_review_events",
+      "weekly_report_obligations",
+      "weekly_reporting_periods",
+      "work_items"
+    ],
+    "assets": [
+      "asset_category_groups",
+      "asset_category_items",
+      "asset_delivery_products",
+      "asset_delivery_views",
+      "asset_documents",
+      "asset_events",
+      "asset_items",
+      "product_asset_bases",
+      "product_asset_resources",
+      "product_assets",
+      "technology_bases"
+    ]
+  },
+  "sources": [
+    {
+      "path": "data-runtime/internal/enterpriseplanning/catalog.go",
+      "sha256": "e208c3358be76584ad3a60d2afac987debd9e7bbe201358f597ca8bd06a60e8e"
+    },
+    {
+      "path": "data-runtime/internal/enterpriseplanning/component_reads.go",
+      "sha256": "7b2ab46cd3ab1ee861edb546bdac8075cb0fdd4c999e618b17454e6f916a8954"
+    },
+    {
+      "path": "data-runtime/internal/enterpriseplanning/components.go",
+      "sha256": "68b6f43b41e53877cea35a6bc52c5140c27840df78806b93ca6115c2b84f1976"
+    },
+    {
+      "path": "data-runtime/internal/enterpriseplanning/features.go",
+      "sha256": "f07e34b701578d3e27e3f6a2905f6422830119e0b0d8393827a6099c18080b69"
+    },
+    {
+      "path": "data-runtime/internal/enterpriseplanning/handoff.go",
+      "sha256": "63de47004faaf13dbbe76acb85fc268b276c15fbf95c0b655e6cfaf3c692b88c"
+    },
+    {
+      "path": "data-runtime/internal/enterpriseplanning/handoff_reads.go",
+      "sha256": "a493983716919d3ced6ab201d5a38f2e89d5c0bf366f2534ad52f14858bab30f"
+    },
+    {
+      "path": "data-runtime/internal/enterpriseplanning/onboarding.go",
+      "sha256": "1e7385cca1e2b6f51f6da50d0d66a1544897a5c9cacbe4e8e773e86eaf32ad5b"
+    },
+    {
+      "path": "data-runtime/internal/enterpriseplanning/onboarding_candidates.go",
+      "sha256": "7ab205cc4811757d961e1356afaf5362a3b2c5c6b29e592d9553281a84759c6b"
+    },
+    {
+      "path": "data-runtime/internal/enterpriseplanning/planning.go",
+      "sha256": "bfbea10784c22049635bbea84c71f60b414648db9d8e85a8692e354e7c530931"
+    },
+    {
+      "path": "data-runtime/internal/enterpriseplanning/request_actions.go",
+      "sha256": "55eaf9c64d9920df0b9f792fad5bea58824257ecbd258343d5fcbc08f5c9543c"
+    },
+    {
+      "path": "data-runtime/internal/enterpriseplanning/requests.go",
+      "sha256": "f601aeade8f8c729ad9ee6193538662819c226000d2264fbfc01ccf64ae4f26a"
+    },
+    {
+      "path": "data-runtime/internal/enterpriseplanning/version_history.go",
+      "sha256": "9327014f7486933e5c38817f6840affcd48a5685e8e29a4b9cfa30963847ec5b"
+    },
+    {
+      "path": "data-runtime/internal/enterpriseplanning/version_reads.go",
+      "sha256": "da6e29c2b247b5f3f570604c55e32128bb5875fc020490f7a34144283a6b195d"
+    },
+    {
+      "path": "data-runtime/internal/enterpriseplanning/versions.go",
+      "sha256": "ba6081f648ceddae1d7b1dd0d1b2d1b64917398126198a9a4b955b221c26c5ab"
+    },
+    {
+      "path": "data-runtime/internal/enterpriseplanning/view_requirements.go",
+      "sha256": "51cf0d1b05b1541069bc8f8636c8f195ecd9cac3c22dad7a13b23ad3c73aa437"
+    },
+    {
+      "path": "data-runtime/internal/enterpriseplanning/workspace.go",
+      "sha256": "ce1f3bd807bf82ce26dc5115a77b320ef4f538dea2d1b317fa6832be01a25bd1"
+    },
+    {
+      "path": "data-runtime/internal/enterpriseassets/products.go",
+      "sha256": "9b63fd660c36180105cb0b4e1fa5df613d56128dfbc543510385b8fcade7b7b3"
+    },
+    {
+      "path": "data-runtime/internal/enterprisescheduler/completion.go",
+      "sha256": "0d61e9f752ec720a50569cc277ab881540540f72baa88ac59c57fcb18dc01a27"
+    },
+    {
+      "path": "data-runtime/internal/enterprisescheduler/notification_wire.go",
+      "sha256": "5c5c762cb19e43907de92c81b83cdc67593a042e8c32679a7fe24b8648bf25bd"
+    },
+    {
+      "path": "data-runtime/internal/enterprisescheduler/notifications.go",
+      "sha256": "57a3bbc91bd37f43ed107aaf442521c8541b590b6b804a2616d8441eb350dc2f"
+    },
+    {
+      "path": "data-runtime/internal/enterprisescheduler/service.go",
+      "sha256": "d5e8cc868f09643b04274b96897a45965d68384176023bdc3f48fa32a00111af"
+    }
+  ]
+}

@@ -1,7 +1,13 @@
 <script setup lang="ts">
-import type { ProductLineGroup, ProductTreeItem, ProductTreePage } from '~/types/productTree'
+import ProductsCatalogRefresh from '../../components/products/CatalogRefresh.vue'
+import ProductsOnboardForm from '../../components/products/OnboardForm.vue'
+import ProductsLineOnboardForm from '../../components/products/LineOnboardForm.vue'
+import { useAimsModule } from '../../../layer/useAimsModule'
+import type { ProductLineGroup, ProductTreeItem, ProductTreePage } from '../../types/productTree'
 
-definePageMeta({ layoutHeader: true, layoutHeaderTitle: '产品中心', layoutHeaderProjectSwitcher: false })
+const { moduleUrl, cacheKey, hosted } = useAimsModule()
+
+definePageMeta({ layoutHeader: true, layoutHeaderTitle: '产品中心', layoutHeaderProjectSwitcher: false, hostContentInset: false })
 const { search, debounced, flush, reset: resetSearch } = useDebouncedSearch()
 const productLine = ref('')
 const productLineSelection = computed({
@@ -15,54 +21,51 @@ const { resetFilters: resetListFilters } = useListPage({
 })
 flush()
 
-// 列表不分页：按接口上限逐页取完整数据，页数封顶避免无界请求。
-const FETCH_PAGE_SIZE = 100
-const MAX_FETCH_PAGES = 20
-interface LoadedPage<T> { items: T[], total: number, truncated: boolean, page: ProductTreePage | null }
-async function fetchAll<T>(pick: (page: ProductTreePage) => T[] | undefined, extra: Record<string, string>): Promise<LoadedPage<T>> {
-  const items: T[] = []
-  let total = 0
-  let last: ProductTreePage | null = null
-  for (let page = 1; page <= MAX_FETCH_PAGES; page++) {
-    const response = await $fetch<{ code: number, data: ProductTreePage }>('/api/v1/products', {
-      query: { tree: 'true', page: String(page), pageSize: String(FETCH_PAGE_SIZE), ...extra }
-    })
-    const batch = response?.code === 0 ? pick(response.data) : undefined
-    if (!Array.isArray(batch) || !Number.isSafeInteger(response.data?.total) || response.data.total < 0) throw createError({ message: '产品列表响应不完整' })
-    items.push(...batch)
-    total = response.data.total
-    last = response.data
-    if (!batch.length || items.length >= total) break
-  }
-  return { items, total, truncated: items.length < total, page: last }
-}
+const ROOT_PAGE_SIZE = 20
+const CHILD_PAGE_SIZE = 20
+const CHOICE_PAGE_SIZE = 100
+const rootPage = ref(1)
+const choicePage = ref(1)
+const choiceSearch = ref('')
+const debouncedChoiceSearch = ref('')
+let choiceSearchTimer: ReturnType<typeof setTimeout> | undefined
 const filterQuery = computed(() => ({
   ...(debounced.value ? { keyword: debounced.value } : {}),
   ...(workspaceStatus.value === 'all' ? {} : { status: workspaceStatus.value })
 }))
-const { data, status, error, refresh } = await useAsyncData(
-  'product-line-tree',
-  () => fetchAll(page => page.groups, { ...filterQuery.value, ...(productLine.value ? { productLine: productLine.value } : {}) }),
-  { server: false, watch: [debounced, productLine, workspaceStatus] }
-)
-// Filter options use the same scoped list, without the current keyword/status filters.
+interface LoadedPage<T> { items: T[], total: number, page: ProductTreePage }
+async function fetchPage<T>(pick: (page: ProductTreePage) => T[] | undefined, page: number, pageSize: number, extra: Record<string, string>): Promise<LoadedPage<T>> {
+  const response = await $fetch<{ code: number, data: ProductTreePage }>(moduleUrl('/api/v1/products'), {
+    query: { tree: 'true', page: String(page), pageSize: String(pageSize), ...extra }, retry: 0
+  })
+  const items = response?.code === 0 ? pick(response.data) : undefined
+  if (!Array.isArray(items) || !Number.isSafeInteger(response.data?.total) || response.data.total < 0 || response.data.page !== page || response.data.pageSize !== pageSize || items.length > pageSize) {
+    throw createError({ message: '产品列表响应不完整' })
+  }
+  return { items, total: response.data.total, page: response.data }
+}
 const { data: lineChoices, status: lineChoiceStatus, error: lineChoiceError, refresh: refreshLineChoices } = await useAsyncData(
-  'product-line-filter-options',
-  () => fetchAll(page => page.groups, {}),
-  { server: false }
+  cacheKey('product-line-filter-options'),
+  () => fetchPage(page => page.groups, choicePage.value, CHOICE_PAGE_SIZE, debouncedChoiceSearch.value ? { keyword: debouncedChoiceSearch.value } : {}),
+  { server: false, watch: [choicePage, debouncedChoiceSearch] }
+)
+const { data, status, error, refresh } = await useAsyncData(
+  cacheKey('product-line-tree'),
+  () => fetchPage(page => page.groups, rootPage.value, ROOT_PAGE_SIZE, { ...filterQuery.value, ...(productLine.value ? { productLine: productLine.value } : {}) }),
+  { server: false, watch: [debounced, productLine, workspaceStatus, rootPage] }
 )
 const lineOptions = computed(() => {
   const options = (lineChoices.value?.items || []).filter(line => line.line_code).map(line => ({
     value: `line:${line.line_code}`,
     label: line.label && line.label !== line.line_code ? `${line.label}（${line.line_code}）` : line.line_code
   }))
-  // Keep a deep-linked selection visible even if its line is absent from this directory.
   if (productLine.value && !options.some(option => option.value === `line:${productLine.value}`)) options.unshift({ value: `line:${productLine.value}`, label: productLine.value })
   return [{ value: 'all', label: '全部产品线' }, ...options]
 })
 const lineChoiceAlert = useApiErrorAlert(lineChoiceError, { fallbackTitle: '产品线选项加载失败，请刷新重试' })
-const { data: globalPermissions, status: permissionStatus, error: permissionError, refresh: refreshPermissions } = await useFetch('/api/v1/product-permissions', {
-  server: false, transform: (response: { code: number, data: { onboard: boolean } }) => response.code === 0 ? response.data : null
+const { data: globalPermissions, status: permissionStatus, error: permissionError, refresh: refreshPermissions } = await useFetch(moduleUrl('/api/v1/product-permissions'), {
+  key: cacheKey('product-permissions'), server: false, retry: 0,
+  transform: (response: { code: number, data: { onboard: boolean } }) => response.code === 0 ? response.data : null
 })
 const permissionAlert = useApiErrorAlert(permissionError, { fallbackTitle: '产品管理权限加载失败' })
 const errorAlert = useApiErrorAlert(error, { fallbackTitle: '产品列表加载失败' })
@@ -72,9 +75,11 @@ const catalog = computed(() => data.value?.page || null)
 
 const onboardForm = useTemplateRef('onboardForm')
 const lineOnboardForm = useTemplateRef('lineOnboardForm')
-interface LineChildren { status: 'pending' | 'success' | 'error', items: ProductTreeItem[], total: number, truncated: boolean, message: string }
+interface LineChildren { status: 'pending' | 'success' | 'error', items: ProductTreeItem[], total: number, page: number, message: string }
 const expanded = ref<Set<string>>(new Set())
 const children = ref<Record<string, LineChildren>>({})
+const childRequests = new Map<string, number>()
+let childRequestSequence = 0
 function lineKey(line: ProductLineGroup) {
   return line.line_code || '__unclassified'
 }
@@ -84,22 +89,29 @@ function setChildren(key: string, state: LineChildren) {
 function resetTreeState() {
   expanded.value = new Set()
   children.value = {}
+  childRequests.clear()
 }
-async function loadChildren(line: ProductLineGroup) {
+async function loadChildren(line: ProductLineGroup, page = 1) {
   const key = lineKey(line)
-  setChildren(key, { status: 'pending', items: [], total: 0, truncated: false, message: '' })
+  const request = ++childRequestSequence
+  childRequests.set(key, request)
+  const signature = JSON.stringify(filterQuery.value)
+  setChildren(key, { status: 'pending', items: [], total: 0, page, message: '' })
   try {
-    const result = await fetchAll(page => page.items, { childLine: line.line_code, ...filterQuery.value })
-    setChildren(key, { status: 'success', items: result.items, total: result.total, truncated: result.truncated, message: '' })
+    const result = await fetchPage(response => response.items, page, CHILD_PAGE_SIZE, { childLine: line.line_code, ...filterQuery.value })
+    if (!expanded.value.has(key) || childRequests.get(key) !== request || JSON.stringify(filterQuery.value) !== signature || children.value[key]?.page !== page) return
+    setChildren(key, { status: 'success', items: result.items, total: result.total, page, message: '' })
   } catch (cause) {
     const message = (cause as { data?: { message?: string } })?.data?.message || (cause as Error)?.message || '产品线下产品加载失败'
-    setChildren(key, { status: 'error', items: [], total: 0, truncated: false, message })
+    if (expanded.value.has(key) && childRequests.get(key) === request && JSON.stringify(filterQuery.value) === signature && children.value[key]?.page === page) setChildren(key, { status: 'error', items: [], total: 0, page, message })
   }
 }
 function toggleLine(line: ProductLineGroup) {
   const key = lineKey(line)
   if (expanded.value.has(key)) {
     expanded.value.delete(key)
+    childRequests.delete(key)
+    children.value = Object.fromEntries(Object.entries(children.value).filter(([entry]) => entry !== key))
     return
   }
   expanded.value.add(key)
@@ -110,11 +122,54 @@ async function refreshTree() {
   resetTreeState()
   await Promise.all([refresh(), refreshPermissions(), refreshLineChoices()])
 }
-watch(filterQuery, resetTreeState)
-watch(productLine, resetTreeState)
+// A recovered identity dependency does not itself retrigger this page's data.
+// Retry only failed read blocks, at most once per minute while visible.
+let lastRecoveryAt = 0
+let recovering = false
+async function recoverFailedReads() {
+  if (recovering || document.visibilityState !== 'visible' || Date.now() - lastRecoveryAt < 60_000) return
+  const reads = [
+    ...(error.value && status.value !== 'pending' ? [refresh()] : []),
+    ...(lineChoiceError.value && lineChoiceStatus.value !== 'pending' ? [refreshLineChoices()] : []),
+    ...(permissionError.value && permissionStatus.value !== 'pending' ? [refreshPermissions()] : [])
+  ]
+  if (!reads.length) return
+  lastRecoveryAt = Date.now()
+  recovering = true
+  try {
+    await Promise.allSettled(reads)
+  } finally {
+    recovering = false
+  }
+}
+watch([filterQuery, productLine], () => {
+  rootPage.value = 1
+  resetTreeState()
+})
+watch(choiceSearch, (value) => {
+  if (choiceSearchTimer) clearTimeout(choiceSearchTimer)
+  choiceSearchTimer = setTimeout(() => {
+    debouncedChoiceSearch.value = value
+    choicePage.value = 1
+  }, 300)
+})
 const { setRefresh, clearRefresh } = usePageActions()
-onMounted(() => setRefresh(refreshTree))
-onBeforeUnmount(clearRefresh)
+let recoveryTimer: ReturnType<typeof setInterval> | undefined
+onMounted(() => {
+  setRefresh(refreshTree)
+  window.addEventListener('focus', recoverFailedReads)
+  window.addEventListener('online', recoverFailedReads)
+  recoveryTimer = setInterval(() => {
+    void recoverFailedReads()
+  }, 60_000)
+})
+onBeforeUnmount(() => {
+  clearRefresh()
+  window.removeEventListener('focus', recoverFailedReads)
+  window.removeEventListener('online', recoverFailedReads)
+  if (recoveryTimer) clearInterval(recoveryTimer)
+  if (choiceSearchTimer) clearTimeout(choiceSearchTimer)
+})
 
 const statusOptions = [{ label: '全部状态', value: 'all' }, { label: '未启用', value: 'not_enabled' }, { label: '已启用', value: 'active' }, { label: '已归档', value: 'archived' }]
 const statusMeta: Record<string, { label: string, color: 'success' | 'neutral' }> = {
@@ -123,7 +178,7 @@ const statusMeta: Record<string, { label: string, color: 'success' | 'neutral' }
   not_enabled: { label: '未启用', color: 'neutral' }
 }
 function productTarget(item: ProductTreeItem) {
-  return `/products/${encodeURIComponent(item.management_product_code || item.product_code)}${item.component_id ? '/components' : ''}`
+  return moduleUrl(`/products/${encodeURIComponent(item.management_product_code || item.product_code)}${item.component_id ? '/components' : ''}`)
 }
 function resetFilters() {
   resetSearch()
@@ -132,8 +187,21 @@ function resetFilters() {
 </script>
 
 <template>
-  <div class="min-h-0 min-w-0 flex-1 space-y-4 overflow-y-auto p-4 sm:p-6">
-    <div class="flex flex-wrap items-center justify-between gap-3">
+  <div
+    class="min-h-0 min-w-0 flex-1 space-y-4 overflow-y-auto p-4 sm:p-6"
+    :class="{ 'hosted-products-content': hosted }"
+  >
+    <ContentPageHeader
+      :hosted="hosted"
+      title="产品管理空间"
+      description="按产品线展开查看产品，并管理产品规划。"
+      breadcrumb="产品 / 产品规划"
+    >
+      <template #actions>
+        <ProductsCatalogRefresh v-if="!hosted && permissionStatus === 'success' && globalPermissions?.onboard === true" @activated="refreshTree()" />
+      </template>
+    </ContentPageHeader>
+    <div v-if="!hosted" class="flex flex-wrap items-center justify-between gap-3">
       <p class="text-sm text-muted">
         按产品线展开查看产品。整条产品线尚未启用管理时，可统一管理，下属产品作为功能模块。
       </p>
@@ -164,11 +232,24 @@ function resetFilters() {
           :items="lineOptions"
           value-key="value"
           :loading="lineChoiceStatus === 'pending'"
-          :search-input="{ placeholder: '搜索产品线名称或编码' }"
+          :search-input="false"
           placeholder="全部产品线"
           class="w-full"
         />
       </UFormField>
+      <UFormField label="查找产品线" name="choiceSearch" class="min-w-0 basis-40">
+        <UInput v-model="choiceSearch" placeholder="名称或编码" class="w-full" />
+      </UFormField>
+      <div v-if="lineChoices && lineChoices.total > CHOICE_PAGE_SIZE" class="flex items-center gap-2 text-xs text-muted">
+        <span>候选共 {{ lineChoices.total }} 条</span>
+        <UPagination
+          v-model:page="choicePage"
+          :total="lineChoices.total"
+          :items-per-page="CHOICE_PAGE_SIZE"
+          :sibling-count="0"
+          show-edges
+        />
+      </div>
       <UFormField label="管理状态" name="status" class="min-w-0 flex-1 basis-32">
         <USelect v-model="workspaceStatus" :items="statusOptions" class="w-full" />
       </UFormField>
@@ -183,24 +264,15 @@ function resetFilters() {
     </form>
     <UAlert v-if="errorAlert" v-bind="errorAlert" />
     <UAlert v-if="lineChoiceAlert" v-bind="lineChoiceAlert" />
-    <UAlert v-if="lineChoices?.truncated" color="warning" title="产品线选项未全部加载，请刷新重试或使用产品搜索。" />
     <UAlert
-      v-if="ready && !catalog?.catalog_generation"
+      v-if="!hosted && ready && !catalog?.catalog_generation"
       color="info"
       variant="soft"
       icon="i-lucide-info"
       title="产品目录尚未刷新"
       description="已有空间仍可按产品编码查看。请由具备产品接入权限的管理员刷新目录，以显示最新产品名称和产品线。"
     />
-    <UAlert
-      v-if="ready && data?.truncated"
-      color="warning"
-      variant="soft"
-      icon="i-lucide-triangle-alert"
-      title="产品线过多，仅显示部分"
-      :description="`共 ${data?.total || 0} 条产品线，当前只加载了 ${lines.length} 条。请用搜索或产品线筛选缩小范围。`"
-    />
-    <div v-if="ready && catalog?.catalog_updated_at" class="text-xs text-muted">
+    <div v-if="!hosted && ready && catalog?.catalog_updated_at" class="text-xs text-muted">
       产品目录更新于 {{ formatDateTime(catalog.catalog_updated_at) }}
     </div>
 
@@ -282,7 +354,7 @@ function resetFilters() {
               <td class="px-4 py-2.5">
                 <UButton
                   v-if="line.management_product_code"
-                  :to="`/products/${encodeURIComponent(line.management_product_code)}`"
+                  :to="moduleUrl(`/products/${encodeURIComponent(line.management_product_code)}`)"
                   color="neutral"
                   variant="ghost"
                   size="xs"
@@ -388,9 +460,19 @@ function resetFilters() {
                   <span v-else class="text-xs text-muted">未启用</span>
                 </td>
               </tr>
-              <tr v-if="children[lineKey(line)]?.truncated" class="border-b border-default">
-                <td colspan="4" class="px-4 py-3 pl-14 text-xs text-warning">
-                  该产品线共 {{ children[lineKey(line)]?.total }} 个产品，当前只加载了 {{ children[lineKey(line)]?.items.length }} 个，请用搜索缩小范围。
+              <tr v-if="children[lineKey(line)]?.status === 'success' && children[lineKey(line)]!.total > CHILD_PAGE_SIZE" class="border-b border-default">
+                <td colspan="4" class="px-4 py-3 pl-14">
+                  <div class="flex flex-wrap items-center gap-3 text-xs text-muted" @click.stop>
+                    <span>共 {{ children[lineKey(line)]!.total }} 个产品</span>
+                    <UPagination
+                      :page="children[lineKey(line)]!.page"
+                      :total="children[lineKey(line)]!.total"
+                      :items-per-page="CHILD_PAGE_SIZE"
+                      :sibling-count="0"
+                      show-edges
+                      @update:page="loadChildren(line, $event)"
+                    />
+                  </div>
                 </td>
               </tr>
             </template>
@@ -405,8 +487,23 @@ function resetFilters() {
         icon="i-lucide-folder-tree"
       />
     </div>
-    <p v-if="ready" class="text-sm text-muted">
-      共 {{ data?.total || 0 }} 条产品线
-    </p>
+    <div v-if="ready" class="flex flex-wrap items-center justify-between gap-3 text-sm text-muted">
+      <span>共 {{ data?.total || 0 }} 条产品线</span>
+      <UPagination
+        v-model:page="rootPage"
+        :total="data?.total || 0"
+        :items-per-page="ROOT_PAGE_SIZE"
+        :sibling-count="0"
+        show-edges
+      />
+    </div>
   </div>
 </template>
+
+<style scoped>
+@media (min-width: 640px) {
+  .hosted-products-content {
+    padding: 3rem;
+  }
+}
+</style>

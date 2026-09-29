@@ -3,6 +3,7 @@ package productcenter
 import (
 	"context"
 	"database/sql"
+	"github.com/huizhi-yun/data-runtime/internal/integrationoperation"
 )
 
 type ProductDocumentRequestSummary struct {
@@ -22,7 +23,7 @@ type ProductDocumentRequestPage struct {
 
 // Lists Aims request facts only; document metadata, UUIDs and operation details
 // are intentionally absent. Opening or linking still requires current Codocs ACL.
-func ListProductDocumentRequests(ctx context.Context, db *sql.DB, code, uid string, permit AuthorizationPermit, q PlanningPageQuery) (ProductDocumentRequestPage, error) {
+func ListProductDocumentRequests(ctx context.Context, db *sql.DB, outbox integrationoperation.TrustedContext, code, uid string, permit AuthorizationPermit, q PlanningPageQuery) (ProductDocumentRequestPage, error) {
 	out := ProductDocumentRequestPage{ProductCode: code, Items: []ProductDocumentRequestSummary{}, Page: q.Page, PageSize: q.PageSize}
 	if err := ValidatePlanningPageQuery(q); err != nil {
 		return out, err
@@ -36,7 +37,7 @@ func ListProductDocumentRequests(ctx context.Context, db *sql.DB, code, uid stri
 		return out, err
 	}
 	out.WorkspaceRevision = permit.Facts.Revision
-	const from = ` FROM product_document_creation_requests r JOIN integration_operation o ON o.operation_id=r.operation_id AND o.source_app='aims' AND o.target_app='codocs' AND o.operation_code='aims.codocs.product-document.create.v1' AND o.source_biz_type='product_document_request' AND o.source_biz_code=r.biz_id WHERE r.product_code=?`
+	from := outbox.SQL(` FROM product_document_creation_requests r JOIN integration_operation o ON o.operation_id=r.operation_id AND o.source_app='aims' AND o.target_app='codocs' AND o.operation_code='aims.codocs.product-document.create.v1' AND o.source_biz_type='product_document_request' AND o.source_biz_code=r.biz_id WHERE r.product_code=?`)
 	if err = tx.QueryRowContext(ctx, `SELECT COUNT(*)`+from, code).Scan(&out.Total); err != nil {
 		return out, err
 	}

@@ -1,11 +1,14 @@
+import { useCodocsModule } from '../../layer/useCodocsModule'
+
 export function useDocumentDownload() {
+  const { moduleUrl } = useCodocsModule()
   const { resolveCurrentAppUrl } = useAppUrls()
 
   function buildDocumentDownloadUrl(uuid: string) {
     const normalizedUuid = String(uuid || '').trim()
     if (!normalizedUuid) return ''
 
-    return resolveCurrentAppUrl(`/api/documents/${encodeURIComponent(normalizedUuid)}/download`)
+    return resolveCurrentAppUrl(moduleUrl(`/api/documents/${encodeURIComponent(normalizedUuid)}/download`))
   }
 
   function downloadDocument(uuid: string) {

@@ -35,17 +35,24 @@ func (a *Adapter) updateWorkItemDeliverable(ctx context.Context, rawWorkItemID s
 	if err := a.requireProjectMemberOrScopedAdmin(ctx, projectID, uid, query); err != nil {
 		return nil, err
 	}
-	if err := a.requireDeliverableMilestoneCompletionUnlocked(ctx, deliverableID); err != nil {
-		return nil, err
+	if !validDeliverableReceiptIdentity(ctx) {
+		if err := a.requireDeliverableMilestoneCompletionUnlocked(ctx, deliverableID); err != nil {
+			return nil, err
+		}
+		if hasAnyBodyKey(body, "documentUuid", "document_uuid", "documentSource", "document_source") {
+			if err := a.requireNoOpenDeliverableQualityReview(ctx, deliverableID); err != nil {
+				return nil, err
+			}
+		}
+		if firstBodyText(body, "status") == "approved" {
+			if err := a.requireDeliverableQualityBeforeApproval(ctx, deliverableID); err != nil {
+				return nil, err
+			}
+		}
 	}
 
 	sets := make([]string, 0, 12)
 	args := make([]any, 0, 12)
-	if hasAnyBodyKey(body, "documentUuid", "document_uuid", "documentSource", "document_source") {
-		if err := a.requireNoOpenDeliverableQualityReview(ctx, deliverableID); err != nil {
-			return nil, err
-		}
-	}
 	appendNullableBodySet := func(column string, keys ...string) {
 		if !hasAnyBodyKey(body, keys...) {
 			return
@@ -81,11 +88,6 @@ func (a *Adapter) updateWorkItemDeliverable(ctx context.Context, rawWorkItemID s
 			sets = append(sets, "submitted_by = ?", "submitted_at = CURRENT_TIMESTAMP")
 			args = append(args, uid)
 		}
-		if status == "approved" {
-			if err := a.requireDeliverableQualityBeforeApproval(ctx, deliverableID); err != nil {
-				return nil, err
-			}
-		}
 	} else if workItemDeliverableShouldAutoSubmit(body) {
 		sets = append(sets, "status = ?", "submitted_by = ?", "submitted_at = CURRENT_TIMESTAMP")
 		args = append(args, "submitted", uid)
@@ -101,13 +103,62 @@ func (a *Adapter) updateWorkItemDeliverable(ctx context.Context, rawWorkItemID s
 
 	sets = append(sets, "updated_at = CURRENT_TIMESTAMP")
 	args = append(args, deliverableID)
-	result, err := a.DB().ExecContext(ctx, "UPDATE deliverables SET "+strings.Join(sets, ", ")+" WHERE id = ?", args...)
+	tx, receipts, err := a.beginDeliverableWrite(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("update work item deliverable: %w", err)
+		return nil, err
 	}
-	affected, _ := result.RowsAffected()
-	if affected == 0 {
-		return nil, httperror.New(http.StatusNotFound, "deliverable_not_found", "deliverable not found")
+	defer tx.Rollback()
+	var lockedProjectID int64
+	if err := tx.QueryRowContext(ctx, "SELECT id FROM aims_projects WHERE id = ? FOR UPDATE", projectID).Scan(&lockedProjectID); err != nil {
+		return nil, err
+	}
+	if err := requireEnterpriseDeliverableProjectScopeTx(ctx, tx, uid, projectID, false); err != nil {
+		return nil, err
+	}
+	if _, enabled := ctx.Value(enterpriseProjectCommandScopeKey{}).(EnterpriseProjectUpdateIdentity); enabled {
+		var actual int64
+		if err := tx.QueryRowContext(ctx, "SELECT project_id FROM work_items WHERE id=? FOR UPDATE", workItemID).Scan(&actual); err != nil {
+			return nil, err
+		}
+		if actual != projectID {
+			return nil, httperror.New(403, "work_item_project_mismatch", "Work item changed project")
+		}
+	}
+	if err := requireEnterpriseDeliverableOwnerTx(ctx, tx, projectID, deliverableID, workItemID); err != nil {
+		return nil, err
+	}
+	receipt, err := executeEnterpriseDeliverableReceipt(ctx, tx, receipts, "work-item-update", "aims:work-item-deliverables:edit", "work-deliverable-update.v1", "work-item-deliverable", map[string]any{"workItemId": workItemID, "deliverableId": deliverableID, "payload": body}, map[string]any{"workItemId": workItemID, "deliverableId": deliverableID, "updated": true}, func() (map[string]any, string, error) {
+		if err := lockExistingMatterDeliverableWriteTx(ctx, tx, projectID, deliverableID); err != nil {
+			return nil, "", err
+		}
+		if receipts != nil {
+			if err := requireDeliverableMilestoneCompletionUnlockedTx(ctx, tx, deliverableID); err != nil {
+				return nil, "", err
+			}
+		}
+		if receipts != nil && hasAnyBodyKey(body, "documentUuid", "document_uuid", "documentSource", "document_source") {
+			if err := requireNoOpenDeliverableQualityReviewTx(ctx, tx, deliverableID); err != nil {
+				return nil, "", err
+			}
+		}
+		if receipts != nil && status == "approved" {
+			if err := a.requireDeliverableQualityBeforeApproval(context.WithValue(ctx, enterpriseMilestoneTxKey{}, tx), deliverableID); err != nil {
+				return nil, "", err
+			}
+		}
+		_, err := tx.ExecContext(ctx, "UPDATE deliverables SET "+strings.Join(sets, ", ")+" WHERE id = ?", args...)
+		if err != nil {
+			return nil, "", fmt.Errorf("update work item deliverable: %w", err)
+		}
+		// lockExistingMatterDeliverableWriteTx already locked this exact row
+		// and project; zero changed rows means the submitted values were equal.
+		return map[string]any{"workItemId": workItemID, "deliverableId": deliverableID, "updated": true}, deliverableReceiptCode(deliverableID), nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, err
 	}
 
 	deliverables, err := a.executionDeliverables(ctx, strconv.FormatInt(workItemID, 10))
@@ -125,12 +176,17 @@ func (a *Adapter) updateWorkItemDeliverable(ctx context.Context, rawWorkItemID s
 		return nil, httperror.New(http.StatusNotFound, "deliverable_not_found", "deliverable not found")
 	}
 
-	return map[string]any{
+	out := map[string]any{
 		"workItemId":    workItemID,
 		"deliverableId": deliverableID,
 		"updated":       true,
 		"deliverable":   updatedDeliverable,
-	}, nil
+	}
+	if receipts != nil {
+		out["receiptId"] = receipt["receiptId"]
+		out["idempotent"] = receipt["idempotent"]
+	}
+	return out, nil
 }
 
 func (a *Adapter) workItemDeliverableProject(ctx context.Context, rawWorkItemID string, rawDeliverableID string) (int64, int64, int64, error) {

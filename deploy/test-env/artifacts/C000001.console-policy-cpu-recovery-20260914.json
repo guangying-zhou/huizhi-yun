@@ -1,0 +1,76 @@
+{
+  "schemaVersion": "test-console-policy-cpu-recovery.v1",
+  "observedAt": "2026-09-14T18:02:05.012Z",
+  "scope": {
+    "tenantCode": "C000001",
+    "environment": "test",
+    "deploymentCode": "wiztek-test-console",
+    "worker": "hzy-test-console"
+  },
+  "source": {
+    "commits": [
+      "5b5315e6",
+      "9bf4e68f"
+    ],
+    "changes": [
+      "reuse candidate durable policy evidence across CAS retries",
+      "retain bounded 90000ms Platform bundle fetch timeout in reproducible test config"
+    ]
+  },
+  "productionComparison": {
+    "worker": "hzy-console-prod",
+    "activeVersion": "81f79fbb-e90e-4133-b028-e337cf06fb3b",
+    "cacheBackend": "memory",
+    "memoryTtlMs": 30000,
+    "platformTransport": "service binding",
+    "conclusion": "Production does not execute the test Runtime persistent snapshot renewal path."
+  },
+  "testDeployment": {
+    "versionId": "fdcbeddf-6e6f-4322-b92b-1aa80fdb4558",
+    "trafficPercent": 100,
+    "platformBundleFetchTimeoutMs": 90000,
+    "cacheBackend": "runtime"
+  },
+  "manualSync": {
+    "status": 200,
+    "elapsedMs": 41543,
+    "result": {
+      "ok": true,
+      "status": 200,
+      "stage": "console"
+    }
+  },
+  "automaticRenewals": [
+    {
+      "schedulerIssuedAtMs": 1789408730206,
+      "responseStatus": 200,
+      "workerCpuMs": 114,
+      "workerWallMs": 44071,
+      "outcome": "ok"
+    },
+    {
+      "schedulerIssuedAtMs": 1789408855254,
+      "responseStatus": 200,
+      "workerCpuMs": 96,
+      "workerWallMs": 41357,
+      "outcome": "ok"
+    }
+  ],
+  "automaticRenewalIntervalMs": 125048,
+  "persistentReadback": {
+    "syncedAtMs": 1789408855269,
+    "ageMsAtReadback": 69744,
+    "bundleVersion": "pv_test_20260914161219_0014",
+    "sealedEnvelopeBytes": 593533
+  },
+  "validation": {
+    "persistentPolicyBundleTests": 11,
+    "cloudflareConfigTests": 5,
+    "failClosedTtlUnchanged": true,
+    "signatureMacCasRollbackChecksUnchanged": true
+  },
+  "limitations": [
+    "Two successful automatic renewals demonstrate the configured interval and current path; they do not establish an unlimited-duration CPU guarantee.",
+    "No production Worker, account plan, policy TTL, secret, or Runtime configuration was changed."
+  ]
+}

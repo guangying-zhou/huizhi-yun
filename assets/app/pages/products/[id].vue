@@ -1,18 +1,30 @@
 <script setup lang="ts">
-import { productCenterLink } from '~/utils/productCenterLink'
-import type { ApiResponse, ProductAssetItem } from '~/types'
-import { normalizeCustomerDomains, normalizeStringList, normalizeSupportedTerminals } from '~/utils/productAssets'
+import CommonEmptyState from '../../../../foundation/app/components/common/EmptyState.vue'
+import { useAssetsModule } from '../../../layer/useAssetsModule'
+import { useAssetLabels } from '../../composables/useAssetLabels'
+import AssetsProductAssetEditModal from '../../components/assets/ProductAssetEditModal.vue'
+import AssetsProductBaseLinkModal from '../../components/assets/ProductBaseLinkModal.vue'
+import AssetsProductResourceLinkModal from '../../components/assets/ProductResourceLinkModal.vue'
+import AssetsProductDocumentLinkModal from '../../components/assets/ProductDocumentLinkModal.vue'
+
+import { productCenterLink } from '../../utils/productCenterLink'
+import type { ApiResponse, ProductAssetItem } from '../../types'
+import { normalizeCustomerDomains, normalizeStringList, normalizeSupportedTerminals } from '../../utils/productAssets'
+
+const { moduleUrl, cacheKey, hosted } = useAssetsModule()
 
 const { apps, loadApps } = useUserApplications()
 const { embedded } = useApplicationShell()
 const clientOrigin = ref('')
 onMounted(async () => {
   clientOrigin.value = window.location.origin
-  await loadApps()
+  if (!hosted) await loadApps()
 })
-const centerLink = computed(() => clientOrigin.value && product.value?.product_code
-  ? productCenterLink(apps.value, product.value.product_code, clientOrigin.value)
-  : '')
+const centerLink = computed(() => hosted
+  ? '/aims/products'
+  : clientOrigin.value && product.value?.product_code
+    ? productCenterLink(apps.value, product.value.product_code, clientOrigin.value)
+    : '')
 
 interface ProductVersionItem {
   feature_count: number
@@ -33,13 +45,13 @@ const linkAssetOpen = ref(false)
 const documentOpen = ref(false)
 const { loadDictionaries, getLabel } = useAssetLabels()
 await loadDictionaries()
-const { data: response, refresh, error } = await useFetch<ApiResponse<ProductAssetItem>>(() => `/api/v1/products/${productId.value}`)
+const { data: response, pending, refresh, error } = await useFetch<ApiResponse<ProductAssetItem>>(() => moduleUrl(`/api/v1/products/${productId.value}`), { key: cacheKey(`product:${productId.value}`) })
 const {
   data: versionResponse,
   refresh: refreshVersions,
   pending: versionsPending,
   error: versionsError
-} = await useFetch<ApiResponse<{ productCode: string, items: ProductVersionItem[] }>>(() => `/api/v1/products/${productId.value}/versions`)
+} = await useFetch<ApiResponse<{ productCode: string, items: ProductVersionItem[] }>>(() => moduleUrl(`/api/v1/products/${productId.value}/versions`), { key: cacheKey(`product-versions:${productId.value}`), immediate: !hosted, watch: hosted ? false : undefined })
 
 if (error.value?.statusCode === 404) {
   throw createError({ statusCode: 404, message: '产品主档不存在' })
@@ -189,6 +201,12 @@ const handleUpdated = async () => {
   <UDashboardPanel id="product-detail" grow>
     <template #body>
       <div class="p-4 space-y-4">
+        <UAlert
+          v-if="error"
+          color="error"
+          title="无法加载产品主档"
+          :description="error.message"
+        />
         <UCard v-if="product">
           <template #header>
             <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
@@ -203,7 +221,7 @@ const handleUpdated = async () => {
                   icon="i-lucide-arrow-left"
                   color="neutral"
                   variant="ghost"
-                  to="/products"
+                  :to="moduleUrl('/products')"
                 >
                   返回
                 </UButton>
@@ -211,7 +229,7 @@ const handleUpdated = async () => {
                   icon="i-lucide-pencil"
                   color="primary"
                   variant="soft"
-                  @click="editOpen = true"
+                  @click="hosted ? navigateTo({ path: moduleUrl(`/products/${productId}/edit`), query: { returnTo: route.fullPath } }) : editOpen = true"
                 >
                   编辑
                 </UButton>
@@ -301,7 +319,8 @@ const handleUpdated = async () => {
             </div>
           </template>
 
-          <div v-if="versionsPending" class="flex items-center justify-center py-8 text-muted">
+          <UAlert v-if="hosted" title="版本计划请在产品中心查看" description="接入产品后，在产品中心管理需求与版本。" />
+          <div v-else-if="versionsPending" class="flex items-center justify-center py-8 text-muted">
             <UIcon name="i-lucide-loader-2" class="size-5 animate-spin" />
           </div>
           <UAlert
@@ -312,7 +331,12 @@ const handleUpdated = async () => {
             title="暂时无法加载版本路线"
             :description="versionsError.message"
           />
-          <UTable v-else :data="versionItems" :columns="versionColumns">
+          <UTable
+            v-else
+            :data="versionItems"
+            :columns="versionColumns"
+            :loading="versionsPending"
+          >
             <template #version_code-cell="{ row }">
               <div class="min-w-0">
                 <p class="font-medium text-default">
@@ -334,6 +358,9 @@ const handleUpdated = async () => {
             <template #feature_count-cell="{ row }">
               {{ row.original.feature_count || 0 }}
             </template>
+            <template #empty>
+              <CommonEmptyState title="暂无记录" description="当前范围内没有可显示的记录。" />
+            </template>
           </UTable>
         </UCard>
 
@@ -341,34 +368,51 @@ const handleUpdated = async () => {
           <template #header>
             <span class="font-semibold">技术底座</span>
           </template>
-          <UTable :data="baseItems" :columns="baseColumns" />
+          <UTable :data="baseItems" :columns="baseColumns" :loading="pending">
+            <template #empty>
+              <CommonEmptyState title="暂无记录" description="当前范围内没有可显示的记录。" />
+            </template>
+          </UTable>
         </UCard>
 
         <UCard>
           <template #header>
             <span class="font-semibold">关联资源</span>
           </template>
-          <UTable :data="assetItems" :columns="assetColumns" />
+          <UTable :data="assetItems" :columns="assetColumns" :loading="pending">
+            <template #empty>
+              <CommonEmptyState title="暂无记录" description="当前范围内没有可显示的记录。" />
+            </template>
+          </UTable>
         </UCard>
 
         <UCard>
           <template #header>
             <span class="font-semibold">关联文档</span>
           </template>
-          <UTable :data="documentItems" :columns="documentColumns" />
+          <UTable :data="documentItems" :columns="documentColumns" :loading="pending">
+            <template #empty>
+              <CommonEmptyState title="暂无记录" description="当前范围内没有可显示的记录。" />
+            </template>
+          </UTable>
         </UCard>
 
         <UCard>
           <template #header>
             <span class="font-semibold">交付实例</span>
           </template>
-          <UTable :data="deliveryInstanceItems" :columns="deliveryInstanceColumns" />
+          <UTable :data="deliveryInstanceItems" :columns="deliveryInstanceColumns" :loading="pending">
+            <template #empty>
+              <CommonEmptyState title="暂无记录" description="当前范围内没有可显示的记录。" />
+            </template>
+          </UTable>
         </UCard>
       </div>
     </template>
   </UDashboardPanel>
 
   <AssetsProductAssetEditModal
+    v-if="!hosted"
     :open="editOpen"
     :product="product || null"
     @update:open="editOpen = $event"

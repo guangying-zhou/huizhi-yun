@@ -4,11 +4,11 @@ import {
   projectCategoryConfig,
   projectCategoryOptions,
   projectSecurityLevelConfig,
-  projectSecurityLevelOptions,
   projectStatusConfig,
   projectStatusOptions
 } from '~/config/project'
 import type { LifecycleStatus, Methodology, ProjectCategory, ProjectSecurityLevel } from '~/types/aims'
+import ProjectAccessControlFields from '~/components/project/ProjectAccessControlFields.vue'
 
 definePageMeta({
   layoutHeader: true,
@@ -258,12 +258,6 @@ const editablePortfolioValue = computed({
   set: (value: number | string) => {
     const id = Number(value)
     editForm.value.portfolioId = id > 0 ? id : null
-  }
-})
-const editAccessWhitelist = computed({
-  get: () => editForm.value.accessWhitelist || [],
-  set: (value: string[]) => {
-    editForm.value.accessWhitelist = value
   }
 })
 
@@ -929,13 +923,12 @@ onBeforeUnmount(clearRefresh)
               <UFormField label="所属部门">
                 <UInput v-model="editForm.deptCode" class="w-full" />
               </UFormField>
-              <UFormField label="可见范围">
-                <USelect
-                  v-model="editForm.securityLevel"
-                  :items="projectSecurityLevelOptions"
-                  class="w-full"
+              <div class="md:col-span-2">
+                <ProjectAccessControlFields
+                  v-model:security-level="editForm.securityLevel"
+                  v-model:access-whitelist="editForm.accessWhitelist"
                 />
-              </UFormField>
+              </div>
               <UFormField label="业务领域">
                 <USelectMenu
                   v-model="editForm.domainCode"
@@ -945,17 +938,6 @@ onBeforeUnmount(clearRefresh)
                   placeholder="选择业务领域"
                   class="w-full"
                   searchable
-                />
-              </UFormField>
-              <UFormField
-                v-if="editForm.securityLevel === 'whitelist'"
-                label="白名单"
-                class="md:col-span-2"
-              >
-                <UserTreeSelector
-                  v-model="editAccessWhitelist"
-                  placeholder="选择白名单用户"
-                  width-class="w-full"
                 />
               </UFormField>
               <UFormField label="计划开始">

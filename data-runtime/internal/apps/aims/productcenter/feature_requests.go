@@ -42,13 +42,27 @@ func ValidateFeatureRequestChange(input FeatureRequestChange) error {
 
 // The relation is maintained as request evidence; it does not select delivery scope.
 func ChangeFeatureRequest(ctx context.Context, db *sql.DB, identity CommandIdentity, requestPermit, featurePermit AuthorizationPermit, input FeatureRequestChange, sourceContext ...integrationoperation.TrustedContext) (CommandResult, error) {
+	return changeFeatureRequest(ctx, identity, requestPermit, featurePermit, input, func(authorize AuthorizeCommand, apply ApplyCommand) (CommandResult, error) {
+		return ExecuteCommand(ctx, db, identity, input, authorize, apply)
+	}, sourceContext...)
+}
+func ChangeFeatureRequestInTransaction(ctx context.Context, tx *sql.Tx, identity CommandIdentity, requestPermit, featurePermit AuthorizationPermit, input FeatureRequestChange, sourceContext ...integrationoperation.TrustedContext) (CommandResult, error) {
+	result, err := changeFeatureRequest(ctx, identity, requestPermit, featurePermit, input, func(authorize AuthorizeCommand, apply ApplyCommand) (CommandResult, error) {
+		return ExecuteCommandInTransaction(ctx, tx, identity, input, authorize, apply)
+	}, sourceContext...)
+	if err != nil && tx != nil {
+		_ = tx.Rollback()
+	}
+	return result, err
+}
+func changeFeatureRequest(ctx context.Context, identity CommandIdentity, requestPermit, featurePermit AuthorizationPermit, input FeatureRequestChange, execute func(AuthorizeCommand, ApplyCommand) (CommandResult, error), sourceContext ...integrationoperation.TrustedContext) (CommandResult, error) {
 	if identity.Action != "product_features:request-link" {
 		return CommandResult{}, invalid("product_command_identity_invalid", "功能需求关联命令不匹配")
 	}
 	if err := ValidateFeatureRequestChange(input); err != nil {
 		return CommandResult{}, err
 	}
-	return ExecuteCommand(ctx, db, identity, input, func(ctx context.Context, tx *sql.Tx) error {
+	return execute(func(ctx context.Context, tx *sql.Tx) error {
 		if err := AuthorizeWorkspaceTransaction(ctx, tx, identity.ProductCode, identity.ActorUID, "product_requests", "edit", requestPermit); err != nil {
 			return err
 		}

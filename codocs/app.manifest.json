@@ -19,6 +19,13 @@
   },
   "resources": [
     {
+      "code": "project-document-access",
+      "name": "项目文档服务访问控制",
+      "description": "Aims 已验签的项目文档查询、访问判定与策略治理",
+      "actions": ["read", "manage", "create"],
+      "sortOrder": 9
+    },
+    {
       "code": "documents",
       "name": "文档中心",
       "description": "个人文档、共享文档、收藏、回收站与通用文档操作",
@@ -62,7 +69,14 @@
       "code": "company",
       "name": "组织资产",
       "description": "公司制度、公告、法务合规、技术规范、产品资料与知识库",
-      "actions": ["view", "create", "edit", "publish", "export", "admin"],
+      "actions": [
+        "view",
+        "create",
+        "edit",
+        "publish",
+        "export",
+        "admin"
+      ],
       "sortOrder": 40
     },
     {
@@ -117,6 +131,22 @@
         "create"
       ],
       "sortOrder": 190
+    },
+    {
+      "code": "project-document",
+      "name": "项目文档服务能力",
+      "description": "供 Aims 与统一企业宿主按签名命令读取项目文档内容；不授予普通用户角色",
+      "actions": [
+        "content:read"
+      ],
+      "sortOrder": 191
+    },
+    {
+      "code": "collaboration-snapshots",
+      "name": "协作运行时 v2 快照",
+      "description": "Collab 服务身份（collab.runtime）经 Host 为已验证写者打开的协作会话读取、准备与发布 Markdown/Yjs 配对快照；每次写入在文档行锁下核对会话、epoch 与发起人写权限，不授予任何用户角色",
+      "actions": ["read", "publish"],
+      "sortOrder": 193
     }
   ],
   "recommendedRoles": [

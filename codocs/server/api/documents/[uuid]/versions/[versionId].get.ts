@@ -6,6 +6,7 @@
 import { createOSSClient, createProjectsOSSClient } from '../../../../utils/oss'
 import { requireRequestUid } from '~~/server/utils/authIdentity'
 import { getCodocsDocumentMetadata, callCodocsTenantRuntime } from '~~/server/utils/codocsRuntime'
+import { assertLegacyBodyDocument } from '~~/server/utils/documentBodyRef'
 
 interface DocumentRow {
   oss_path: string | null
@@ -33,6 +34,8 @@ export default defineEventHandler(async (event) => {
 
     const actorUid = requireRequestUid(event)
     const doc = await getCodocsDocumentMetadata(event, uuid, { actorUid }) as DocumentRow
+    // v2 版本的 oss_version_id 属于快照对象，与 oss_path 配对必然读不到或读错：失败关闭。
+    assertLegacyBodyDocument(doc as DocumentRow & { snapshot_generation?: number })
     const page = await callCodocsTenantRuntime<{ items?: (VersionRow & { id: number })[] }>(event, `/v1/codocs/documents/${encodeURIComponent(uuid)}/versions`, {
       scope: 'codocs.read'
     })

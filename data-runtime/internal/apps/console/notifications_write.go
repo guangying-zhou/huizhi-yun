@@ -254,6 +254,14 @@ func (a *Adapter) UserNotificationTodos(ctx context.Context, uid string, query u
 	if err != nil {
 		return nil, err
 	}
+	page, size, paged, err := notificationReadPagination(query)
+	if err != nil {
+		return nil, err
+	}
+	if paged {
+		return a.userNotificationTodosPage(ctx, uid, query, page, size)
+	}
+
 	todoCase := `CASE
 		WHEN n.category='approval' THEN 'approval'
 		WHEN n.category='project-risk' THEN 'risk'

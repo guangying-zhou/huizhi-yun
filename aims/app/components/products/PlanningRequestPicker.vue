@@ -1,10 +1,13 @@
 <script setup lang="ts">
-import type { ProductRequestRecord } from '~/types/productRequest'
+import { useAimsModule } from '../../../layer/useAimsModule'
+import type { ProductRequestRecord } from '../../types/productRequest'
+
+const { moduleUrl, hosted, cacheKey } = useAimsModule()
 
 const props = defineProps<{ productCode: string, disabled?: boolean }>()
 const selected = defineModel<ProductRequestRecord[]>({ required: true })
 const search = ref(''), keyword = ref(''), page = ref(1)
-const { data, status, error, execute } = await useFetch(() => `/api/v1/products/${encodeURIComponent(props.productCode)}/requests`, {
+const { data, status, error, execute } = await useFetch(() => moduleUrl(`/api/v1/products/${encodeURIComponent(props.productCode)}/requests`), { ...(hosted ? { key: computed(() => cacheKey('aims/app/components/products/PlanningRequestPicker.vue:0' + ':' + String(toValue(() => moduleUrl(`/api/v1/products/${encodeURIComponent(props.productCode)}/requests`))))) } : {}),
   server: false, immediate: false, watch: false,
   query: computed(() => ({ page: page.value, pageSize: 10, keyword: keyword.value || undefined })),
   transform: (response: { code: number, data: { items: ProductRequestRecord[], total: number } }) => {

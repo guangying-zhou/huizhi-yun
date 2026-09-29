@@ -35,7 +35,9 @@ var requiredTables = []string{
 	"flow_tasks",
 	"flow_actions",
 	"flow_actionable_outbox",
+	"flow_notification_outbox",
 	"flow_callback_logs",
+	"flow_delivery_audit",
 	"service_command_receipt",
 }
 
@@ -45,6 +47,12 @@ func New(cfg config.WorkflowConfig) (*Adapter, error) {
 		return nil, err
 	}
 	return &Adapter{db: conn, dbName: cfg.DB.Database}, nil
+}
+
+// NewWithDB wraps an existing connection; used by route-level tests that
+// need a real adapter over a mocked database.
+func NewWithDB(conn *sql.DB) *Adapter {
+	return &Adapter{db: conn}
 }
 
 func (a *Adapter) Ping(ctx context.Context) error {

@@ -145,7 +145,7 @@ func (a *Adapter) enqueueServiceTicketDeliveryOperationTx(
 	if createdBy == "" {
 		createdBy = trusted.ServiceClientID
 	}
-	if _, err := tx.ExecContext(ctx, `
+	if _, err := tx.ExecContext(ctx, trusted.SQL(`
 		INSERT INTO integration_operation (
 		  operation_id, operation_key, correlation_key, sequence_no, depends_on_operation_key,
 		  tenant_code, deployment_code, source_app, target_app, operation_code,
@@ -154,7 +154,7 @@ func (a *Adapter) enqueueServiceTicketDeliveryOperationTx(
 		  original_request_id, original_actor_uid, service_client_id, created_by, updated_by,
 		  next_attempt_at
 		) VALUES (?, ?, ?, 1, NULL, ?, ?, 'aims', 'altoc', ?, ?, 'work_item', ?, ?, 'v1', ?, ?, 'pending', ?, ?, ?, ?, ?, UTC_TIMESTAMP(3))
-	`,
+	`),
 		operationID,
 		operationKey,
 		operationKey,
@@ -179,7 +179,7 @@ func (a *Adapter) enqueueServiceTicketDeliveryOperationTx(
 
 func existingServiceTicketDeliveryOperation(ctx context.Context, tx *sql.Tx, trusted integrationoperation.TrustedContext, operationKey, itemKey string) (string, map[string]any, error) {
 	var status, commandJSON, commandSHA string
-	err := tx.QueryRowContext(ctx, `
+	err := tx.QueryRowContext(ctx, trusted.SQL(`
 		SELECT status, command_json, command_sha256
 		FROM integration_operation
 		WHERE operation_key = ?
@@ -193,7 +193,7 @@ func existingServiceTicketDeliveryOperation(ctx context.Context, tx *sql.Tx, tru
 		  AND idempotency_key = ?
 		LIMIT 1
 		FOR UPDATE
-	`, operationKey, trusted.TenantCode, trusted.DeploymentCode, itemKey, operationKey).Scan(&status, &commandJSON, &commandSHA)
+	`), operationKey, trusted.TenantCode, trusted.DeploymentCode, itemKey, operationKey).Scan(&status, &commandJSON, &commandSHA)
 	if err != nil {
 		return "", nil, err
 	}

@@ -1,4 +1,4 @@
-import type { CreateProjectRequest } from '~/types/aims'
+import type { CreateProjectRequest } from '../types/aims'
 
 type ServiceYearInput = Pick<CreateProjectRequest,
   | 'serviceLineCode'

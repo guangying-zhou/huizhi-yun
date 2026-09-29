@@ -1,18 +1,30 @@
 <script setup lang="ts">
-import { projectStatusConfig, projectCategoryConfig, methodologyConfig, projectConfidentialityLevelConfig, projectConfidentialityLevelOptions, projectSecurityLevelConfig, projectSecurityLevelOptions } from '~/config/project'
-import { projectWorkflowActionConfigs } from '~/utils/projectWorkflow'
-import type { ProjectWorkflowActionCode } from '~/utils/projectWorkflow'
-import { getProjectInitiationRepositoryIssue, projectRequiresInitiation } from '~/utils/projectInitiationPolicy'
-import type { LifecycleStatus, ProjectConfidentialityLevel, ProjectSecurityLevel } from '~/types/aims'
-import { PROJECT_ROLE_COLORS, PROJECT_ROLE_LABELS, PROJECT_ROLE_OPTIONS } from '~/utils/projectRoles'
+import { useAimsModule } from '../../../../layer/useAimsModule'
+import { projectStatusConfig, projectCategoryConfig, methodologyConfig, projectConfidentialityLevelConfig, projectSecurityLevelConfig } from '../../../config/project'
+import ProjectAccessControlFields from '../../../components/project/ProjectAccessControlFields.vue'
+import { effectiveProjectSecurityLevel } from '../../../utils/projectAccessControl'
+import { projectWorkflowActionConfigs } from '../../../utils/projectWorkflow'
+import type { ProjectWorkflowActionCode } from '../../../utils/projectWorkflow'
+import { getProjectInitiationRepositoryIssue, projectRequiresInitiation } from '../../../utils/projectInitiationPolicy'
+import type { LifecycleStatus, ProjectConfidentialityLevel, ProjectSecurityLevel } from '../../../types/aims'
+import { PROJECT_ROLE_COLORS, PROJECT_ROLE_LABELS, PROJECT_ROLE_OPTIONS } from '../../../utils/projectRoles'
 import {
   normalizeProjectModuleConfig,
   projectModuleKeys,
   projectModuleMeta,
   toPersistedProjectModuleConfig,
   type ProjectModuleKey
-} from '~/utils/projectModuleConfig'
+} from '../../../utils/projectModuleConfig'
+import { useMilestoneStore } from '../../../stores/milestone'
+import { usePortfolioStore } from '../../../stores/portfolio'
+import { useProjectStore } from '../../../stores/project'
+import AimsDocumentPicker from '../../../components/AimsDocumentPicker.vue'
+import AimsDocumentPreview from '../../../components/AimsDocumentPreview.vue'
+import ProjectEditModal from '../../../components/project/ProjectEditModal.vue'
+import ProjectNavbar from '../../../components/project/ProjectNavbar.vue'
 
+// 同一份代码供独立应用与企业宿主使用：非宿主模式下 moduleUrl 原样返回路径。
+const { moduleUrl } = useAimsModule()
 definePageMeta({
   layoutHeader: true,
   layoutHeaderTitle: '设置',
@@ -55,6 +67,9 @@ const securityForm = ref<{
 
 // 新仓库关联
 const showAddRepoModal = ref(false)
+watch(showAddRepoModal, (open) => {
+  if (!open && newRepoCode.value) projectStore.abandonRepoIntent('link', projectId.value, newRepoCode.value)
+}, { flush: 'sync' })
 const newRepoCode = ref('')
 const addingRepo = ref(false)
 
@@ -81,7 +96,7 @@ const productBindings = ref<ProjectProductBinding[]>([])
 async function loadProductBindings() {
   try {
     const res = await $fetch<{ code: number, data: { items: ProjectProductBinding[] } }>(
-      `/api/v1/projects/${projectId.value}/products`
+      moduleUrl(`/api/v1/projects/${projectId.value}/products`)
     )
     productBindings.value = res.data.items || []
   } catch {
@@ -90,7 +105,7 @@ async function loadProductBindings() {
 }
 
 // 立项书
-// import type { DocumentRef } from '~/composables/useAimsDocumentPicker'
+// import type { DocumentRef } from '../../../composables/useAimsDocumentPicker'
 
 interface ProposalInfo {
   id: number
@@ -113,7 +128,7 @@ const proposalSaving = ref(false)
 async function loadProposal() {
   try {
     const res = await $fetch<{ code: number, data: { proposal: ProposalInfo | null } }>(
-      `/api/v1/projects/${projectId.value}/documents`
+      moduleUrl(`/api/v1/projects/${projectId.value}/documents`)
     )
     if (res.code === 0) {
       proposal.value = res.data.proposal
@@ -148,7 +163,7 @@ const proposalInitialValue = computed<DocumentRef | null>(() => {
 async function handleProposalSelected(docRef: DocumentRef) {
   proposalSaving.value = true
   try {
-    await $fetch(`/api/v1/projects/${projectId.value}/documents`, {
+    await $fetch(moduleUrl(`/api/v1/projects/${projectId.value}/documents`), {
       method: proposal.value ? 'PUT' : 'POST',
       body: {
         source: docRef.source,
@@ -419,7 +434,7 @@ async function fetchRepoUrls() {
   const gitGroup = portfolioGitGroup.value
   if (!gitGroup) return
   try {
-    const res = await $fetch<ProjectsResponse>('/api/account/projects', {
+    const res = await $fetch<ProjectsResponse>(moduleUrl('/api/account/projects'), {
       params: { only_group: 'false' }
     })
     if (res.code === 0 && res.data?.items) {
@@ -504,28 +519,8 @@ const selectedSecurityFormConfig = computed(() => projectSecurityLevelConfig[sec
 
 const selectedConfidentialityFormConfig = computed(() => projectConfidentialityLevelConfig[securityForm.value.confidentialityLevel])
 
-const securityAccessWhitelist = computed({
-  get: () => securityForm.value.accessWhitelist,
-  set: (value: string[]) => {
-    securityForm.value.accessWhitelist = value
-  }
-})
-
-function resolveEffectiveSecurityLevel(
-  confidentialityLevel: ProjectConfidentialityLevel,
-  securityLevel: ProjectSecurityLevel
-): ProjectSecurityLevel {
-  if (confidentialityLevel === 'L3' && (securityLevel === 'company' || securityLevel === 'department')) {
-    return 'project_team'
-  }
-  if (confidentialityLevel === 'L2' && securityLevel === 'company') {
-    return 'department'
-  }
-  return securityLevel
-}
-
 const effectiveSecurityLevel = computed(() =>
-  resolveEffectiveSecurityLevel(securityForm.value.confidentialityLevel, securityForm.value.securityLevel)
+  effectiveProjectSecurityLevel(securityForm.value.securityLevel, securityForm.value.confidentialityLevel)
 )
 
 const effectiveSecurityFormConfig = computed(() => projectSecurityLevelConfig[effectiveSecurityLevel.value])
@@ -736,7 +731,7 @@ async function handleDelete() {
   try {
     await projectStore.deleteProject(projectId.value)
     showDeleteConfirm.value = false
-    await navigateTo('/projects')
+    await navigateTo(moduleUrl('/projects'))
   } catch (err) {
     toast.add({
       title: getErrorMessage(err, '删除失败'),
@@ -777,7 +772,7 @@ async function fetchGroupRepos() {
   if (!gitGroup) return
   groupReposLoading.value = true
   try {
-    const res = await $fetch<GroupReposResponse>('/api/account/projects', {
+    const res = await $fetch<GroupReposResponse>(moduleUrl('/api/account/projects'), {
       params: { parent_id: gitGroup, include_template: 'false' }
     })
     if (res.code === 0 && res.data?.items) {
@@ -825,7 +820,7 @@ async function handleCreateRepo() {
   try {
     const repoCode = newRepoName.value.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
     const fullProjectCode = `${gitGroup}/${repoCode}`
-    const res = await $fetch<{ success: boolean, data: { repoUrl?: string } }>('/api/account/projects', {
+    const res = await $fetch<{ success: boolean, data: { repoUrl?: string } }>(moduleUrl('/api/account/projects'), {
       method: 'POST',
       body: {
         projectCode: fullProjectCode,
@@ -877,7 +872,10 @@ async function handleRemoveRepo(repoProjectCode: string) {
     message: `确定解除仓库 ${repoProjectCode} 的关联？可稍后重新关联。`,
     confirmLabel: '解除关联',
     tone: 'warning'
-  }))) return
+  }))) {
+    projectStore.abandonRepoIntent('unlink', projectId.value, repoProjectCode)
+    return
+  }
   await projectStore.unlinkRepo(projectId.value, repoProjectCode)
 }
 
@@ -1795,42 +1793,13 @@ async function onEditSaved() {
           </template>
           <template #body>
             <div class="space-y-4 p-4">
-              <UFormField label="密级">
-                <div class="space-y-3">
-                  <USelect
-                    v-model="securityForm.confidentialityLevel"
-                    :items="projectConfidentialityLevelOptions"
-                    value-key="value"
-                    class="w-full"
-                  />
-                  <p class="text-xs text-muted">
-                    {{ selectedConfidentialityFormConfig.description }}
-                  </p>
-                </div>
-              </UFormField>
-              <UFormField label="可见范围">
-                <div class="space-y-3">
-                  <USelect
-                    v-model="securityForm.securityLevel"
-                    :items="projectSecurityLevelOptions"
-                    value-key="value"
-                    class="w-full"
-                  />
-                  <p class="text-xs text-muted">
-                    {{ selectedSecurityFormConfig.description }}
-                  </p>
-                </div>
-              </UFormField>
-              <UFormField
-                v-if="securityForm.securityLevel === 'whitelist'"
-                label="白名单"
-              >
-                <UserTreeSelector
-                  v-model="securityAccessWhitelist"
-                  placeholder="选择白名单用户"
-                  width-class="w-full"
-                />
-              </UFormField>
+              <ProjectAccessControlFields
+                v-model:security-level="securityForm.securityLevel"
+                v-model:confidentiality-level="securityForm.confidentialityLevel"
+                v-model:access-whitelist="securityForm.accessWhitelist"
+                show-confidentiality
+                :show-policy-hint="false"
+              />
               <div class="rounded-lg border border-muted bg-elevated/50 p-3">
                 <div class="mb-2 flex items-start justify-between gap-3">
                   <div class="flex min-w-0 items-center gap-2">

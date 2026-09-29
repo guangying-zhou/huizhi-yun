@@ -177,3 +177,14 @@ erDiagram
   revocation_snapshots ||--o{ revocation_snapshot_targets : "snapshot distribution"
   deployments ||--o{ revocation_entries : "revocation source"
 ```
+
+## 6) 可选 Gateway 公钥登记（未应用环境）
+
+```mermaid
+erDiagram
+  deployment_sites ||--o| platform_gateway_keysets : "exact site code resolves to site_id"
+  platform_gateway_keysets ||--o{ platform_gateway_service_keys : "public key rotation history"
+```
+
+两处 FK 保留历史并拒绝孤儿，不存 Gateway 私钥；租户/环境从 deployment 取。
+见 [迁移合同](../../docs/Gateway-Service-Assertion-Registry-Migration.md)。

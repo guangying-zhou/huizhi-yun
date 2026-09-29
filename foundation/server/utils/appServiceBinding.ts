@@ -5,6 +5,7 @@ import {
   type CloudflareServiceBinding
 } from './consoleServiceBinding'
 import { resolveTrustedServiceAppRoute } from './serviceAppUrl'
+import { selfHostedServiceBinding } from './selfHostedServiceTransport'
 
 /**
  * 业务应用之间的 Service Binding 解析与调用。
@@ -47,9 +48,10 @@ export function appServiceBinding(
   const name = appServiceBindingName(appCodeInput)
   if (!name) return null
   const candidate = cloudflareEnvFromEvent(event)[name] as Partial<CloudflareServiceBinding> | undefined
-  return candidate && typeof candidate.fetch === 'function'
-    ? candidate as CloudflareServiceBinding
-    : null
+  if (candidate && typeof candidate.fetch === 'function') return candidate as CloudflareServiceBinding
+  // Self-hosted single site: loopback transport with Service Binding semantics
+  // (fixed local origin, path kept). Unconfigured targets fail closed (503).
+  return selfHostedServiceBinding(appCodeInput)
 }
 
 /**
@@ -100,10 +102,13 @@ export interface ServiceAppFetchOptions {
    * 业务应用默认挂在 `/{app}/`，不传即按原样透传。
    */
   targetBasePath?: string
+  /** Event-less scheduled delivery: must match the server-owned target deployment setting. */
+  scheduledTargetDeployment?: string
 }
 
 function jsonBody(body: unknown) {
   if (body === undefined || body === null) return undefined
+  if (body instanceof FormData || body instanceof Blob || body instanceof ArrayBuffer || ArrayBuffer.isView(body)) return body as BodyInit
   if (typeof body === 'string') return body
   return JSON.stringify(body)
 }
@@ -129,9 +134,9 @@ export async function serviceAppFetch<T>(
     accept: 'application/json',
     ...(options.headers || {})
   }
-  applyTargetAppContext(headers, event, appCode)
+  applyTargetAppContext(headers, event, appCode, options.scheduledTargetDeployment)
   const payload = jsonBody(options.body)
-  if (payload !== undefined && !Object.keys(headers).some(key => key.toLowerCase() === 'content-type')) {
+  if (payload !== undefined && typeof payload === 'string' && !Object.keys(headers).some(key => key.toLowerCase() === 'content-type')) {
     headers['content-type'] = 'application/json'
   }
 
@@ -208,11 +213,23 @@ function deleteHeaderCaseInsensitive(headers: Record<string, string>, name: stri
 function applyTargetAppContext(
   headers: Record<string, string>,
   event: H3Event | null | undefined,
-  appCodeInput: string
+  appCodeInput: string,
+  scheduledTargetDeployment?: string
 ) {
   const appCode = normalizeAppCode(appCodeInput)
   for (const name of TARGET_CONTEXT_HEADERS) deleteHeaderCaseInsensitive(headers, name)
-  if (!event || !appCode) return
+  if (!appCode) return
+  if (!event) {
+    if (!scheduledTargetDeployment) return
+    const expected = String(process.env[`HZY_${appCode.replace(/-/g, '_').toUpperCase()}_TARGET_DEPLOYMENT`] || '').trim()
+    if (!expected || expected !== scheduledTargetDeployment || !/^[A-Za-z0-9][A-Za-z0-9._-]{2,127}$/.test(expected)) {
+      throw createError({ statusCode: 503, message: 'Scheduled service target binding is unavailable.' })
+    }
+    headers['x-hzy-app-code'] = appCode
+    headers['x-hzy-deployment'] = expected
+    headers['x-forwarded-prefix'] = `/${appCode}`
+    return
+  }
 
   let route: ReturnType<typeof resolveTrustedServiceAppRoute> = null
   try {

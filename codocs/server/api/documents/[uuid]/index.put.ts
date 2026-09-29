@@ -6,6 +6,7 @@
 import { uploadDocument } from '~~/server/utils/oss'
 import { createHash } from 'node:crypto'
 import { requireRequestUid } from '~~/server/utils/authIdentity'
+import { assertLegacyBodyDocument } from '~~/server/utils/documentBodyRef'
 import { createCodocsDocumentVersion, getCodocsDocumentMetadata, updateCodocsDocumentMetadata } from '~~/server/utils/codocsRuntime'
 
 export default defineEventHandler(async (event) => {
@@ -56,6 +57,9 @@ export default defineEventHandler(async (event) => {
     if (title !== undefined) {
       updateBody.title = title
     }
+
+    // v2 文档正文只经快照协议保存：在任何 OSS 写入之前失败关闭，避免旧端用过期内容覆盖派生镜像。
+    if (content !== undefined) assertLegacyBodyDocument(doc)
 
     if (content !== undefined) {
       contentSize = Buffer.from(content, 'utf-8').length

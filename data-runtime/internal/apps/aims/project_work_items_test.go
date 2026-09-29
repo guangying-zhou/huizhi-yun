@@ -20,6 +20,7 @@ func TestProjectWorkItemsUsesProjectReadGuardAndKeepsLegacyListShape(t *testing.
 	mock.ExpectQuery("(?s)SELECT p\\.id\\s+FROM aims_projects p\\s+WHERE p\\.id = \\?").
 		WithArgs(int64(42), "u1", "u1", "u1", "u1", "PRJ-1").
 		WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(int64(42)))
+	mock.ExpectBegin()
 	mock.ExpectQuery("SELECT COUNT\\(\\*\\) AS total FROM work_items wi LEFT JOIN work_item_service_ext wse ON wse\\.work_item_id = wi\\.id WHERE wi\\.project_id = \\? AND wi\\.tier = 'target'").
 		WithArgs(int64(42)).
 		WillReturnRows(sqlmock.NewRows([]string{"total"}).AddRow(int64(1)))
@@ -29,6 +30,7 @@ func TestProjectWorkItemsUsesProjectReadGuardAndKeepsLegacyListShape(t *testing.
 			"id",
 			"project_id",
 			"milestone_id",
+			"version_id",
 			"item_number",
 			"item_key",
 			"type",
@@ -73,6 +75,7 @@ func TestProjectWorkItemsUsesProjectReadGuardAndKeepsLegacyListShape(t *testing.
 			int64(10),
 			int64(42),
 			int64(5),
+			int64(8),
 			int64(7),
 			"AIMS-7",
 			"task",
@@ -114,6 +117,7 @@ func TestProjectWorkItemsUsesProjectReadGuardAndKeepsLegacyListShape(t *testing.
 			nil,
 			nil,
 		))
+	mock.ExpectCommit()
 
 	data, err := adapter.projectWorkItems(
 		context.Background(),
@@ -168,6 +172,24 @@ func TestProjectWorkItemsServiceDeskFilterSkipsTargetDefault(t *testing.T) {
 		t.Fatalf("service desk query should not force target tier: %q", joined)
 	}
 	if len(args) != 3 || args[0] != int64(42) || args[1] != "CUS-1" || args[2] != "ENV-1" {
+		t.Fatalf("args = %#v", args)
+	}
+}
+
+func TestProjectWorkItemsPageFiltersBeforeCountAndItems(t *testing.T) {
+	where, args, err := projectWorkItemsWhere(42, url.Values{
+		"tier": {"target"}, "milestoneId": {"__null__"}, "severity": {"high"}, "versionId": {"__null__"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	joined := strings.Join(where, " AND ")
+	for _, clause := range []string{"wi.project_id = ?", "wi.milestone_id IS NULL", "wi.severity = ?", "wi.version_id IS NULL", "wi.tier = ?"} {
+		if !strings.Contains(joined, clause) {
+			t.Fatalf("missing %s: %s", clause, joined)
+		}
+	}
+	if len(args) != 3 || args[0] != int64(42) || args[1] != "high" || args[2] != "target" {
 		t.Fatalf("args = %#v", args)
 	}
 }

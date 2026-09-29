@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -63,6 +64,55 @@ type companySummaryObligation struct {
 	SubmittedAt      sql.NullTime
 	InclusionStatus  string
 	IncludedByChoice bool
+}
+
+type enterpriseCompanyWeeklySummaryOutboxKey struct{}
+
+// WithEnterpriseCompanyWeeklySummaryOutbox marks a verified Enterprise Host
+// delegated publish/retry/cancel call. Only the server's delegated route sets
+// it; the outbox identity is then derived from this adapter's registered
+// Enterprise write and worker bindings, never from request body reserved keys.
+func WithEnterpriseCompanyWeeklySummaryOutbox(ctx context.Context, requestID string) context.Context {
+	return context.WithValue(ctx, enterpriseCompanyWeeklySummaryOutboxKey{}, strings.TrimSpace(requestID))
+}
+
+var companySummaryRequestIDPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:@/-]{0,239}$`)
+
+// companySummaryTrustedContext keeps the legacy per-application path (reserved
+// keys injected by the authenticated data-runtime server) byte for byte. The
+// Enterprise delegated path enqueues into the registered Aims outbox tables for
+// the formal Aims worker deployment, which is exactly what the unified
+// scheduler claims (enterprisescheduler.Service.Claim).
+func (a *Adapter) companySummaryTrustedContext(ctx context.Context, body map[string]any) (integrationoperation.TrustedContext, error) {
+	requestID, delegated := ctx.Value(enterpriseCompanyWeeklySummaryOutboxKey{}).(string)
+	if !delegated {
+		return integrationoperation.TrustedContextFromMap(body, "aims")
+	}
+	if err := a.requireEnterpriseWriter(); err != nil {
+		return integrationoperation.TrustedContext{}, err
+	}
+	if a.enterpriseWrites.workerDeployment == "" {
+		return integrationoperation.TrustedContext{}, httperror.New(http.StatusServiceUnavailable, "company_weekly_summary_worker_unbound", "Formal Aims worker deployment is required")
+	}
+	outbox, err := a.enterpriseOutbox()
+	if err != nil {
+		return integrationoperation.TrustedContext{}, err
+	}
+	if !companySummaryRequestIDPattern.MatchString(requestID) {
+		requestID = ""
+	}
+	trusted, err := integrationoperation.TrustedContextFromMap(map[string]any{
+		integrationoperation.TrustedTenantCodeKey:      a.enterpriseWrites.writer.Key.Tenant,
+		integrationoperation.TrustedDeploymentCodeKey:  a.enterpriseWrites.workerDeployment,
+		integrationoperation.TrustedSourceAppKey:       "aims",
+		integrationoperation.TrustedServiceClientIDKey: "aims.runtime",
+		integrationoperation.TrustedRequestIDKey:       requestID,
+	}, "aims")
+	if err != nil {
+		return integrationoperation.TrustedContext{}, err
+	}
+	trusted.OutboxTables = outbox.OutboxTables
+	return trusted, nil
 }
 
 func (a *Adapter) handleCompanyWeeklySummaryGovernanceRuntime(
@@ -130,9 +180,22 @@ func (a *Adapter) companyWeeklySummaryPublishContent(
 		return nil, err
 	}
 	expectedHash := strings.TrimSpace(firstBodyText(body, "markdownSha256", "markdown_sha256"))
+	return readCompanyWeeklySummaryPublishContent(ctx, a.DB(), versionID, expectedHash)
+}
+
+type companySummaryRowQueryer interface {
+	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
+}
+
+func readCompanyWeeklySummaryPublishContent(
+	ctx context.Context,
+	db companySummaryRowQueryer,
+	versionID int64,
+	expectedHash string,
+) (map[string]any, error) {
 	var periodKey, title, markdown, hash, publishStatus string
 	var revision int
-	err = a.DB().QueryRowContext(ctx, `
+	err := db.QueryRowContext(ctx, `
 		SELECT period.period_key,
 		       JSON_UNQUOTE(JSON_EXTRACT(version.structured_snapshot_json, '$.title')),
 		       version.revision_no, version.markdown_content, version.markdown_sha256,
@@ -158,6 +221,66 @@ func (a *Adapter) companyWeeklySummaryPublishContent(
 		"summaryVersionId": versionID, "periodKey": periodKey, "revisionNo": revision,
 		"title": title, "markdownContent": markdown, "markdownSha256": hash,
 	}, nil
+}
+
+// CompanyWeeklySummaryPublishContentInTransaction serves the unified scheduler's
+// read of immutable summary Markdown. The caller supplies the scheduler guard
+// transaction and the registry-derived outbox context; the body is closed and
+// must name the exact processing lease this worker currently holds, so the
+// route cannot be used to read arbitrary summary versions.
+func CompanyWeeklySummaryPublishContentInTransaction(
+	ctx context.Context,
+	tx *sql.Tx,
+	trusted integrationoperation.TrustedContext,
+	worker string,
+	body map[string]any,
+	now time.Time,
+) (map[string]any, error) {
+	invalid := httperror.New(http.StatusBadRequest, "enterprise_scheduler_input_invalid", "Invalid company weekly summary content request")
+	for key := range body {
+		if key != "operationKey" && key != "summaryVersionId" && key != "markdownSha256" {
+			return nil, invalid
+		}
+	}
+	operationKey, _ := body["operationKey"].(string)
+	expectedHash, _ := body["markdownSha256"].(string)
+	versionID, err := bodyPositiveInt64(body, "summaryVersionId")
+	if strings.TrimSpace(operationKey) == "" || operationKey != strings.TrimSpace(operationKey) ||
+		expectedHash == "" || err != nil || versionID <= 0 || trusted.OutboxTables == nil || strings.TrimSpace(worker) == "" {
+		return nil, invalid
+	}
+	var commandJSON []byte
+	err = tx.QueryRowContext(ctx, trusted.SQL(`
+		SELECT command_json
+		FROM integration_operation
+		WHERE operation_key = ?
+		  AND tenant_code = ?
+		  AND deployment_code = ?
+		  AND source_app = 'aims'
+		  AND target_app = 'codocs'
+		  AND operation_code = ?
+		  AND status = 'processing'
+		  AND locked_by = ?
+		  AND locked_until > ?
+		FOR UPDATE
+	`), operationKey, trusted.TenantCode, trusted.DeploymentCode, companyWeeklySummaryOperationCode,
+		worker, now.UTC()).Scan(&commandJSON)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, httperror.New(http.StatusConflict, "integration_operation_lease_stale", "Integration operation lease is stale")
+	}
+	if err != nil {
+		return nil, err
+	}
+	var command map[string]any
+	if err := json.Unmarshal(commandJSON, &command); err != nil {
+		return nil, httperror.New(http.StatusConflict, "company_weekly_summary_operation_invalid", "summary operation command is invalid")
+	}
+	commandVersionID, err := bodyPositiveInt64(command, "summaryVersionId")
+	if err != nil || commandVersionID != versionID ||
+		strings.TrimSpace(firstBodyText(command, "markdownSha256")) != expectedHash {
+		return nil, httperror.New(http.StatusConflict, "company_weekly_summary_operation_invalid", "summary version identity does not match the claimed operation")
+	}
+	return readCompanyWeeklySummaryPublishContent(ctx, tx, versionID, expectedHash)
 }
 
 func companyWeeklySummaryPath(path string) (string, string, bool) {
@@ -199,7 +322,7 @@ func (a *Adapter) cancelCompanyWeeklySummaryPublish(
 	if err != nil {
 		return nil, err
 	}
-	trusted, err := integrationoperation.TrustedContextFromMap(body, "aims")
+	trusted, err := a.companySummaryTrustedContext(ctx, body)
 	if err != nil {
 		return nil, err
 	}
@@ -233,7 +356,7 @@ func (a *Adapter) cancelCompanyWeeklySummaryPublish(
 	var operationID, operationStatus string
 	var operationVersion uint64
 	var receiptID sql.NullString
-	err = tx.QueryRowContext(ctx, `
+	err = tx.QueryRowContext(ctx, trusted.SQL(`
 		SELECT operation_id, status, version_no, target_receipt_id
 		FROM integration_operation
 		WHERE tenant_code = ?
@@ -246,7 +369,7 @@ func (a *Adapter) cancelCompanyWeeklySummaryPublish(
 		  AND JSON_UNQUOTE(JSON_EXTRACT(command_json, '$.summaryVersionId')) = CAST(? AS CHAR)
 		LIMIT 1
 		FOR UPDATE
-	`, trusted.TenantCode, trusted.DeploymentCode, companyWeeklySummaryOperationCode,
+	`), trusted.TenantCode, trusted.DeploymentCode, companyWeeklySummaryOperationCode,
 		periodKey, versionID).Scan(&operationID, &operationStatus, &operationVersion, &receiptID)
 	if err != nil {
 		return nil, err
@@ -255,7 +378,7 @@ func (a *Adapter) cancelCompanyWeeklySummaryPublish(
 		operationStatus != string(integrationoperation.StatusRetryWait)) {
 		return nil, httperror.New(http.StatusConflict, "company_weekly_summary_publish_not_cancellable", "publish can only be cancelled before target delivery starts")
 	}
-	result, err := tx.ExecContext(ctx, `
+	result, err := tx.ExecContext(ctx, trusted.SQL(`
 		UPDATE integration_operation
 		SET status = 'cancelled', next_attempt_at = UTC_TIMESTAMP(6),
 		    locked_by = NULL, locked_until = NULL,
@@ -265,7 +388,7 @@ func (a *Adapter) cancelCompanyWeeklySummaryPublish(
 		  AND version_no = ?
 		  AND status IN ('pending','retry_wait')
 		  AND target_receipt_id IS NULL
-	`, actor, operationID, operationVersion)
+	`), actor, operationID, operationVersion)
 	if err != nil {
 		return nil, err
 	}
@@ -347,14 +470,18 @@ func (a *Adapter) retryCompanyWeeklySummaryPublish(
 	if err != nil {
 		return nil, err
 	}
-	trusted, err := integrationoperation.TrustedContextFromMap(body, "aims")
+	trusted, err := a.companySummaryTrustedContext(ctx, body)
 	if err != nil {
 		return nil, err
 	}
 	var operationID, operationKey, status string
 	var operationVersion uint64
 	var summaryVersionID int64
-	err = a.DB().QueryRowContext(ctx, `
+	outbox, err := a.enterpriseOutbox()
+	if err != nil {
+		return nil, err
+	}
+	err = a.DB().QueryRowContext(ctx, outbox.SQL(`
 		SELECT operation.operation_id, operation.operation_key, operation.status,
 		       operation.version_no, version.id
 		FROM company_weekly_summaries summary
@@ -374,7 +501,7 @@ func (a *Adapter) retryCompanyWeeklySummaryPublish(
 		  AND operation.deployment_code = ?
 		ORDER BY version.revision_no DESC
 		LIMIT 1
-	`, companyWeeklySummaryOperationCode, periodKey, trusted.TenantCode, trusted.DeploymentCode).Scan(
+	`), companyWeeklySummaryOperationCode, periodKey, trusted.TenantCode, trusted.DeploymentCode).Scan(
 		&operationID, &operationKey, &status, &operationVersion, &summaryVersionID,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -392,7 +519,7 @@ func (a *Adapter) retryCompanyWeeklySummaryPublish(
 	case integrationoperation.StatusProcessing:
 		return nil, httperror.New(http.StatusConflict, "company_weekly_summary_publish_in_progress", "summary publish is already in progress")
 	case integrationoperation.StatusFailedPermanent, integrationoperation.StatusDeadLetter:
-		repository, err := integrationoperation.NewRepository(a.DB())
+		repository, err := a.integrationOperationRepository()
 		if err != nil {
 			return nil, err
 		}
@@ -410,7 +537,7 @@ func (a *Adapter) retryCompanyWeeklySummaryPublish(
 		}
 		status = string(result.Status)
 	case integrationoperation.StatusRetryWait, integrationoperation.StatusPartialUnknown:
-		result, err := a.DB().ExecContext(ctx, `
+		result, err := a.DB().ExecContext(ctx, outbox.SQL(`
 			UPDATE integration_operation
 			SET next_attempt_at = UTC_TIMESTAMP(6),
 			    version_no = version_no + 1,
@@ -419,7 +546,7 @@ func (a *Adapter) retryCompanyWeeklySummaryPublish(
 			  AND version_no = ?
 			  AND status IN ('retry_wait','partial_unknown')
 			  AND target_receipt_id IS NULL
-		`, actor, operationID, operationVersion)
+		`), actor, operationID, operationVersion)
 		if err != nil {
 			return nil, err
 		}
@@ -651,7 +778,7 @@ func (a *Adapter) publishCompanyWeeklySummary(
 	if err != nil {
 		return nil, err
 	}
-	trusted, err := integrationoperation.TrustedContextFromMap(body, "aims")
+	trusted, err := a.companySummaryTrustedContext(ctx, body)
 	if err != nil {
 		return nil, err
 	}
@@ -1161,14 +1288,19 @@ func loadCompanySummaryObligationsTx(
 	for rows.Next() {
 		var item companySummaryObligation
 		var late int
+		// Obligations without a reviewed version come back from the LEFT JOIN
+		// with NULL JSON columns; *json.RawMessage cannot scan NULL, *[]byte can.
+		var managerContent, factSnapshot []byte
 		if err := rows.Scan(
 			&item.ID, &item.ProjectID, &item.ProjectCode, &item.ProjectName,
 			&item.ResponsibleUID, &item.DueStatus, &late, &item.ReportID,
-			&item.ReviewedVersion, &item.SelectedRAG, &item.ManagerContent,
-			&item.FactSnapshot, &item.SubmittedBy, &item.SubmittedAt,
+			&item.ReviewedVersion, &item.SelectedRAG, &managerContent,
+			&factSnapshot, &item.SubmittedBy, &item.SubmittedAt,
 		); err != nil {
 			return nil, err
 		}
+		item.ManagerContent = json.RawMessage(managerContent)
+		item.FactSnapshot = json.RawMessage(factSnapshot)
 		item.Late = late == 1
 		_, item.IncludedByChoice = selected[item.ID]
 		switch {
@@ -1449,7 +1581,7 @@ func enqueueCompanyWeeklySummaryPublishOperationTx(
 	if err := identity.Validate(); err != nil {
 		return nil, err
 	}
-	if _, err := tx.ExecContext(ctx, `
+	if _, err := tx.ExecContext(ctx, trusted.SQL(`
 		INSERT INTO integration_operation (
 		  operation_id, operation_key, correlation_key, sequence_no, depends_on_operation_key,
 		  tenant_code, deployment_code, source_app, target_app, operation_code,
@@ -1458,7 +1590,7 @@ func enqueueCompanyWeeklySummaryPublishOperationTx(
 		  original_request_id, original_actor_uid, service_client_id, created_by, updated_by,
 		  next_attempt_at
 		) VALUES (?, ?, ?, 1, NULL, ?, ?, 'aims', 'codocs', ?, ?, 'company_weekly_summary', ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, UTC_TIMESTAMP(3))
-	`, operationID, operationKey, operationKey, trusted.TenantCode, trusted.DeploymentCode,
+	`), operationID, operationKey, operationKey, trusted.TenantCode, trusted.DeploymentCode,
 		companyWeeklySummaryOperationCode, companyWeeklySummaryRequiredCapability,
 		periodKey, operationKey, companyWeeklySummaryCommandSchema, string(commandJSON), commandSHA256,
 		nullableText(trusted.RequestID), nullableText(actor), nullableText(trusted.ServiceClientID),

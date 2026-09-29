@@ -1,5 +1,9 @@
 <script setup lang="ts">
-import type { ProductRequestRecord } from '~/types/productRequest'
+import { useAimsModule } from '../../../../../../layer/useAimsModule'
+import ProductsComponentPicker from '../../../../../components/products/ComponentPicker.vue'
+import type { ProductRequestRecord } from '../../../../../types/productRequest'
+
+const { moduleUrl, hosted, cacheKey } = useAimsModule()
 
 definePageMeta({ layoutHeader: true, layoutHeaderTitle: '版本计划工作区', layoutHeaderProjectSwitcher: false })
 
@@ -44,9 +48,9 @@ const route = useRoute()
 const versionPerspectiveQuery = computed(() => route.query.view === 'gtm' ? { view: 'gtm' } : {})
 const code = computed(() => String(route.params.productCode || ''))
 const versionId = computed(() => String(route.params.versionId || ''))
-const base = computed(() => `/api/v1/products/${encodeURIComponent(code.value)}/versions/${encodeURIComponent(versionId.value)}`)
+const base = computed(() => moduleUrl(`/api/v1/products/${encodeURIComponent(code.value)}/versions/${encodeURIComponent(versionId.value)}`))
 interface VersionSummary { id: number, product_code: string, version_code: string, name: string | null, status: 'planning' | 'developing' | 'released' | 'archived' }
-const { data: version } = await useFetch(() => base.value, {
+const { data: version } = await useFetch(() => base.value, { ...(hosted ? { key: computed(() => cacheKey('aims/app/pages/products/[productCode]/versions/[versionId]/plan.vue:0' + ':' + String(toValue(() => base.value)))) } : {}),
   server: false,
   transform: (response: { code: number, data: VersionSummary }) => {
     const value = response.data
@@ -66,7 +70,7 @@ const { search: candidateSearch, debounced: candidateKeyword, flush: flushCandid
 })
 
 const planQuery = computed(() => `${base.value}/plan`)
-const { data: plan, status: planStatus, error: planError, refresh: refreshPlan } = await useFetch(planQuery, {
+const { data: plan, status: planStatus, error: planError, refresh: refreshPlan } = await useFetch(planQuery, { ...(hosted ? { key: computed(() => cacheKey('aims/app/pages/products/[productCode]/versions/[versionId]/plan.vue:1' + ':' + String(toValue(planQuery)))) } : {}),
   server: false,
   transform: (response: { code: number, data: Plan }) => {
     const value = response.data
@@ -75,7 +79,7 @@ const { data: plan, status: planStatus, error: planError, refresh: refreshPlan }
   }
 })
 const scopeQuery = computed(() => ({ page: scopePage.value, pageSize: scopePageSize }))
-const { data: scopes, status: scopesStatus, error: scopesError, refresh: refreshScopes } = await useFetch(() => `${base.value}/plan/items`, {
+const { data: scopes, status: scopesStatus, error: scopesError, refresh: refreshScopes } = await useFetch(() => `${base.value}/plan/items`, { ...(hosted ? { key: computed(() => cacheKey('aims/app/pages/products/[productCode]/versions/[versionId]/plan.vue:2' + ':' + String(toValue(() => `${base.value}/plan/items`)))) } : {}),
   server: false,
   query: scopeQuery,
   transform: (response: { code: number, data: ScopePage }) => {
@@ -91,7 +95,7 @@ const candidateQuery = computed(() => ({
   componentId: candidateComponentId.value ?? undefined,
   includeDescendants: candidateComponentId.value && candidateIncludeDescendants.value ? 'true' : undefined
 }))
-const { data: candidates, status: candidatesStatus, error: candidatesError, refresh: refreshCandidates } = await useFetch(() => `/api/v1/products/${encodeURIComponent(code.value)}/requests`, {
+const { data: candidates, status: candidatesStatus, error: candidatesError, refresh: refreshCandidates } = await useFetch(() => moduleUrl(`/api/v1/products/${encodeURIComponent(code.value)}/requests`), { ...(hosted ? { key: computed(() => cacheKey('aims/app/pages/products/[productCode]/versions/[versionId]/plan.vue:3' + ':' + String(toValue(() => moduleUrl(`/api/v1/products/${encodeURIComponent(code.value)}/requests`))))) } : {}),
   server: false,
   query: candidateQuery,
   transform: (response: { code: number, data: { items: ProductRequestRecord[], total: number } }) => {
@@ -306,7 +310,7 @@ async function confirmPlan() {
   try {
     const response = await $fetch<{ code: number }>(`${base.value}/plan/confirm`, { method: 'POST', body, headers: { 'Idempotency-Key': mutationKey(body) } })
     if (response.code !== 0) throw new Error('计划确认结果不完整，请重试')
-    toast.add({ title: '计划已确认，可进入研发交付', color: 'success' })
+    toast.add({ title: hosted ? '计划已确认' : '计划已确认，可进入研发交付', color: 'success' })
     await refreshAll(true)
   } catch (cause) {
     mutationError.value = friendlyPlanError(cause, '计划确认失败')
@@ -317,7 +321,7 @@ async function confirmPlan() {
 watch(addRequestFromLink, async (requestBizId) => {
   if (!requestBizId || addingRequest.value || busy.value) return
   try {
-    const response = await $fetch<{ code: number, data: ProductRequestRecord }>(`/api/v1/products/${encodeURIComponent(code.value)}/requests/${encodeURIComponent(requestBizId)}`)
+    const response = await $fetch<{ code: number, data: ProductRequestRecord }>(moduleUrl(`/api/v1/products/${encodeURIComponent(code.value)}/requests/${encodeURIComponent(requestBizId)}`))
     if (response.code !== 0 || response.data?.product_code !== code.value || response.data.biz_id !== requestBizId) throw new Error('需求详情响应不完整')
     openAdd(response.data)
   } catch (cause) {
@@ -377,10 +381,10 @@ onBeforeRouteUpdate(() => !busy.value)
         description="轻量计划工作区只适用于新建的简单计划版本；该版本继续使用原有规划入口。"
       />
       <div v-if="!isSimple" class="flex flex-wrap gap-2">
-        <UButton :to="`/products/${encodeURIComponent(code)}/cycles`" color="neutral" variant="outline">
+        <UButton :to="moduleUrl(`/products/${encodeURIComponent(code)}/cycles`)" color="neutral" variant="outline">
           规划周期与评分选入
         </UButton>
-        <UButton :to="{ path: `/products/${encodeURIComponent(code)}/versions/${encodeURIComponent(versionId)}/features`, query: versionPerspectiveQuery }">
+        <UButton :to="{ path: moduleUrl(`/products/${encodeURIComponent(code)}/versions/${encodeURIComponent(versionId)}/features`), query: versionPerspectiveQuery }">
           查看版本范围与交付
         </UButton>
       </div>
@@ -539,15 +543,15 @@ onBeforeRouteUpdate(() => !busy.value)
                 size="sm"
                 color="neutral"
                 variant="outline"
-                :to="{ path: `/products/${encodeURIComponent(code)}/versions/${encodeURIComponent(versionId)}/features`, query: versionPerspectiveQuery }"
+                :to="{ path: moduleUrl(`/products/${encodeURIComponent(code)}/versions/${encodeURIComponent(versionId)}/features`), query: versionPerspectiveQuery }"
               >
-                研发交付
+                {{ hosted ? '查看研发交付' : '研发交付' }}
               </UButton><UButton
                 v-if="planWritable && plan.planStatus === 'confirmed' && plan.permissions.canHandoff && item.planningItemBizId"
                 size="sm"
                 color="neutral"
                 variant="outline"
-                :to="{ path: `/products/${encodeURIComponent(code)}/planning-items/${item.planningItemBizId}/handoff`, query: { versionId, scopeId: item.id } }"
+                :to="{ path: moduleUrl(`/products/${encodeURIComponent(code)}/planning-items/${item.planningItemBizId}/handoff`), query: { versionId, scopeId: item.id } }"
               >
                 转交项目
               </UButton><span v-else-if="planWritable && item.planningItemBizId" class="text-sm text-muted">确认后可转交</span><UButton
@@ -574,15 +578,15 @@ onBeforeRouteUpdate(() => !busy.value)
               3. 确认计划
             </h2>
             <p v-if="plan.planStatus === 'confirmed'" class="text-sm text-muted">
-              计划已确认。下一步进入研发交付，按范围安排承接项目并跟踪交付。
+              {{ hosted ? '计划已确认。可查看研发交付页的范围、执行汇总与历史，并在本页按范围安排承接项目。' : '计划已确认。下一步进入研发交付，按范围安排承接项目并跟踪交付。' }}
             </p>
             <div class="flex flex-wrap items-center justify-between gap-3">
               <span class="text-sm text-muted">{{ plan.planStatus === 'confirmed' ? '确认人和时间已写入冻结快照。' : '确认会校验完整范围、日期、预算、依赖和验收标准。' }}</span><UButton :loading="busy" :disabled="!planWritable || !plan.permissions.canConfirmPlan" @click="confirmPlan">
                 {{ plan.planStatus === 'confirmed' ? '重新确认计划' : '确认计划' }}
               </UButton>
             </div>
-            <UButton v-if="plan.planStatus === 'confirmed'" :to="{ path: `/products/${encodeURIComponent(code)}/versions/${encodeURIComponent(versionId)}/features`, query: versionPerspectiveQuery }" icon="i-lucide-arrow-right">
-              进入研发交付
+            <UButton v-if="plan.planStatus === 'confirmed'" :to="{ path: moduleUrl(`/products/${encodeURIComponent(code)}/versions/${encodeURIComponent(versionId)}/features`), query: versionPerspectiveQuery }" icon="i-lucide-arrow-right">
+              {{ hosted ? '查看研发交付' : '进入研发交付' }}
             </UButton>
           </div>
         </div>

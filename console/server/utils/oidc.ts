@@ -20,7 +20,7 @@ import {
   verifyConsoleOidcServiceTokenState
 } from '@hzy/foundation/server/utils/consoleTenantRuntimeClient'
 import { resolveTrustedTenantGatewayContext } from '@hzy/foundation/server/utils/tenantGatewayTrust'
-import { readCachedBundle } from '~~/server/utils/bundleCache'
+import { readCachedBundle, verifiedPolicyStoreEnabled } from '~~/server/utils/bundleCache'
 import { loadPlatformRuntimeConfig, resolvePlatformRuntimeCacheScope } from '~~/server/utils/platformRuntime'
 import type { ConsoleSessionContext } from '~~/server/utils/authSession'
 import {
@@ -30,6 +30,8 @@ import {
 } from '~~/server/utils/serviceAccessTokenClaims'
 import { clampRefreshTokenTtlSeconds } from '~~/server/utils/oidcTokenLifetime'
 import { localGatewayIssuer } from '~~/server/utils/localGatewayIssuer'
+import { resolveLocalConsoleFacade } from '@hzy/foundation/server/utils/localConsoleFacade'
+import { logAuthDependencyFailure } from '@hzy/foundation/server/utils/authDependencyDiagnostic'
 
 export const OIDC_SUPPORTED_SCOPES = new Set(['openid', 'profile', 'email', 'offline_access'])
 
@@ -110,6 +112,29 @@ export interface ServiceAccessTokenInput {
   }
 }
 
+type ServiceTokenTimingStage = 'identity' | 'policy_digest' | 'signing' | 'audit'
+const serviceTokenTimings = new WeakMap<H3Event, Partial<Record<ServiceTokenTimingStage, number>>>()
+
+export async function measureServiceTokenStage<T>(event: H3Event, stage: ServiceTokenTimingStage, action: () => Promise<T>) {
+  if (process.env.HZY_CONSOLE_TOKEN_TIMING_ENABLED !== 'true') return await action()
+  const started = performance.now()
+  try {
+    return await action()
+  } finally {
+    const timings = serviceTokenTimings.get(event) || {}
+    timings[stage] = Math.round((performance.now() - started) * 100) / 100
+    serviceTokenTimings.set(event, timings)
+  }
+}
+
+export function logServiceTokenTimings(event: H3Event, path: 'gateway' | 'credential') {
+  if (process.env.HZY_CONSOLE_TOKEN_TIMING_ENABLED !== 'true') return
+  const timings = serviceTokenTimings.get(event)
+  serviceTokenTimings.delete(event)
+  if (!timings) return
+  console.info(JSON.stringify({ event: 'console-service-token-stages', path, durationsMs: timings }))
+}
+
 function stringValue(value: unknown) {
   return String(value || '').trim()
 }
@@ -161,6 +186,8 @@ export function getOidcTtl(event: H3Event, key: 'authorizationCodeTtlSeconds' | 
 }
 
 export function getOidcIssuer(event: H3Event) {
+  const facade = resolveLocalConsoleFacade(event)
+  if (facade) return facade.issuer
   const trustedGateway = resolveTrustedTenantGatewayContext(event)
   if (trustedGateway?.forwardedHost) {
     const localIssuer = localGatewayIssuer({
@@ -222,8 +249,14 @@ export async function ensureCurrentSigningKey(event: H3Event) {
 }
 
 export async function getPublishedJwks(event: H3Event) {
-  const response = await getConsoleOidcPublishedJwks(event)
-  return { keys: response.data.keys as JWK[] }
+  const startedAt = Date.now()
+  try {
+    const response = await getConsoleOidcPublishedJwks(event)
+    return { keys: response.data.keys as JWK[] }
+  } catch (error) {
+    logAuthDependencyFailure(event, 'runtime-jwks', error, Date.now() - startedAt)
+    throw error
+  }
 }
 
 export async function findOidcClient(event: H3Event, clientId: string) {
@@ -362,16 +395,31 @@ export async function consumeRefreshToken(event: H3Event, token: string, clientI
 }
 
 export async function loadOidcPolicyDigest(event: H3Event) {
+  const localFacade = resolveLocalConsoleFacade(event)
+  const policyRequired = localFacade || verifiedPolicyStoreEnabled(event)
   try {
     const config = loadPlatformRuntimeConfig(event)
-    const bundle = await readCachedBundle(config.bundleCacheDir, resolvePlatformRuntimeCacheScope(config, event))
+    const bundle = await readCachedBundle(config.bundleCacheDir, resolvePlatformRuntimeCacheScope(config, event), event)
+    if (policyRequired && !bundle?.bundleVersion) {
+      throw createError({ statusCode: 503, message: 'Local Console policy is unavailable' })
+    }
     return {
       tenantCode: bundle?.tenantCode || config.tenantCode,
       deploymentCode: bundle?.deploymentCode || config.deploymentCode,
       policyVersion: bundle?.bundleVersion || null,
       caps: bundle?.bundleHash || null
     }
-  } catch {
+  } catch (error) {
+    if (policyRequired) {
+      const failure = error as { statusCode?: number, data?: { code?: string } }
+      const code = failure.data?.code
+      console.warn('Console policy digest unavailable', {
+        status: failure.statusCode || 503,
+        code: typeof code === 'string' && /^[a-z][a-z0-9_]{0,80}$/.test(code) ? code : 'policy_read_failed'
+      })
+      // Explicit verified mode must fail closed even outside the local facade.
+      throw createError({ statusCode: 503, message: 'Console policy is unavailable', data: { code: localFacade ? 'local_console_policy_unavailable' : 'verified_console_policy_unavailable' } })
+    }
     return {
       tenantCode: null,
       deploymentCode: null,
@@ -434,7 +482,8 @@ async function signJwt(input: {
 
 async function signServiceAccessJwt(input: ServiceAccessTokenInput & { expiresIn: number }) {
   const issuer = getOidcIssuer(input.event)
-  const policyDigest = await loadOidcPolicyDigest(input.event)
+  const policyDigest = await measureServiceTokenStage(input.event, 'policy_digest',
+    () => loadOidcPolicyDigest(input.event))
   const trustedGateway = resolveTrustedTenantGatewayContext(input.event)
   const credentialBinding = input.serviceClient.policyBinding
   if (trustedGateway && credentialBinding && (
@@ -508,10 +557,10 @@ async function signServiceAccessJwt(input: ServiceAccessTokenInput & { expiresIn
     policyVersion: policy.policyVersion,
     caps: policy.caps
   })
-  return (await signConsoleOidcToken(input.event, {
+  return await measureServiceTokenStage(input.event, 'signing', async () => (await signConsoleOidcToken(input.event, {
     claims,
     ttlSeconds: input.expiresIn
-  })).data.token
+  })).data.token)
 }
 
 export async function issueTokenSet(input: TokenIssueInput): Promise<TokenSet> {
@@ -627,13 +676,21 @@ export async function verifyAccessToken(event: H3Event, token: string) {
     throw createError({ statusCode: 401, message: 'invalid_token: sid missing' })
   }
 
+  const sessionStartedAt = Date.now()
   try {
     await resolveConsoleAuthSession(event, {
       sessionIdHash: sid,
       touch: false
     })
-  } catch {
-    throw createError({ statusCode: 401, message: 'invalid_token: session revoked or expired' })
+  } catch (error) {
+    logAuthDependencyFailure(event, 'runtime-session', error, Date.now() - sessionStartedAt)
+    const failure = error as { statusCode?: number, status?: number, response?: { status?: number } }
+    const status = Number(failure?.response?.status || failure?.statusCode || failure?.status || 0)
+    if (status === 401) {
+      throw createError({ statusCode: 401, message: 'invalid_token: session revoked or expired' })
+    }
+    throw createError({ statusCode: 503, message: 'Console session verification is unavailable',
+      data: { code: 'console_session_verification_unavailable' } })
   }
 
   return payload

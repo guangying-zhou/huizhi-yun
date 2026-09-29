@@ -35,6 +35,66 @@ type ProductCatalogPage struct {
 	NextPage  *int                 `json:"nextPage"`
 }
 
+type ProductCatalogExportPage struct {
+	Items     []map[string]any `json:"items"`
+	Total     int64            `json:"total"`
+	Page      int              `json:"page"`
+	PageSize  int              `json:"pageSize"`
+	Watermark string           `json:"watermark"`
+	NextPage  *int             `json:"nextPage"`
+}
+
+var productCatalogExportFields = map[string]func(ProductCatalogItem) any{
+	"product_code":       func(item ProductCatalogItem) any { return item.ProductCode },
+	"product_name":       func(item ProductCatalogItem) any { return item.ProductName },
+	"product_line":       func(item ProductCatalogItem) any { return item.ProductLine },
+	"product_line_label": func(item ProductCatalogItem) any { return item.ProductLineLabel },
+	"source_status":      func(item ProductCatalogItem) any { return item.Status },
+	"onboardable":        func(item ProductCatalogItem) any { return item.Onboardable },
+}
+
+func parseProductCatalogExportFields(raw string) ([]string, error) {
+	if raw == "" {
+		return nil, httperror.New(400, "product_catalog_export_fields_required", "explicit export fields required")
+	}
+	fields := strings.Split(raw, ",")
+	seen := make(map[string]struct{}, len(fields))
+	for _, field := range fields {
+		if field == "" || strings.TrimSpace(field) != field {
+			return nil, httperror.New(400, "product_catalog_export_field_invalid", "invalid product catalog export field")
+		}
+		if _, allowed := productCatalogExportFields[field]; !allowed {
+			return nil, httperror.New(400, "product_catalog_export_field_not_allowed", "product catalog export field not allowed")
+		}
+		if _, duplicate := seen[field]; duplicate {
+			return nil, httperror.New(400, "product_catalog_export_field_invalid", "duplicate product catalog export field")
+		}
+		seen[field] = struct{}{}
+	}
+	return fields, nil
+}
+
+func (a *Adapter) productCatalogExport(ctx context.Context, query url.Values) (ProductCatalogExportPage, error) {
+	result := ProductCatalogExportPage{Items: []map[string]any{}}
+	fields, err := parseProductCatalogExportFields(query.Get("fields"))
+	if err != nil {
+		return result, err
+	}
+	page, err := a.productCatalog(ctx, query)
+	if err != nil {
+		return result, err
+	}
+	result.Total, result.Page, result.PageSize, result.Watermark, result.NextPage = page.Total, page.Page, page.PageSize, page.Watermark, page.NextPage
+	for _, item := range page.Items {
+		row := make(map[string]any, len(fields))
+		for _, field := range fields {
+			row[field] = productCatalogExportFields[field](item)
+		}
+		result.Items = append(result.Items, row)
+	}
+	return result, nil
+}
+
 func catalogPageNumber(raw string, fallback, max int) (int, error) {
 	if raw == "" {
 		return fallback, nil
@@ -101,10 +161,7 @@ func (a *Adapter) productCatalog(ctx context.Context, query url.Values) (Product
 			rows.Close()
 			return result, err
 		}
-		switch item.Status {
-		case "poc", "mvp", "mmp", "pmf", "iterating":
-			item.Onboardable = true
-		}
+		item.Onboardable = ProductStatusOnboardable(item.Status)
 		result.Items = append(result.Items, item)
 	}
 	err = rows.Err()
@@ -139,7 +196,29 @@ func requireProductCatalogService(query url.Values) error {
 	return httperror.New(403, "insufficient_scope", "assets:product:read required")
 }
 
+func requireProductCatalogExportService(query url.Values) error {
+	if err := requireProductCatalogService(query); err != nil {
+		return err
+	}
+	for _, scope := range strings.Fields(query.Get("current_user_scopes")) {
+		if scope == "assets:product:export" {
+			return nil
+		}
+	}
+	return httperror.New(403, "insufficient_scope", "assets:product:export required")
+}
+
 func (a *Adapter) handleProductCatalogRuntime(ctx context.Context, method, path string, query url.Values) (any, string, bool, error) {
+	if path == "/v1/assets/service/products/catalog/export" {
+		if method != http.MethodGet {
+			return nil, "assets.product_catalog.export", true, httperror.New(405, "method_not_allowed", "GET required")
+		}
+		if err := requireProductCatalogExportService(query); err != nil {
+			return nil, "assets.product_catalog.export", true, err
+		}
+		result, err := a.productCatalogExport(ctx, query)
+		return ok(result), "assets.product_catalog.export", true, err
+	}
 	if path != "/v1/assets/service/products/catalog" && path != "/v1/assets/service/products" {
 		return nil, "", false, nil
 	}
@@ -155,4 +234,13 @@ func (a *Adapter) handleProductCatalogRuntime(ctx context.Context, method, path 
 	}
 	result, err := a.productCatalog(ctx, query)
 	return ok(result), "assets.product_catalog", true, err
+}
+
+// ProductStatusOnboardable is the owning Assets lifecycle rule for Aims intake.
+func ProductStatusOnboardable(status string) bool {
+	switch status {
+	case "poc", "mvp", "mmp", "pmf", "iterating":
+		return true
+	}
+	return false
 }

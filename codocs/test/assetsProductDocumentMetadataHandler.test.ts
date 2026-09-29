@@ -10,7 +10,7 @@ import { buildServiceCommandRuntimeHeaders, hashServiceCommandPayload, verifySer
 
 const uuid = '00000000-0000-4000-8000-000000000001'
 const compiled = ts.transpileModule(readFileSync(new URL('../server/utils/assetsProductDocumentMetadataService.ts', import.meta.url), 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText
-function harness(options: { scopes?: string[], badSignature?: boolean, tenant?: string, app?: string, bodyPatch?: object, hash?: string, runtimeFailure?: boolean, realSignature?: boolean, tamper?: string } = {}) {
+function harness(options: { sourceApp?: string, sourceClient?: string, scopes?: string[], badSignature?: boolean, tenant?: string, app?: string, bodyPatch?: object, hash?: string, runtimeFailure?: boolean, realSignature?: boolean, tamper?: string } = {}) {
   const calls: string[] = [], signed: any[] = [], runtime: any[] = [], exports: any = {}
   const headers: Record<string, string> = { 'authorization': 'Bearer test-token', 'x-hzy-tenant': options.tenant ?? 'TENANT', 'x-hzy-deployment': 'custom-codocs', 'x-hzy-app-code': options.app ?? 'codocs', 'x-request-id': 'request-1' }
   const command = { actorUid: 'reader', productCode: 'P', documentUuid: uuid, action: 'metadata:read', ...options.bodyPatch }
@@ -22,7 +22,7 @@ function harness(options: { scopes?: string[], badSignature?: boolean, tenant?: 
     } }
     if (name.endsWith('/consoleOidc')) return { requireConsoleAuthContext: async () => {
       calls.push('auth')
-      return { authenticated: true, tokenUse: 'service', subjectType: 'service', appCode: 'assets', clientCode: 'assets.runtime', scopes: options.scopes ?? ['codocs:product-document:read'], tenant: 'TENANT', deployment: 'custom-assets' }
+      return { authenticated: true, tokenUse: 'service', subjectType: 'service', appCode: options.sourceApp ?? 'assets', clientCode: options.sourceClient ?? `${options.sourceApp ?? 'assets'}.runtime`, scopes: options.scopes ?? ['codocs:product-document:read'], tenant: 'TENANT', deployment: `custom-${options.sourceApp ?? 'assets'}` }
     } }
     if (name.endsWith('/serviceAuthGuard')) return policy
     if (name.endsWith('/tenantRuntimeClient')) return { hashServiceCommandPayload: options.realSignature ? hashServiceCommandPayload : async () => 'hash', verifyServiceCommandRuntimeHeaders: async (args: any) => {
@@ -44,7 +44,7 @@ function harness(options: { scopes?: string[], badSignature?: boolean, tenant?: 
       envelope.commandSha256 = await hashServiceCommandPayload(command)
       Object.assign(headers, await buildServiceCommandRuntimeHeaders({
         token: 'test-token', method: 'POST', requestTarget: `/api/v1/service/assets-product-documents/${uuid}/metadata`, requestId: 'request-1',
-        tenantCode: 'TENANT', sourceDeploymentCode: 'custom-assets', targetDeploymentCode: 'custom-codocs', sourceApp: 'assets', sourceClientId: 'assets.runtime', targetApp: 'codocs', envelope
+        tenantCode: 'TENANT', sourceDeploymentCode: `custom-${options.sourceApp ?? 'assets'}`, targetDeploymentCode: 'custom-codocs', sourceApp: options.sourceApp ?? 'assets', sourceClientId: options.sourceClient ?? `${options.sourceApp ?? 'assets'}.runtime`, targetApp: 'codocs', envelope
       }))
       if (options.tamper === 'actor') {
         command.actorUid = 'other-reader'
@@ -90,4 +90,24 @@ test('product metadata handler verifies real HMAC and rejects substituted signed
     await assert.rejects(h.run(), { statusCode: 403 }, tamper)
     assert.equal(h.runtime.length, 0, tamper)
   }
+})
+
+test('Enterprise Assets metadata uses its physical identity and rejects mixed clients', async () => {
+  const valid = harness({ sourceApp: 'enterprise', realSignature: true })
+  await valid.run()
+  assert.equal(valid.signed[0].sourceApp, 'enterprise')
+  assert.equal(valid.signed[0].sourceDeploymentCode, 'custom-enterprise')
+  assert.equal(valid.signed[0].sourceClientId, 'enterprise.runtime')
+  assert.equal(valid.runtime[0].args.serviceCommandActor.uid, 'reader')
+  for (const options of [
+    { sourceApp: 'enterprise', sourceClient: 'assets.runtime' },
+    { sourceApp: 'assets', sourceClient: 'enterprise.runtime' },
+    { sourceApp: 'aims', sourceClient: 'enterprise.runtime' },
+    { sourceApp: 'enterprise', scopes: ['codocs:*'] }
+  ]) {
+    const invalid = harness(options)
+    await assert.rejects(invalid.run(), { statusCode: 403 })
+    assert.deepEqual(invalid.calls, ['auth'])
+  }
+  await assert.rejects(harness({ sourceApp: 'enterprise', realSignature: true, tamper: 'actor' }).run(), { statusCode: 403 })
 })

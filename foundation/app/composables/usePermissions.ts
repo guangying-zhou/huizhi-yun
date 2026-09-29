@@ -5,7 +5,8 @@ export function usePermissions() {
     hasRole,
     filterMenus,
     clearAuthorizationCache,
-    loaded
+    loaded,
+    error
   } = usePlatformPermission()
 
   return {
@@ -14,6 +15,7 @@ export function usePermissions() {
     hasRole,
     filterMenus,
     clearCache: clearAuthorizationCache,
-    loaded
+    loaded,
+    error
   }
 }

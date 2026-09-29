@@ -263,6 +263,10 @@ func (a *Adapter) HandleRuntime(ctx context.Context, method string, path string,
 
 	if method == http.MethodGet && suffix == "documents" {
 		result, err := a.documentsList(ctx, query)
+		if err == nil && wantsSnapshotRef(query.Get("include_snapshot_ref")) {
+			items, _ := result["items"].([]map[string]any)
+			err = a.annotateSnapshotState(ctx, items, true)
+		}
 		return map[string]any{"success": true, "data": result}, "codocs.documents.list", err
 	}
 	if method == http.MethodGet && suffix == "documents/stats/my" {
@@ -290,6 +294,12 @@ func (a *Adapter) HandleRuntime(ctx context.Context, method string, path string,
 	if method == http.MethodGet && strings.HasPrefix(suffix, "documents/") && len(pathSegments(suffix)) == 2 {
 		uuid := strings.TrimPrefix(suffix, "documents/")
 		result, err := a.documentAccess(ctx, uuid, query)
+		if err == nil {
+			// Standalone Codocs must fail closed on v2 documents before it
+			// touches storage; the exact body reference is only returned to
+			// trusted server callers that ask for it.
+			err = a.annotateSnapshotState(ctx, []map[string]any{result}, wantsSnapshotRef(query.Get("include_snapshot_ref")))
+		}
 		return map[string]any{"success": true, "data": result}, "codocs.documents.get", err
 	}
 	if (method == http.MethodPatch || method == http.MethodPut) && strings.HasPrefix(suffix, "documents/") && len(pathSegments(suffix)) == 2 {
@@ -505,6 +515,12 @@ func (a *Adapter) HandleRuntime(ctx context.Context, method string, path string,
 	}
 	if method == http.MethodGet && suffix == "open-department-documents" {
 		result, err := a.openDepartmentDocuments(ctx, query)
+		if err == nil && strings.TrimSpace(query.Get("uuid")) != "" {
+			// A single-document read (preview) must know whether the body lives
+			// in a v2 snapshot; the folder tree listing stays untouched.
+			documents, _ := result["documents"].([]map[string]any)
+			err = a.annotateSnapshotState(ctx, documents, wantsSnapshotRef(query.Get("include_snapshot_ref")))
+		}
 		return map[string]any{"success": true, "data": result}, "codocs.open_department_documents.list", err
 	}
 	if method == http.MethodGet && suffix == "folders" {
@@ -514,6 +530,10 @@ func (a *Adapter) HandleRuntime(ctx context.Context, method string, path string,
 	if method == http.MethodPost && suffix == "folders" {
 		result, err := a.createFolder(ctx, query, body)
 		return map[string]any{"success": true, "data": result}, "codocs.folders.create", err
+	}
+	if strings.HasPrefix(suffix, "folders/") && len(pathSegments(suffix)) == 2 && (method == http.MethodGet || method == http.MethodPatch || method == http.MethodDelete) {
+		result, err := a.scopedFolderOperation(ctx, method, strings.TrimPrefix(suffix, "folders/"), query, body)
+		return map[string]any{"success": err == nil, "data": result}, "codocs.folders.scoped", err
 	}
 	if method == http.MethodGet && suffix == "collaboration/context" {
 		result, err := a.collaborationContext(ctx, query)
@@ -569,6 +589,11 @@ func (a *Adapter) HandleRuntime(ctx context.Context, method string, path string,
 		uuid := pathMiddle(suffix, "documents/", "/versions")
 		result, err := a.documentVersions(ctx, uuid, query)
 		return map[string]any{"success": true, "data": result}, "codocs.documents.versions.list", err
+	}
+	if method == http.MethodGet && strings.HasPrefix(suffix, "documents/") && strings.Contains(suffix, "/versions/") {
+		uuid, versionID := documentNestedID(suffix, "versions")
+		result, err := a.documentVersion(ctx, uuid, versionID, query)
+		return map[string]any{"success": true, "data": result}, "codocs.documents.versions.view", err
 	}
 	if method == http.MethodDelete && strings.HasPrefix(suffix, "documents/") && strings.Contains(suffix, "/versions/") {
 		uuid, versionID := documentNestedID(suffix, "versions")

@@ -114,6 +114,31 @@ export function getProductPerspectives(productCode: string): ProductPerspective[
   ]
 }
 
+/** Enterprise Host only exposes the product routes registered by aims/layer/entry.mjs. */
+export function hostProductPerspectives(values: ProductPerspective[]): ProductPerspective[] {
+  return values.filter(value => ['overview', 'rd', 'gtm'].includes(value.key)).map(value => ({
+    ...value,
+    ...(value.key === 'gtm' ? { path: value.items.find(item => hostProductPathAvailable(item.path))?.path || value.path } : {}),
+    extraPaths: value.extraPaths?.filter(hostProductPathAvailable),
+    items: value.items.filter(item => hostProductPathAvailable(item.path)).map(item => ({
+      ...item,
+      extraPaths: item.extraPaths?.filter(hostProductPathAvailable)
+    })),
+    more: value.more.filter(item => hostProductPathAvailable(item.path)).map(item => ({
+      ...item,
+      extraPaths: item.extraPaths?.filter(hostProductPathAvailable)
+    }))
+  }))
+}
+
+function hostProductPathAvailable(path: string) {
+  const suffix = path.replace(/^\/products\/[^/]+/, '')
+  return suffix === '' || ['/requests', '/versions', '/structure', '/features', '/components', '/adoption', '/documents', '/cycles', '/execution-coordination', '/planning'].includes(suffix)
+    || /^\/versions\//.test(suffix)
+    || /^\/features\//.test(suffix)
+    || /^\/planning-items\/[^/]+\/handoff$/.test(suffix)
+}
+
 /** 路径是否命中某个入口（含其子路由） */
 export function productPathMatches(path: string, target: string) {
   return path === target || path.startsWith(`${target}/`)

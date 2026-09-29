@@ -6,10 +6,12 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"sort"
 	"strconv"
 	"strings"
 
 	"github.com/huizhi-yun/data-runtime/internal/httperror"
+	iop "github.com/huizhi-yun/data-runtime/internal/integrationoperation"
 )
 
 type batchWorkItemRow struct {
@@ -57,18 +59,111 @@ func (a *Adapter) batchUpdateWorkItems(ctx context.Context, query url.Values, bo
 		return nil, err
 	}
 
-	items, err := a.batchWorkItemRows(ctx, ids)
+	identity, scoped := ctx.Value(enterpriseProjectCommandScopeKey{}).(EnterpriseProjectUpdateIdentity)
+	var tx *sql.Tx
+	var repo *iop.ReceiptRepository
+	var projects []int64
+	if scoped {
+		seen := map[int64]bool{}
+		for _, id := range ids {
+			if seen[id] {
+				return nil, httperror.New(http.StatusBadRequest, "duplicate_work_item_id", "工作项标识重复")
+			}
+			seen[id] = true
+		}
+		if identity.CommandScope == nil || identity.ActorUID != uid {
+			return nil, httperror.New(http.StatusForbidden, "enterprise_project_command_scope_invalid", "Batch scope is invalid")
+		}
+		// Discover only the owning IDs before locking. Recheck every item's owner
+		// after locking rows; a concurrent move must fail the whole batch.
+		projects, err = a.batchOwningProjects(ctx, ids)
+		if err != nil {
+			return nil, err
+		}
+		tx, repo, err = a.beginDeliverableWrite(ctx)
+		if err != nil {
+			return nil, err
+		}
+		defer tx.Rollback()
+		for _, projectID := range projects {
+			if err := requireEnterpriseProjectCommandScopeTx(ctx, tx, identity, strconv.FormatInt(projectID, 10), "", "batch-edit"); err != nil {
+				return nil, err
+			}
+		}
+	}
+	var items []batchWorkItemRow
+	if scoped {
+		items, err = a.batchWorkItemRowsFrom(ctx, tx, ids, true)
+	} else {
+		items, err = a.batchWorkItemRows(ctx, ids)
+	}
 	if err != nil {
 		return nil, err
 	}
-	if len(items) == 0 {
+	if len(items) == 0 || (scoped && len(items) != len(ids)) {
 		return nil, httperror.New(http.StatusNotFound, "work_item_not_found", "工作项不存在")
 	}
+	if scoped {
+		allowed := map[int64]bool{}
+		for _, projectID := range projects {
+			allowed[projectID] = true
+		}
+		for _, item := range items {
+			if !allowed[item.ProjectID] {
+				return nil, httperror.New(http.StatusConflict, "work_item_project_changed", "工作项归属已变化")
+			}
+		}
+	}
 
+	if !scoped {
+		return a.finishBatchUpdateWorkItems(ctx, tx, scoped, items, changes, uid, query, body)
+	}
+	seenProjects := map[int64]bool{}
+	for _, item := range items {
+		if seenProjects[item.ProjectID] {
+			continue
+		}
+		seenProjects[item.ProjectID] = true
+		if err := requireBatchProjectMemberOrScopedAdminTx(ctx, tx, item.ProjectID, uid, query); err != nil {
+			return nil, err
+		}
+	}
+	write := func(writeCtx context.Context) (map[string]any, error) {
+		return a.finishBatchUpdateWorkItems(writeCtx, tx, true, items, changes, uid, query, body)
+	}
+	var result map[string]any
+	if repo == nil {
+		result, err = write(ctx)
+	} else {
+		result, err = executeLegacyWorkItemReceipt(ctx, tx, repo, legacyWorkItemReceiptConfig[map[string]any]{Action: "batch-update", Capability: "aims:work-item-batch:edit", BizType: "work-item-batch", Command: map[string]any{"payload": body}, BizCode: func(value map[string]any) string { return fmt.Sprint(value["updated"]) }, Replay: func(_ context.Context, code string) (map[string]any, error) {
+			n, err := strconv.Atoi(code)
+			if err != nil {
+				return nil, httperror.New(503, "work_item_receipt_corrupt", "Work item receipt is invalid")
+			}
+			return map[string]any{"updated": n}, nil
+		}, Decorate: decorateLegacyWorkItemMap}, write)
+	}
+	if err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
+func (a *Adapter) finishBatchUpdateWorkItems(ctx context.Context, tx *sql.Tx, scoped bool, items []batchWorkItemRow, changes []workItemBatchChange, uid string, query url.Values, body map[string]any) (map[string]any, error) {
+	var err error
 	projectSeen := map[int64]bool{}
 	for _, item := range items {
 		if item.MilestoneID.Valid {
-			if err := a.requireMilestoneCompletionUnlocked(ctx, item.MilestoneID.Int64); err != nil {
+			var lockErr error
+			if scoped {
+				lockErr = requireMilestoneCompletionUnlockedTx(ctx, tx, item.MilestoneID.Int64)
+			} else {
+				lockErr = a.requireMilestoneCompletionUnlocked(ctx, item.MilestoneID.Int64)
+			}
+			if err := lockErr; err != nil {
 				return nil, err
 			}
 		}
@@ -76,7 +171,13 @@ func (a *Adapter) batchUpdateWorkItems(ctx context.Context, query url.Values, bo
 			continue
 		}
 		projectSeen[item.ProjectID] = true
-		if err := a.requireProjectMemberOrScopedAdmin(ctx, item.ProjectID, uid, query); err != nil {
+		var memberErr error
+		if scoped {
+			memberErr = requireBatchProjectMemberOrScopedAdminTx(ctx, tx, item.ProjectID, uid, query)
+		} else {
+			memberErr = a.requireProjectMemberOrScopedAdmin(ctx, item.ProjectID, uid, query)
+		}
+		if err := memberErr; err != nil {
 			return nil, err
 		}
 		if strings.TrimSpace(item.LifecycleStatus) != "active" {
@@ -90,7 +191,13 @@ func (a *Adapter) batchUpdateWorkItems(ctx context.Context, query url.Values, bo
 	for _, change := range changes {
 		if change.bodyKey == "milestoneId" && change.value != nil {
 			if milestoneID, ok := change.value.(int64); ok {
-				if err := a.requireMilestoneCompletionUnlocked(ctx, milestoneID); err != nil {
+				var lockErr error
+				if scoped {
+					lockErr = requireMilestoneCompletionUnlockedTx(ctx, tx, milestoneID)
+				} else {
+					lockErr = a.requireMilestoneCompletionUnlocked(ctx, milestoneID)
+				}
+				if err := lockErr; err != nil {
 					return nil, err
 				}
 			}
@@ -102,7 +209,12 @@ func (a *Adapter) batchUpdateWorkItems(ctx context.Context, query url.Values, bo
 			if item.Status == statusChange {
 				continue
 			}
-			valid, err := a.validateWorkItemStatusTransition(ctx, item.ProjectID, item.Tier, item.Status, statusChange)
+			var valid bool
+			if scoped {
+				valid, err = validateWorkItemStatusTransitionFrom(ctx, tx, item.ProjectID, item.Tier, item.Status, statusChange)
+			} else {
+				valid, err = a.validateWorkItemStatusTransition(ctx, item.ProjectID, item.Tier, item.Status, statusChange)
+			}
 			if err != nil {
 				return nil, err
 			}
@@ -120,11 +232,13 @@ func (a *Adapter) batchUpdateWorkItems(ctx context.Context, query url.Values, bo
 		return map[string]any{"updated": 0}, nil
 	}
 
-	tx, err := a.DB().BeginTx(ctx, nil)
-	if err != nil {
-		return nil, err
+	if !scoped {
+		tx, err = a.DB().BeginTx(ctx, nil)
+		if err != nil {
+			return nil, err
+		}
+		defer tx.Rollback()
 	}
-	defer tx.Rollback()
 
 	setClauses := make([]string, 0, len(changes))
 	updateArgs := make([]any, 0, len(changes)+len(items))
@@ -177,14 +291,66 @@ func (a *Adapter) batchUpdateWorkItems(ctx context.Context, query url.Values, bo
 		}
 	}
 
-	if err := tx.Commit(); err != nil {
-		return nil, err
+	if !scoped {
+		if err := tx.Commit(); err != nil {
+			return nil, err
+		}
 	}
 	return map[string]any{"updated": len(items)}, nil
 }
 
 func (a *Adapter) batchWorkItemRows(ctx context.Context, ids []int64) ([]batchWorkItemRow, error) {
-	rows, err := a.DB().QueryContext(ctx, `
+	return a.batchWorkItemRowsFrom(ctx, a.DB(), ids, false)
+}
+
+type batchQueryer interface {
+	QueryContext(context.Context, string, ...any) (*sql.Rows, error)
+	QueryRowContext(context.Context, string, ...any) *sql.Row
+}
+
+func (a *Adapter) batchOwningProjects(ctx context.Context, ids []int64) ([]int64, error) {
+	rows, err := a.DB().QueryContext(ctx, "SELECT DISTINCT project_id FROM work_items WHERE id IN ("+placeholders(len(ids))+") ORDER BY project_id", int64SliceArgs(ids)...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	projects := []int64{}
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		projects = append(projects, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	sort.Slice(projects, func(i, j int) bool { return projects[i] < projects[j] })
+	return projects, nil
+}
+
+func requireBatchProjectMemberOrScopedAdminTx(ctx context.Context, tx *sql.Tx, projectID int64, uid string, query url.Values) error {
+	if hasProjectAdminFlag(query) {
+		return nil
+	}
+	adminWhere, adminArgs := projectScopedAdminWhere(query, "p")
+	args := append([]any{uid, projectID, uid}, adminArgs...)
+	var count int64
+	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM aims_projects p LEFT JOIN aims_project_members pm ON pm.project_id=p.id AND pm.uid=? AND COALESCE(pm.status,'active')='active' WHERE p.id=? AND (p.leader_uid=? OR pm.id IS NOT NULL OR `+adminWhere+`)`, args...).Scan(&count); err != nil {
+		return err
+	}
+	if count == 0 {
+		return httperror.New(http.StatusForbidden, "project_member_required", "project member access required")
+	}
+	return nil
+}
+
+func (a *Adapter) batchWorkItemRowsFrom(ctx context.Context, q batchQueryer, ids []int64, lock bool) ([]batchWorkItemRow, error) {
+	suffix := ""
+	if lock {
+		suffix = " ORDER BY wi.id FOR UPDATE"
+	}
+	rows, err := q.QueryContext(ctx, `
 		SELECT
 			wi.id,
 			wi.project_id,
@@ -200,8 +366,7 @@ func (a *Adapter) batchWorkItemRows(ctx context.Context, ids []int64) ([]batchWo
 		FROM work_items wi
 		JOIN aims_projects p ON p.id = wi.project_id
 		LEFT JOIN work_item_service_ext wse ON wse.work_item_id = wi.id
-		WHERE wi.id IN (`+placeholders(len(ids))+`)
-	`, int64SliceArgs(ids)...)
+		WHERE wi.id IN (`+placeholders(len(ids))+`)`+suffix, int64SliceArgs(ids)...)
 	if err != nil {
 		return nil, fmt.Errorf("query batch work items: %w", err)
 	}
@@ -304,8 +469,12 @@ func batchStatusChange(changes []workItemBatchChange) (string, bool) {
 }
 
 func (a *Adapter) validateWorkItemStatusTransition(ctx context.Context, projectID int64, entityType string, fromStatus string, toStatus string) (bool, error) {
+	return validateWorkItemStatusTransitionFrom(ctx, a.DB(), projectID, entityType, fromStatus, toStatus)
+}
+
+func validateWorkItemStatusTransitionFrom(ctx context.Context, q batchQueryer, projectID int64, entityType string, fromStatus string, toStatus string) (bool, error) {
 	var ruleID int64
-	err := a.DB().QueryRowContext(ctx, `
+	err := q.QueryRowContext(ctx, `
 		SELECT id
 		FROM workflow_transitions
 		WHERE project_id = ? AND entity_type = ? AND from_status = ? AND to_status = ?
@@ -318,7 +487,7 @@ func (a *Adapter) validateWorkItemStatusTransition(ctx context.Context, projectI
 		return false, err
 	}
 
-	err = a.DB().QueryRowContext(ctx, `
+	err = q.QueryRowContext(ctx, `
 		SELECT id
 		FROM workflow_transitions
 		WHERE project_id = ? AND entity_type = ?
@@ -331,7 +500,7 @@ func (a *Adapter) validateWorkItemStatusTransition(ctx context.Context, projectI
 		return false, err
 	}
 
-	err = a.DB().QueryRowContext(ctx, `
+	err = q.QueryRowContext(ctx, `
 		SELECT id
 		FROM workflow_transitions
 		WHERE project_id IS NULL AND entity_type = ? AND from_status = ? AND to_status = ?

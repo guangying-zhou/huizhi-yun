@@ -1,3 +1,6 @@
+import { gatewayTokenLane } from './gateway-assertion.js'
+import { enterpriseHostEntries, enterpriseHostRoutes } from '../../../test-env/enterprise-host-routes.mjs'
+import { enterpriseHostAllowlistFor, enterprisePilot, resolveEnterprisePilotPath, validateEnterprisePilotBinding } from '../../../test-env/enterprise-topology.mjs'
 const DEFAULT_CONSOLE_ORIGIN = 'https://console.huizhi.yun'
 const DEFAULT_FINANCE_ORIGIN = 'https://finance.isme.dev'
 const DEFAULT_ALTOC_ORIGIN = 'https://altoc.isme.dev'
@@ -14,11 +17,13 @@ const PLATFORM_REGISTRY_CACHE_TTL_MS = 5 * 60 * 1000
 const PLATFORM_REGISTRY_STALE_TTL_MS = 24 * 60 * 60 * 1000
 const PLATFORM_REGISTRY_CACHE_MARKER = '__hzy_tenant_gateway_registry_cache_v2'
 const SCHEDULER_INTERVAL_MS = 5 * 60 * 1000
-const SCHEDULER_APPS = new Set(['aims', 'altoc', 'console', 'finance', 'people', 'workflow'])
+// Assets is woken only with a persisted unified/recovered selection (see wakeTenantApp).
+const SCHEDULER_APPS = new Set(['aims', 'altoc', 'assets', 'console', 'finance', 'people', 'workflow'])
 const APP_SERVICE_BINDINGS = Object.freeze({
   aims: 'HZY_AIMS_SERVICE',
   assets: 'HZY_ASSETS_SERVICE',
   altoc: 'HZY_ALTOC_SERVICE',
+  codocs: 'HZY_CODOCS_SERVICE',
   console: 'HZY_CONSOLE_SERVICE',
   finance: 'HZY_FINANCE_SERVICE',
   people: 'HZY_PEOPLE_SERVICE',
@@ -81,6 +86,7 @@ const DEFAULT_RESERVED_TENANT_SUBDOMAIN_SUFFIXES = [
 
 const platformRegistryCache = new Map()
 const runtimeBootstrapTokenCache = new Map()
+const runtimeBootstrapTokenPending = new Map()
 
 const APP_ROUTES = [
   {
@@ -150,6 +156,13 @@ export default {
         headers: { 'content-type': 'text/plain;charset=utf-8' }
       })
     }
+    // The private Aims Worker remains a Service Binding drain target. This
+    // public proxy switch is intentionally absent from all environment vars
+    // until production request analytics have been reviewed.
+    if (env.HZY_TENANT_GATEWAY_BLOCK_PUBLIC_AIMS === 'true'
+      && (requestUrl.pathname === '/aims' || requestUrl.pathname.startsWith('/aims/'))) {
+      return new Response('Not Found', { status: 404 })
+    }
     const reservedHost = reservedTenantHost(requestUrl.hostname, env)
     if (reservedHost) {
       return passthroughReservedHost(request, env)
@@ -179,6 +192,18 @@ export default {
       })
     }
 
+    if (!tenantBindingMatchesExpected(tenant, requestUrl.hostname, env)) {
+      console.error('Tenant registry binding does not match the configured site binding')
+      return new Response('Tenant binding unavailable', {
+        status: 503,
+        headers: {
+          'content-type': 'text/plain;charset=utf-8',
+          'cache-control': 'no-store',
+          'x-hzy-gateway': 'tenant-gateway'
+        }
+      })
+    }
+
     const canonicalRedirect = canonicalRedirectUrl(requestUrl)
     if (canonicalRedirect) {
       return Response.redirect(canonicalRedirect, 308)
@@ -194,6 +219,20 @@ export default {
 
     if (isDirectoryConnectorRequest(requestUrl.pathname)) {
       return proxyToDirectoryConnector(request, env, tenant)
+    }
+
+    if ((env.HZY_ENTERPRISE_PILOT === 'true' || env.HZY_ENTERPRISE_AUTH_PILOT === 'true')
+      && (requestUrl.hostname === new URL(enterprisePilot.origin).hostname
+        || enterpriseHostAllowlistFor(env.HZY_ENTERPRISE_HOST_ALLOWLIST_JSON, requestUrl.hostname).length > 0)) {
+      const pilotRoute = resolveEnterprisePilotPath(requestUrl.pathname, requestUrl.search, request.method)
+      const authOnlyRoute = pilotRoute && requestUrl.pathname.startsWith('/enterprise/') && ['page', 'auth', 'asset', 'unavailable'].includes(pilotRoute.kind)
+      const legacyShellRoute = pilotRoute?.kind === 'redirect' && requestUrl.pathname.startsWith('/shell/')
+      const legacyShellGet = legacyShellRoute && env.HZY_ENTERPRISE_PILOT === 'true' && request.method === 'GET'
+      if (pilotRoute && (pilotRoute.kind === 'redirect'
+        ? (legacyShellRoute ? legacyShellGet : env.HZY_ENTERPRISE_PILOT === 'true' || authOnlyRoute)
+        : (env.HZY_ENTERPRISE_PILOT === 'true' || authOnlyRoute))) {
+        return proxyToEnterprisePilot(request, env, tenant, pilotRoute)
+      }
     }
 
     for (const route of APP_ROUTES) {
@@ -226,6 +265,9 @@ function isForbiddenSchedulerHttpPath(pathname) {
 
 async function passthroughReservedHost(request, env) {
   const headers = new Headers(request.headers)
+  for (const name of [...headers.keys()]) {
+    if (name.startsWith('x-hzy-gateway-') && name !== 'x-hzy-gateway-token') headers.delete(name)
+  }
   if (!isTrustedInternalForward(request, env)) {
     stripInternalHeaders(headers)
   }
@@ -569,6 +611,39 @@ function allowedTenantSet(env) {
   )
 }
 
+async function proxyToEnterprisePilot(request, env, tenant, route) {
+  const allowlist = enterpriseHostAllowlistFor(env.HZY_ENTERPRISE_HOST_ALLOWLIST_JSON, new URL(request.url).hostname)
+  if (route.kind === 'unavailable' || !validateEnterprisePilotBinding(tenant, env.HZY_ENTERPRISE_SERVICE, allowlist)) {
+    return new Response('Enterprise test binding unavailable', { status: 503 })
+  }
+  if (route.kind === 'redirect') {
+    if (!new URL(request.url).pathname.startsWith('/shell/')) {
+      const original = new URL(request.url)
+      original.pathname = route.path
+      return Response.redirect(original.toString(), 308)
+    }
+    const redirectUrl = new URL(route.path, request.url)
+    // A pilot can be rolled back. Do not permanently cache the compatibility
+    // mapping in browsers across tenant/release configuration changes.
+    return new Response(null, { status: 307, headers: { Location: redirectUrl.toString(), 'Cache-Control': 'no-store' } })
+  }
+  const url = new URL(request.url)
+  url.pathname = route.path
+  // Physical identity and root prefix must change together. Logical URL stays intact.
+  const headers = buildForwardHeaders(request, env, tenant, '/', 'enterprise')
+  if (route.kind === 'auth' || route.kind === 'api') {
+    const token = await resolveRuntimeBootstrapToken(env, tenant)
+    if (token) headers.set('x-hzy-data-runtime-token', token)
+  }
+  if (route.kind === 'page' || route.kind === 'asset') { headers.delete('cookie'); headers.delete('authorization') }
+  const response = await env.HZY_ENTERPRISE_SERVICE.fetch(url.toString(), {
+    method: request.method, headers, body: requestBody(request), redirect: 'manual'
+  })
+  const resultHeaders = new Headers(response.headers)
+  resultHeaders.set('cache-control', 'no-store')
+  return new Response(response.body, { status: response.status, statusText: response.statusText, headers: resultHeaders })
+}
+
 async function proxyToApp(request, env, tenant, route) {
   const origin = normalizeOrigin(env[route.originEnv] || route.defaultOrigin)
   const requestUrl = new URL(request.url)
@@ -636,13 +711,19 @@ function schedulerRegistryUrl(env) {
 function schedulerOptions(controller, env) {
   const shardCount = boundedInteger(env.HZY_TENANT_GATEWAY_SCHEDULER_SHARD_COUNT, 12, 1, 256)
   const slot = Math.floor(boundedInteger(controller?.scheduledTime, Date.now(), 0, Number.MAX_SAFE_INTEGER) / SCHEDULER_INTERVAL_MS)
+  const maxWakes = boundedInteger(env.HZY_TENANT_GATEWAY_SCHEDULER_MAX_WAKES, 8, 1, 32)
   return {
     slot,
     shardCount,
     shardIndex: boundedInteger(env.HZY_TENANT_GATEWAY_SCHEDULER_SHARD_INDEX, slot % shardCount, 0, shardCount - 1),
     pageSize: boundedInteger(env.HZY_TENANT_GATEWAY_SCHEDULER_PAGE_SIZE, 25, 1, 100),
     maxPages: boundedInteger(env.HZY_TENANT_GATEWAY_SCHEDULER_MAX_PAGES, 4, 1, 20),
-    maxTenants: boundedInteger(env.HZY_TENANT_GATEWAY_SCHEDULER_MAX_TENANTS, 50, 1, 500),
+    // The registry rotates this bounded window on the next shard round. Keep
+    // the window proportional to the per-cron wake budget so excess tenants
+    // are picked up by later rounds rather than skipped inside a large window.
+    maxTenants: Math.min(boundedInteger(env.HZY_TENANT_GATEWAY_SCHEDULER_MAX_TENANTS, 50, 1, 500),
+      Math.max(1, Math.floor(maxWakes / SCHEDULER_APPS.size))),
+    maxWakes,
     concurrency: boundedInteger(env.HZY_TENANT_GATEWAY_SCHEDULER_CONCURRENCY, 4, 1, 16),
     maxAppPasses: SCHEDULER_MAX_APP_PASSES,
     maxWallTimeMs: boundedInteger(env.HZY_TENANT_GATEWAY_SCHEDULER_MAX_WALL_TIME_MS, 45_000, 100, 50_000),
@@ -688,7 +769,7 @@ async function loadSchedulerPage(env, options, cursor, fetchImpl) {
     const responseSummary = stringValue(await response.text()).slice(0, 300)
     throw new Error(`Tenant scheduler registry failed: ${response.status}${responseSummary ? ` ${responseSummary}` : ''}`)
   }
-  return schedulerPageItems(await response.json())
+  return await response.json()
 }
 
 async function serviceBindingFetch(env, bindingName, fetchImpl, input, init) {
@@ -738,8 +819,18 @@ function schedulerBootstrapMetadata(token) {
   }
 }
 
-async function schedulerRequestHeaders(env, tenant, tenantHost, appCode, requestId, issuedAt, runtimeBootstrapToken, path = SCHEDULER_WAKE_PATH) {
+export async function schedulerRequestHeaders(env, tenant, tenantHost, appCode, requestId, issuedAt, runtimeBootstrapToken, path = SCHEDULER_WAKE_PATH) {
   const appConfig = recordValue(tenant.apps?.[appCode]) || {}
+  const scheduler = recordValue(appConfig.enterpriseScheduler) || {}
+  const schedulerStorage = stringValue(scheduler.storage)
+  const schedulerGeneration = stringValue(scheduler.generation)
+  if (appConfig.enterpriseScheduler !== undefined
+    && (!['aims', 'assets'].includes(appCode) || !['unified', 'recovered', 'disabled'].includes(schedulerStorage)
+      || scheduler.storage !== schedulerStorage || typeof scheduler.generation !== 'string' || scheduler.generation !== schedulerGeneration
+      || !/^[1-9][0-9]{0,19}$/.test(schedulerGeneration)
+      || BigInt(schedulerGeneration) > 18446744073709551615n)) {
+    throw new Error('Invalid tenant scheduler storage binding.')
+  }
   const consoleConfig = recordValue(tenant.apps?.console) || {}
   const dataRuntime = dataRuntimeFor(tenant, appConfig)
   const deploymentCode = firstString(appConfig, ['deploymentCode', 'deployment']) || tenant.deploymentCode
@@ -778,6 +869,10 @@ async function schedulerRequestHeaders(env, tenant, tenantHost, appCode, request
   if (dataRuntime.audience) headers.set('x-hzy-data-runtime-audience', dataRuntime.audience)
   if (runtimeBootstrapToken) headers.set('x-hzy-data-runtime-token', runtimeBootstrapToken)
   headers.set('x-hzy-scheduler-issued-at', issuedAt)
+  if (schedulerStorage) {
+    headers.set('x-hzy-scheduler-storage', schedulerStorage)
+    headers.set('x-hzy-scheduler-generation', schedulerGeneration)
+  }
   const canonical = [
     'POST',
     path,
@@ -790,6 +885,7 @@ async function schedulerRequestHeaders(env, tenant, tenantHost, appCode, request
     tenantHost
   ]
   if (appCode === 'people') canonical.push(consoleTargetDeployment)
+  if (schedulerStorage) canonical.push('enterprise-scheduler-v1', schedulerStorage, schedulerGeneration)
   canonical.push(issuedAt)
   headers.set('x-hzy-scheduler-signature', await schedulerHmacHex(gatewayToken, canonical.join('\n')))
   return headers
@@ -801,7 +897,8 @@ export async function runScheduledPolicyBundleSync(env, fetchImpl = fetch) {
   const hosts = [...new Set(stringValue(env.HZY_POLICY_SYNC_HOSTS).split(',').map(normalizeHostname).filter(Boolean))]
   if (hosts.length > 100) throw new Error('policy sync host limit exceeded')
   const results = []
-  const deadline = Date.now() + 45_000
+  const consoleTimeoutMs = boundedInteger(env.HZY_POLICY_SYNC_CONSOLE_TIMEOUT_MS, 35_000, 1_000, 120_000)
+  const deadline = Date.now() + Math.max(45_000, consoleTimeoutMs + 10_000)
   await mapWithConcurrency(hosts, 4, async host => {
     if (Date.now() >= deadline) {
       results.push({ ok: false, status: 503, stage: 'budget' })
@@ -813,6 +910,8 @@ export async function runScheduledPolicyBundleSync(env, fetchImpl = fetch) {
         { ...init, signal: AbortSignal.timeout(15_000) })
       const tenant = await resolveTenant(host, env, platformFetch)
       if (!tenant.allowed || reservedTenantHost(host, env)) throw new Error('invalid sync tenant')
+      stage = 'binding'
+      if (!tenantBindingMatchesExpected(tenant, host, env)) throw new Error('sync tenant binding mismatch')
       stage = 'bootstrap'
       const token = await resolveRuntimeBootstrapToken(env, tenant, platformFetch)
       const path = '/api/internal/policy-bundle/sync'
@@ -821,7 +920,7 @@ export async function runScheduledPolicyBundleSync(env, fetchImpl = fetch) {
       stage = 'console'
       const response = await serviceBindingFetch(env, APP_SERVICE_BINDINGS.console, fetchImpl,
         new URL(path, normalizeOrigin(env.HZY_CONSOLE_ORIGIN || DEFAULT_CONSOLE_ORIGIN)),
-        { method: 'POST', headers, signal: AbortSignal.timeout(35_000) })
+        { method: 'POST', headers, signal: AbortSignal.timeout(consoleTimeoutMs) })
       await response.arrayBuffer()
       results.push({ ok: response.ok, status: response.status, stage })
     } catch {
@@ -833,6 +932,15 @@ export async function runScheduledPolicyBundleSync(env, fetchImpl = fetch) {
 }
 
 async function wakeTenantApp(env, tenant, tenantHost, appCode, requestId, issuedAt, runtimeBootstrapToken, options, fetchImpl) {
+  // A persisted disabled selection must never be interpreted as legacy storage.
+  if (appCode === 'aims' && recordValue(tenant.apps?.aims?.enterpriseScheduler)?.storage === 'disabled') {
+    return { ok: true, busy: false }
+  }
+  // Assets has no legacy wake handler: only a persisted unified/recovered
+  // selection makes its Worker a scheduler target.
+  if (appCode === 'assets' && !['unified', 'recovered'].includes(recordValue(tenant.apps?.assets?.enterpriseScheduler)?.storage)) {
+    return { ok: true, busy: false }
+  }
   const route = appCode === 'console'
     ? { prefix: '/', originEnv: 'HZY_CONSOLE_ORIGIN', defaultOrigin: DEFAULT_CONSOLE_ORIGIN }
     : APP_ROUTES.find(item => item.appCode === appCode)
@@ -905,7 +1013,7 @@ function createConcurrencyGate(concurrency) {
 }
 
 async function processSchedulerTenant(item, env, options, fetchImpl, now, startedAt, counters, runWake) {
-  if (now() - startedAt >= options.maxWallTimeMs) return
+  if (now() - startedAt >= options.maxWallTimeMs || counters.attemptedWakes >= options.maxWakes) return
   try {
     if (reservedTenantHost(item.host, env)) {
       counters.failedTenants += 1
@@ -924,6 +1032,7 @@ async function processSchedulerTenant(item, env, options, fetchImpl, now, starte
       || tenant.tenantCode !== item.tenantCode
       || (item.environment && tenant.environment !== item.environment)
       || !normalizeDataRuntime(tenant.dataRuntime).endpoint
+      || !tenantBindingMatchesExpected(tenant, item.host, env)
     ) {
       counters.failedTenants += 1
       return
@@ -932,13 +1041,16 @@ async function processSchedulerTenant(item, env, options, fetchImpl, now, starte
     if (!runtimeBootstrapToken) {
       throw new Error('Tenant Runtime bootstrap token is unavailable for scheduler wakes.')
     }
-    let pendingApps = [...item.appCodes]
+    // A tight wake budget may stop mid-tenant. Rotate the first-pass app order
+    // across slots so the same trailing app is not omitted on every wake.
+    const offset = options.slot % item.appCodes.length
+    let pendingApps = [...item.appCodes.slice(offset), ...item.appCodes.slice(0, offset)]
     for (let pass = 1; pass <= options.maxAppPasses && pendingApps.length > 0; pass += 1) {
       if (now() - startedAt >= options.maxWallTimeMs) break
       const busyApps = []
       await mapWithConcurrency(pendingApps, pendingApps.length, appCode => runWake(async () => {
         const elapsed = now() - startedAt
-        if (elapsed >= options.maxWallTimeMs) return
+        if (elapsed >= options.maxWallTimeMs || counters.attemptedWakes >= options.maxWakes) return
         counters.attemptedWakes += 1
         const requestId = `gateway-drain-${options.slot}-${options.shardIndex}-${item.tenantCode}-${appCode}-p${pass}`
         const issuedAt = String(now())
@@ -977,12 +1089,16 @@ async function processSchedulerTenant(item, env, options, fetchImpl, now, starte
 export async function runScheduledIntegrationDrains(controller, env, dependencies = {}) {
   const fetchImpl = dependencies.fetchImpl || fetch
   const now = dependencies.now || Date.now
+  // A self-hosted single-site gateway supplies its own configured page instead
+  // of the Platform-wide shard, so it never wakes another site's deployments.
+  const loadPage = dependencies.loadPage || loadSchedulerPage
   const options = schedulerOptions(controller, env)
   const startedAt = now()
   const runWake = createConcurrencyGate(options.concurrency)
   const counters = {
     pages: 0,
     tenants: 0,
+    maxWakes: options.maxWakes,
     attemptedWakes: 0,
     succeededWakes: 0,
     failedWakes: 0,
@@ -994,9 +1110,10 @@ export async function runScheduledIntegrationDrains(controller, env, dependencie
   while (
     counters.pages < options.maxPages
     && counters.tenants < options.maxTenants
+    && counters.attemptedWakes < options.maxWakes
     && now() - startedAt < options.maxWallTimeMs
   ) {
-    const page = await loadSchedulerPage(env, options, cursor, fetchImpl)
+    const page = schedulerPageItems(await loadPage(env, options, cursor, fetchImpl))
     counters.pages += 1
     const remaining = options.maxTenants - counters.tenants
     const items = page.items.slice(0, remaining)
@@ -1009,6 +1126,10 @@ export async function runScheduledIntegrationDrains(controller, env, dependencie
       processSchedulerTenant(item, env, options, fetchImpl, now, startedAt, counters, runWake))
     if (now() - startedAt >= options.maxWallTimeMs) {
       counters.stoppedBy = 'max_wall_time'
+      break
+    }
+    if (counters.attemptedWakes >= options.maxWakes) {
+      counters.stoppedBy = 'max_wakes'
       break
     }
     if (counters.tenants >= options.maxTenants) {
@@ -1070,10 +1191,21 @@ async function proxyToConsole(request, env, tenant) {
   const requestUrl = new URL(request.url)
   const targetUrl = new URL(requestUrl.pathname + requestUrl.search, origin)
   const headers = buildForwardHeaders(request, env, tenant, '', 'console')
-  preserveTrustedServiceTokenSource(request, env, tenant, headers)
+  const tokenSource = preserveTrustedServiceTokenSource(request, env, tenant, headers)
   const runtimeBootstrapToken = await resolveRuntimeBootstrapToken(env, tenant)
   if (runtimeBootstrapToken) {
     headers.set('x-hzy-data-runtime-token', runtimeBootstrapToken)
+  }
+  if (env.HZY_GATEWAY_ASSERTION_ENABLED === 'true' && request.method === 'POST'
+    && requestUrl.pathname === '/oauth/token' && isTrustedInternalForward(request, env)) {
+    // The lane never signs browser-selected app/deployment/Runtime bindings.
+    const runtime = dataRuntimeFor(tenant, recordValue(tenant.apps?.console) || {})
+    const lane = await gatewayTokenLane(request, env, {
+      ...tokenSource, runtimeCode: runtime.runtimeCode
+    }, headers, (laneHeaders, body) => serviceBindingFetch(env, APP_SERVICE_BINDINGS.console, fetch, targetUrl.toString(), {
+      method: 'POST', headers: laneHeaders, body, redirect: 'manual'
+    }))
+    if (lane) return rewriteResponse(lane, request, env, { noStore: true })
   }
   // Console pages contain tenant-specific session state and a Nuxt entry
   // manifest.  Do not allow the browser or edge to reuse a prior page shell
@@ -1134,9 +1266,20 @@ function preserveTrustedServiceTokenSource(request, env, tenant, headers) {
 
   headers.set('x-hzy-app-code', sourceAppCode)
   headers.set('x-hzy-deployment', expectedDeployment)
+  return { tenant: tenantCode, environment, appCode: sourceAppCode, deployment: expectedDeployment }
 }
 
-async function resolveRuntimeBootstrapToken(env, tenant, fetchImpl = fetch) {
+function awaitBootstrapRefresh(pending, signal) {
+  if (!signal) return pending
+  if (signal.aborted) return Promise.reject(new DOMException('Aborted', 'AbortError'))
+  return new Promise((resolve, reject) => {
+    const abort = () => reject(new DOMException('Aborted', 'AbortError'))
+    signal.addEventListener('abort', abort, { once: true })
+    pending.then(resolve, reject).finally(() => signal.removeEventListener('abort', abort))
+  })
+}
+
+async function resolveRuntimeBootstrapToken(env, tenant, fetchImpl = fetch, minValidityMs = 15_000, signal) {
   const appConfig = recordValue(tenant.apps?.console) || {}
   const runtime = dataRuntimeFor(tenant, appConfig)
   if (!runtime.endpoint || runtime.staticToken) return ''
@@ -1144,47 +1287,66 @@ async function resolveRuntimeBootstrapToken(env, tenant, fetchImpl = fetch) {
   const registryUrl = stringValue(env.HZY_TENANT_GATEWAY_REGISTRY_URL)
   const token = platformRegistryToken(env)
   if (!registryUrl || !token) return ''
+  if (signal?.aborted) throw new DOMException('Aborted', 'AbortError')
 
-  const cacheKey = [
+  const cacheKey = JSON.stringify([
+    registryUrl,
+    token,
     tenant.tenantCode || tenant.slug,
     tenant.environment || 'prod',
     firstString(appConfig, ['deploymentCode', 'deployment']) || tenant.deploymentCode,
-    runtime.runtimeCode || ''
-  ].join('|')
+    runtime.runtimeCode || '',
+    runtime.endpoint,
+    runtime.audience || ''
+  ])
   const cached = runtimeBootstrapTokenCache.get(cacheKey)
-  if (cached && cached.expiresAt > Date.now() + 15_000) {
+  if (cached && cached.expiresAt > Date.now() + minValidityMs) {
     return cached.token
   }
-
-  const url = new URL(registryUrl)
-  url.pathname = url.pathname.replace(/\/resolve\/?$/, '/runtime-bootstrap-token')
-  url.search = ''
-  url.hash = ''
-  const response = await fetchImpl(url.toString(), {
-    method: 'POST',
-    headers: {
-      accept: 'application/json',
-      authorization: `Bearer ${token}`,
-      'content-type': 'application/json'
-    },
-    body: JSON.stringify({
-      tenantCode: tenant.tenantCode || tenant.slug,
-      environment: tenant.environment || 'prod',
-      appCode: 'console'
-    })
-  })
-  if (!response.ok) {
-    throw new Error(`Platform runtime bootstrap token failed: ${response.status}`)
+  let pending = runtimeBootstrapTokenPending.get(cacheKey)
+  if (!pending) {
+    pending = (async () => {
+      const url = new URL(registryUrl)
+      url.pathname = url.pathname.replace(/\/resolve\/?$/, '/runtime-bootstrap-token')
+      url.search = ''
+      url.hash = ''
+      const response = await fetchImpl(url.toString(), {
+        method: 'POST',
+        headers: {
+          accept: 'application/json',
+          authorization: `Bearer ${token}`,
+          'content-type': 'application/json'
+        },
+        body: JSON.stringify({
+          tenantCode: tenant.tenantCode || tenant.slug,
+          environment: tenant.environment || 'prod',
+          appCode: 'console'
+        })
+      })
+      if (!response.ok) {
+        throw new Error(`Platform runtime bootstrap token failed: ${response.status}`)
+      }
+      const payload = await response.json()
+      const data = recordValue(payload.data) || payload
+      const accessToken = stringValue(data.token)
+      const expiresAt = new Date(stringValue(data.expiresAt)).getTime()
+      if (!accessToken || !Number.isFinite(expiresAt) || expiresAt <= Date.now()) {
+        throw new Error('Platform runtime bootstrap token response is invalid')
+      }
+      runtimeBootstrapTokenCache.set(cacheKey, { token: accessToken, expiresAt })
+      return { token: accessToken, expiresAt }
+    })()
+    runtimeBootstrapTokenPending.set(cacheKey, pending)
+    // A rejected refresh is never cached. Each caller receives the original
+    // rejection, while the next request is free to retry the same binding.
+    void pending.then(() => runtimeBootstrapTokenPending.delete(cacheKey),
+      () => runtimeBootstrapTokenPending.delete(cacheKey))
   }
-  const payload = await response.json()
-  const data = recordValue(payload.data) || payload
-  const accessToken = stringValue(data.token)
-  const expiresAt = new Date(stringValue(data.expiresAt)).getTime()
-  if (!accessToken || !Number.isFinite(expiresAt) || expiresAt <= Date.now() + 15_000) {
-    throw new Error('Platform runtime bootstrap token response is invalid')
+  const refreshed = await awaitBootstrapRefresh(pending, signal)
+  if (refreshed.expiresAt <= Date.now() + minValidityMs) {
+    throw new Error('Platform runtime bootstrap token response is too short-lived')
   }
-  runtimeBootstrapTokenCache.set(cacheKey, { token: accessToken, expiresAt })
-  return accessToken
+  return refreshed.token
 }
 
 function isDirectoryConnectorRequest(pathname) {
@@ -1266,6 +1428,15 @@ function buildForwardHeaders(request, env, tenant, prefix, appCode) {
     headers.set('x-hzy-service-routes', serviceRoutes)
   }
 
+  // Console may use this only after validating the gateway token and the
+  // tenant binding.  Keep the projection narrow: it is emitted for the
+  // enterprise pilot only and contains generated, registered page patterns;
+  // it is never a browser-controlled query or a general app catalog.
+  const enterprisePages = trustedEnterpriseShellMetadata(env, tenant, requestUrl.hostname)
+  if (enterprisePages && appCode === 'console') {
+    headers.set('x-hzy-enterprise-shell-pages', enterprisePages)
+  }
+
   const gatewayToken = tenantGatewayInternalToken(env)
   if (gatewayToken) {
     headers.set('x-hzy-gateway-token', gatewayToken)
@@ -1302,6 +1473,19 @@ function buildForwardHeaders(request, env, tenant, prefix, appCode) {
   }
 
   return headers
+}
+
+function trustedEnterpriseShellMetadata(env, tenant, host) {
+  if (env.HZY_ENTERPRISE_PILOT !== 'true' || !validateEnterprisePilotBinding(tenant, env.HZY_ENTERPRISE_SERVICE,
+    enterpriseHostAllowlistFor(env.HZY_ENTERPRISE_HOST_ALLOWLIST_JSON, host))) return ''
+  return JSON.stringify({
+    version: 1,
+    appCode: 'enterprise',
+    deploymentCode: tenant.apps?.enterprise?.deploymentCode || '',
+    consoleDeploymentCode: tenant.apps?.console?.deploymentCode || tenant.deploymentCode || '',
+    pages: enterpriseHostRoutes,
+    entries: enterpriseHostEntries
+  })
 }
 
 function buildTrustedServiceRouteCatalog(env, tenant) {
@@ -1366,6 +1550,11 @@ function setHeaderIfValue(headers, name, value) {
 }
 
 function stripInternalHeaders(headers) {
+  // New proof material is always stripped, even from a trusted caller. Only
+  // this Worker may issue a fresh assertion from resolved registration facts.
+  for (const name of [...headers.keys()]) {
+    if (name.startsWith('x-hzy-gateway-')) headers.delete(name)
+  }
   for (const name of [
     'x-hzy-gateway',
     'x-hzy-gateway-token',
@@ -1374,13 +1563,18 @@ function stripInternalHeaders(headers) {
     'x-hzy-environment',
     'x-hzy-app-code',
     'x-hzy-service-routes',
+    'x-hzy-enterprise-shell-pages',
     'x-hzy-scheduler',
     'x-hzy-scheduler-issued-at',
     'x-hzy-scheduler-signature',
+    'x-hzy-scheduler-storage',
+    'x-hzy-scheduler-generation',
     'x-hzy-console-target-deployment',
     'x-hzy-data-runtime-url',
+    'x-hzy-local-runtime-dial-url',
     'x-hzy-data-runtime-code',
     'x-hzy-data-runtime-token',
+    'x-hzy-runtime-bootstrap-unavailable',
     'x-hzy-data-runtime-audience',
     'x-hzy-console-login-mode',
     'x-hzy-console-login-providers',
@@ -1404,6 +1598,38 @@ function stripInternalHeaders(headers) {
   ]) {
     headers.delete(name)
   }
+}
+
+// Optional site pin (`HZY_TENANT_GATEWAY_EXPECTED_BINDINGS_JSON`), set only by a
+// self-hosted gateway. When present, the Platform registry answer for a host
+// must match the configured tenant, environment, per-app deployment codes and
+// Runtime exactly; anything else (including malformed configuration) fails
+// closed. Absent keeps the managed-cloud behaviour unchanged.
+function tenantBindingMatchesExpected(tenant, host, env) {
+  const raw = stringValue(env.HZY_TENANT_GATEWAY_EXPECTED_BINDINGS_JSON)
+  if (!raw) return true
+  let bindings
+  try {
+    bindings = JSON.parse(raw)
+  } catch {
+    return false
+  }
+  const expected = recordValue(recordValue(bindings)?.[normalizeHostname(host)])
+  const apps = recordValue(expected?.apps)
+  const runtime = recordValue(expected?.dataRuntime)
+  if (!expected || !apps || !Object.keys(apps).length || !runtime) return false
+  if (!stringValue(expected.tenantCode) || tenant.tenantCode !== expected.tenantCode
+    || !stringValue(expected.environment) || tenant.environment !== expected.environment) return false
+  for (const [appCode, deploymentCode] of Object.entries(apps)) {
+    const appConfig = recordValue(tenant.apps?.[appCode])
+    if (!appConfig || typeof deploymentCode !== 'string' || !deploymentCode) return false
+    if ((firstString(appConfig, ['deploymentCode', 'deployment']) || tenant.deploymentCode) !== deploymentCode) return false
+    const appRuntime = dataRuntimeFor(tenant, appConfig)
+    if (appRuntime.endpoint && appRuntime.endpoint !== runtime.endpoint) return false
+  }
+  const consoleRuntime = dataRuntimeFor(tenant, recordValue(tenant.apps?.console) || {})
+  return Boolean(stringValue(runtime.endpoint)) && consoleRuntime.endpoint === runtime.endpoint
+    && (!stringValue(runtime.runtimeCode) || consoleRuntime.runtimeCode === runtime.runtimeCode)
 }
 
 function dataRuntimeFor(tenant, appConfig) {
@@ -1623,6 +1849,9 @@ function rewriteLocation(location, request, env) {
 
     locationUrl.protocol = requestUrl.protocol
     locationUrl.host = requestUrl.host
+    // The URL host setter keeps an existing port; an upstream origin with an
+    // explicit port (self-hosted loopback) must not leak it to the browser.
+    locationUrl.port = requestUrl.port
     return locationUrl.toString()
   } catch {
     return location
@@ -1639,6 +1868,7 @@ function rewriteNestedRedirect(locationUrl, requestUrl, origins) {
 
     redirectUrl.protocol = requestUrl.protocol
     redirectUrl.host = requestUrl.host
+    redirectUrl.port = requestUrl.port
     locationUrl.searchParams.set('redirect', redirectUrl.toString())
   } catch {
     // Ignore malformed user-provided redirect values and preserve upstream behavior.
@@ -1671,11 +1901,13 @@ function recordValue(value) {
 
 export {
   buildForwardHeaders,
+  tenantBindingMatchesExpected,
   preserveTrustedServiceTokenSource,
   cachePolicyFor,
   isAppBuildAssetPath,
   isHtmlResponse,
   resolvePlatformRegistryTenant,
+  resolveRuntimeBootstrapToken,
   rewriteResponse,
   shouldNoStoreAppResponse
 }

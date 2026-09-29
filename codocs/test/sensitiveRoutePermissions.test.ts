@@ -121,7 +121,7 @@ describe('Codocs sensitive route permissions', () => {
     assert.match(departmentPage, /path:\s*`\/documents\/\$\{uuid\}`/)
     assert.match(departmentPage, /query:\s*deptCode\.value \? \{\s*dept_code:\s*deptCode\.value\s*\}/)
 
-    assert.match(documentPage, /const documentDeptCode = computed\(\(\) => routeQueryText\(route\.query\.dept_code \|\| route\.query\.deptCode\)\)/)
+    assert.match(documentPage, /const documentDeptCode = computed\(\(\) => routeQueryText\(route\.query\.dept_code \|\| route\.query\.deptCode\) \|\| responseDeptCode\.value\)/)
     assert.match(documentPage, /if \(documentDeptCode\.value\) query\.dept_code = documentDeptCode\.value/)
 
     assert.match(detailRoute, /requireDepartmentReadAccess/)
@@ -136,10 +136,11 @@ describe('Codocs sensitive route permissions', () => {
     const openRoute = source('server/api/open-department-docs/[uuid].get.ts')
 
     assert.match(openRoute, /requireRequestUid\(event\)/)
-    assert.match(openRoute, /const doc = await requireOpenDepartmentDocument\(event,\s*uuid\)/)
+    assert.match(openRoute, /const doc = assertLegacyBodyDocument\(await requireOpenDepartmentDocument\(event,\s*uuid\)\)/)
     assert.doesNotMatch(openRoute, /getCodocsDocumentMetadata/)
     assertBefore(openRoute, 'requireRequestUid(event)', 'requireOpenDepartmentDocument(event, uuid)')
     assertBefore(openRoute, 'requireOpenDepartmentDocument(event, uuid)', 'downloadDocument(doc.oss_path, doc.doc_type)')
+    assertBefore(openRoute, 'assertLegacyBodyDocument(', 'downloadDocument(doc.oss_path, doc.doc_type)')
   })
 
   test('open department document validation uses folder visibility instead of document dept metadata', () => {
@@ -220,16 +221,17 @@ describe('Codocs sensitive route permissions', () => {
 
   test('v1 service document APIs verify service token before delegated writes', () => {
     const documentCreate = source('server/api/v1/documents/index.post.ts')
+    const creation = source('server/utils/projectDocumentCreation.ts')
     const previewAccess = source('server/api/v1/documents/[uuid]/preview-access.post.ts')
 
     assert.match(documentCreate, /verifyInternalApi\(event,\s*\{\s*scopes:\s*\['codocs:documents:write'\]\s*\}\)/)
-    assert.match(documentCreate, /if \(!body\.ownerUid\)/)
-    assert.match(documentCreate, /ownerUid:\s*body\.ownerUid/)
-    assert.match(documentCreate, /operatorUid:\s*body\.ownerUid/)
+    assert.match(creation, /if \(!body\.ownerUid\)/)
+    assert.match(creation, /ownerUid:\s*String\(body\.ownerUid\)/)
+    assert.match(creation, /operatorUid:\s*String\(body\.ownerUid\)/)
     assert.doesNotMatch(documentCreate, /requireRequestUid\(event/)
     assertBefore(documentCreate, 'verifyInternalApi(event', 'readBody(event)')
-    assertBefore(documentCreate, 'verifyInternalApi(event', 'createCodocsDocumentMetadata(event')
-    assertBefore(documentCreate, 'verifyInternalApi(event', 'uploadDocument(doc.oss_path')
+    assertBefore(documentCreate, 'verifyInternalApi(event', 'return await createProjectDocumentContent(event')
+    assertBefore(creation, 'createCodocsDocumentMetadata(event', 'client.put(doc.oss_path')
 
     assert.match(previewAccess, /requireCodocsServiceAuth\(auth, AIMS_DOCUMENT_PREVIEW_GRANT_SERVICE_AUTH\)/)
     assert.match(previewAccess, /preview_access_service_command_required/)
@@ -840,7 +842,7 @@ describe('Codocs sensitive route permissions', () => {
 
     assertBefore(imageList, 'requirePermission(event, \'admin\', \'admin\'', 'listImages()')
     assertBefore(imageDelete, 'requirePermission(event, \'admin\', \'admin\'', 'readBody<{ paths?: string[] }>')
-    assertBefore(imageDocContent, 'requirePermission(event, \'admin\', \'admin\'', 'downloadDocument(doc.oss_path, doc.doc_type)')
+    assertBefore(imageDocContent, 'requirePermission(event, \'admin\', \'admin\'', 'readImageOwnerDocumentContent(event, doc)')
     assertBefore(imagePreview, 'requirePermission(event, \'admin\', \'admin\'', 'downloadImageBuffer(path)')
     assertBefore(cleanupYjs, 'requirePermission(event, \'admin\', \'admin\'', 'createOSSClient()')
     assertBefore(cleanupYjs, 'requirePermission(event, \'admin\', \'admin\'', 'createProjectsOSSClient()')

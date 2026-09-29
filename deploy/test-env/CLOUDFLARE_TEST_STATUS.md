@@ -1,5 +1,22 @@
 # C000001 Cloudflare 测试环境
 
+## 2026-09-19 项目文档链候选（按用户要求暂停独立链路）
+
+- **最新方向**：用户认为后续还要整合，不应继续大量投入 Codocs 打通。已停止联调与日志监听，不再推进控制面修复或增加 Codocs 功能；现有代码与测试部署保留为候选，不能标记业务链完成。后续先明确统一文档能力的整合边界，再评估复用，历史 TODO 不构成继续实施授权。
+- 登录已恢复，真实用户 `zhouguangying` 可进入项目 257 文档页。修复未注册 `documents` 用户资源入口（恢复 `projects:view`，保留项目成员/经理关系判定）、`/aims` 服务路由前缀与 Host → Aims 受信上下文传递；未扩大用户角色。列表拒绝不再回退为成员可见，读取不修补 ACL；空文件夹对项目成员保留。新增明确加载失败提示，关闭列表自动重试。
+- 当前阻断：Console 主体权限接口的实时签名策略刷新在 Worker 调用中超过 100 秒被取消；日志已确认服务身份、命令签名、目录身份均通过，未到策略包刷新完成阶段。本机对相同测试策略包接口只读请求 200，约 58.9 秒，有签名包返回；未证明根因为网络或控制面处理，未绕过 fresh-policy。文档链使用有界预算，同一请求的管理员快照合并，不跨请求缓存未完成 I/O。一次 Runtime 重启窗口另出现 token issue 502，之后本地/公网 health 200、匿名/伪造 Bearer 401 已复验。
+- 最后部署候选：Console `da1ccdba-5d54-4197-82b7-c9c6b3bcec55`、Aims `75e3dee6-1bc9-4056-9306-1960d1dd933c`、Enterprise `0a2a8d2d-4df5-486a-bbab-7659d51af6ac`；Codocs 保持下述版本。Console/Aims 候选尚含无敏感字段的临时阶段诊断日志，本地源码已移除；暂停后未追加发布。Foundation 超时映射 503 与最后格式整理尚未重新发布。
+- Runtime 已到 `0.3.219-test.document-chain.3`（`2026-09-19T16:38:00Z`），权限检查只留访问审计，不因列表读取创建策略。完整 Go 检查及实际 LaunchAgent 环境启动校验通过；上版备份 `deployments/document-chain-20260919-read-only-check/hzy-data-runtime.before`。本轮 Foundation 579、Enterprise 106（1 跳过）、Console 主体/签名相关 39、Aims 定向 8 项通过，Aims 类型检查通过。未创建成功业务测试文档，Markdown/附件/预览/下载/删除/权限编辑及移动端仍未端到端验收。
+
+- 用户授权完成项目文档业务链，并允许从 `oa.wiztek.cn/hzy_console` 迁移必要存储参数。生产仅 SELECT；测试 `oss.default` 原凭证可解密且与生产相同，未复制或替换密钥。只补缺失的 region、recycleDays、bucketDomain、projectsEndpoint、projectsBucketName、projectsBucketDomain，保留测试原字段。工具：`import-production-document-storage.mjs`（默认 dry-run，`--apply` 明确写测试）。
+- `verify-document-storage.mjs` 在 `codocs/test/C000001/document-chain-probe/<随机 UUID>.md` 实测 PUT/GET 字节一致，清理了自身一次性探测对象；既有生产对象未修改。测试仍共享生产存储凭证/桶，不等于存储资源隔离，业务验收只允许创建命名清晰的测试夹具。
+- 文档页改为原完整页面；补宿主附件上传（10 MiB）、multipart Binding、固定 UUID 重试、跨跳 actor 校验与 Console 主体用途；Codocs 项目服务使用本应用 Runtime 身份。策略 GET 缺省不落库。
+- 新 v2.11 grants、已有 v1.50/v1.55 初始化仅执行于 `hzy_console_test_local_20260910`。实际 `aims.runtime` 对 `codocs` 的 read/manage/create 与 cabinet read/upload/delete **组合** scope 签发 200；`codocs.runtime` 对 data-runtime 和 tenant-runtime 的 integration_config:view + credential_vault:resolve 组合签发均 200，限制 oss.default。
+- 已发布测试 Worker：Console `8353ae9c-0144-4643-9574-6658af34cc66`、Aims `71503646-b81c-47a9-b0b8-399d60314251`、Enterprise `91ab3ea8-cdf5-4498-b797-ad48da3b7302`、Codocs `2621dc6c-9480-41d5-ab3c-5a405b3b339c`。Host 增加 Aims/Codocs Binding，Aims 增加 Codocs Binding；没有发布生产或改 Gateway secret。
+- 本机 Runtime `0.3.219-test.document-chain.2`；全量 Go 检查及携带完整 LaunchAgent 环境的启动探测通过。此前版本备份在 `deployments/document-chain-20260919/hzy-data-runtime.before`，中间候选备份在 `deployments/document-chain-20260919-final/`。本地/公网 health、匿名/伪造 Bearer 401 已核验。
+- 已通过 Foundation 579 项、Enterprise 105 项（另 1 项原本跳过）、文档相关 Aims 107 项、Codocs 原 239 项 + 新签名边界 3 项、测试部署配置 11 项。Aims 全量 tsx 测试 688/696；剩余 8 项位于本次未改的 catalog refresh、feature component、version development 测试及其旧 harness，不将其记为通过。模块默认 strip-types 脚本另有无扩展名导入失败，定向检查使用现有 tsx。
+- **尚未全链验收**：此前 SSO 阻断已解除，当前状态以上方最新记录为准。后续整合方案确定前不继续独立链路验收；未索取密码、未伪造会话或扩大用户角色。
+
 2026-09-09：用户授权搭建独立测试环境，未授权覆盖生产 Worker。
 
 最新产品导航整合结果见文末「2026-09-13 产品工作区导航与业务整合」；下列早期待办属于当日历史记录。
@@ -305,3 +322,111 @@
 - 真实登录 HZ-TY-S-002：需求池 10 条、功能 38 项；模块「租户与订阅」准确筛到 1 项功能，跳需求池保留模块筛选；版本计划 4 个历史周期版本、局部矩阵工具和研发交付页正常。1440 / 390 实际截图已查看，无 console error / warn，旧 `/features` 地址自动转到 `/structure`；匿名 API 401。真实租户未执行创建／进入开发／转交／验收发布写入，该边界不以模拟 API 代替。
 - 实施记录：[产品工作区整合](../../aims/docs/Aims-Product-Workspace-Simplification.md)。本轮构建、发布、脱敏回执、浏览器脚本及截图：`/tmp/hzy-product-nav-qa-20260913`。
 - 最终版补丁线上复验：从模块进入需求池显示「租户与订阅」，刷新应用后名称仍保留；点击重置恢复全部模块、移除旧名称及相关 URL 参数，无 console error / warn。证据 `live-module-context-final.json`、`live-module-name-final.png`。
+
+## 2026-09-17 宿主直读 Codocs 项目文档正文（enterprise Worker + 本机 Runtime）
+
+- 用户授权部署。测试 `hzy-test-enterprise` 版本 **`cbbb7726-451b-4a7c-ade4-4d580575f2cf`**，部署列表确认 100% 流量；回滚点为上一版本 `96caa71a-dba1-4f77-8b81-c158fd9510c3`。本机测试 Runtime 同步更新至 `0.3.219-test.codocs-project-document.1`（`4ce960df`），SHA-256 与备份见 [LOCAL_RUNTIME.md 版本更新](./LOCAL_RUNTIME.md#版本更新)。未改 secrets、grants、Gateway 或生产。
+- 发布前：全量 Go 31 包通过；换二进制前用 LaunchAgent 的**全部**环境变量做启动探测。只传 `HZY_DATA_RUNTIME_CONFIG_DIR` 时进程会回落到默认配置（8080、无库）并正常启动，等于没验证；补齐后日志到达 `listening on 127.0.0.1:18084`，再因端口占用退出，才是本文档要的结论。
+- 发布后线上验证：新路由 `GET /aims/api/v1/codocs/documents/:uuid/content` 匿名返回 401（已注册，不是 503 未就绪），未注册路径仍 503；按生成清单 `enterprise/composition/business-api-routes.generated.mjs` 逐条、各用其自身声明的方法比对 176 条路由，174 条返回 401/400/403。Runtime 本地与公网 health 均为新版本，匿名与伪造 Bearer 均 401。
+- 探针纠错：过程中两次是探针本身写错而非部署回归——先用了 `project-portfolios`、裸 `time-entries` 这类实际不存在的路径形状，又对 PUT/DELETE-only 路由发 GET。比对路由必须取清单里声明的方法。
+
+### 阻断：Codocs 在 C000001 测试环境从未上线（已于同日解除，见文末「2026-09-17 Codocs 上线测试环境」）
+
+该端点的端到端验收**跑不通**，原因不是缺一项配置：
+
+- 共享测试 Gateway 对 `/codocs/*` 是显式 503——`cloudflare-gateway.mjs:30` 把 `codocs` 与 `altoc`/`people`/`workflow`/`webdev`/`collab` 一并列入 “Application not enabled in test environment”，线上实测 `/codocs/`、`/codocs/api/v1/health` 均为 503。
+- 线上不存在 `hzy-test-codocs` Worker（CF API 查不到该 script）。
+- Runtime health 中 `"codocs":{"enabled":false}`，没有对应数据库。
+
+要跑通需另立一件事：新建 Codocs Worker 及其 secrets（含 `downloadDocument` 依赖的阿里云 OSS 凭据）、Console 应用注册与 homeUrl、修改共享测试 Gateway 放行 `/codocs/*`、启用 Runtime codocs adapter 与数据库。**涉及共享 Gateway，需单独授权**，本轮未做。
+
+浏览器验收另有一层阻断：消费该端点的 `aims/app/pages/projects/[id]/documents.vue` 仍是未迁页面之一（`enterprise/app/pages/` 下无对应页面），宿主目前没有 UI 调用它。`enterprise-oauth-codocs-evidence.json` 中 `browserAcceptance` 保持 `false`，未改。
+
+### 顺带发现（既有缺口，未修）
+
+`POST /aims/api/v1/company-weekly-summaries/:periodKey` 与 `POST /aims/api/v1/weekly-reports/:reportId` 线上返回 404，但路由文件与就绪清单中都存在（同路径 GET 正常返回 401/400）。`HEAD~2` 时清单里已有这几条，本轮两个提交未触碰任何 weekly 文件，属既有缺口而非本次引入。2026-09-17 复测仍为 404。
+
+## 2026-09-17 Codocs 上线测试环境
+
+用户授权把 Codocs 部署到 CF 测试环境，解除本文上一节记录的阻断。用户在 `codocs/.env.dev` 提供了本机 MySQL 管理凭据；`codocs/.wrangler.generated.jsonc` 是**生产**配置（`hzy-codocs` / `codocs.huizhi.yun` / `hzy-console-prod`），测试构建不使用它，也不使用 `.env.dev`（`build-cloudflare-worker.mjs` 设 `dotenv: false` 并清除 `HZY_*`／`ALIYUN_*` 等进程变量）。
+
+已有、无需新建的部分：Console `auth_clients` 的 `codocs`（含本测试域 callback / post-logout URI）、服务账号 `codocs.runtime` 及其 8 条 active grant、Platform 的 active `codocs` 订阅、策略包中 `homeUrl=https://hzy-test.huizhi.yun/codocs/` 的 codocs 应用，以及当前 Runtime 二进制内已编译的 codocs adapter（本次**没有**重建 Runtime）。
+
+本次改动：
+
+- 数据库：新建本机 `hzy_codocs`（utf8mb4 / utf8mb4_0900_ai_ci），装入 `codocs/docs/codocs_schema.sql` 并按序执行 v1.1–v1.6 及 `company_asset_quick_publish`（后者多为 `IF NOT EXISTS` 空操作，schema dump 已含大部分对象），共 34 张表；adapter `requiredTables` 24 张逐项核对齐全。授权 `hzy_test_local_runtime@127.0.0.1`。库名沿用用户在 `.env.dev` 指定的 `hzy_codocs`，与其余 `hzy_*_test_local_20260910` 命名不同。
+- Runtime：`config.json` 增加 `apps.codocs`（同一本机用户，库 `hzy_codocs`），原文件备份为 `config.before-codocs-20260917T085710.json`。换配置前按文档做启动探测（带齐 LaunchAgent 全部环境变量），日志到达 `listening on 127.0.0.1:18084` 才重启，证明 `server.New(cfg)` 通过 codocs adapter 的建表校验。重启后本地与公网 health 均为 `"codocs":{"db":"ok","enabled":true}`，其余应用不变，匿名与伪造 Bearer 仍 401。未改 Runtime 版本（仍 `0.3.219-test.codocs-project-document.1`）。
+- Platform 控制面：按 `register-product-apps.mjs` 同样的主机／控制面／订阅守卫，在 `hzy_platform_dev` 插入 `C000001-test-codocs` 部署（`license_status=pending`，与 aims/assets/finance 一致）。仅新增一行，未改其他部署。
+- Gateway 源码：`APP_SERVICE_BINDINGS` 增加 `codocs: 'HZY_CODOCS_SERVICE'`。**缺这一条时 codocs 会回落到 `DEFAULT_CODOCS_ORIGIN`（外部 `codocs.isme.dev`）**，即 2026-09-09 Assets 那次同类故障。该改动是加法：`serviceBindingFetch` 在缺少绑定时回退普通 fetch，生产网关行为不变。
+- 测试 Gateway：`cloudflare-gateway.mjs` 的 503 名单移除 codocs；`prepare-cloudflare-gateway.mjs` 的 registry apps、service bindings、secrets 与 `HZY_CODOCS_ORIGIN=https://codocs.test.invalid` 同步补齐。新增测试断言 codocs 命中绑定且 `x-hzy-app-code=codocs`、`x-hzy-deployment=C000001-test-codocs`。test-env 43 项、tenant-gateway 40 项全部通过。
+- Worker：`hzy-test-codocs` 版本 **`4b524c54-2150-42b4-bf98-2de670546f37`**，44 个变量 + 2 个 secret（`HZY_CODOCS_SERVICE_CLIENT_SECRET`、`HZY_TENANT_GATEWAY_INTERNAL_TOKEN`），无公网路由、`workers_dev:false`、无定时任务、`tenant-runtime` 数据模式、`HZY_COLLAB_ENABLED=false`。服务账号密钥取自服务器 `product-runtime-clients.json`，落盘为 0600，部署前已对活的 Console 验证该凭据有效（进入 scope 判定而非 `invalid_client`）。
+- Gateway registry：线上 registry 与两份本地副本都不一致，漂移是 2026-09-14 的 `apps.aims.enterpriseScheduler={storage:'unified',generation:'1'}`；据此重建后摘要与线上 `0a5f499b…` 逐字节相同，才在其上合并 codocs。写入前复核、写入后回读，新摘要 `0fe7cb98…`，enterprise 绑定保持 `C000001-test-enterprise`。合并制品 `codocs-source.secret-patch.json` / `codocs-source.receipt.json`。
+- Gateway 部署：先从线上版本读出真实绑定、变量、cron 与路由再组配置，避免按仓库里过时的候选配置覆盖。线上只有一条 cron `0 16 * * *`（仓库 prepare 脚本里的 `*/5` 集成 drain 并未上线），本次原样保留。新版本 **`0fc9768d-e170-4da9-a3ef-ce1a0ae5e40b`**，回滚点 `0866464e-ffa4-4de8-a75e-895100a87bfa`。
+
+验收：`/codocs/` 与 `/codocs/login` 返回 200；`/`、`/aims/projects`、`/assets/`、`/finance/` 仍 200；`/altoc/`、`/people/`、`/workflow/`、`/webdev/`、`/collab/` 仍 503。匿名 `/codocs/api/documents|folders|cabinet` 为 401、`/codocs/api/info/items` 为 403、服务 API `POST /codocs/api/v1/service/product-documents/search` 为 401。真实 Chrome 访问 `/codocs/` 正确跳转 Wiztek SSO，与其他应用一致，无 console 错误（两条 401 是触发跳转的鉴权探测）。`verify-enterprise-oauth.mjs --execute-codocs` 通过：2 个 scope 签发并验签、2 个负向用例被拒，证据 `enterprise-oauth-codocs-evidence.json` 已按新 registry 摘要更新。
+
+### 未完成：宿主直读 Codocs 正文在测试环境仍跑不通（同日已修复，见文末「2026-09-17 修正项目文档正文的来源/目标部署绑定」）
+
+Codocs 应用本身已可用，但 `/aims/api/v1/codocs/documents/:uuid/content` 这条宿主直读链路**在测试环境仍不通**，原因是跨应用直连拓扑，不是本次部署遗漏：
+
+- `aims/server/utils/codocsApi.ts` 要求直连 Codocs 独立子域名（生产为 `https://codocs.<suffix>/codocs`），明确禁止回环统一网关。测试环境没有 codocs 子域名。
+- enterprise Worker 没有 `HZY_CODOCS_API_URL`，也没有 codocs service binding，`HZY_DEPLOYMENT_PROFILE` 未设置，因此 `resolveServiceAppBaseUrl` 解析不出 https 直连地址，回退到 Console 应用目录的 `homeUrl`，即网关回环。（顺带确认：不会误连生产 `codocs.huizhi.yun`。）
+- 网关按应用路由时用 `stripInternalHeaders` 清掉入站上下文并把 `x-hzy-deployment` 设为**目标**应用（`C000001-test-codocs`），而 `codocs/server/api/v1/service/project-documents/[uuid]/content.post.ts` 经 `requireCodocsServiceTenantDeploymentBinding` 要求它等于 token 的**来源**部署（`C000001-test-enterprise`）。用真实 enterprise 服务令牌实测该端点即返回 `403 Service tenant/deployment binding is invalid.`——令牌与 capability 都正确，是传输拓扑不匹配。`preserveTrustedServiceTokenSource` 只覆盖 `POST /oauth/token`，不覆盖服务 API。
+- 网关注入的 `x-hzy-service-routes` 目录里 codocs 的 origin 是 `https://codocs.test.invalid`，与其他应用一样是测试环境刻意设置的不可路由地址。
+
+要打通需另做一件事并单独决策：给 codocs 一个可路由的测试直连地址并相应设置 `HZY_CODOCS_ORIGIN`，或给 enterprise 加 codocs service binding 并让 Foundation 受信 route helper 保留来源部署，或让网关在跨应用服务 API 路径上保留来源上下文。浏览器端到端验收另有一层阻断：消费该端点的 `aims/app/pages/projects/[id]/documents.vue` 仍是未迁页面，宿主没有 UI 调它，证据文件 `browserAcceptance` 保持 `false`。
+
+Codocs 文件下载所需的阿里云 OSS 凭据未配置（测试 Worker 无 `ALIYUN_OSS_*`，按仓库约定应走 Console `integration-config + credential-vault`），因此附件下载不可用；文档正文读取不依赖 OSS。实时协同按 `HZY_COLLAB_ENABLED=false` 关闭，与 `/collab/` 仍 503 一致。
+
+
+## 2026-09-17 修正项目文档正文的来源/目标部署绑定
+
+上一节把宿主直读跑不通归因为"需要 codocs 独立子域名"。**这个判断是错的**：测试环境的 `validateCloudflareTestConfig` 明确禁止业务 Worker 带 `routes`（"App ingress and scheduling must remain disabled"），给 codocs 配公网主机名会破坏该不变量。真正的缺陷在代码——项目文档正文这条链路两端都停在旧的同部署形状。
+
+- Codocs 侧 `api/v1/service/project-documents/[uuid]/content.post.ts` 用 `requireCodocsServiceTenantDeploymentBinding`，要求 `x-hzy-deployment` 等于令牌里的来源部署；而经受信网关到达时该头是**目标**（codocs）部署，必然 403。它的 5 条兄弟路由（product-documents metadata、productDocumentContentService、productDocumentSearchService、productDocumentCreateService、companyWeeklySummaryService、assetsProductDocumentMetadataService）早已改用 `requireCodocsCrossAppServiceTenantDeploymentBinding`。
+- Aims 侧 `getCodocsProjectDocumentContent` 把 `targetDeploymentCode` 写成来源部署，出站也发来源部署；同文件的 `searchDepartmentDocuments` 早已从网关下发的 `x-hzy-service-routes` 受信目录解析目标部署再签名。
+
+改动：两端按兄弟链路的既有形状对齐——Codocs 改用跨应用绑定并把 `binding.tenant/sourceDeployment/targetDeployment` 分别传入签名校验；Aims 解析 `resolveTrustedServiceAppRoute(event,'codocs')`，以目标部署签名并发送，有网关上下文却无受信路由时 503 失败关闭。没有改网关信任模型，没有新增公网入口，没有放宽任何校验。
+
+验证：codocs typecheck、aims typecheck 均通过。codocs 225 项测试 217 通过 / 8 失败、aims 63 项失败，改动前后失败集合逐文件相同（均为既有的 `ERR_MODULE_NOT_FOUND`：测试文件以无扩展名路径 import，在 `--experimental-strip-types` 下加载失败，属既有问题，本次未引入也未处理）。更新了受影响的契约测试并新增 `aims/test/codocsProjectDocumentContentCaller.test.ts`。
+
+部署：`hzy-test-codocs` **`2bc3dcd0-cdbc-4128-9101-930b3efe28fd`**；`hzy-test-enterprise` **`727bc257-6842-458a-bda8-316b90cef4bb`**，回滚点 `cbbb7726-451b-4a7c-ade4-4d580575f2cf`。先发目标应用再发调用方。
+
+线上信任边界回归矩阵（真实令牌打真实端点，来源 enterprise → 网关 → codocs → codocs runtime → MySQL）：
+
+| 用例 | 结果 |
+| --- | --- |
+| 正确调用 | `404 document_not_found` —— 鉴权、跨应用绑定、命令校验、HMAC 全部通过并查到数据库，探针用的是不存在的 UUID |
+| 签名声称目标部署=来源部署 | 403 signature context invalid |
+| 签名声称来源应用为 aims | 403 signature context invalid |
+| 签名声称错误租户 | 403 signature context invalid |
+| 签名后篡改命令体 | 403 command is invalid |
+| 无令牌 | 客户端签名即拒绝（上下文不完整） |
+| 伪造令牌 | 401 |
+| capability 不符（`codocs:product-document:read`） | 403 Missing required service scope |
+| audience 错误（data-runtime） | 令牌不予签发（invalid_scope） |
+| aims 令牌走 enterprise 条目 | 令牌不予签发（insufficient_scope） |
+
+仍未完成：浏览器端到端验收——消费该端点的 `aims/app/pages/projects/[id]/documents.vue` 还是未迁页面，宿主没有 UI 调它；库内也没有项目文档数据。`browserAcceptance` 保持 `false`。
+
+同时盘点了 Codocs 全部服务路由的绑定形状，仍用同部署形状的 4 条（`altoc-entity-documents` 的 content/attach、`reviews/workflow-callback`、`projectDocumentQualityService`）记录在 `codocs/CLAUDE.md`：前三条的来源应用未部署无法验证，`projectDocumentQualityService` 经网关会同样失配，属已识别未处理项。
+
+## 2026-09-17 项目文档预览下载端点与侧栏导航改版
+
+用户授权部署。两个 Worker，先发目标应用再发调用方。
+
+- `hzy-test-aims` **`7541a838-4c6c-4097-8e58-fd23d4449259`**，回滚点 `b4b4763b-57ac-4ad8-b4a8-67e042c31ad0`。本次同时补上了此前只发到宿主、未发到 Aims 的 `codocsApi.ts` 来源/目标 deployment 修正——该文件同样被 Aims 自身路由使用。
+- `hzy-test-enterprise` **`6aa36332-f60f-400d-9b42-f1cb927526ed`**，回滚点 `727bc257-6842-458a-bda8-316b90cef4bb`。
+
+内容：项目文档 preview/download 端点（宿主路由 + Aims service 端点 + 独立 `aims:project-documents:download` capability），以及侧栏一级菜单改为分节标题、二级菜单加图标。
+
+验证：
+
+- 部署前 Console 令牌签发探测：`aims:project-documents:read`、`aims:project-documents:download`、`codocs:project-document:content:read` 均 200 签发。
+- 新宿主路由 `/aims/api/v1/projects/:id/documents/:id/{preview,download}` 匿名返回 401（已注册，非 `enterprise_module_runtime_not_ready` 的 503）。
+- 导航改版确认落到线上：`/enterprise/_nuxt/DCH0lk4l.js` 含 `HostNavSections` 与分节标题样式；服务端下发的 `businessNavigation` 含 6 个工作域图标（book-marked / box / boxes / folder-kanban / list-checks / map），4 个领域图标（package / truck / chart-line / settings）保留供折叠态图标轨使用。
+- 回归：`/`、`/enterprise/`、`/aims/*`、`/assets/`、`/finance/`、`/codocs/` 均 200；`/altoc/`、`/people/`、`/workflow/`、`/webdev/`、`/collab/` 仍 503；Runtime 版本与各库状态不变。
+
+拓扑澄清（本次排查所得）：企业宿主 pilot 服务于 `/enterprise/*`，构建产物在 `/enterprise/_nuxt/`；站点根 `/` 由 Console 提供，引用 `/_nuxt/`。`/enterprise/` 会 308 跳到 `/aims/`。按公网路径探测 `/aims/api/v1/service/enterprise/**` 得到的 503 是宿主命名空间的正常结果——该 Aims service 端点只经 `HZY_AIMS_SERVICE` Service Binding 由宿主调用，不对外暴露。
+
+未完成：preview/download 的浏览器端到端验收仍未做——需要登录会话，且消费这些端点的 `projects/[id]/documents.vue` 尚未迁入宿主（闭包还差 13 个端点）。侧栏改版的线上视觉验收同样需要登录；本次视觉验证是在本地用真实组件与真实导航数据、以 1440×900 和 390×844 完成的。

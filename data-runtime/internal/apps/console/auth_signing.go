@@ -10,7 +10,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"net/url"
 	"os"
 	"strings"
 	"time"
@@ -94,6 +93,9 @@ func (a *Adapter) SignOIDCToken(
 	if err != nil {
 		return nil, err
 	}
+	if err := a.authorizeOIDCSigningClaims(ctx, normalizedClaims); err != nil {
+		return nil, err
+	}
 	key, err := a.ensureOIDCSigningKey(ctx, meta.ActorID)
 	if err != nil {
 		return nil, err
@@ -114,7 +116,117 @@ func (a *Adapter) SignOIDCToken(
 	}, nil
 }
 
+// authorizeOIDCSigningClaims turns a well-formed signing request into an
+// authorized one. Shape validation cannot establish who a token may speak for,
+// so every issuance is justified by a fact this Runtime owns: a live session for
+// a user token, or an active credential and grant for a service token. Holding
+// the signing capability lets a workload ask for a token; it must not let that
+// workload assert a subject, session or scope the Runtime cannot confirm.
+func (a *Adapter) authorizeOIDCSigningClaims(ctx context.Context, claims map[string]any) error {
+	hzy, ok := claims["hzy"].(map[string]any)
+	if !ok {
+		return httperror.New(http.StatusBadRequest, "oidc_signing_hzy_claim_invalid", "hzy claim must be an object")
+	}
+	if stringField(claims["token_use"]) == "service" {
+		return a.authorizeServiceSigningClaims(ctx, claims, hzy)
+	}
+	return a.authorizeUserSigningClaims(ctx, claims, hzy)
+}
+
+// The credential and grant state that guards service-token consumption must also
+// guard issuance, so a revoked credential or an ungranted scope cannot be minted
+// in the first place.
+func (a *Adapter) authorizeServiceSigningClaims(ctx context.Context, claims, hzy map[string]any) error {
+	credentialID, _ := integerField(hzy["credentialId"])
+	var identity serviceSigningIdentity
+	state, err := a.verifyOIDCServiceTokenState(ctx, map[string]any{
+		"clientId":     stringField(claims["client_id"]),
+		"credentialId": credentialID,
+		"scope":        stringField(claims["scope"]),
+	}, &identity)
+	if err != nil {
+		return err
+	}
+	if state["active"] != true {
+		return httperror.New(http.StatusForbidden, "oidc_signing_service_state_inactive",
+			"service credential or requested scope is not active")
+	}
+	if err := bindServiceSigningIdentity(claims, hzy, identity); err != nil {
+		return err
+	}
+	audience, ok := claims["aud"].(string)
+	if target, exists := claims["target_app"]; !ok || audience == "" || (exists && target != audience) {
+		return httperror.New(http.StatusForbidden, "oidc_signing_service_target_mismatch", "target_app must equal audience")
+	}
+	claims["target_app"] = audience
+	scopes := strings.Fields(stringField(claims["scope"]))
+	// Existing Console management alias is derived from one exact grant only.
+	if identity.ClientCode == consoleRuntimeClientCode && audience == "data-runtime" && len(scopes) == 1 && scopes[0] == "runtime.update" {
+		scopes[0] = "data-runtime:runtime:update"
+	}
+	selected, err := mapServiceAudienceScopes(identity.ClientCode, audience, scopes, identity.Grants)
+	if err != nil {
+		return err
+	}
+	return a.authorizeServiceSigningDeployment(claims["deployment"], identity, selected)
+}
+
+// A user token speaks for whoever the session says it speaks for. Resolving the
+// session here keeps a revoked, expired or simply invented sid from becoming a
+// signed identity, and keeps sub, hzy.uid and the session from disagreeing:
+// consumers read the subject from either field.
+func (a *Adapter) authorizeUserSigningClaims(ctx context.Context, claims, hzy map[string]any) error {
+	var uid string
+	err := a.db.QueryRowContext(ctx, `
+		SELECT ls.uid
+		FROM local_sessions ls
+		INNER JOIN directory_users u ON u.uid=ls.uid AND u.status='active'
+		WHERE ls.session_id=? AND ls.status='active' AND ls.revoked_at IS NULL
+			AND ls.expires_at>UTC_TIMESTAMP()
+		LIMIT 1
+	`, strings.TrimSpace(stringField(claims["sid"]))).Scan(&uid)
+	if errors.Is(err, sql.ErrNoRows) {
+		return httperror.New(http.StatusForbidden, "oidc_signing_session_not_active",
+			"user token session is missing, revoked or expired")
+	}
+	if err != nil {
+		return err
+	}
+	if strings.TrimSpace(stringField(hzy["uid"])) != uid || stringField(claims["sub"]) != "user:"+uid {
+		return httperror.New(http.StatusForbidden, "oidc_signing_session_subject_mismatch",
+			"user token subject does not match the authenticated session")
+	}
+	if err := a.authorizeUserSigningDeployment(claims["deployment"]); err != nil {
+		return err
+	}
+	return a.authorizeUserSigningClient(ctx, claims)
+}
+
 func (a *Adapter) VerifyOIDCServiceTokenState(ctx context.Context, body map[string]any) (map[string]any, error) {
+	return a.verifyOIDCServiceTokenState(ctx, body, nil)
+}
+
+// VerifyOIDCServiceTokenStateForAudience reuses issuance mapping for a token
+// already authenticated by Runtime. audience must come from that verified
+// authentication context, never from an Enterprise request body.
+// The public state endpoint retains its existing input/output contract.
+func (a *Adapter) VerifyOIDCServiceTokenStateForAudience(ctx context.Context, body map[string]any, audience string) (map[string]any, error) {
+	var identity serviceSigningIdentity
+	state, err := a.verifyOIDCServiceTokenState(ctx, body, &identity)
+	if err != nil || state["active"] != true {
+		return state, err
+	}
+	if _, err := mapServiceAudienceScopes(identity.ClientCode, audience, strings.Fields(stringField(body["scope"])), identity.Grants); err != nil {
+		var denied httperror.Error
+		if errors.As(err, &denied) && denied.Status == http.StatusForbidden {
+			return map[string]any{"active": false, "reason": denied.Code}, nil
+		}
+		return nil, err
+	}
+	return state, nil
+}
+
+func (a *Adapter) verifyOIDCServiceTokenState(ctx context.Context, body map[string]any, identity *serviceSigningIdentity) (map[string]any, error) {
 	clientID, err := requiredAuthString(body["clientId"], "client_id", 128)
 	if err != nil {
 		return nil, err
@@ -128,18 +240,23 @@ func (a *Adapter) VerifyOIDCServiceTokenState(ctx context.Context, body map[stri
 		return map[string]any{"active": false, "reason": "scope_missing"}, nil
 	}
 	var (
-		serviceClientID, currentCredentialID  uint64
+		serviceClientID     uint64
+		currentCredentialID sql.NullInt64
 		serviceClientStatus, credentialStatus string
 		expiresAt                             sql.NullTime
+		clientCode, clientName, clientType    string
+		appCode                               sql.NullString
 	)
 	err = a.db.QueryRowContext(ctx, `
-		SELECT sc.id,sc.status,sc.current_credential_id,scc.status,scc.expires_at
+		SELECT sc.id,sc.status,sc.current_credential_id,scc.status,scc.expires_at,
+			sc.client_code,sc.client_name,sc.client_type,sc.app_code
 		FROM service_client_credentials scc
 		INNER JOIN service_clients sc ON sc.id=scc.service_client_id
 		WHERE scc.id=? AND scc.client_id=?
 		LIMIT 1
 	`, credentialID, clientID).Scan(
 		&serviceClientID, &serviceClientStatus, &currentCredentialID, &credentialStatus, &expiresAt,
+		&clientCode, &clientName, &clientType, &appCode,
 	)
 	if err == sql.ErrNoRows {
 		return map[string]any{"active": false, "reason": "credential_missing"}, nil
@@ -148,34 +265,45 @@ func (a *Adapter) VerifyOIDCServiceTokenState(ctx context.Context, body map[stri
 		return nil, err
 	}
 	if serviceClientStatus != "active" || credentialStatus != "active" ||
-		currentCredentialID != uint64(credentialID) ||
+		!currentCredentialID.Valid || currentCredentialID.Int64 != int64(credentialID) ||
 		(expiresAt.Valid && !expiresAt.Time.After(time.Now().UTC())) {
 		return map[string]any{"active": false, "reason": "credential_inactive"}, nil
 	}
-	rows, err := a.db.QueryContext(ctx, `
-		SELECT resource_code,action
-		FROM service_client_grants
-		WHERE service_client_id=? AND status='active'
-	`, serviceClientID)
+	grantQuery := `SELECT resource_code,action FROM service_client_grants WHERE service_client_id=? AND status='active'`
+	if identity != nil {
+		grantQuery = `SELECT resource_code,action,scope_json FROM service_client_grants WHERE service_client_id=? AND status='active'`
+	}
+	rows, err := a.db.QueryContext(ctx, grantQuery, serviceClientID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 	allowed := map[string]bool{}
+	var grants []serviceScopeGrant
 	for rows.Next() {
 		var resource, action string
-		if err := rows.Scan(&resource, &action); err != nil {
+		var scopeJSON sql.NullString
+		args := []any{&resource, &action}
+		if identity != nil {
+			args = append(args, &scopeJSON)
+		}
+		if err := rows.Scan(args...); err != nil {
 			return nil, err
 		}
-		allowed[joinConsoleServiceScope(resource, action)] = true
+		scope := joinConsoleServiceScope(resource, action)
+		allowed[scope] = true
+		grants = append(grants, serviceScopeGrant{scope: scope, scopeJSON: scopeJSON})
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
 	for _, scope := range scopes {
-		if !allowed[scope] {
+		if identity == nil && !allowed[scope] {
 			return map[string]any{"active": false, "reason": "grant_inactive"}, nil
 		}
+	}
+	if identity != nil {
+		*identity = serviceSigningIdentity{ClientCode: clientCode, ClientName: clientName, ClientType: clientType, AppCode: appCode.String, Grants: grants}
 	}
 	return map[string]any{"active": true}, nil
 }
@@ -192,14 +320,9 @@ func (a *Adapter) normalizeOIDCSigningClaims(input map[string]any) (map[string]a
 			return nil, httperror.New(http.StatusBadRequest, "oidc_signing_claim_not_allowed", "OIDC signing claim is not allowed: "+key)
 		}
 	}
-	issuer, err := requiredAuthString(input["iss"], "issuer", 1000)
+	issuer, err := a.resolveOIDCSigningIssuer(input["iss"])
 	if err != nil {
 		return nil, err
-	}
-	parsedIssuer, err := url.Parse(issuer)
-	if err != nil || parsedIssuer.Scheme == "" || parsedIssuer.Host == "" ||
-		(parsedIssuer.Scheme != "https" && parsedIssuer.Scheme != "http") {
-		return nil, httperror.New(http.StatusBadRequest, "oidc_signing_issuer_invalid", "iss must be an absolute HTTP(S) URL")
 	}
 	subject, err := requiredAuthString(input["sub"], "subject", 191)
 	if err != nil {
@@ -245,9 +368,7 @@ func (a *Adapter) normalizeOIDCSigningClaims(input map[string]any) (map[string]a
 		if !ok || credentialID <= 0 {
 			return nil, httperror.New(http.StatusBadRequest, "oidc_signing_service_credential_invalid", "service token credentialId is invalid")
 		}
-		if strings.TrimSpace(stringField(hzy["subjectType"])) != "service" ||
-			strings.TrimSpace(stringField(hzy["subjectCode"])) == "" ||
-			strings.TrimSpace(stringField(hzy["clientCode"])) == "" {
+		if strings.TrimSpace(stringField(hzy["subjectType"])) != "service" {
 			return nil, httperror.New(http.StatusBadRequest, "oidc_signing_service_identity_invalid", "service token identity claims are invalid")
 		}
 	} else {
@@ -266,6 +387,11 @@ func (a *Adapter) normalizeOIDCSigningClaims(input map[string]any) (map[string]a
 	for key, value := range input {
 		normalized[key] = value
 	}
+	normalizedHZY := make(map[string]any, len(hzy))
+	for key, value := range hzy {
+		normalizedHZY[key] = value
+	}
+	normalized["hzy"] = normalizedHZY
 	normalized["iss"], normalized["sub"], normalized["aud"] = issuer, subject, audience
 	normalized["tenant"] = a.tenant
 	normalized["token_use"] = tokenUse

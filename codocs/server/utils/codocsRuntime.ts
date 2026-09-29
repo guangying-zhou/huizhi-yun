@@ -1,6 +1,7 @@
 import type { H3Event } from 'h3'
 import { createError } from 'h3'
 import { maybeCallTenantRuntime } from '@hzy/foundation/server/utils/tenantRuntimeClient'
+import { assertLegacyBodyDocument } from './documentBodyRef'
 
 export interface CodocsCollaborationContext {
   docId: number
@@ -36,6 +37,10 @@ export interface CodocsDocumentMetadata {
   updated_at?: string
   readonly?: boolean
   sharePermission?: 'read' | 'write' | null
+  /** 0 or absent = v1. Above 0 the body lives in a snapshot; oss_path is only a derived mirror. */
+  snapshot_generation?: number
+  /** Only returned when `include_snapshot_ref` was requested by a trusted server caller. */
+  snapshot_ref?: unknown
 }
 
 export interface CreateCodocsDocumentInput {
@@ -124,6 +129,19 @@ export async function getCodocsDocumentMetadata(
       scope: 'codocs.read'
     }
   )
+}
+
+/**
+ * Metadata for a route that is about to read or write the body at `oss_path`.
+ * A v2 (snapshot-backed) document is refused with 409 before any storage
+ * access: its `oss_path` is only a possibly stale mirror.
+ */
+export async function getCodocsLegacyBodyDocumentMetadata(
+  event: H3Event,
+  uuid: string,
+  query: Record<string, unknown> = {}
+) {
+  return assertLegacyBodyDocument(await getCodocsDocumentMetadata(event, uuid, query))
 }
 
 export async function createCodocsDocumentMetadata(

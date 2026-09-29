@@ -1,5 +1,8 @@
 <script setup lang="ts">
-interface AccessRecord { id: string, viewerUid: string, viewedAt: string, ossPath: string }
+import { useCodocsModule } from '../../../layer/useCodocsModule'
+import { useAccountStore } from '@hzy/foundation/app/stores/account'
+
+interface AccessRecord { id: string, viewerUid: string, viewerName?: string, viewedAt: string, ossPath: string }
 interface AccessResponse { data: { items: AccessRecord[], total: number } }
 
 const props = defineProps<{ path: string, title: string }>()
@@ -7,6 +10,7 @@ const { hasPermission } = usePermissions()
 const canView = computed(() => hasPermission('admin', 'admin') && hasPermission('company', 'admin'))
 const canExport = computed(() => canView.value && hasPermission('company', 'export'))
 const { resolveCurrentAppPath } = useAppUrls()
+const { hosted, moduleUrl } = useCodocsModule()
 const accountStore = useAccountStore()
 const toast = useToast()
 const open = ref(false)
@@ -33,13 +37,13 @@ async function load() {
   loading.value = true
   errorMessage.value = ''
   try {
-    const response = await $fetch<AccessResponse>(resolveCurrentAppPath('/api/company-assets/access-records'), {
+    const response = await $fetch<AccessResponse>(hosted ? moduleUrl('/api/company-assets/access-records') : resolveCurrentAppPath('/api/company-assets/access-records'), {
       params: { ...query.value, page: page.value, pageSize }
     })
     if (id !== requestId) return
     items.value = response.data.items
     total.value = response.data.total
-    void accountStore.fetchUsersBatch([...new Set(items.value.map(item => item.viewerUid))]).catch(() => {})
+    if (!hosted) void accountStore.fetchUsersBatch([...new Set(items.value.map(item => item.viewerUid))]).catch(() => {})
   } catch (error: unknown) {
     if (id !== requestId) return
     items.value = []
@@ -81,7 +85,7 @@ async function exportRecords() {
   if (!canExport.value || exporting.value) return
   exporting.value = true
   try {
-    const blob = await $fetch<Blob>(resolveCurrentAppPath('/api/company-assets/access-records/export'), {
+    const blob = await $fetch<Blob>(hosted ? moduleUrl('/api/company-assets/access-records/export') : resolveCurrentAppPath('/api/company-assets/access-records/export'), {
       params: query.value, responseType: 'blob'
     })
     const url = URL.createObjectURL(blob)
@@ -145,8 +149,8 @@ async function exportRecords() {
           class="max-h-80 overflow-auto"
         >
           <template #viewerUid-cell="{ row }">
-            <div>{{ accountStore.getUserByUid(row.original.viewerUid)?.realName || row.original.viewerUid }}</div>
-            <div v-if="accountStore.getUserByUid(row.original.viewerUid)?.realName" class="text-xs text-muted">
+            <div>{{ row.original.viewerName || accountStore.getUserByUid(row.original.viewerUid)?.realName || row.original.viewerUid }}</div>
+            <div v-if="row.original.viewerName || accountStore.getUserByUid(row.original.viewerUid)?.realName" class="text-xs text-muted">
               {{ row.original.viewerUid }}
             </div>
           </template>

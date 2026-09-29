@@ -5,11 +5,13 @@ import {
   type CachedPolicyBundle
 } from '~~/server/utils/bundleCache'
 import { getOidcIssuer } from '~~/server/utils/oidc'
+import { resolveLocalConsoleFacade } from '@hzy/foundation/server/utils/localConsoleFacade'
 import {
   loadPlatformRuntimeConfig,
   refreshPlatformBundle,
   resolvePlatformRuntimeCacheScope
 } from '~~/server/utils/platformRuntime'
+import { enterpriseModuleAvailability } from '~~/server/utils/enterpriseEntitlement'
 import { getSystemParameter } from '~~/server/utils/systemParameters'
 
 type BundleRecord = Record<string, unknown>
@@ -29,6 +31,7 @@ interface RuntimeAppItem {
   authMode?: string | null
   sortOrder?: number | null
   status?: string | null
+  deploymentState?: 'deployed' | 'not-deployed'
 }
 
 function stringValue(value: unknown) {
@@ -119,7 +122,12 @@ function appsFromBundle(event: H3Event, bundle: CachedPolicyBundle | null) {
   const deploymentPublicUrl = nullableString(deployment?.publicUrl)
 
   return records(bundle?.payload?.applications)
-    .map(item => normalizeAppItem(event, item, deploymentPublicUrl))
+    .map((item) => {
+      const app = normalizeAppItem(event, item, deploymentPublicUrl)
+      if (!app || !bundle) return app
+      const availability = enterpriseModuleAvailability(bundle.payload, app.appCode)
+      return availability ? { ...app, ...availability, homeUrl: availability.deploymentState === 'deployed' ? app.homeUrl : null } : app
+    })
     .filter((item): item is RuntimeAppItem => Boolean(item))
     .filter(isActive)
     .sort((a, b) => appSortOrder(a) - appSortOrder(b) || a.appCode.localeCompare(b.appCode))
@@ -179,7 +187,8 @@ export default defineEventHandler(async (event) => {
   const applications = appsFromBundle(event, bundle)
   const app = applications.find(item => item.appCode === appCode) || fallbackApp(appCode)
   const deployment = bundle?.payload?.deployment as Record<string, unknown> | undefined
-  const consoleBaseUrl = normalizeBaseUrl(requestOrigin(event))
+  // Backchannels retain canonical names; the private local transport selects the dial address.
+  const consoleBaseUrl = resolveLocalConsoleFacade(event)?.issuer || normalizeBaseUrl(requestOrigin(event))
   const [workflowApiUrl, notificationRuntimeApiUrl] = await Promise.all([
     getSystemParameter('workflow.apiUrl').catch(() => null),
     getSystemParameter('notification.runtimeApiUrl').catch(() => null)

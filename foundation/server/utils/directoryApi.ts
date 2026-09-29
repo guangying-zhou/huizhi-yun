@@ -221,7 +221,7 @@ async function fetchDirectorySharingByService<T>(options: {
   params?: Record<string, unknown>
   timeout?: number
   event?: H3Event
-}, projection?: 'departments') {
+}, projection?: 'departments' | 'user-departments') {
   const config = requireDirectoryConfig()
   return await requestWithServiceAccessToken<T>({
     audience: 'console',
@@ -343,6 +343,25 @@ export async function fetchConsoleDirectoryApi<T = unknown>(
 
   if (normalizedPath === '/departments' && (!options.method || options.method === 'GET')) {
     return fetchDirectorySharingByService<T>(options, 'departments')
+  }
+
+  if (normalizedPath === '/user-departments' && (!options.method || options.method === 'GET')) {
+    return fetchDirectorySharingByService<T>(options, 'user-departments')
+  }
+
+  if (normalizedPath === '/projects' && (!options.method || options.method === 'GET')) {
+    const config = requireDirectoryConfig()
+    return requestWithServiceAccessToken<T>({
+      audience: 'console',
+      scope: 'console:directory-project-access:read',
+      event: options.event,
+      request: token => consoleServiceFetch<T>(options.event,
+        `${config.consoleApiUrl}/api/v1/console/service/directory/project-access`, {
+          headers: { ...trustedServiceRequestHeaders(options.event), authorization: `Bearer ${token}` },
+          params: { ...options.params, projection: 'projects' },
+          timeout: options.timeout || config.timeoutMs
+        })
+    })
   }
 
   if (normalizedPath === '/users' && (!options.method || options.method === 'GET')) {

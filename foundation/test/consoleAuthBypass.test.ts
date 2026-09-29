@@ -55,4 +55,11 @@ describe('Console auth bypass paths', () => {
     assert.match(content, /pathname === '\/oauth\/introspect'/)
     assert.match(content, /isServiceTokenIntrospectionPath\(pathname\)[\s\S]*shouldBypassConsoleAuth/)
   })
+
+  test('bypasses generic auth only for the exact token handler', () => {
+    const content = source('server/middleware/console-auth.ts')
+    assert.match(content, /\|\| pathname === '\/oauth\/token'/)
+    assert.doesNotMatch(content, /pathname\.startsWith\('\/oauth\/token'/)
+    assert.doesNotMatch(content, /pathname\.startsWith\('\/oauth\/'/)
+  })
 })

@@ -1,8 +1,11 @@
 <script setup lang="ts">
+import CommonEmptyState from '../../../../foundation/app/components/common/EmptyState.vue'
 import type { ApiResponse, AssetDetail } from '~/types'
 import type { DropdownMenuItem } from '@nuxt/ui'
+import { useAssetsModule } from '../../../layer/useAssetsModule'
 
 const route = useRoute()
+const { hosted, moduleUrl, cacheKey } = useAssetsModule()
 const assetIdentifier = computed(() => String(route.params.id || ''))
 const editOpen = ref(false)
 const operationOpen = ref(false)
@@ -15,9 +18,11 @@ const canRequestAssignment = computed(() => permissionsLoaded.value && hasPermis
 const canEditAssignment = computed(() => permissionsLoaded.value && hasPermission('assignments', 'edit'))
 const canCreateAssignment = computed(() => canRequestAssignment.value || canEditAssignment.value)
 const requestOnlyAssignment = computed(() => canRequestAssignment.value && !canEditAssignment.value)
-const { loadDictionaries, getLabel } = useAssetLabels()
+const { loadDictionaries, getLabel } = useAssetLabels('asset-items')
 await loadDictionaries()
-const { data: response, refresh, error } = await useFetch<ApiResponse<AssetDetail>>(() => `/api/v1/assets/${assetIdentifier.value}`)
+const { data: response, pending, refresh, error } = await useFetch<ApiResponse<AssetDetail>>(() => moduleUrl(`/api/v1/assets/${assetIdentifier.value}`), {
+  key: computed(() => cacheKey(`asset:${assetIdentifier.value}`))
+})
 
 if (error.value?.statusCode === 404) {
   throw createError({ statusCode: 404, message: '资产不存在' })
@@ -35,9 +40,9 @@ watch(() => asset.value, (value) => {
     return
   }
 
-  navigateTo(`/items/${value.public_id}`, { replace: true })
+  navigateTo(moduleUrl(`/items/${value.public_id}`), { replace: true })
 })
-const backTo = computed(() => asset.value?.asset_category === 'physical' ? '/physical' : '/resources')
+const backTo = computed(() => moduleUrl(asset.value?.asset_category === 'physical' ? '/physical' : '/resources'))
 const assetCategoryLabel = computed(() => getLabel('asset_category', asset.value?.asset_category))
 const assetSubtypeLabel = computed(() => {
   if (!asset.value) return '-'
@@ -191,7 +196,7 @@ function printLabel() {
                     返回
                   </UButton>
                   <UButton
-                    v-if="canEditAsset"
+                    v-if="!hosted && canEditAsset"
                     icon="i-lucide-pencil"
                     color="primary"
                     variant="soft"
@@ -210,7 +215,7 @@ function printLabel() {
                   </UButton>
                   <UDropdownMenu :items="operationItems" :content="{ align: 'end' }">
                     <UButton
-                      v-if="canCreateAssignment"
+                      v-if="!hosted && canCreateAssignment"
                       icon="i-lucide-arrow-right-left"
                       color="primary"
                       variant="soft"
@@ -278,7 +283,7 @@ function printLabel() {
             <div class="flex items-center justify-between">
               <span class="font-semibold">关联文档</span>
               <UButton
-                v-if="canEditAsset"
+                v-if="!hosted && canEditAsset"
                 icon="i-lucide-plus"
                 color="primary"
                 variant="soft"
@@ -289,20 +294,29 @@ function printLabel() {
               </UButton>
             </div>
           </template>
-          <UTable :data="documentItems" :columns="documentColumns" />
+          <UTable :data="documentItems" :columns="documentColumns" :loading="pending">
+            <template #empty>
+              <CommonEmptyState title="暂无记录" description="当前范围内没有可显示的记录。" />
+            </template>
+          </UTable>
         </UCard>
 
         <UCard>
           <template #header>
             <span class="font-semibold">最近操作记录</span>
           </template>
-          <UTable :data="asset?.latest_events || []" :columns="eventColumns" />
+          <UTable :data="asset?.latest_events || []" :columns="eventColumns" :loading="pending">
+            <template #empty>
+              <CommonEmptyState title="暂无记录" description="当前范围内没有可显示的记录。" />
+            </template>
+          </UTable>
         </UCard>
       </div>
     </template>
   </UDashboardPanel>
 
   <AssetsAssetEditModal
+    v-if="!hosted"
     :open="editOpen"
     :asset="asset || null"
     @update:open="editOpen = $event"
@@ -310,6 +324,7 @@ function printLabel() {
   />
 
   <AssetsAssignmentCreateModal
+    v-if="!hosted"
     :open="operationOpen"
     :asset="asset || null"
     :default-action-type="operationAction"
@@ -319,6 +334,7 @@ function printLabel() {
   />
 
   <AssetsAssetDocumentLinkModal
+    v-if="!hosted"
     :open="documentOpen"
     :asset="asset || null"
     @update:open="documentOpen = $event"

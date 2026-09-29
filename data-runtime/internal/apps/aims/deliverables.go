@@ -3,9 +3,12 @@ package aims
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
+	"math"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 
 	"github.com/huizhi-yun/data-runtime/internal/httperror"
@@ -55,6 +58,51 @@ type directDeliverableControl struct {
 	TemplateKey *string
 }
 
+type optionalProjectListPage struct {
+	enabled  bool
+	page     int64
+	pageSize int64
+	offset   int64
+}
+
+func parseOptionalProjectListPage(query url.Values) (optionalProjectListPage, error) {
+	pageValues, hasPage := query["page"]
+	sizeValues, hasSize := query["pageSize"]
+	if !hasPage && !hasSize {
+		return optionalProjectListPage{}, nil
+	}
+	parse := func(values []string, present bool, fallback int64) (int64, error) {
+		if !present {
+			return fallback, nil
+		}
+		if len(values) != 1 || values[0] == "" || values[0][0] == '0' {
+			return 0, httperror.New(http.StatusBadRequest, "invalid_pagination", "page and pageSize must be positive integers")
+		}
+		for _, digit := range values[0] {
+			if digit < '0' || digit > '9' {
+				return 0, httperror.New(http.StatusBadRequest, "invalid_pagination", "page and pageSize must be positive integers")
+			}
+		}
+		value, err := strconv.ParseInt(values[0], 10, 64)
+		if err != nil || value < 1 {
+			return 0, httperror.New(http.StatusBadRequest, "invalid_pagination", "page and pageSize must be positive integers")
+		}
+		return value, nil
+	}
+	page, err := parse(pageValues, hasPage, 1)
+	if err != nil {
+		return optionalProjectListPage{}, err
+	}
+	pageSize, err := parse(sizeValues, hasSize, 20)
+	if err != nil {
+		return optionalProjectListPage{}, err
+	}
+	if pageSize > 100 || page-1 > math.MaxInt64/pageSize {
+		return optionalProjectListPage{}, httperror.New(http.StatusBadRequest, "invalid_pagination", "pagination exceeds allowed range")
+	}
+	return optionalProjectListPage{enabled: true, page: page, pageSize: pageSize, offset: (page - 1) * pageSize}, nil
+}
+
 func (a *Adapter) handleDeliverablesRuntime(ctx context.Context, method string, path string, query url.Values, body map[string]any) (any, string, bool, error) {
 	if data, operation, handled, err := a.handleDeliverableQualityRuntime(ctx, method, path, query, body); handled {
 		return data, operation, true, err
@@ -80,7 +128,11 @@ func (a *Adapter) handleDeliverablesRuntime(ctx context.Context, method string, 
 	}
 }
 
-func (a *Adapter) listDeliverables(ctx context.Context, query url.Values) ([]deliverableListItem, error) {
+func (a *Adapter) listDeliverables(ctx context.Context, query url.Values) (any, error) {
+	page, err := parseOptionalProjectListPage(query)
+	if err != nil {
+		return nil, err
+	}
 	uid := strings.TrimSpace(query.Get("current_user"))
 	if uid == "" {
 		return nil, httperror.New(http.StatusUnauthorized, "missing_current_user", "current_user is required")
@@ -182,8 +234,14 @@ func (a *Adapter) listDeliverables(ctx context.Context, query url.Values) ([]del
 	if len(conditions) > 0 {
 		whereClause = "WHERE " + strings.Join(conditions, " AND ")
 	}
+	var total int64
+	if page.enabled {
+		if err := a.DB().QueryRowContext(ctx, `SELECT COUNT(*) FROM deliverables d JOIN aims_projects p ON p.id = d.project_id `+whereClause, args...).Scan(&total); err != nil {
+			return nil, fmt.Errorf("count deliverables: %w", err)
+		}
+	}
 
-	rows, err := a.DB().QueryContext(ctx, `
+	listSQL := `
 		SELECT
 			d.id,
 			d.project_owner_id,
@@ -194,7 +252,7 @@ func (a *Adapter) listDeliverables(ctx context.Context, query url.Values) ([]del
 			d.description,
 			d.acceptance_criteria,
 			d.deliverable_type,
-			d.`+"`required`"+`,
+			d.` + "`required`" + `,
 			d.sort_order,
 			d.status,
 			d.quality_status,
@@ -231,11 +289,18 @@ func (a *Adapter) listDeliverables(ctx context.Context, query url.Values) ([]del
 		LEFT JOIN deliverable_submissions current_submission ON current_submission.id = d.current_submission_id
 		LEFT JOIN work_items target_wi ON target_wi.id = d.target_id
 		LEFT JOIN work_items matter_wi ON matter_wi.id = d.matter_id
-		`+whereClause+`
+		` + whereClause + `
 		ORDER BY COALESCE(d.target_id, d.matter_id, d.milestone_owner_id, d.project_owner_id, d.id) ASC,
 		         d.sort_order ASC,
-		         d.created_at ASC
-	`, args...)
+		         d.created_at ASC,
+		         d.id ASC
+	`
+	listArgs := append([]any(nil), args...)
+	if page.enabled {
+		listSQL += " LIMIT ? OFFSET ?"
+		listArgs = append(listArgs, page.pageSize, page.offset)
+	}
+	rows, err := a.DB().QueryContext(ctx, listSQL, listArgs...)
 	if err != nil {
 		return nil, fmt.Errorf("query deliverables: %w", err)
 	}
@@ -251,6 +316,9 @@ func (a *Adapter) listDeliverables(ctx context.Context, query url.Values) ([]del
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
+	}
+	if page.enabled {
+		return map[string]any{"items": items, "total": total, "page": page.page, "pageSize": page.pageSize}, nil
 	}
 	return items, nil
 }
@@ -274,8 +342,20 @@ func (a *Adapter) updateDirectDeliverable(ctx context.Context, rawDeliverableID 
 	if err := a.requireProjectManagerOrScopedAdmin(ctx, control.ProjectID, uid, query); err != nil {
 		return nil, err
 	}
-	if err := a.requireDeliverableMilestoneCompletionUnlocked(ctx, deliverableID); err != nil {
-		return nil, err
+	if !validDeliverableReceiptIdentity(ctx) {
+		if err := a.requireDeliverableMilestoneCompletionUnlocked(ctx, deliverableID); err != nil {
+			return nil, err
+		}
+		if hasAnyBodyKey(body, "documentUuid", "document_uuid", "documentSource", "document_source") {
+			if err := a.requireNoOpenDeliverableQualityReview(ctx, deliverableID); err != nil {
+				return nil, err
+			}
+		}
+		if firstBodyText(body, "status") == "approved" {
+			if err := a.requireDeliverableQualityBeforeApproval(ctx, deliverableID); err != nil {
+				return nil, err
+			}
+		}
 	}
 
 	sets := make([]string, 0, 12)
@@ -289,11 +369,6 @@ func (a *Adapter) updateDirectDeliverable(ctx context.Context, rawDeliverableID 
 		}
 		sets = append(sets, "name = ?")
 		args = append(args, newName)
-	}
-	if hasAnyBodyKey(body, "documentUuid", "document_uuid", "documentSource", "document_source") {
-		if err := a.requireNoOpenDeliverableQualityReview(ctx, deliverableID); err != nil {
-			return nil, err
-		}
 	}
 	appendNullableBodySet := func(column string, keys ...string) {
 		if !hasAnyBodyKey(body, keys...) {
@@ -329,11 +404,6 @@ func (a *Adapter) updateDirectDeliverable(ctx context.Context, rawDeliverableID 
 			sets = append(sets, "submitted_by = ?", "submitted_at = CURRENT_TIMESTAMP")
 			args = append(args, uid)
 		}
-		if status == "approved" {
-			if err := a.requireDeliverableQualityBeforeApproval(ctx, deliverableID); err != nil {
-				return nil, err
-			}
-		}
 	}
 
 	if len(sets) == 0 {
@@ -341,31 +411,57 @@ func (a *Adapter) updateDirectDeliverable(ctx context.Context, rawDeliverableID 
 	}
 	sets = append(sets, "updated_at = CURRENT_TIMESTAMP")
 	args = append(args, deliverableID)
-	if nameChanged {
-		tx, err := a.DB().BeginTx(ctx, nil)
-		if err != nil {
-			return nil, err
-		}
-		defer tx.Rollback()
-		var lockedProjectID int64
-		if err := tx.QueryRowContext(ctx, "SELECT id FROM aims_projects WHERE id = ? FOR UPDATE", control.ProjectID).Scan(&lockedProjectID); err != nil {
-			return nil, err
-		}
-		if err := ensureDirectDeliverableNameAvailable(ctx, tx, deliverableID, control.ProjectID, newName); err != nil {
-			return nil, err
-		}
-		if _, err := tx.ExecContext(ctx, "UPDATE deliverables SET "+strings.Join(sets, ", ")+" WHERE id = ?", args...); err != nil {
-			return nil, err
-		}
-		if err := tx.Commit(); err != nil {
-			return nil, err
-		}
-		return map[string]any{"id": deliverableID, "updated": true}, nil
-	}
-	if _, err := a.DB().ExecContext(ctx, "UPDATE deliverables SET "+strings.Join(sets, ", ")+" WHERE id = ?", args...); err != nil {
+	tx, receipts, err := a.beginDeliverableWrite(ctx)
+	if err != nil {
 		return nil, err
 	}
-	return map[string]any{"id": deliverableID, "updated": true}, nil
+	defer tx.Rollback()
+	var lockedProjectID int64
+	if err := tx.QueryRowContext(ctx, "SELECT id FROM aims_projects WHERE id = ? FOR UPDATE", control.ProjectID).Scan(&lockedProjectID); err != nil {
+		return nil, err
+	}
+	if err := requireEnterpriseDeliverableProjectScopeTx(ctx, tx, uid, control.ProjectID, true); err != nil {
+		return nil, err
+	}
+	if err := requireEnterpriseDeliverableOwnerTx(ctx, tx, control.ProjectID, deliverableID, 0); err != nil {
+		return nil, err
+	}
+	out, err := executeEnterpriseDeliverableReceipt(ctx, tx, receipts, "project-update", "aims:project-deliverables:edit", "deliverable-update.v1", "deliverable", map[string]any{"deliverableId": deliverableID, "payload": body}, map[string]any{"id": deliverableID, "updated": true}, func() (map[string]any, string, error) {
+		if err := lockExistingMatterDeliverableWriteTx(ctx, tx, control.ProjectID, deliverableID); err != nil {
+			return nil, "", err
+		}
+		if receipts != nil {
+			if err := requireDeliverableMilestoneCompletionUnlockedTx(ctx, tx, deliverableID); err != nil {
+				return nil, "", err
+			}
+		}
+		if receipts != nil && hasAnyBodyKey(body, "documentUuid", "document_uuid", "documentSource", "document_source") {
+			if err := requireNoOpenDeliverableQualityReviewTx(ctx, tx, deliverableID); err != nil {
+				return nil, "", err
+			}
+		}
+		if receipts != nil && status == "approved" {
+			if err := a.requireDeliverableQualityBeforeApproval(context.WithValue(ctx, enterpriseMilestoneTxKey{}, tx), deliverableID); err != nil {
+				return nil, "", err
+			}
+		}
+		if nameChanged {
+			if err := ensureDirectDeliverableNameAvailable(ctx, tx, deliverableID, control.ProjectID, newName); err != nil {
+				return nil, "", err
+			}
+		}
+		if _, err := tx.ExecContext(ctx, "UPDATE deliverables SET "+strings.Join(sets, ", ")+" WHERE id = ?", args...); err != nil {
+			return nil, "", err
+		}
+		return map[string]any{"id": deliverableID, "updated": true}, deliverableReceiptCode(deliverableID), nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+	return out, nil
 }
 
 func ensureDirectDeliverableNameAvailable(
@@ -437,24 +533,76 @@ func (a *Adapter) deleteDirectDeliverable(ctx context.Context, rawDeliverableID 
 	}
 	control, err := a.loadDirectDeliverableControl(ctx, deliverableID)
 	if err != nil {
+		var denied httperror.Error
+		if errors.As(err, &denied) && denied.Status == http.StatusNotFound {
+			return a.replayDeletedEnterpriseDeliverable(ctx, deliverableID, uid, query)
+		}
 		return nil, err
 	}
 	if err := a.requireProjectManagerOrScopedAdmin(ctx, control.ProjectID, uid, query); err != nil {
 		return nil, err
 	}
-	if err := a.requireDeliverableMilestoneCompletionUnlocked(ctx, deliverableID); err != nil {
+	if !validDeliverableReceiptIdentity(ctx) {
+		if err := a.requireDeliverableMilestoneCompletionUnlocked(ctx, deliverableID); err != nil {
+			return nil, err
+		}
+		if control.TemplateKey != nil && strings.TrimSpace(*control.TemplateKey) != "" {
+			return nil, httperror.New(http.StatusBadRequest, "required_deliverable_delete_denied", "系统必选交付物不允许删除")
+		}
+		if control.Status != "pending" {
+			return nil, httperror.New(http.StatusBadRequest, "deliverable_status_delete_denied", "只能删除待准备状态的交付物")
+		}
+	}
+	tx, receipts, err := a.beginDeliverableWrite(ctx)
+	if err != nil {
 		return nil, err
 	}
-	if control.TemplateKey != nil && strings.TrimSpace(*control.TemplateKey) != "" {
-		return nil, httperror.New(http.StatusBadRequest, "required_deliverable_delete_denied", "系统必选交付物不允许删除")
-	}
-	if control.Status != "pending" {
-		return nil, httperror.New(http.StatusBadRequest, "deliverable_status_delete_denied", "只能删除待准备状态的交付物")
-	}
-	if _, err := a.DB().ExecContext(ctx, "DELETE FROM deliverables WHERE id = ?", deliverableID); err != nil {
+	defer tx.Rollback()
+	var lockedProjectID int64
+	if err := tx.QueryRowContext(ctx, "SELECT id FROM aims_projects WHERE id = ? FOR UPDATE", control.ProjectID).Scan(&lockedProjectID); err != nil {
 		return nil, err
 	}
-	return nil, nil
+	if err := requireEnterpriseDeliverableProjectScopeTx(ctx, tx, uid, control.ProjectID, true); err != nil {
+		return nil, err
+	}
+	if err := requireEnterpriseDeliverableOwnerTx(ctx, tx, control.ProjectID, deliverableID, 0); err != nil {
+		return nil, err
+	}
+	out, err := executeEnterpriseDeliverableReceipt(ctx, tx, receipts, "project-delete", "aims:project-deliverables:edit", "deliverable-delete.v1", "deliverable-project", map[string]any{"deliverableId": deliverableID}, map[string]any{"id": deliverableID, "deleted": true}, func() (map[string]any, string, error) {
+		if err := lockExistingMatterDeliverableWriteTx(ctx, tx, control.ProjectID, deliverableID); err != nil {
+			return nil, "", err
+		}
+		if receipts != nil {
+			if err := requireDeliverableMilestoneCompletionUnlockedTx(ctx, tx, deliverableID); err != nil {
+				return nil, "", err
+			}
+			var status string
+			var templateKey sql.NullString
+			if err := tx.QueryRowContext(ctx, "SELECT status,template_key FROM deliverables WHERE id=? FOR UPDATE", deliverableID).Scan(&status, &templateKey); err != nil {
+				return nil, "", err
+			}
+			if templateKey.Valid && strings.TrimSpace(templateKey.String) != "" {
+				return nil, "", httperror.New(http.StatusBadRequest, "required_deliverable_delete_denied", "系统必选交付物不允许删除")
+			}
+			if status != "pending" {
+				return nil, "", httperror.New(http.StatusBadRequest, "deliverable_status_delete_denied", "只能删除待准备状态的交付物")
+			}
+		}
+		if _, err := tx.ExecContext(ctx, "DELETE FROM deliverables WHERE id = ?", deliverableID); err != nil {
+			return nil, "", err
+		}
+		return map[string]any{"id": deliverableID, "deleted": true}, deliverableReceiptCode(control.ProjectID), nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+	if receipts == nil {
+		return nil, nil
+	}
+	return out, nil
 }
 
 func (a *Adapter) loadDirectDeliverableControl(ctx context.Context, deliverableID int64) (directDeliverableControl, error) {

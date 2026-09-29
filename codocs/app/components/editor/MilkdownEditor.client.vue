@@ -52,7 +52,7 @@ import { StableEditorTableView, createEnsureTableColgroupPlugin } from './editor
 import { createEditorMermaidPreview, EDITOR_MERMAID_RENDERER_VARIANT, initEditorMermaid } from './editorMermaid'
 import { createMermaidSvgCache } from './editorMermaidCache'
 import { createEditorToolbarConfig } from './editorToolbarConfig'
-import { MERMAID_RUNTIME_VARIANT } from '~/utils/mermaidLoader'
+import { MERMAID_RUNTIME_VARIANT } from '../../utils/mermaidLoader'
 import { useEditorAnnotations } from './useEditorAnnotations'
 import { useEditorImageUpload } from './useEditorImageUpload'
 import { useEditorModeSync } from './useEditorModeSync'
@@ -105,9 +105,12 @@ interface Props {
   watermarkText?: string
   theme?: 'frame' | 'classic' | 'nord'
   showSidebar?: boolean
+  aiEnabled?: boolean
+  cloudClipboardEnabled?: boolean
   documentId?: string
   versions?: VersionItem[]
   versionsLoading?: boolean
+  versionsError?: string
   showVersionHistory?: boolean
   showSharePanel?: boolean
   docType?: string
@@ -119,6 +122,7 @@ interface Props {
   allowShare?: boolean
   canManageShares?: boolean
   activeVersionNum?: number | null
+  versionHistoryReadOnly?: boolean
   aiAbstract?: string
   collaborationDoc?: Y.Doc | null
   collaborationAwareness?: Awareness | null
@@ -132,9 +136,12 @@ const props = withDefaults(defineProps<Props>(), {
   watermarkText: '',
   theme: 'frame',
   showSidebar: true,
+  aiEnabled: true,
+  cloudClipboardEnabled: true,
   documentId: '',
   versions: () => [],
   versionsLoading: false,
+  versionsError: '',
   showVersionHistory: false,
   showSharePanel: false,
   docType: 'private',
@@ -146,6 +153,7 @@ const props = withDefaults(defineProps<Props>(), {
   allowShare: true,
   canManageShares: true,
   activeVersionNum: null,
+  versionHistoryReadOnly: false,
   aiAbstract: '',
   collaborationDoc: null,
   collaborationAwareness: null,
@@ -462,7 +470,7 @@ const {
 const {
   readonlyCodeBlocks,
   readonlyLinks,
-  readonlyWatermarkStyle,
+  readonlyWatermarkText,
   scheduleReadonlyCodeBlockRefresh,
   setupReadonlyCodeBlockObserver,
   syncReadonlyCodeBlockObserver,
@@ -878,6 +886,8 @@ const _toggleFormat = (command: { key: string }) => {
 }
 
 const editorToolbarConfig = createEditorToolbarConfig({
+  aiEnabled: props.aiEnabled,
+  cloudClipboardEnabled: props.cloudClipboardEnabled,
   isAnnotationDialogOpen,
   aiMenuVisible,
   pasteFromCloudClipboard,
@@ -1585,7 +1595,6 @@ defineExpose({
       <div
         ref="editorRef"
         class="crepe-editor relative"
-        :style="readonlyWatermarkStyle"
         :class="{
           'crepe-readonly': readonly,
           'crepe-hidden': isLoading || viewMode === 'source',
@@ -1596,6 +1605,13 @@ defineExpose({
         @copy.capture="readonly && disableSelection && $event.preventDefault()"
         @dragstart.capture="readonly && disableSelection && $event.preventDefault()"
       />
+
+      <!-- DOM overlay instead of a data: SVG background, which the page CSP (img-src) blocks -->
+      <div v-if="readonlyWatermarkText" class="readonly-watermark" aria-hidden="true">
+        <div class="readonly-watermark-grid">
+          <span v-for="n in 96" :key="n">{{ readonlyWatermarkText }}</span>
+        </div>
+      </div>
 
       <button
         v-for="block in (disableSelection ? [] : readonlyCodeBlocks)"
@@ -1650,8 +1666,8 @@ defineExpose({
             <div
               class="cursor-pointer flex items-center justify-center w-8 h-8 rounded-full shadow-sm border hover:scale-110 transition-transform"
               :class="getAnnotation(icon.id)?.status === 'resolved'
-                ? 'bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400 border-green-200 dark:border-green-700'
-                : 'bg-white dark:bg-gray-800 text-yellow-600 dark:text-yellow-400 border-gray-200 dark:border-gray-700'"
+                ? 'bg-success/10 text-success border-success/25'
+                : 'bg-default text-warning border-default'"
               @click.stop="toggleAnnotation(icon.id)"
             >
               <svg
@@ -1675,7 +1691,7 @@ defineExpose({
             <!-- Manual Popover Content -->
             <div
               v-if="activeAnnotationId === icon.id && getAnnotation(icon.id)"
-              class="absolute right-full top-0 mr-3 w-80 max-w-sm bg-white dark:bg-gray-800 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 z-50 overflow-hidden transform origin-top-right transition-all"
+              class="absolute right-full top-0 mr-3 w-80 max-w-sm bg-default rounded-lg shadow-xl border border-default z-50 overflow-hidden transform origin-top-right transition-all"
             >
               <AnnotationCard
                 :annotation="getAnnotation(icon.id)!"
@@ -1696,7 +1712,7 @@ defineExpose({
         <textarea
           ref="sourceTextareaRef"
           :value="modelValue"
-          class="w-full h-full py-8 px-4 sm:py-16 sm:px-32 font-mono text-sm leading-relaxed bg-white dark:bg-gray-900 border-none outline-none resize-none"
+          class="w-full h-full py-8 px-4 sm:py-16 sm:px-32 font-mono text-sm leading-relaxed bg-default border-none outline-none resize-none"
           spellcheck="false"
           placeholder="请输入......"
           @input="handleSourceInput"
@@ -1713,6 +1729,7 @@ defineExpose({
       :document-id="documentId"
       :versions="versions"
       :versions-loading="versionsLoading"
+      :versions-error="versionsError"
       :show-version-history="showVersionHistory"
       :show-share-panel="showSharePanel"
       :is-project-doc="docType === 'project'"
@@ -1723,7 +1740,9 @@ defineExpose({
       :allow-share="allowShare"
       :can-manage-shares="canManageShares"
       :active-version-num="activeVersionNum"
+      :version-history-read-only="versionHistoryReadOnly"
       :ai-abstract="aiAbstract"
+      :ai-enabled="aiEnabled"
       :readonly="readonly"
       @close="emit('close-sidebar')"
       @update-abstract="(text: string) => emit('update-abstract', text)"
@@ -1748,7 +1767,7 @@ defineExpose({
 
     <!-- AI 下拉菜单（从 Crepe 工具栏 AI 按钮触发） -->
     <EditorAiToolbar
-      v-if="!readonly"
+      v-if="!readonly && aiEnabled"
       :visible="aiMenuVisible"
       :selected-text="aiSelectedText"
       :position="aiMenuPosition"
@@ -1759,6 +1778,35 @@ defineExpose({
 </template>
 
 <style>
+.readonly-watermark {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  overflow: hidden;
+  pointer-events: none;
+  user-select: none;
+}
+.readonly-watermark-grid {
+  position: absolute;
+  top: -50%;
+  left: -50%;
+  width: 200%;
+  height: 200%;
+  display: flex;
+  flex-wrap: wrap;
+  align-content: flex-start;
+  transform: rotate(-24deg);
+}
+.readonly-watermark-grid > span {
+  box-sizing: border-box;
+  flex: 0 0 280px;
+  height: 180px;
+  padding: 80px 24px 0;
+  overflow: hidden;
+  white-space: nowrap;
+  font-size: 20px;
+  color: rgba(100, 116, 139, 0.16);
+}
 /* 图片上传中旋转动画 */
 .milkdown-image-block .image-icon .animate-spin {
   animation: spin 1s linear infinite;
@@ -2417,10 +2465,6 @@ defineExpose({
     /* Make read-only mode perfectly symmetrical and centered, removing the space reserved for toolbars */
     padding: 1rem !important;
     max-width: none !important;
-  background-image: var(--readonly-watermark-image, none);
-  background-repeat: repeat;
-  background-size: 280px 180px;
-  background-attachment: local;
 
     /* Ensure text can be selected in read-only mode */
     user-select: text !important;

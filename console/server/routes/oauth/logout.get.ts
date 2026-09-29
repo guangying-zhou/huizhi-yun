@@ -2,6 +2,7 @@ import { defineEventHandler, getQuery, getRequestURL, sendRedirect } from 'h3'
 import { assertRedirectUri, requireOidcClient } from '~~/server/utils/oidc'
 import { revokeConsoleSession, setConsoleLogoutMarker } from '~~/server/utils/authSession'
 import { getUpstreamOidcLogoutUrl } from '~~/server/utils/upstreamOidc'
+import { resolveCurrentAppUrl } from '@hzy/foundation/server/utils/appUrls'
 
 function first(value: unknown) {
   return Array.isArray(value) ? value[0] : value
@@ -65,6 +66,6 @@ export default defineEventHandler(async (event) => {
     return sendRedirect(event, await buildUpstreamLogoutRedirect(event, finalRedirect))
   }
 
-  const finalRedirect = appendState('/login', state || 'logged_out')
+  const finalRedirect = appendState(resolveCurrentAppUrl(event, '/login'), state || 'logged_out')
   return sendRedirect(event, await buildUpstreamLogoutRedirect(event, finalRedirect))
 })

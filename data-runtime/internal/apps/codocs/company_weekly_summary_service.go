@@ -11,6 +11,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/huizhi-yun/data-runtime/internal/httperror"
 	"github.com/huizhi-yun/data-runtime/internal/integrationoperation"
@@ -66,6 +67,26 @@ func (a *Adapter) publishCompanyWeeklySummary(
 	if err != nil {
 		return nil, codocsServiceCommandReceiptError(err)
 	}
+	value := executed.Value
+	if executed.Existing && value == nil {
+		// An idempotent hit returns only the stored receipt identity. Aims still
+		// needs the document evidence to finish its checkpoint, so rebuild it
+		// from the rows the first successful publish committed.
+		revision, err := positiveCompanySummaryCommandInt(command["revisionNo"])
+		if err != nil {
+			return nil, err
+		}
+		recipients, err := companySummaryCommandStringSlice(command["recipientUids"])
+		if err != nil {
+			return nil, err
+		}
+		value, err = a.existingCompanyWeeklySummaryResult(
+			ctx, periodKey, revision, strings.TrimSpace(stringValue(command["markdownSha256"])), len(recipients),
+		)
+		if err != nil {
+			return nil, err
+		}
+	}
 	response := map[string]any{
 		"receiptId":             executed.ReceiptID,
 		"receiptStatus":         "succeeded",
@@ -78,7 +99,7 @@ func (a *Adapter) publishCompanyWeeklySummary(
 		"targetBizType":         executed.TargetBizType,
 		"targetBizCode":         executed.TargetBizCode,
 		"responseSummarySha256": executed.ResponseSummarySHA256,
-		"result":                executed.Value,
+		"result":                value,
 	}
 	return response, nil
 }
@@ -105,7 +126,9 @@ func (a *Adapter) publishCompanyWeeklySummaryTx(
 		return nil, httperror.New(http.StatusBadRequest, "company_weekly_summary_command_invalid", "company weekly summary command is invalid")
 	}
 	expectedPath := fmt.Sprintf("codocs/publish/company/%s/company-weekly-summary.md", periodKey)
-	if ossPath != expectedPath || ossVersionID == "" {
+	// document_versions.oss_version_id is varchar(100); a longer id would abort the
+	// receipt transaction inside MySQL instead of failing with a stable contract code.
+	if ossPath != expectedPath || ossVersionID == "" || utf8.RuneCountInString(ossVersionID) > 100 {
 		return nil, httperror.New(http.StatusConflict, "company_weekly_summary_oss_binding_invalid", "summary object storage evidence is invalid")
 	}
 	recipients, err := companySummaryCommandStringSlice(body["recipientUids"])
@@ -194,7 +217,7 @@ func (a *Adapter) publishCompanyWeeklySummaryTx(
 		    last_editor_uid = ?, oss_commit_id = ?, committed_at = NOW(),
 		    publish_info = ?, updated_at = NOW()
 		WHERE id = ? AND uuid = ?
-	`, title, len([]byte(markdown)), operatorUID, ossVersionID,
+	`, title, len([]byte(markdown)), operatorUID, markdownHash,
 		fmt.Sprintf("Aims 公司项目周报汇总 %s R%d", periodKey, revision),
 		documentID, documentUUID); err != nil {
 		return nil, err
@@ -326,4 +349,49 @@ func rawCompanySummaryString(value any) string {
 		return text
 	}
 	return fmt.Sprint(value)
+}
+
+// existingCompanyWeeklySummaryResult reads back the document evidence written by
+// the first successful publish of this exact period revision and content hash.
+func (a *Adapter) existingCompanyWeeklySummaryResult(
+	ctx context.Context,
+	periodKey string,
+	revision int,
+	markdownHash string,
+	recipientCount int,
+) (map[string]any, error) {
+	var documentUUID, storedHash string
+	var documentVersionID int64
+	err := a.db.QueryRowContext(ctx, `
+		SELECT document.uuid, version.id, COALESCE(version.content_sha256, '')
+		FROM documents document
+		INNER JOIN document_relations relation
+		  ON relation.document_id = document.id
+		 AND relation.related_uid = ?
+		 AND relation.relation_type = 'source'
+		 AND relation.source_type = 'aims_company_weekly_summary'
+		 AND relation.source_id = ?
+		 AND relation.status = 1
+		INNER JOIN document_versions version
+		  ON version.document_id = document.id
+		 AND version.version_num = ?
+		WHERE document.status <> 0
+		LIMIT 1
+	`, companyWeeklySummaryContextPrincipal, periodKey, revision).Scan(&documentUUID, &documentVersionID, &storedHash)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, httperror.New(http.StatusConflict, "company_weekly_summary_receipt_document_missing", "existing summary receipt has no matching published document")
+	}
+	if err != nil {
+		return nil, err
+	}
+	if storedHash != markdownHash {
+		return nil, httperror.New(http.StatusConflict, "company_weekly_summary_version_hash_conflict", "document revision already exists with another content hash")
+	}
+	// The request's documentUrl is not covered by the signed command digest, so it
+	// is not trusted here; the server-derived default is always used.
+	return map[string]any{
+		"documentUuid": documentUUID, "documentVersionId": documentVersionID,
+		"documentVersionNum": revision, "markdownSha256": markdownHash,
+		"documentUrl": "/documents/" + documentUUID, "recipientCount": recipientCount,
+	}, nil
 }

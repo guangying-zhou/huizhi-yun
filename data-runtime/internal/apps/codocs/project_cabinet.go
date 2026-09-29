@@ -3,9 +3,12 @@ package codocs
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"net/http"
 	"net/url"
 	"strings"
+
+	"github.com/go-sql-driver/mysql"
 
 	"github.com/huizhi-yun/data-runtime/internal/httperror"
 )
@@ -144,7 +147,21 @@ func (a *Adapter) createProjectCabinetFile(ctx context.Context, query url.Values
 		nullableInt64(folderID),
 	)
 	if err != nil {
-		return nil, err
+		var duplicate *mysql.MySQLError
+		if !errors.As(err, &duplicate) || duplicate.Number != 1062 {
+			return nil, err
+		}
+		var matched string
+		err = a.db.QueryRowContext(ctx, `SELECT uuid FROM cabinet_files WHERE uuid=? AND filename=?
+		  AND original_name=? AND file_ext=? AND file_size=? AND oss_path=? AND owner_uid=?
+		  AND dept_code <=> ? AND project_code=? AND folder_id <=> ? AND status=1 AND deleted_at IS NULL`,
+			uuid, filename, originalName, fileExt, fileSize, ossPath, ownerUID, nullableString(deptCode), projectCode, nullableInt64(folderID)).Scan(&matched)
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, httperror.New(http.StatusConflict, "cabinet_uuid_conflict", "File UUID already belongs to a different upload")
+		}
+		if err != nil {
+			return nil, err
+		}
 	}
 	return a.projectCabinetFile(ctx, uuid, query)
 }

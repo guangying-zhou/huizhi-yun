@@ -1,4 +1,4 @@
-import type { PivrStage, MilestoneMode, ProjectCategory } from '~/types/aims'
+import type { PivrStage, MilestoneMode, ProjectCategory } from '../types/aims'
 
 // ============================================================
 // PIVR 四阶段定义

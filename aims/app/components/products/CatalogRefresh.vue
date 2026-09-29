@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { useAimsModule } from '../../../layer/useAimsModule'
+const { moduleUrl } = useAimsModule()
 interface Batch { refresh_id: string, status: 'staging' | 'active' | 'failed' | 'superseded', row_count: number, revision: number, total: number }
 const emit = defineEmits<{ activated: [] }>()
 const open = ref(false)
@@ -28,7 +30,7 @@ async function run(action: 'start' | 'continue' | 'status' | 'cancel') {
             action: next, refreshId: batch.value?.refresh_id || resumeId.value.trim(),
             ...(next === 'continue' ? { expectedRevision: batch.value?.revision } : {})
           }
-      const response = await $fetch<{ code: number, data: Batch }>('/api/v1/products/catalog-refresh', {
+      const response = await $fetch<{ code: number, data: Batch }>(moduleUrl('/api/v1/products/catalog-refresh'), {
         method: 'POST', body, ...(next === 'start' ? { headers: { 'Idempotency-Key': startKey! } } : {})
       })
       if (response.code !== 0 || !response.data?.refresh_id || !Number.isSafeInteger(response.data.revision)) throw new Error('同步状态响应不完整，请读取状态后重试')

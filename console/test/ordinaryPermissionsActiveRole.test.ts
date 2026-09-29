@@ -22,9 +22,11 @@ describe('Console ordinary permission snapshots ignore legacy active-role select
 
   test('bearer permission endpoint does not forward query simulation mode', () => {
     const content = source('server/api/v1/console/user/permissions.get.ts')
+    const callStart = content.indexOf('loadPolicyAuthorizationSnapshot(uid, targetAppCode, event)')
+    assert.notEqual(callStart, -1)
     const callBlock = content.slice(
-      content.indexOf('const snapshot = await loadPolicyAuthorizationSnapshot'),
-      content.indexOf('await writeTokenEvent', content.indexOf('const snapshot = await loadPolicyAuthorizationSnapshot'))
+      callStart,
+      content.indexOf('await writeTokenEvent', callStart)
     )
 
     assert.match(callBlock, /loadPolicyAuthorizationSnapshot\(uid, targetAppCode, event\)/)

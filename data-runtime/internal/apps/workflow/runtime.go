@@ -26,6 +26,28 @@ func (a *Adapter) HandleRuntime(ctx context.Context, method string, path string,
 	}
 	body := workflowRuntimeBodyFromRequest(query, rawBody)
 	switch {
+	case method == http.MethodGet && path == "/v1/workflow/delivery-effects/status":
+		return a.workflowDeliveryStatus(ctx, query.Get("hzy_runtime_tenant_code"), query.Get("hzy_runtime_deployment_code"))
+	case method == http.MethodPost && strings.HasPrefix(path, "/v1/workflow/delivery-effects/") && strings.HasSuffix(path, "/recover"):
+		parts := strings.Split(strings.TrimPrefix(strings.TrimSuffix(path, "/recover"), "/v1/workflow/delivery-effects/"), "/")
+		if len(parts) != 2 {
+			return InstanceAPIResponse{}, "", httperror.New(http.StatusNotFound, "not_found", "Route not found")
+		}
+		var kind workflowDeliveryKind
+		switch parts[0] {
+		case "notification":
+			kind = workflowNotificationDelivery
+		case "actionable":
+			kind = workflowActionableDelivery
+		case "callback":
+			kind = workflowCallbackDelivery
+		default:
+			return InstanceAPIResponse{}, "", httperror.New(http.StatusNotFound, "not_found", "Route not found")
+		}
+		return a.recoverWorkflowDelivery(ctx, kind, parts[1], body)
+	case method == http.MethodPost && path == "/v1/workflow/service/aims-work-item-completion-approval":
+		response, err := a.executeAimsCompletionApproval(ctx, body)
+		return response, "workflow.service.aims_work_item_completion_approval", err
 	case method == http.MethodPost && path == "/v1/workflow/service/codocs-publish-approval":
 		response, err := a.executeCodocsPublishApproval(ctx, body)
 		return response, "workflow.service.codocs_publish_approval", err
@@ -37,17 +59,24 @@ func (a *Adapter) HandleRuntime(ctx context.Context, method string, path string,
 	case method == http.MethodGet && path == "/v1/workflow/actionable-lifecycle-effects/pending":
 		limit, _ := strconv.Atoi(query.Get("limit"))
 		return a.pendingActionableLifecycleOutbox(ctx, limit)
+	case method == http.MethodGet && path == "/v1/workflow/notification-effects/pending":
+		limit, _ := strconv.Atoi(query.Get("limit"))
+		return a.pendingWorkflowNotificationOutbox(ctx, limit)
+	case method == http.MethodPost && strings.HasSuffix(path, "/ack") && strings.HasPrefix(path, "/v1/workflow/notification-effects/"):
+		return a.acknowledgeWorkflowNotificationOutbox(ctx, pathActionID(path, "/v1/workflow/notification-effects/", "/ack"), body)
+	case method == http.MethodPost && strings.HasSuffix(path, "/fail") && strings.HasPrefix(path, "/v1/workflow/notification-effects/"):
+		return a.failWorkflowNotificationOutbox(ctx, pathActionID(path, "/v1/workflow/notification-effects/", "/fail"), body)
 	case method == http.MethodGet && path == "/v1/workflow/callback-effects/pending":
 		limit, _ := strconv.Atoi(query.Get("limit"))
 		return a.pendingWorkflowCallbacks(ctx, limit)
 	case method == http.MethodPost && strings.HasSuffix(path, "/ack") && strings.HasPrefix(path, "/v1/workflow/callback-effects/"):
-		return a.acknowledgeWorkflowCallback(ctx, pathActionID(path, "/v1/workflow/callback-effects/", "/ack"))
+		return a.acknowledgeWorkflowCallback(ctx, pathActionID(path, "/v1/workflow/callback-effects/", "/ack"), body)
 	case method == http.MethodPost && strings.HasSuffix(path, "/fail") && strings.HasPrefix(path, "/v1/workflow/callback-effects/"):
 		return a.failWorkflowCallback(ctx, pathActionID(path, "/v1/workflow/callback-effects/", "/fail"), body)
 	case method == http.MethodPost && strings.HasSuffix(path, "/ack") && strings.HasPrefix(path, "/v1/workflow/actionable-lifecycle-effects/"):
-		return a.acknowledgeActionableLifecycleOutbox(ctx, pathActionID(path, "/v1/workflow/actionable-lifecycle-effects/", "/ack"))
+		return a.acknowledgeActionableLifecycleOutbox(ctx, pathActionID(path, "/v1/workflow/actionable-lifecycle-effects/", "/ack"), body)
 	case method == http.MethodPost && strings.HasSuffix(path, "/fail") && strings.HasPrefix(path, "/v1/workflow/actionable-lifecycle-effects/"):
-		return a.failActionableLifecycleOutbox(ctx, pathActionID(path, "/v1/workflow/actionable-lifecycle-effects/", "/fail"))
+		return a.failActionableLifecycleOutbox(ctx, pathActionID(path, "/v1/workflow/actionable-lifecycle-effects/", "/fail"), body)
 	case method == http.MethodGet && path == "/v1/workflow/actions":
 		return a.listActions(ctx, query)
 	case method == http.MethodGet && path == "/v1/workflow/tasks/pending":
@@ -125,6 +154,14 @@ func (a *Adapter) listTasks(ctx context.Context, query url.Values, listType stri
 		return InstanceAPIResponse{}, "", httperror.New(http.StatusUnauthorized, "missing_current_user", "未登录")
 	}
 	page := workflowPageParams(query, 20)
+	paged := false
+	if listType == "pending" {
+		var err error
+		page, paged, err = pendingTaskPage(query)
+		if err != nil {
+			return InstanceAPIResponse{}, "", err
+		}
+	}
 	appCode := strings.TrimSpace(query.Get("app_code"))
 
 	conditions := []string{"t.assignee_uid = ?"}
@@ -142,10 +179,47 @@ func (a *Adapter) listTasks(ctx context.Context, query url.Values, listType stri
 		conditions = append(conditions, "i.app_code = ?")
 		args = append(args, appCode)
 	}
+	if listType == "pending" {
+		// Match the Host's former JS string equality even on unicode_ci schemas.
+		if _, scoped := query["resource_code"]; scoped && appCode != "" {
+			conditions = append(conditions, "CAST(i.app_code AS BINARY) = CAST(? AS BINARY)")
+			args = append(args, appCode)
+		}
+		for _, key := range []string{"resource_code", "action_code", "exclude_initiator"} {
+			if values, ok := query[key]; ok {
+				if len(values) != 1 || values[0] == "" || len(values[0]) > 64 || strings.ContainsAny(values[0], "\x00\r\n") {
+					return InstanceAPIResponse{}, "", httperror.New(400, "pending_filter_invalid", "Invalid pending filter")
+				}
+				if key == "exclude_initiator" {
+					if values[0] != "true" {
+						return InstanceAPIResponse{}, "", httperror.New(400, "pending_filter_invalid", "Invalid pending filter")
+					}
+					// Derive from the authenticated actor, never accept an arbitrary excluded UID.
+					conditions = append(conditions, "CAST(COALESCE(i.initiator_uid,'') AS BINARY) <> CAST(? AS BINARY)")
+					args = append(args, currentUser)
+				} else {
+					conditions = append(conditions, "CAST(i."+key+" AS BINARY) = CAST(? AS BINARY)")
+					args = append(args, values[0])
+				}
+			}
+		}
+	}
+	var conn execQueryContext = a.db
+	var tx *sql.Tx
+	if paged {
+		var err error
+		tx, err = a.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true, Isolation: sql.LevelRepeatableRead})
+		if err != nil {
+			return InstanceAPIResponse{}, "", err
+		}
+		defer tx.Rollback()
+		conn = tx
+		orderColumn += ", t.id DESC"
+	}
 	whereSQL := strings.Join(conditions, " AND ")
 
 	var total int64
-	if err := a.db.QueryRowContext(ctx, `
+	if err := conn.QueryRowContext(ctx, `
 		SELECT COUNT(*) AS total
 		FROM flow_tasks t
 		INNER JOIN flow_instances i ON t.instance_id = i.id
@@ -157,7 +231,7 @@ func (a *Adapter) listTasks(ctx context.Context, query url.Values, listType stri
 	if listType == "done" {
 		selectCompleted = "t.completed_at AS task_completed_at,"
 	}
-	rows, err := queryMaps(ctx, a.db, `
+	rows, err := queryMaps(ctx, conn, `
 		SELECT t.id AS task_id, t.instance_id, i.instance_no,
 		       i.app_code, i.resource_code, i.action_code, i.biz_title, i.biz_url,
 		       i.initiator_uid, i.status AS instance_status,
@@ -201,7 +275,14 @@ func (a *Adapter) listTasks(ctx context.Context, query url.Values, listType stri
 		items = append(items, item)
 	}
 
-	return InstanceAPIResponse{Code: 0, Data: map[string]any{"total": total, "items": items}}, operation, nil
+	data := map[string]any{"total": total, "items": items}
+	if paged {
+		if err := tx.Commit(); err != nil {
+			return InstanceAPIResponse{}, "", err
+		}
+		data["page"], data["pageSize"] = page.page, page.pageSize
+	}
+	return InstanceAPIResponse{Code: 0, Data: data}, operation, nil
 }
 
 func (a *Adapter) listInitiated(ctx context.Context, query url.Values) (InstanceAPIResponse, string, error) {
@@ -475,6 +556,9 @@ func (a *Adapter) rejectTask(ctx context.Context, taskID string, rawBody map[str
 			map[string]any{"instanceId": task["instance_id"], "actionId": actionID, "taskId": parseInt64Fallback(taskID), "rejectStrategy": rejectStrategy},
 		))
 		if callback := callbackEffect(instance, "rejected"); callback.URL != "" {
+			if err := bindCompletionApprovalEvidence(ctx, tx, &callback, instance, actionID); err != nil {
+				return InstanceAPIResponse{}, "", err
+			}
 			effects.Callbacks = append(effects.Callbacks, callback)
 		}
 	}
@@ -1002,6 +1086,9 @@ func advanceFlowRuntime(ctx context.Context, tx *sql.Tx, instanceID int64, trigg
 			))
 		}
 		if callback := callbackEffect(instance, "approved"); callback.URL != "" {
+			if err := bindCompletionApprovalEvidence(ctx, tx, &callback, instance, triggeringActionID); err != nil {
+				return nil, err
+			}
 			effects.Callbacks = append(effects.Callbacks, callback)
 		}
 		return effects, nil
@@ -1153,7 +1240,10 @@ func trustedWorkflowCallbackPath(appCode, raw string) string {
 		return ""
 	}
 	parsed, err := url.Parse(strings.TrimSpace(raw))
-	if err != nil || parsed.User != nil || parsed.RawQuery != "" || parsed.Fragment != "" || parsed.Path != expected {
+	if appCode == "aims" && err == nil && parsed.Path == aimsCompletionWorkflowCallback {
+		expected = aimsCompletionWorkflowCallback
+	}
+	if err != nil || parsed.User != nil || parsed.ForceQuery || parsed.RawQuery != "" || parsed.Fragment != "" || strings.Contains(raw, "#") || parsed.Path != expected {
 		return ""
 	}
 	return expected

@@ -57,7 +57,7 @@
       "code": "contract",
       "name": "合同管理",
       "description": "合同主数据、里程碑、履约状态和合同文档",
-      "actions": ["view", "edit", "approve", "finance-summary:sync", "admin"],
+      "actions": ["view", "edit", "approve", "activate-delivery", "finance-summary:sync", "admin"],
       "sortOrder": 50
     },
     {
@@ -263,5 +263,103 @@
   ],
   "capabilitiesRequired": [
     "platform:app-registry"
-  ]
+  ],
+  "hostNavigation": {
+    "schemaVersion": 1,
+    "placement": "host-native",
+    "pages": [
+      "/altoc/customers",
+      "/altoc/customers/:customerId",
+      "/altoc/contracts",
+      "/altoc/contracts/:contractId",
+      "/altoc/payments",
+      "/altoc/payments/:planId",
+      "/altoc/leads",
+      "/altoc/leads/:leadId",
+      "/altoc/opportunities",
+      "/altoc/opportunities/:opportunityId",
+      "/altoc/quotes",
+      "/altoc/quotes/:quotationId"
+    ],
+    "entries": [
+      {
+        "id": "altoc.sales.customers",
+        "label": "客户",
+        "to": "/altoc/customers",
+        "area": "sales",
+        "group": "customer",
+        "order": 10,
+        "access": {
+          "kind": "permission",
+          "resource": "customer",
+          "action": "view"
+        }
+      },
+      {
+        "id": "altoc.sales.contracts",
+        "label": "合同",
+        "to": "/altoc/contracts",
+        "area": "sales",
+        "group": "contract",
+        "order": 10,
+        "access": {
+          "kind": "permission",
+          "resource": "contract",
+          "action": "view"
+        }
+      },
+      {
+        "id": "altoc.sales.payments",
+        "label": "回款计划",
+        "to": "/altoc/payments",
+        "area": "sales",
+        "group": "settlement",
+        "order": 10,
+        "access": {
+          "kind": "permission",
+          "resource": "receivable",
+          "action": "view"
+        }
+      },
+      {
+        "id": "altoc.sales.leads",
+        "label": "线索",
+        "to": "/altoc/leads",
+        "area": "sales",
+        "group": "opportunity",
+        "order": 10,
+        "access": {
+          "kind": "permission",
+          "resource": "lead",
+          "action": "view"
+        }
+      },
+      {
+        "id": "altoc.sales.opportunities",
+        "label": "商机",
+        "to": "/altoc/opportunities",
+        "area": "sales",
+        "group": "opportunity",
+        "order": 20,
+        "access": {
+          "kind": "permission",
+          "resource": "opportunity",
+          "action": "view"
+        }
+      },
+      {
+        "id": "altoc.sales.quotes",
+        "label": "报价",
+        "to": "/altoc/quotes",
+        "area": "sales",
+        "group": "quote",
+        "order": 10,
+        "access": {
+          "kind": "permission",
+          "resource": "quotation",
+          "action": "view"
+        }
+      }
+    ]
+  }
 }

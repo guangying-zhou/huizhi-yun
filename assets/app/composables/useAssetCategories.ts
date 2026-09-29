@@ -1,14 +1,16 @@
-import type { AssetCategoryScope } from '~~/shared/assetCategoryDefaults'
+import type { AssetCategoryScope } from '../../shared/assetCategoryDefaults'
 import type { AssetCategoryGroup } from '~/types'
 import { normalizeAssetCategoryGroups } from '~/utils/assetCategories'
+import { useAssetsModule } from '../../layer/useAssetsModule'
 
 function sortByOrder<T extends { sortOrder?: number }>(items: T[]) {
   return items.slice().sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0))
 }
 
 export function useAssetCategories(scope: AssetCategoryScope = 'physical') {
-  const categories = useState<AssetCategoryGroup[]>(`asset-categories-${scope}`, () => [])
-  const loaded = useState<boolean>(`asset-categories-${scope}-loaded`, () => false)
+  const { moduleUrl, cacheKey } = useAssetsModule()
+  const categories = useState<AssetCategoryGroup[]>(cacheKey(`asset-categories-${scope}`), () => [])
+  const loaded = useState<boolean>(cacheKey(`asset-categories-${scope}-loaded`), () => false)
 
   async function loadCategories(force = false) {
     if (loaded.value && !force) {
@@ -20,7 +22,7 @@ export function useAssetCategories(scope: AssetCategoryScope = 'physical') {
       data: {
         items: AssetCategoryGroup[]
       }
-    }>('/api/v1/asset-categories', {
+    }>(moduleUrl('/api/v1/asset-categories'), {
       query: { scope, pageSize: 500 }
     })
 

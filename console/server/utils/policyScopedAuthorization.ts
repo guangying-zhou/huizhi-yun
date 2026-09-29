@@ -1,3 +1,4 @@
+import { projectScopeSourceDeadline } from '@hzy/foundation/server/utils/projectScopeAuthorization'
 import { actionSatisfies, type ResourceActionPolicy } from '@hzy/authz-core'
 import {
   buildPolicyBundleActionPolicy,
@@ -35,6 +36,7 @@ export interface PolicyScopedAuthorizationSnapshot {
   grants: FoundationScopedAuthorizationGrant[]
   actionPolicy?: ResourceActionPolicy
   decision?: FoundationScopedAuthorizationDecision
+  authorizationExpiresAt?: number
 }
 
 function stringValue(value: unknown) {
@@ -119,6 +121,7 @@ export async function loadPolicyScopedAuthorization(
     policyRevision: snapshot.policyRevision,
     grants,
     actionPolicy,
-    decision
+    decision,
+    authorizationExpiresAt: projectScopeSourceDeadline(snapshot.payload || {})
   }
 }

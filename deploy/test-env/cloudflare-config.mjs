@@ -22,9 +22,16 @@ export function cloudflareConfig(app) {
   })
   if (app === 'console') {
     vars.HZY_PLATFORM_BUNDLE_CACHE_SCOPE = 'cloudflare-C000001-test-console'
-    // Match the active production rollback mode until scheduled durable sync
-    // has sustained availability; cache misses still fetch and verify policy.
-    vars.HZY_PLATFORM_BUNDLE_CACHE_BACKEND = 'memory'
+    // ADR-018 requires durable policy revision watermarks across Worker restarts.
+    // Live activation still requires target Runtime policy-store verification.
+    vars.HZY_PLATFORM_BUNDLE_CACHE_BACKEND = 'runtime'
+    // Test-only daily policy sync has a 24-hour cadence plus a bounded 2-hour
+    // recovery margin. Console rejects this override outside HZY_PLATFORM_ENVIRONMENT=test.
+    vars.HZY_PLATFORM_BUNDLE_MAX_AGE_MS = '93600000'
+    // The signed test bundle can take longer than the generic request budget.
+    // Keep the bounded setting in the reproducible test build, not only a
+    // previously uploaded Worker version.
+    vars.HZY_PLATFORM_POLICY_BUNDLE_FETCH_TIMEOUT_MS = '90000'
   }
   for (const target of [...apps, 'workflow']) {
     const code = target.toUpperCase()
@@ -73,7 +80,7 @@ export function cloudflareConfig(app) {
   return {
     ...config, name: `hzy-test-${app}`, workers_dev: false,
     assets: { directory: app === 'console' ? './output/public' : './assets', binding: 'ASSETS' },
-    services: app === 'console' ? [] : ['console', 'aims', 'assets', 'finance'].filter(target => target !== app)
+    services: app === 'console' ? [] : ['console', 'aims', 'assets', 'finance', ...(app === 'aims' ? ['codocs'] : [])].filter(target => target !== app)
       .map(target => ({ binding: `HZY_${target.toUpperCase()}_SERVICE`, service: `hzy-test-${target}` })),
     vars,
   }
@@ -85,7 +92,8 @@ export function validateCloudflareTestConfig(config) {
   if (config.vars.HZY_PLATFORM_TENANT_CODE !== 'C000001' || config.vars.HZY_PLATFORM_ENVIRONMENT !== 'test') throw Error('Unexpected tenant/environment')
   if (config.vars.HZY_PLATFORM_URL !== 'https://hzy.wiztek.cn') throw Error('Unexpected control plane')
   for (const service of config.services || []) {
-    if (!apps.some(app => service.service === `hzy-test-${app}`)) throw Error('Non-test service binding')
+    const drain = ['hzy-test-aims', 'hzy-test-assets'].includes(config.name) && config.main === './drain-entry.mjs' && service.binding === 'HZY_DRAIN_COORDINATOR' && service.service === 'hzy-test-drain-coordinator'
+    if (!drain && !apps.some(app => service.service === `hzy-test-${app}`)) throw Error('Non-test service binding')
   }
   for (const [key, value] of Object.entries(config.vars)) {
     if (/(?:SECRET|PASSWORD|TOKEN|PRIVATE_KEY)$/.test(key)) throw Error('Secrets belong in Worker secrets')

@@ -2,7 +2,7 @@ import { createError, type H3Event } from 'h3'
 import { getConsoleDirectoryUser, getConsoleDirectoryUserDepartments, getConsoleDirectoryDepartments } from '@hzy/foundation/server/utils/consoleTenantRuntimeClient'
 import { subjectDepartmentTreeIndex } from './subjectDepartmentTree'
 import { loadConsoleRuntimeMode } from './platformRuntime'
-import { evaluateWithFreshNotificationDetailPolicy } from './notificationDetailFreshPolicy'
+import { evaluateWithRevisionCheckedConsoleServicePolicy } from './revisionCheckedServicePolicy'
 import { loadPolicyScopedAuthorization } from './policyScopedAuthorization'
 import type { resolveSubjectScopedAuthorizationRequest } from './subjectScopedAuthorizationContract'
 
@@ -24,7 +24,9 @@ export async function loadSubjectScopedAuthorization(event: H3Event, request: Re
   if (!['active', '1'].includes(status)) throw createError({ statusCode: 403, message: 'subject_scoped_subject_inactive' })
   let departmentCodes: string[] = []
   let departmentTree: Record<string, string[]> = {}
-  if (request.targetAppCode === 'assets') {
+  const projectDocumentWrite = request.targetAppCode === 'aims'
+    && (request.purpose === 'enterprise_project_document_write' || request.purpose === 'enterprise_project_document_access_policy_update')
+  if (request.targetAppCode === 'assets' || projectDocumentWrite) {
     try {
       const envelope = await getConsoleDirectoryUserDepartments(event, request.subjectUid)
       const data = envelope.data as { departments?: Array<{ deptCode?: unknown, orgType?: unknown, relationType?: unknown }> } | null
@@ -43,7 +45,7 @@ export async function loadSubjectScopedAuthorization(event: H3Event, request: Re
     throw createError({ statusCode: 503, message: 'subject_scoped_policy_unavailable' })
   }
   try {
-    return await evaluateWithFreshNotificationDetailPolicy(event, request, async () => {
+    return await evaluateWithRevisionCheckedConsoleServicePolicy(event, request.tenantId, async () => {
       const snapshot = await loadPolicyScopedAuthorization(request.subjectUid, request.targetAppCode, event, {
         resourceCode: request.resourceCode,
         action: request.action,

@@ -45,6 +45,26 @@ function seedPermissionsByRole(sql: string) {
 }
 
 describe('Aims recommended role split', () => {
+  test('project requirement permissions follow project duties without granting approval or product roles', () => {
+    const expected = new Map<string, string[]>([
+      ['aims:viewer', ['view']],
+      ['aims:dev', ['view']],
+      ['aims:member', ['view']],
+      ['aims:qa', ['view']],
+      ['aims:pm', ['view', 'edit']],
+      ['aims:pmo', ['view', 'edit']],
+      ['aims:project_director', ['view', 'edit']],
+      ['aims:project_approver', ['view']],
+      ['aims:admin', ['admin']]
+    ])
+    for (const manifestRole of manifest.recommendedRoles) {
+      const actual = (manifestRole.suggestedPermissions || [])
+        .filter(permission => permission.startsWith('aims:requirements:'))
+        .map(permission => permission.slice('aims:requirements:'.length))
+      assert.deepEqual(actual, expected.get(manifestRole.code) || [], manifestRole.code)
+    }
+  })
+
   test('member, PM, PMO, approval and admin roles remain separated', () => {
     assert.deepEqual(permissions('aims:member'), permissions('aims:dev'))
 

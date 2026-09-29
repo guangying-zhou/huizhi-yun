@@ -9,6 +9,7 @@ import { verifyInternalApi } from '~~/server/utils/internalApi'
 import { downloadDocument } from '~~/server/utils/oss'
 import { hasMeaningfulMarkdownContent, recoverMarkdownFromYjsSnapshot } from '~~/server/utils/yjsMarkdownRecovery'
 import { getCodocsDocumentMetadata } from '~~/server/utils/codocsRuntime'
+import { assertLegacyBodyDocument } from '~~/server/utils/documentBodyRef'
 
 export default defineEventHandler(async (event) => {
   await verifyInternalApi(event, { scopes: ['codocs:documents:read'] })
@@ -18,7 +19,7 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, message: '缺少文档 UUID' })
   }
 
-  const doc = await getCodocsDocumentMetadata(event, uuid)
+  const doc = assertLegacyBodyDocument(await getCodocsDocumentMetadata(event, uuid))
 
   let content = ''
   if (doc.oss_path) {

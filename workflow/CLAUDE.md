@@ -53,8 +53,10 @@ Phase 1 需要统一的动作定义：
 ## 运行时通知目标资格
 
 - Workflow 只按受信事件映射固定目的：task actionable 使用 `workflow_tasks:view`，instance actionable/status 使用 `workflow_instances:view`；未知事件、矛盾 identity 或 actionable 事件无目标任务时失败关闭。
+- 待办生命周期同步与收件人资格查询通过 Foundation Console Service Binding helper 调用 Console；生命周期同步保留受信 Workflow tenant/deployment/app 上下文，避免后台 drain 经公网 WAF 或丢失租户绑定。
+- 待办生命周期 outbox 首次立即投递；失败后按 10、20、40、最多 60 分钟的持久退避筛选到期记录。失败项仍保持 pending，新记录不被旧失败项占满每轮的 100 条扫描额度；退避不代表 Console 投影已修复。
 - 发布前必须对去重后的全部收件人执行 Console subject eligibility；任一用户拒绝、inactive 或资格服务不可用时整条通知不发送，并保留 lifecycle/outbox 重试。
-- 单任务通知使用 Workflow canonical task URL；并行多任务和 instance 通知使用 Workflow canonical instance URL。业务 payload 中的目标应用或 URL 仅保留为业务上下文，不得决定 permission 或实际 action URL。
+- 单任务通知在验签目录的 Enterprise 为 active+deployed 时使用宿主 `/enterprise/approvals/{taskId}`（目标为 enterprise）；否则使用 Workflow canonical task URL。并行多任务和 instance/status 通知在 Workflow 有受信且已部署的 home 时仍使用 Workflow canonical instance URL；仅当 Enterprise 为 active+deployed 且 Workflow 无受信入口（未部署或无可解析 homeUrl）时回退到宿主审批列表 `/enterprise/approvals`（目标为 enterprise，记录 `workflow_action_target_host_list_fallback`）；Enterprise 未部署且 Workflow 无受信入口时记录 `workflow_action_target_host_not_deployed` 并失败关闭。目录加载失败记录 `workflow_action_target_catalog_unavailable`（仅 HTTP 状态/错误类）。效果检查点因服务令牌签发或 scope 被拒（401/403）时记录 `workflow_effect_checkpoint_token_denied` 并计入进程内计数，drain 响应 `data.checkpointTokenDenied` 暴露。业务应用保留在 businessTargetAppCode；业务 payload 中的 URL 不得决定 permission 或实际 action URL，矛盾目录失败关闭。
 
 ## 数据库
 
@@ -68,7 +70,7 @@ Schema 定义：`docs/workflow_schema.sql`
 - 用户/部门查询通过 Console directory-runtime；旧 `/api/account/*` 路由仅作为迁移期兼容路径保留
 - 发起人审批上下文和任务委托人校验必须把当前请求事件传给 Foundation `fetchConsoleDirectoryApi()`，由短期服务令牌读取最小用户/部门投影；Console 目录的 401/403/依赖故障不得吞掉后返回空上下文。初始化与发布前核验使用 `console/docs/sql/Console-SQL-Seed-v1.96-workflow-directory-sharing-read-grant.sql` / `console/docs/sql/Console-SQL-Verify-v1.96-workflow-directory-sharing-read-grant.sql`。
 - 审批同意/驳回/委托必须同时满足任务分配关系与 `workflow_tasks:approve|reject|delegate` 精确动作；实例撤回/重新提交必须同时满足发起人关系与 `workflow_instances:cancel|resubmit` 精确动作，不得只用 `edit/admin` 泛化授权。跨应用 `/api/workflow-proxy/**` 请求不转发浏览器 Cookie；Workflow 必须从受信代理路由派生固定 subject-eligibility purpose，由 Console 对委托 UID 执行 fresh normal-merged 精确动作检查，再交由 tenant-runtime 校验 task assignee / instance initiator 关系。
-- Workflow 向业务模块发送终态回调时使用 Console service token（`aud=<业务appCode>`、`scope=workflow:callback`），业务模块负责校验 `token_use=service`、`aud`、`scope` 和来源应用；不要新增共享 webhook secret。Cloudflare 后台 drain 没有浏览器边缘上下文，回调 tenant host 必须通过 `HZY_TENANT_GATEWAY_SERVICE` 直达 Tenant Gateway，由 Gateway 解析目标 deployment 并再通过目标应用 Service Binding 转发；不得由 Worker 公网 fetch tenant/custom domain，否则可在进入目标 Worker 前被 zone WAF 拒绝。
+- Workflow 向业务模块发送终态回调时使用 Console service token（`aud=<业务appCode>`、`scope=workflow:callback`），业务模块负责校验 `token_use=service`、`aud`、`scope` 和来源应用；不要新增共享 webhook secret。Cloudflare 后台 drain 没有浏览器边缘上下文，回调 tenant host 必须通过 `HZY_TENANT_GATEWAY_SERVICE` 直达 Tenant Gateway，由 Gateway 解析目标 deployment 并再通过目标应用 Service Binding 转发；不得由 Worker 公网 fetch tenant/custom domain，否则可在进入目标 Worker 前被 zone WAF 拒绝。自托管单站点（Foundation `HZY_SELF_HOSTED_SERVICE_ORIGINS_JSON` 已配置）则经受信 route catalog 解析目标 basePath，用 `verifiedSelfHostedCallbackHeaders`（受信 Gateway 上下文 + 目标 app/deployment/prefix 精确绑定，禁止 hzy0 拨号头）直连本机目标进程，不经公网入口；hzy0 的 `HZY0_LOCAL_AIMS_URL`/23141 路径不变。
 - Workflow 应用自身不得直连 MySQL，也不再配置 `DB_*` / `runtimeConfig.db` / Hyperdrive。所有 `/api/v1/**` 业务数据读写必须通过 tenant-runtime/data-runtime，由 runtime 侧执行数据库操作。
 - Workflow 的 tenant-runtime 主路径集中在 `server/middleware/data-runtime.ts` 和 `server/utils/dataRuntime.ts`；旧 `maybeCallWorkflowDataRuntime` 命名保留为兼容层，内部通过 Foundation `tenantRuntimeClient` 转发实例、任务和管理配置 API。`/api/v1/action-defs/sync` 在 Nuxt server 校验调用方 service token 后转发 tenant-runtime。
 - `server/utils/db.ts` 仅保留为迁移期防误用桩，任何新增代码不得导入或调用它；如业务接口缺失，应先补 tenant-runtime adapter，而不是恢复本地 repository、DB fallback 或 Cloudflare Hyperdrive。

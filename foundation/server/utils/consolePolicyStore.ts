@@ -4,26 +4,39 @@ import { callConsoleTenantRuntime, type ConsoleTenantRuntimeEnvelope } from './c
 
 // Domain-specific CAS storage, never a generic database/table proxy.
 export function consolePolicyStore(event: H3Event) {
+  return createConsolePolicyStore((path, options) => callConsoleTenantRuntime(event, path, options))
+}
+
+type PolicyRuntimeCall = (path: '/v1/console/policy-bundle', options: {
+  scope: 'console:policy-bundle:read' | 'console:policy-bundle:write'
+  serviceTokenSourceBinding: 'service-client-policy'
+  method: 'GET' | 'PUT'
+  query: Record<string, unknown>
+  body?: unknown
+  idempotencyKey?: string
+}) => Promise<ConsoleTenantRuntimeEnvelope<unknown>>
+
+export function createConsolePolicyStore(callRuntime: PolicyRuntimeCall) {
   return {
     async get(key: string) {
-      const response = await callConsoleTenantRuntime<ConsoleTenantRuntimeEnvelope<{ body: string, etag: string } | null>>(
-        event, '/v1/console/policy-bundle', {
+      const response = await callRuntime(
+        '/v1/console/policy-bundle', {
           scope: 'console:policy-bundle:read', serviceTokenSourceBinding: 'service-client-policy',
           method: 'GET', query: { key }
         })
-      const record = response.data
+      const record = response.data as { body: string, etag: string } | null
       return record ? { etag: record.etag, text: async () => record.body } : null
     },
     async put(key: string, body: string, options: { onlyIf: { etagMatches?: string, etagDoesNotMatch?: string } }) {
       const expectedEtag = options.onlyIf.etagMatches || ''
       if (!expectedEtag && options.onlyIf.etagDoesNotMatch !== '*') throw new Error('policy CAS condition required')
       const idempotencyKey = createHash('sha256').update(JSON.stringify({ key, body, expectedEtag })).digest('hex')
-      const response = await callConsoleTenantRuntime<ConsoleTenantRuntimeEnvelope<{ stored: boolean }>>(
-        event, '/v1/console/policy-bundle', {
+      const response = await callRuntime(
+        '/v1/console/policy-bundle', {
           scope: 'console:policy-bundle:write', serviceTokenSourceBinding: 'service-client-policy',
           method: 'PUT', query: {}, body: { key, body, expectedEtag }, idempotencyKey
         })
-      return response.data.stored ? response.data : null
+      return (response.data as { stored: boolean }).stored ? response.data : null
     }
   }
 }

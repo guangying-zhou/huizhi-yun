@@ -3,6 +3,7 @@ import { getRequestUid } from '~~/server/utils/authIdentity'
 import { downloadDocument } from '~~/server/utils/oss'
 import { hasMeaningfulMarkdownContent, recoverMarkdownFromYjsSnapshot } from '~~/server/utils/yjsMarkdownRecovery'
 import { requirePermission } from '~~/server/utils/checkPermission'
+import { assertLegacyBodyDocument } from '~~/server/utils/documentBodyRef'
 
 export default defineEventHandler(async (event) => {
   await requirePermission(event, 'documents', 'export', '缺少文档导出权限')
@@ -12,7 +13,7 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, message: 'Document UUID is required' })
   }
 
-  const doc = await getCodocsDocumentMetadata(event, uuid, { actorUid: getRequestUid(event) })
+  const doc = assertLegacyBodyDocument(await getCodocsDocumentMetadata(event, uuid, { actorUid: getRequestUid(event) }))
   if (!doc.oss_path) {
     throw createError({ statusCode: 404, message: 'Document content not found in OSS' })
   }

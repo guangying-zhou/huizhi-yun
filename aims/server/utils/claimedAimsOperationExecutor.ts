@@ -1,4 +1,5 @@
 import { executeClaimedProductFeedbackProgressOperation } from './productFeedbackProgressOperationExecutor'
+import { executeClaimedWorkItemCompletionOperation } from './workItemCompletionOperationExecutor'
 import { executeClaimedProductCostRulesOperation } from './productCostRulesOperationExecutor'
 import { executeClaimedProductFeedbackStatusOperation } from './productFeedbackStatusOperationExecutor'
 import { executeClaimedProductDocumentOperation } from './productDocumentOperationExecutor'
@@ -17,6 +18,8 @@ export async function executeClaimedAimsOperation(
   expectedOperationKey = String(operation.operationKey || '').trim()
 ) {
   switch (String(operation.operationCode || '').trim()) {
+    case 'aims.work-item.completion.workflow-submit.v1':
+      return await executeClaimedWorkItemCompletionOperation(operation, io)
     case 'aims.finance.product-cost.rules.replace.v1':
       return await executeClaimedProductCostRulesOperation(operation, io)
     case 'aims.altoc.product-feedback.update-progress.v1':

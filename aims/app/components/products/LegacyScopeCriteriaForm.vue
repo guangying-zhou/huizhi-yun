@@ -1,5 +1,8 @@
 <script setup lang="ts">
+import { useAimsModule } from '../../../layer/useAimsModule'
+
 const props = defineProps<{ productCode: string, versionId: string, scopeId: number, title: string, criteria: string | null, workspaceRevision: number, versionRevision: number, scopeRevision: number }>()
+const { moduleUrl } = useAimsModule()
 const emit = defineEmits<{ saved: [], cancel: [], busy: [boolean] }>()
 const criteria = ref(props.criteria || ''), reason = ref(''), saving = ref(false)
 const error = ref<Error | null>(null)
@@ -17,7 +20,7 @@ async function save() {
   let completed = false
   try {
     if (!await confirm({ title: '补录历史范围验收标准', message: `范围：${props.title}\n原标准：${props.criteria || '未填写'}\n新标准：${body.acceptanceCriteria}\n原因：${body.reason}\n历史未评估属性保留，范围版本更新后需要重新核验验收依据。`, confirmLabel: '保存标准', tone: 'warning' })) return
-    const result = await $fetch<{ code: number, data: { value: { id: number, version_id: number, product_code: string, acceptance_criteria: string } } }>(`/api/v1/products/${encodeURIComponent(props.productCode)}/versions/${encodeURIComponent(props.versionId)}/features/${props.scopeId}/legacy-criteria`, { method: 'POST', body, headers: { 'Idempotency-Key': retry.key } })
+    const result = await $fetch<{ code: number, data: { value: { id: number, version_id: number, product_code: string, acceptance_criteria: string } } }>(moduleUrl(`/api/v1/products/${encodeURIComponent(props.productCode)}/versions/${encodeURIComponent(props.versionId)}/features/${props.scopeId}/legacy-criteria`), { method: 'POST', body, headers: { 'Idempotency-Key': retry.key } })
     const value = result.data?.value
     if (result.code !== 0 || value?.id !== props.scopeId || String(value.version_id) !== props.versionId || value.product_code !== props.productCode || value.acceptance_criteria !== body.acceptanceCriteria) throw new Error('保存结果不完整，请使用原请求重试')
     completed = true

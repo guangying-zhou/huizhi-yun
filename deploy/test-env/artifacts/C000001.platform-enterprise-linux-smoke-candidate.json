@@ -1,0 +1,67 @@
+{
+  "receiptVersion": 1,
+  "createdAt": "2026-09-14T05:28:35Z",
+  "scope": "development Platform Linux candidate transfer and loopback smoke only; no PM2 replacement, restart, database mutation, or traffic change",
+  "candidate": {
+    "remotePath": "/wiztek/hzy-test/platform-candidates/enterprise-platform-linux-20260914T052100Z",
+    "compressedOutputArchiveSha256": "2096c04db66953be3522ae6b40df7afb1111dbb70d69d16bb244b771e05803a9",
+    "compressedOutputArchiveBytes": 1977524,
+    "outputFiles": 849,
+    "outputManifestSha256": "9331f2c20650e22e9ca44a65d424ac7f3f0065e2f58f9b7ca828db0d09b55cd5",
+    "entrySha256": "eda69251613de61c0928bd181e61b2c9c087da2a3d9d55070b9aa8507cc9d00b",
+    "linuxNodeVersion": "v24.18.0",
+    "nativeNodeFiles": 0
+  },
+  "transferVerification": {
+    "archiveSha256Matched": true,
+    "canonicalRelativePathManifestMatched": true,
+    "note": "The first remote aggregate used absolute paths and therefore had a different manifest hash. Recalculation from the .output directory with LC_ALL=C matched the local canonical manifest exactly."
+  },
+  "smoke": {
+    "withoutEnvironment": {
+      "listener": "127.0.0.1:18112",
+      "health": "GET /api/health returned HTTP 200 platform status ok",
+      "nativeDependencyErrors": 0,
+      "stopped": true
+    },
+    "withCurrentDevelopmentPm2Environment": {
+      "environmentHandling": "read in memory from the current hzy-platform-dev process; never written to a file or output",
+      "preflight": {
+        "nodeEnvProduction": true,
+        "activeSigningKeyCount": 1,
+        "query": "read-only"
+      },
+      "startupAudit": "The only Nitro plugin is signing-key initialization. Production mode disables development-key generation; no plugin schedules, queues, or external outbound work.",
+      "firstAttempt": "Failed only because inherited NITRO_PORT remained 3011 and the candidate got EADDRINUSE. It did not bind or affect the dev listener.",
+      "retry": {
+        "listener": "127.0.0.1:18113",
+        "overrides": ["HOST", "PORT", "NITRO_HOST", "NITRO_PORT"],
+        "health": "GET /api/health returned HTTP 200 platform status ok",
+        "nativeDependencyErrors": 0,
+        "unhandledErrors": 0,
+        "stopped": true
+      }
+    }
+  },
+  "currentDevelopmentBaseline": {
+    "pm2Process": "hzy-platform-dev",
+    "statusAfterSmoke": "online",
+    "pid": 3522614,
+    "port": 3011,
+    "database": "hzy_platform_dev",
+    "nodeEnv": "production",
+    "interpreter": "/root/.nvm/versions/node/v24.18.0/bin/node",
+    "cwd": "/wiztek/hzy-test/platform-release-5f898581/platform",
+    "entry": "/wiztek/hzy-test/platform-release-5f898581/platform/.output/server/index.mjs",
+    "entrySha256": "845e40b810118f24bf355dd237053b40f24b19ebdab9426280efd5b4c9264b03",
+    "safePm2ConfigurationSha256": "38ee4213691460c6267f9955fd3a3b6702705858b1c8165e63f81fd5992a5c9f"
+  },
+  "replacementPreparation": {
+    "readyForReview": true,
+    "notExecuted": true,
+    "candidateEntry": "/wiztek/hzy-test/platform-candidates/enterprise-platform-linux-20260914T052100Z/.output/server/index.mjs",
+    "rollbackDirectory": "/wiztek/hzy-test/platform-release-5f898581/platform",
+    "rollbackEntry": "/wiztek/hzy-test/platform-release-5f898581/platform/.output/server/index.mjs",
+    "requiredAtExecution": "Recheck the safe PM2 configuration hash, baseline entry hash, candidate output manifest and protected environment immediately before the single development-process replacement."
+  }
+}

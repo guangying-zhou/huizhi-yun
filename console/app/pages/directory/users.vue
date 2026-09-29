@@ -1,6 +1,4 @@
 <script setup lang="ts">
-import { h, resolveComponent } from 'vue'
-import type { TableColumn } from '@nuxt/ui'
 import { dashboardPanelUi } from '~/utils/dashboardPanel'
 
 usePageTitle('目录用户')
@@ -130,9 +128,6 @@ const { data: provisioningData } = await useFetch<ApiResponse<DirectoryProvision
 
 const users = computed(() => data.value?.data.items || [])
 const total = computed(() => data.value?.data.total || 0)
-const UAvatar = resolveComponent('UAvatar')
-const UBadge = resolveComponent('UBadge')
-const UButton = resolveComponent('UButton')
 
 const statusOptions = [
   { label: '正常', value: 'active' },
@@ -176,16 +171,6 @@ const provisioningTargetOptions = computed(() => [
 function resetFilters() {
   resetSearch()
   resetListFilters()
-}
-
-function statusMeta(user: DirectoryUser) {
-  if (user.status === 1) return { label: '正常', color: 'success' as const }
-  if (user.status === -1) return { label: '已删除', color: 'error' as const }
-  return { label: '停用', color: 'neutral' as const }
-}
-
-function getDisplayName(user: DirectoryUser) {
-  return user.realName || user.displayName || user.nickname || user.username || user.uid
 }
 
 function statusToForm(user: DirectoryUser) {
@@ -353,57 +338,6 @@ async function submitUser() {
     saving.value = false
   }
 }
-
-const userColumns: TableColumn<DirectoryUser>[] = [
-  {
-    accessorKey: 'uid',
-    header: '用户',
-    cell: ({ row }) => {
-      const user = row.original
-      return h('div', { class: 'flex items-center gap-3' }, [
-        h(UAvatar, { src: user.avatar || undefined, alt: getDisplayName(user), size: 'sm' }),
-        h('div', [
-          h('p', { class: 'font-medium text-highlighted' }, getDisplayName(user)),
-          h('p', { class: 'text-xs text-muted' }, user.uid)
-        ])
-      ])
-    }
-  },
-  {
-    accessorKey: 'deptCode',
-    header: '主部门',
-    cell: ({ row }) => {
-      const user = row.original
-      if (!user.deptCode) return '未分配'
-      return h('div', [
-        h('p', { class: 'text-highlighted' }, user.deptName || user.deptCode),
-        h('p', { class: 'text-xs text-muted' }, user.deptCode)
-      ])
-    }
-  },
-  { accessorKey: 'email', header: '邮箱', cell: ({ row }) => row.original.email || '-' },
-  { accessorKey: 'mobileTail4', header: '手机尾号', cell: ({ row }) => row.original.mobileTail4 || '-' },
-  { accessorKey: 'userType', header: '类型', cell: ({ row }) => row.original.userType || 'employee' },
-  {
-    accessorKey: 'status',
-    header: '状态',
-    cell: ({ row }) => {
-      const meta = statusMeta(row.original)
-      return h(UBadge, { color: meta.color, variant: 'soft' }, () => meta.label)
-    }
-  },
-  {
-    id: 'actions',
-    header: '',
-    cell: ({ row }) => h(UButton, {
-      color: 'neutral',
-      variant: 'ghost',
-      size: 'sm',
-      icon: 'i-lucide-pencil',
-      onClick: () => openEditUser(row.original)
-    }, () => '编辑')
-  }
-]
 </script>
 
 <template>
@@ -494,22 +428,14 @@ const userColumns: TableColumn<DirectoryUser>[] = [
           class="mb-3"
         />
 
-        <UTable
-          sticky
-          :data="users"
-          :columns="userColumns"
+        <DirectoryUsersTable
+          :items="users"
           :loading="pending"
-          empty="暂无用户"
-          class="flex-1 max-h-[calc(100svh-22rem)] rounded-lg border border-default"
-        >
-          <template #empty>
-            <CommonEmptyState
-              icon="i-lucide-users"
-              title="暂无目录用户"
-              description="调整筛选条件，或新建一个目录用户。"
-            />
-          </template>
-        </UTable>
+          action-label="编辑"
+          action-icon="i-lucide-pencil"
+          empty-description="调整筛选条件，或新建一个目录用户。"
+          @select="openEditUser"
+        />
 
         <div
           v-if="total > 0"

@@ -1,8 +1,10 @@
 <script setup lang="ts">
-import { parsePublishedAssetPath, publishedAssetShortPagePath } from '~~/shared/utils/publishedAssetLink'
+import { parsePublishedAssetPath, publishedAssetShortPagePath } from '../../../shared/utils/publishedAssetLink'
+import { useCodocsModule } from '../../../layer/useCodocsModule'
 
 const props = defineProps<{ path: string }>()
 const { resolveCurrentAppUrl, resolveCurrentAppPath } = useAppUrls()
+const { hosted, moduleUrl } = useCodocsModule()
 const toast = useToast()
 const showLink = ref(false)
 const link = ref('')
@@ -18,13 +20,13 @@ async function copyLink() {
   const sourcePath = props.path
   try {
     if (!link.value) {
-      const response = await $fetch<{ data: { token: string } }>(resolveCurrentAppPath('/api/published-asset-links'), {
+      const response = await $fetch<{ data: { token: string } }>(hosted ? moduleUrl('/api/published-asset-links') : resolveCurrentAppPath('/api/published-asset-links'), {
         method: 'POST', body: { path: sourcePath }
       })
       if (sourcePath !== props.path) return
       const pagePath = publishedAssetShortPagePath(response.data.token)
       if (!pagePath) throw new Error('invalid short link')
-      link.value = resolveCurrentAppUrl(pagePath)
+      link.value = hosted ? new URL(moduleUrl(pagePath), window.location.origin).toString() : resolveCurrentAppUrl(pagePath)
     }
     try {
       await navigator.clipboard.writeText(link.value)

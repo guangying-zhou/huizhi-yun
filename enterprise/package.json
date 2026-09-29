@@ -1,0 +1,35 @@
+{
+  "name": "@hzy/enterprise",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "nuxt dev --port 3010",
+    "build": "node scripts/check-business-module-aliases.mjs && nuxt build",
+    "typecheck": "nuxt typecheck",
+    "test": "node --test test/*.test.mjs",
+    "generate:navigation": "node scripts/generate-business-navigation.mjs",
+    "generate:api-readiness": "node scripts/generate-business-api-readiness.mjs",
+    "cloudflare:config": "node scripts/render-cloudflare-config.mjs",
+    "build:cloudflare": "node scripts/check-business-module-aliases.mjs && HZY_CLOUDFLARE_BUILD=true nuxt build --preset=cloudflare_module",
+    "check:module-aliases": "node scripts/check-business-module-aliases.mjs",
+    "verify:cloudflare": "pnpm cloudflare:config && pnpm build:cloudflare && wrangler deploy --dry-run --config .wrangler.generated.jsonc"
+  },
+  "dependencies": {
+    "@hzy/foundation": "workspace:*",
+    "@nuxt/ui": "^4.1.0",
+    "@pinia/nuxt": "^0.11.3",
+    "@vueuse/nuxt": "^13.9.0",
+    "nuxt": "~4.4.8",
+    "pinia": "^3.0.4",
+    "tailwindcss": "^4.1.0"
+  },
+  "devDependencies": {
+    "@nuxt/eslint": "^1.9.0",
+    "@vue/compiler-sfc": "3.5.40",
+    "es-module-lexer": "2.0.0",
+    "typescript": "^5.9.3",
+    "vue-tsc": "^3.1.2",
+    "wrangler": "4.110.0"
+  }
+}

@@ -12,6 +12,7 @@ import type {
   UserProjects,
   ApiResponse
 } from '../types/account'
+import { sharedApiPath } from '../utils/sharedApiPath'
 
 export function useDirectoryBusinessDomains() {
   const domains = ref<BusinessDomain[]>([])
@@ -21,7 +22,7 @@ export function useDirectoryBusinessDomains() {
     loading.value = true
     try {
       const response = await $fetch<ApiResponse<BusinessDomain[]>>(
-        '/api/directory/business-domains'
+        sharedApiPath('/api/directory/business-domains')
       )
       if (response.code === 0 && response.data) {
         domains.value = response.data
@@ -46,7 +47,7 @@ export function useDirectoryUsers(params?: { search?: string, dept_code?: string
     loading.value = true
     try {
       const response = await $fetch<ApiResponse<{ items: AccountUser[], total: number } | AccountUser[]>>(
-        '/api/directory/users',
+        sharedApiPath('/api/directory/users'),
         { params: { pageSize: 500, ...params } }
       )
       if (response.code === 0 && response.data) {
@@ -75,7 +76,7 @@ export function useDirectoryUser(uid: Ref<string | null | undefined> | string) {
     loading.value = true
     try {
       const response = await $fetch<ApiResponse<AccountUser>>(
-        `/api/directory/users/${encodeURIComponent(uidVal)}`
+        `${sharedApiPath('/api/directory/users')}/${encodeURIComponent(uidVal)}`
       )
       if (response.code === 0 && response.data) {
         user.value = response.data
@@ -104,7 +105,7 @@ export function useDirectoryDepartments() {
     loading.value = true
     try {
       const response = await $fetch<ApiResponse<DepartmentResponse>>(
-        '/api/directory/departments'
+        sharedApiPath('/api/directory/departments')
       )
       if (response.code === 0 && response.data) {
         departments.value = response.data
@@ -135,7 +136,7 @@ export function useDirectoryProjects(params?: { dept_code?: string, search?: str
     loading.value = true
     try {
       const response = await $fetch<ApiResponse<{ items: Project[], total: number }>>(
-        '/api/directory/projects',
+        sharedApiPath('/api/directory/projects'),
         { params }
       )
       if (response.code === 0 && response.data) {
@@ -173,7 +174,7 @@ export function useDirectoryGitGroups() {
     loading.value = true
     try {
       const response = await $fetch<ApiResponse<{ items: Project[], total: number }>>(
-        '/api/directory/projects',
+        sharedApiPath('/api/directory/projects'),
         { params: { only_group: 'true' } }
       )
       if (response.code === 0 && response.data) {
@@ -202,7 +203,7 @@ export function useDirectoryUserProjects(uid: Ref<string | null | undefined> | s
     loading.value = true
     try {
       const response = await $fetch<ApiResponse<UserProjects>>(
-        `/api/directory/users/${encodeURIComponent(uidVal)}/projects`
+        `${sharedApiPath('/api/directory/users')}/${encodeURIComponent(uidVal)}/projects`
       )
       if (response.code === 0 && response.data) {
         userProjects.value = response.data

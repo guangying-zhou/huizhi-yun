@@ -35,6 +35,21 @@ type OnboardInput struct {
 }
 
 func OnboardWorkspace(ctx context.Context, db *sql.DB, identity CommandIdentity, permit OnboardPermit, source OnboardSourceEvidence, directory MemberDirectoryEvidence, input OnboardInput) (CommandResult, error) {
+	return onboardWorkspace(ctx, identity, permit, source, directory, input, func(authorize AuthorizeCommand, apply ApplyCommand) (CommandResult, error) {
+		return ExecuteCommand(ctx, db, identity, input, authorize, apply)
+	})
+}
+func OnboardWorkspaceInTransaction(ctx context.Context, tx *sql.Tx, identity CommandIdentity, permit OnboardPermit, source OnboardSourceEvidence, directory MemberDirectoryEvidence, input OnboardInput) (CommandResult, error) {
+	result, err := onboardWorkspace(ctx, identity, permit, source, directory, input, func(authorize AuthorizeCommand, apply ApplyCommand) (CommandResult, error) {
+		return ExecuteCommandInTransaction(ctx, tx, identity, input, authorize, apply)
+	})
+	if err != nil && tx != nil {
+		_ = tx.Rollback()
+	}
+	return result, err
+}
+func onboardWorkspace(ctx context.Context, identity CommandIdentity, permit OnboardPermit, source OnboardSourceEvidence, directory MemberDirectoryEvidence, input OnboardInput, execute func(AuthorizeCommand, ApplyCommand) (CommandResult, error)) (CommandResult, error) {
+
 	if strings.HasPrefix(identity.ProductCode, "~line-") || identity.Action != "products:onboard" || !validMemberUID(input.ManagerUID) || strings.TrimSpace(input.Reason) == "" || utf8.RuneCountInString(input.Reason) > 2000 {
 		return CommandResult{}, invalid("product_onboard_input_invalid", "接入须指定有效负责人和原因")
 	}
@@ -45,7 +60,7 @@ func OnboardWorkspace(ctx context.Context, db *sql.DB, identity CommandIdentity,
 	}
 	created := false
 	candidateID := uuid.NewString()
-	return ExecuteCommand(ctx, db, identity, input, func(ctx context.Context, tx *sql.Tx) error {
+	return execute(func(ctx context.Context, tx *sql.Tx) error {
 		if permit.ProductCode != identity.ProductCode || permit.ActorUID != identity.ActorUID || permit.Resource != "products" || permit.Action != "onboard" {
 			return invalid("product_authorization_invalid", "产品接入授权不匹配")
 		}

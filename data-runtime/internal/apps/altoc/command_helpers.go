@@ -613,6 +613,7 @@ func altocTableExists(ctx context.Context, conn altocQueryer, table string) (boo
 }
 
 func altocInsertRecordTx(ctx context.Context, tx *sql.Tx, table string, fields map[string]any) (int64, error) {
+	table = contractPhysicalTable(ctx, table)
 	columns, err := altocTableColumns(ctx, tx, table)
 	if err != nil {
 		return 0, err

@@ -1,7 +1,10 @@
 <script setup lang="ts">
+import { useAimsModule } from '../../../layer/useAimsModule'
+
+const { moduleUrl, hosted, cacheKey } = useAimsModule()
 const props = defineProps<{ productCode: string, requestId: string }>()
 interface Link { biz_id: string, title: string, decision_status: string }
-const { data, status, error, refresh } = await useFetch(() => `/api/v1/products/${encodeURIComponent(props.productCode)}/requests/${props.requestId}`, {
+const { data, status, error, refresh } = await useFetch(() => moduleUrl(`/api/v1/products/${encodeURIComponent(props.productCode)}/requests/${props.requestId}`), { ...(hosted ? { key: computed(() => cacheKey('aims/app/components/products/RequestMergeTrail.vue:0' + ':' + String(toValue(() => moduleUrl(`/api/v1/products/${encodeURIComponent(props.productCode)}/requests/${props.requestId}`))))) } : {}),
   server: false,
   transform: (response: { code: number, data: { biz_id: string, merge_trail?: Link[], merge_trail_truncated?: boolean } }) => {
     if (response.code !== 0 || response.data?.biz_id !== props.requestId || (response.data.merge_trail !== undefined && !Array.isArray(response.data.merge_trail))) throw new Error('合并关系响应不完整')

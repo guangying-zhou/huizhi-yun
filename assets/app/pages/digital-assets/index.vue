@@ -1,20 +1,44 @@
 <script setup lang="ts">
-import type { ApiResponse, DigitalAssetItem, ListPayload, SummaryMetric } from '~/types'
+import type { ApiResponse, DigitalAssetItem, ListPayload, SummaryMetric } from '../../types'
+import { useAssetsModule } from '../../../layer/useAssetsModule'
+import { useAssetLabels } from '../../composables/useAssetLabels'
+
+definePageMeta({ hostContentInset: false })
 
 usePageTitle('数字资产')
 
 const { loadDictionaries, getLabel } = useAssetLabels()
 await loadDictionaries()
 
+const route = useRoute()
 const createOpen = ref(false)
-const page = ref(1)
+function openCreate() {
+  if (hosted) void navigateTo({ path: moduleUrl('/digital-assets/new'), query: { returnTo: route.fullPath } })
+  else createOpen.value = true
+}
+const { hosted, moduleUrl, cacheKey } = useAssetsModule()
+const listState = useState(cacheKey('digital-assets-list-state'), () => ({ page: 1, search: '', status: 'all' }))
+const page = ref(listState.value.page)
 const pageSize = ref(20)
 const { search, debounced: debouncedSearch } = useDebouncedSearch({
+  initial: listState.value.search,
   onChange: () => {
     page.value = 1
   }
 })
-const selectedStatus = ref<'all' | 'active' | 'archived' | 'deprecated'>('all')
+const selectedStatus = ref<'all' | 'active' | 'archived' | 'deprecated'>(listState.value.status as 'all' | 'active' | 'archived' | 'deprecated')
+onBeforeUnmount(() => {
+  listState.value = { page: page.value, search: search.value, status: selectedStatus.value }
+})
+const { loadPermissions, hasPermission, loaded: permissionsLoaded } = usePermissions()
+const { data: writeAccess } = await useFetch<ApiResponse<{ digital_assets: boolean, ip_assets: boolean }>>(moduleUrl('/api/v1/write-access'), {
+  key: cacheKey('assets-write-access'),
+  immediate: hosted
+})
+if (!hosted) await loadPermissions()
+const canEditDigitalAsset = computed(() => hosted
+  ? writeAccess.value?.data?.digital_assets === true
+  : permissionsLoaded.value && hasPermission('digital_assets', 'edit'))
 
 watch(selectedStatus, () => {
   page.value = 1
@@ -27,7 +51,10 @@ const query = computed(() => ({
   status: selectedStatus.value === 'all' ? undefined : selectedStatus.value
 }))
 
-const { data: response, refresh, status } = await useFetch<ApiResponse<ListPayload<DigitalAssetItem>>>('/api/v1/digital-assets', { query })
+const { data: response, refresh, status } = await useFetch<ApiResponse<ListPayload<DigitalAssetItem>>>(moduleUrl('/api/v1/digital-assets'), {
+  key: cacheKey('digital-assets'),
+  query
+})
 const { setRefresh, clearRefresh } = usePageActions()
 onMounted(() => setRefresh(refresh))
 onBeforeUnmount(clearRefresh)
@@ -52,19 +79,37 @@ const columns = [
 ]
 
 const handleRowSelect = (_event: Event, row: { original: DigitalAssetItem }) => {
-  navigateTo(`/digital-assets/${row.original.id}`)
+  navigateTo(moduleUrl(`/digital-assets/${row.original.id}`))
 }
 
 const handleCreated = async (id: number) => {
   await refresh()
-  navigateTo(`/digital-assets/${id}`)
+  navigateTo(moduleUrl(`/digital-assets/${id}`))
 }
 </script>
 
 <template>
   <UDashboardPanel id="digital-assets" grow>
     <template #body>
-      <div class="p-4 space-y-4">
+      <div class="space-y-4 p-4 sm:p-6">
+        <ContentPageHeader
+          :hosted="hosted"
+          title="数字资产"
+          description="查看企业数字资产及其访问范围。"
+          breadcrumb="产品 / 产品资产"
+        >
+          <template #actions>
+            <UButton
+              v-if="!hosted || canEditDigitalAsset"
+              icon="i-lucide-plus"
+              color="primary"
+              class="shrink-0"
+              @click="openCreate"
+            >
+              新增资产
+            </UButton>
+          </template>
+        </ContentPageHeader>
         <AssetsSummaryMetricGrid :metrics="metrics" />
 
         <UCard>
@@ -72,10 +117,11 @@ const handleCreated = async (id: number) => {
             <div class="flex items-center justify-between gap-3">
               <span class="font-semibold">台账列表</span>
               <UButton
+                v-if="!hosted"
                 icon="i-lucide-plus"
                 color="primary"
                 class="shrink-0"
-                @click="createOpen = true"
+                @click="openCreate"
               >
                 新增资产
               </UButton>
@@ -152,5 +198,10 @@ const handleCreated = async (id: number) => {
     </template>
   </UDashboardPanel>
 
-  <AssetsDigitalAssetCreateModal :open="createOpen" @update:open="createOpen = $event" @created="handleCreated" />
+  <AssetsDigitalAssetCreateModal
+    v-if="!hosted"
+    :open="createOpen"
+    @update:open="createOpen = $event"
+    @created="handleCreated"
+  />
 </template>

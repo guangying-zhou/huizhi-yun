@@ -4,7 +4,8 @@
  * runtime 负责生成不可篡改的归档计划和事务落库；Codocs BFF 只在两步之间
  * 完成 OSS 内容复制，并在事务成功后编排通知与临时快照清理。
  */
-import { deleteDocument, downloadDocument, uploadDocument } from '../../../utils/oss'
+import { createRuntimeOSSClient, deleteDocument, downloadDocument, uploadDocument } from '../../../utils/oss'
+import { parseBodyRef, readBodyByRef } from '../../../utils/documentBodyRef'
 import { notifyPublished, notifySealAdminsNeeded } from '../../../utils/reviewNotify'
 import { requireRequestUid } from '~~/server/utils/authIdentity'
 import { requirePermission } from '~~/server/utils/checkPermission'
@@ -14,6 +15,8 @@ interface PublishArchivePlan {
   publishRequestId: number
   alreadyArchived: boolean
   sourceOssPath: string
+  /** 无冻结副本且源文档为 v2 时由 Runtime 给出精确快照引用，此时 sourceOssPath 为空。 */
+  sourceBodyRef?: unknown
   sourceDocumentType: string
   reviewSnapshotOssPath?: string | null
   archiveOssPath: string
@@ -63,8 +66,18 @@ export default defineEventHandler(async (event) => {
     }
   }
 
-  const content = await downloadDocument(plan.sourceOssPath, plan.sourceDocumentType)
-  if (!content) {
+  let content: string | null
+  if (plan.sourceBodyRef) {
+    // v2：精确版本 + 长度/SHA-256 校验，镜像可能过期，绝不回退读取。
+    const client = await createRuntimeOSSClient({ event })
+    content = (await readBodyByRef(client, parseBodyRef(plan.sourceBodyRef))).toString('utf-8')
+  } else {
+    if (!plan.sourceOssPath) {
+      throw createError({ statusCode: 404, message: '待发布文档内容不存在' })
+    }
+    content = await downloadDocument(plan.sourceOssPath, plan.sourceDocumentType)
+  }
+  if (content === null || (!plan.sourceBodyRef && !content)) {
     throw createError({ statusCode: 404, message: '待发布文档内容不存在' })
   }
   await uploadDocument(plan.archiveOssPath, content)

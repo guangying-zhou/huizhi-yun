@@ -4,6 +4,7 @@ import {
   readShellSessionCache,
   writeShellSessionCache
 } from '../utils/shellSessionCache'
+import { sharedApiPath } from '../utils/sharedApiPath'
 
 export type NotificationSeverity = 'info' | 'success' | 'warning' | 'error'
 export type NotificationStatusFilter = 'all' | 'unread' | 'read' | 'archived'
@@ -37,7 +38,10 @@ export interface NotificationDetail {
   bizId: string | null
   createdAt: string
   expiresAt: string | null
+  detailMode?: 'notification_snapshot'
 }
+
+export interface NotificationPage { items: NotificationItem[], total: number, page: number, pageSize: number }
 
 export interface NotificationSummary {
   totalCount: number
@@ -90,9 +94,12 @@ const _useNotifications = () => {
   const currentAppCode = String(runtimeConfig.public.appCode || runtimeConfig.public.appName || '')
     .trim()
     .toLowerCase()
+  // The Enterprise Host serves the Foundation user API under its shared base;
+  // every other application keeps the root contract.
+  const notificationApiBase = sharedApiPath('/api/notifications')
   const notificationItemApiBase = currentAppCode === 'console'
     ? '/api/v1/console/notifications'
-    : '/api/notifications'
+    : notificationApiBase
   const items = ref<NotificationItem[]>([])
   const summary = ref<NotificationSummary>(emptySummary())
   const loading = ref(false)
@@ -111,6 +118,52 @@ const _useNotifications = () => {
       tenant: auth.tenant.value,
       policyVersion: auth.policyVersion.value
     })
+  }
+
+  // Separate page state so the bell and existing cursor callers keep their contract.
+  const pageItems = ref<NotificationItem[]>([])
+  const pageTotal = ref(0)
+  const pageLoading = ref(false)
+  const pageError = ref<string | null>(null)
+  const cacheFingerprint = computed(currentAuthFingerprint)
+  let pageGeneration = 0
+  let pageController: AbortController | undefined
+  watch(cacheFingerprint, () => {
+    pageGeneration++
+    pageController?.abort()
+    pageItems.value = []
+    pageTotal.value = 0
+    pageLoading.value = false
+    pageError.value = null
+  }, { flush: 'sync' })
+  onScopeDispose(() => {
+    pageGeneration++
+    pageController?.abort()
+  })
+  async function loadNotificationPage(options: { status: NotificationStatusFilter, page: number, pageSize: number }): Promise<NotificationPage | null> {
+    const epoch = ++pageGeneration, fingerprint = currentAuthFingerprint()
+    pageController?.abort()
+    pageController = new AbortController()
+    pageItems.value = []
+    pageTotal.value = 0
+    pageError.value = null
+    if (!fingerprint) {
+      pageLoading.value = false
+      return null
+    }
+    pageLoading.value = true
+    try {
+      const response = await $fetch<ApiResponse<NotificationPage>>(notificationApiBase, { query: options, signal: pageController.signal })
+      if (epoch !== pageGeneration || fingerprint !== currentAuthFingerprint()) return null
+      const value = response.data
+      if (response.code !== 0 || !Array.isArray(value?.items) || !Number.isSafeInteger(value.total) || value.total < 0 || value.page !== options.page || value.pageSize !== options.pageSize || value.items.length > options.pageSize) throw new Error('Invalid notification page')
+      pageItems.value = value.items
+      pageTotal.value = value.total
+      return value
+    } catch {
+      if (epoch === pageGeneration) pageError.value = '消息列表加载失败，请重试'
+      return null
+    } finally { if (epoch === pageGeneration) pageLoading.value = false }
   }
 
   async function loadSummary(options: { force?: boolean } = {}) {
@@ -145,7 +198,7 @@ const _useNotifications = () => {
     summaryLoading.value = true
     pendingSummary = (async () => {
       try {
-        const response = await $fetch<ApiResponse<NotificationSummary>>('/api/notifications/summary')
+        const response = await $fetch<ApiResponse<NotificationSummary>>(`${notificationApiBase}/summary`)
         summary.value = parseNotificationSummary(response.data) || emptySummary()
         summaryLoadedAt = Date.now()
         if (import.meta.client && fingerprint) {
@@ -180,7 +233,7 @@ const _useNotifications = () => {
     error.value = null
     const requestedStatus = options.status || status.value
     try {
-      const response = await $fetch<ApiResponse<{ items: NotificationItem[], nextCursor: string | null }>>('/api/notifications', {
+      const response = await $fetch<ApiResponse<{ items: NotificationItem[], nextCursor: string | null }>>(notificationApiBase, {
         query: {
           status: requestedStatus,
           limit: options.limit || 20,
@@ -232,7 +285,7 @@ const _useNotifications = () => {
   }
 
   async function archive(notificationId: string) {
-    await $fetch(`/api/notifications/${encodeURIComponent(notificationId)}/archive`, {
+    await $fetch(`${notificationApiBase}/${encodeURIComponent(notificationId)}/archive`, {
       method: 'POST',
       headers: {
         'idempotency-key': `notification:archive:${notificationId}:${globalThis.crypto?.randomUUID?.() || Date.now()}`
@@ -242,13 +295,14 @@ const _useNotifications = () => {
     await loadSummary({ force: true })
   }
 
-  async function markAllRead() {
-    await $fetch('/api/notifications/read-all', {
+  async function markAllRead(options: { status?: NotificationStatusFilter } = {}) {
+    const requestedStatus = options.status || status.value
+    await $fetch(`${notificationApiBase}/read-all`, {
       method: 'POST',
       headers: {
         'idempotency-key': `notification:read-all:${globalThis.crypto?.randomUUID?.() || Date.now()}`
       },
-      body: status.value === 'unread' ? {} : { status: status.value }
+      body: requestedStatus === 'unread' ? {} : { status: requestedStatus }
     })
     for (const item of items.value) {
       item.recipient.isRead = true
@@ -258,6 +312,7 @@ const _useNotifications = () => {
   }
 
   return {
+    cacheFingerprint, pageItems, pageTotal, pageLoading, pageError, loadNotificationPage,
     items,
     summary,
     loading,

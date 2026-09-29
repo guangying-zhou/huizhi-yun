@@ -90,6 +90,25 @@ test('source identity and recipient rules fail closed before Runtime', () => {
   )
 })
 
+test('Enterprise Host business notification keeps its service source and Codocs attribution', () => {
+  const hostActor = { actorId: 'enterprise.runtime', appCode: 'enterprise' }
+  const hostRequest = request({
+    sourceAppCode: 'enterprise',
+    eventType: 'codocs.document.shared',
+    metadata: { notificationKind: 'business_event', moduleAppCode: 'codocs' }
+  })
+  const canonical = canonicalizePortalNotificationRequest(hostRequest, hostActor)
+  assert.equal(canonical.sourceAppCode, 'enterprise')
+  assert.equal(canonical.metadata.moduleAppCode, 'codocs')
+  assert.equal(canonical.actionable, null)
+  assert.throws(
+    () => canonicalizePortalNotificationRequest({ ...hostRequest, sourceAppCode: 'codocs' }, hostActor),
+    (error: unknown) => error instanceof PortalNotificationPublishError
+      && error.statusCode === 403
+      && error.code === 'source_app_mismatch'
+  )
+})
+
 test('Runtime owns canonical idempotency, replay and immutable persistence', () => {
   const runtime = readFileSync(new URL('../../data-runtime/internal/apps/console/notifications_write.go', import.meta.url), 'utf8')
   const consoleSource = readFileSync(new URL('../server/utils/portalNotificationIdempotency.ts', import.meta.url), 'utf8')

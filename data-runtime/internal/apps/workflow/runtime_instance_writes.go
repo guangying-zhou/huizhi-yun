@@ -73,6 +73,9 @@ func (a *Adapter) cancelInstance(ctx context.Context, instanceID string, rawBody
 	}
 	effects := &WorkflowEffects{ActionableLifecycles: pendingEffects}
 	if callback := callbackEffect(instance, "cancelled"); callback.URL != "" {
+		if err := bindCompletionCancellationEvidence(ctx, tx, &callback, instance, actionID); err != nil {
+			return InstanceAPIResponse{}, "", err
+		}
 		effects.Callbacks = append(effects.Callbacks, callback)
 	}
 	if err := persistActionableLifecycleEffects(ctx, tx, instanceID, actionID, effects); err != nil {

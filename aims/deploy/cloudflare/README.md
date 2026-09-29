@@ -1,5 +1,39 @@
 # Aims Cloudflare Worker Deployment
 
+## Private scheduler variant for the six-artifact pilot
+
+`deploy/build-pilot-artifacts.mjs` packages the Aims Nuxt Worker as
+`aims-worker.tar.gz` with two separate Wrangler configurations generated from
+`aims/deploy/cloudflare/scheduler-worker-config.mjs`:
+
+- `wrangler.aims-scheduler.production.jsonc` targets `hzy-aims` for production.
+- `wrangler.aims-scheduler.staging.jsonc` targets `hzy-test-aims` for C000001 staging.
+
+Both variants have no public route, `workers_dev=false`, `preview_urls=false`, no static Assets
+binding, and no own cron.
+Gateway reaches their private drain endpoint through `HZY_AIMS_SERVICE` with
+the existing signed scheduler request. This artifact is built with
+`HZY_AIMS_SCHEDULER_ONLY=true` so `hzy.schedulerOnly` is baked into Nitro's
+runtime config; the deployment config does not try to override it. Its server
+middleware returns 404 for pages
+and ordinary `/api/v1/**` routes even when called through a Binding, while the
+drain handler checks the Gateway signature. The `aims.runtime` credential and
+Gateway verification secret are installed as Worker secrets only after the
+environment's separate approval; neither is embedded in the artifact. The
+existing standalone `.wrangler.generated.jsonc` and deploy command below are
+unchanged. Gateway's `HZY_TENANT_GATEWAY_BLOCK_PUBLIC_AIMS` switch is off by
+default and must stay off until production's 30-day request analysis confirms
+that blocking `/aims` will not remove a real user or API caller. The six-artifact
+build itself does not deploy or enable this switch.
+The signed wake can be replayed within 60 seconds because the shared Gateway
+signature verifier has no nonce; the bounded drain and its target commands
+retain their idempotency keys, so this is accepted for the 10/8 window.
+Before and after any approved deployment, read back routes and custom domains
+for both Worker names. Omitting `route/routes` from this config does not remove
+existing Dashboard-managed routes. Removing any remaining public route needs
+the separate production approval in the go-live plan §7, followed by another
+read-only route check.
+
 Aims can run as a Cloudflare Worker behind the tenant gateway:
 
 ```text

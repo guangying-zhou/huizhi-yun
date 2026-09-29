@@ -1,5 +1,5 @@
 import type { H3Event } from 'h3'
-import type { FoundationScopePredicate, FoundationScopedAuthorizationGrant } from '@hzy/foundation/server/utils/scopeEvaluator'
+import type { FoundationScopedAuthorizationGrant } from '@hzy/foundation/server/utils/scopeEvaluator'
 import { loadScopedAuthorizationFromConsoleRuntime } from '@hzy/foundation/server/utils/platformBundleAuthorization'
 import { fetchDirectoryApi } from '@hzy/foundation/server/utils/directoryApi'
 import { getRequestUid } from '~~/server/utils/authIdentity'
@@ -8,6 +8,7 @@ import { appCode, type PermissionAction } from '~~/app/config/permissions'
 import {
   buildAltocDepartmentTreeCodeIndex,
   resolveAltocDataAccessQueryFromScopedGrants,
+  scopedGrantsNeedAltocDepartmentTree as scopedGrantsNeedDepartmentTree,
   type AltocDepartmentScopeTreeNode
 } from './altocDataAccessScope'
 
@@ -40,20 +41,6 @@ function splitCodes(value: unknown): string[] {
     .split(/[,\s;]+/)
     .map(item => item.trim())
     .filter(Boolean)
-}
-
-function scopeNeedsDepartmentTree(scope: FoundationScopePredicate) {
-  return stringValue(scope.dimension) === 'department'
-    && stringValue(scope.predicate) === 'tree'
-    && Boolean(stringValue(scope.value))
-}
-
-function scopedGrantsNeedDepartmentTree(grants: FoundationScopedAuthorizationGrant[]) {
-  return grants.some(grant => [
-    ...(grant.defaultScopes || []),
-    ...(grant.assignmentScopes || []),
-    ...(grant.scopes || [])
-  ].some(scopeNeedsDepartmentTree))
 }
 
 function extractDepartmentTree(response: {

@@ -23,6 +23,16 @@ type sqlRunner interface {
 	QueryRowContext(context.Context, string, ...any) *sql.Row
 }
 
+// The temporary table matches directory_users.external_ref (utf8mb4_unicode_ci);
+// a MySQL 8 schema default of utf8mb4_0900_ai_ci would otherwise make the
+// full-sync join an illegal collation mix.
+const ldapExternalRefsTempTableDDL = "CREATE TEMPORARY TABLE IF NOT EXISTS tmp_hzy_ldap_external_refs (external_ref VARCHAR(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci PRIMARY KEY) ENGINE=MEMORY"
+
+const ldapMarkMissingUsersDeletedSQL = `UPDATE directory_users u
+			LEFT JOIN tmp_hzy_ldap_external_refs current ON current.external_ref=u.external_ref
+			SET u.status='deleted',u.synced_at=UTC_TIMESTAMP(),u.updated_at=UTC_TIMESTAMP()
+			WHERE u.source_provider='ldap' AND u.status<>'deleted' AND current.external_ref IS NULL`
+
 func (a *Adapter) ApplySync(ctx context.Context, identity ConnectorIdentity, body map[string]any) (map[string]any, error) {
 	rawUsers, ok := body["users"].([]any)
 	if !ok && body["users"] != nil {
@@ -80,7 +90,7 @@ func (a *Adapter) ApplySync(ctx context.Context, identity ConnectorIdentity, bod
 		}
 	}
 	if fullSync {
-		if _, err := tx.ExecContext(ctx, "CREATE TEMPORARY TABLE IF NOT EXISTS tmp_hzy_ldap_external_refs (external_ref VARCHAR(255) PRIMARY KEY) ENGINE=MEMORY"); err != nil {
+		if _, err := tx.ExecContext(ctx, ldapExternalRefsTempTableDDL); err != nil {
 			return abort(err)
 		}
 		if _, err := tx.ExecContext(ctx, "TRUNCATE TABLE tmp_hzy_ldap_external_refs"); err != nil {
@@ -91,10 +101,7 @@ func (a *Adapter) ApplySync(ctx context.Context, identity ConnectorIdentity, bod
 				return abort(err)
 			}
 		}
-		result, err := tx.ExecContext(ctx, `UPDATE directory_users u
-			LEFT JOIN tmp_hzy_ldap_external_refs current ON current.external_ref=u.external_ref
-			SET u.status='deleted',u.synced_at=UTC_TIMESTAMP(),u.updated_at=UTC_TIMESTAMP()
-			WHERE u.source_provider='ldap' AND u.status<>'deleted' AND current.external_ref IS NULL`)
+		result, err := tx.ExecContext(ctx, ldapMarkMissingUsersDeletedSQL)
 		if err != nil {
 			return abort(err)
 		}

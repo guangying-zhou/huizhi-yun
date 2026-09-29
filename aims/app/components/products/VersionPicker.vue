@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import { useAimsModule } from '../../../layer/useAimsModule'
+
+const { moduleUrl, hosted, cacheKey } = useAimsModule()
 const props = defineProps<{ productCode: string, disabled?: boolean, searchLabel?: string, includePublished?: boolean, simpleOnly?: boolean }>()
 interface Version { id: number, product_code: string, version_code: string, name: string | null, status: string, revision: number, planning_mode?: 'simple' | 'cycle' }
 const selected = defineModel<Version | null>({ required: true })
@@ -6,7 +9,7 @@ const page = ref(1), pageSize = 20
 const { search, debounced, flush } = useDebouncedSearch({ onChange: () => {
   page.value = 1
 } })
-const { data, status, error, refresh } = useFetch(() => `/api/v1/products/${encodeURIComponent(props.productCode)}/versions`, { server: false, query: computed(() => ({ page: page.value, pageSize, keyword: debounced.value || undefined })), transform: (response: { code: number, data: { items: Version[], total: number } }) => {
+const { data, status, error, refresh } = useFetch(() => moduleUrl(`/api/v1/products/${encodeURIComponent(props.productCode)}/versions`), { ...(hosted ? { key: computed(() => cacheKey('aims/app/components/products/VersionPicker.vue:0' + ':' + String(toValue(() => moduleUrl(`/api/v1/products/${encodeURIComponent(props.productCode)}/versions`))))) } : {}), server: false, query: computed(() => ({ page: page.value, pageSize, keyword: debounced.value || undefined })), transform: (response: { code: number, data: { items: Version[], total: number } }) => {
   if (response.code !== 0 || !Array.isArray(response.data?.items) || !Number.isSafeInteger(response.data.total) || response.data.total < 0 || response.data.items.some(v => v.product_code !== props.productCode || !Number.isSafeInteger(v.id) || v.id < 1 || !Number.isSafeInteger(v.revision) || v.revision < 1 || !['planning', 'developing', 'released', 'archived'].includes(v.status) || (v.planning_mode !== undefined && !['simple', 'cycle'].includes(v.planning_mode)))) throw new Error('版本选择列表无效')
   return response.data
 } })

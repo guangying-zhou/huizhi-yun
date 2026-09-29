@@ -77,6 +77,10 @@ func (a *Adapter) altocEntityDocumentContent(ctx context.Context, uuid string, q
 	if int64Value(document["status"]) != 1 {
 		return nil, httperror.New(403, "altoc_entity_document_scope_invalid", "document is not active")
 	}
+	// Snapshot-backed (v2) documents keep only a derived mirror at oss_path.
+	if err := refuseSnapshotV2Document(ctx, a.db, uuid); err != nil {
+		return nil, err
+	}
 	ossPath := strings.TrimSpace(firstTextValue(document, "oss_path"))
 	if ossPath == "" {
 		return nil, httperror.New(404, "altoc_entity_document_content_missing", "document content is unavailable")

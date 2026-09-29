@@ -1,13 +1,21 @@
 <script setup lang="ts">
+import { useDocumentPreviewBootstrap } from '../../composables/useDocumentPreviewBootstrap'
+import { useResizablePanel } from '../../composables/useResizablePanel'
+import { useCodocsModule } from '../../../layer/useCodocsModule'
+import { createCreationAttempt } from '../../../layer/creationAttempt.mjs'
+
+definePageMeta({ hostContentInset: false })
+
 /**
  * 日志周报页面
  * 左侧日历（日志模式按天选择，周报模式按周选择），右侧查看/编辑
  * 通过页签切换日志/周报模式
  */
 
-definePageMeta({ layout: 'default' })
-
 usePageTitle('日志周报')
+const { moduleUrl, documentUrl, cacheKey, hosted } = useCodocsModule()
+const worklogCreationAttempt = createCreationAttempt()
+const weeklyReportCreationAttempt = createCreationAttempt()
 
 // ==================== 类型定义 ====================
 
@@ -69,6 +77,7 @@ const getErrorMessage = (error: unknown, fallback: string) => {
 // ==================== 基础状态 ====================
 
 const toast = useToast()
+const route = useRoute()
 const { user, userRealname } = useAuth()
 const { setPayload: setDocumentPreviewBootstrap } = useDocumentPreviewBootstrap()
 const uid = computed(() => user.value || 'user1')
@@ -76,7 +85,8 @@ const { panelWidth, panelCollapsed, onResizeStart, showPanel } = useResizablePan
 
 // 模式切换：日志 / 周报
 type JournalMode = 'worklog' | 'weekly'
-const mode = ref<JournalMode>('worklog')
+const initialMode: JournalMode = route.path.endsWith('/weekly-reports') || route.query.mode === 'weekly' ? 'weekly' : 'worklog'
+const mode = ref<JournalMode>(initialMode)
 
 // 当前日历显示的年月
 const calendarYear = ref(new Date().getFullYear())
@@ -106,7 +116,7 @@ const monthLogsLoading = ref(false)
 
 // 上报
 const isSubmitting = ref(false)
-const showSubmitConfirm = ref(false)
+const { confirm } = useConfirm()
 const isReported = computed(() => {
   if (mode.value === 'worklog') return !!selectedLog.value?.readonly_flag
   return !!selectedReport.value?.readonly_flag
@@ -305,8 +315,8 @@ const fetchMonthLogs = async () => {
   if (!uid.value) return
   monthLogsLoading.value = true
   try {
-    const res = await $fetch<WorklogListResponse>('/api/worklogs/list', {
-      query: { owner: uid.value, year: calendarYear.value, month: calendarMonth.value }
+    const res = await $fetch<WorklogListResponse>(moduleUrl('/api/worklogs/list'), {
+      query: { year: calendarYear.value, month: calendarMonth.value }
     })
     applyMonthLogs(res.success ? (res.data?.items || []) : [])
   } catch {
@@ -344,13 +354,13 @@ const checkSelectedDate = async () => {
 const loadLog = async () => {
   previewLoading.value = true
   try {
-    const res = await $fetch<WorklogListResponse>('/api/worklogs/list', {
-      query: { owner: uid.value, year: calendarYear.value, month: calendarMonth.value }
+    const res = await $fetch<WorklogListResponse>(moduleUrl('/api/worklogs/list'), {
+      query: { year: calendarYear.value, month: calendarMonth.value }
     })
     applyMonthLogs(res.success ? (res.data?.items || []) : [])
     const item = res.data?.items?.find(i => i.date === selectedDate.value)
     if (item) {
-      const docRes = await $fetch<DocumentContentResponse>(`/api/documents/${item.uuid}`, { params: { uid: uid.value } })
+      const docRes = await $fetch<DocumentContentResponse>(moduleUrl(`/api/documents/${item.uuid}`))
       if (docRes.success && docRes.data) {
         previewContent.value = docRes.data.content || ''
         selectedLog.value = { uuid: item.uuid, title: item.title, readonly_flag: (docRes.data as Record<string, unknown>).readonly_flag as number | undefined }
@@ -372,14 +382,17 @@ const createLog = async () => {
   isCreating.value = true
   try {
     const dateKey = toDateKey(selectedDate.value)
-    const res = await $fetch<CreateWorklogResponse>('/api/worklogs/create', {
+    const attemptKey = worklogCreationAttempt.keyFor(cacheKey('worklog-create'), { date: dateKey })
+    const res = await $fetch<CreateWorklogResponse>(moduleUrl('/api/worklogs/create'), {
       method: 'POST',
-      body: { owner_uid: uid.value, owner_realname: userRealname.value || '', date: dateKey }
+      headers: { 'Idempotency-Key': attemptKey },
+      body: { date: dateKey }
     })
     if (res.success && res.data) {
+      worklogCreationAttempt.complete(attemptKey)
       await fetchMonthLogs()
       const query = res.data.existed ? {} : { new: '1' }
-      navigateTo({ path: `/documents/${res.data.uuid}`, query })
+      navigateTo({ path: documentUrl(res.data.uuid), query })
     }
   } catch (err: unknown) {
     toast.add({ title: getErrorMessage(err, '创建日志失败'), color: 'error' })
@@ -395,7 +408,7 @@ const editLog = () => {
         content: previewContent.value
       })
     }
-    navigateTo(`/documents/${selectedLog.value.uuid}`)
+    navigateTo(documentUrl(selectedLog.value.uuid))
   }
 }
 
@@ -416,8 +429,9 @@ const fetchReports = async () => {
 
   for (const yr of yearsToFetch) {
     try {
-      const res = await $fetch<WeeklyReportListResponse>('/api/personal-weekly-reports/list', {
-        query: { owner: uid.value, year: yr }
+      const res = await $fetch<WeeklyReportListResponse>(moduleUrl('/api/personal-weekly-reports/list'), {
+        // The Enterprise Host derives the owner from the verified session.
+        query: hosted ? { year: yr } : { owner: uid.value, year: yr }
       })
       if (res.success && res.data?.items) {
         res.data.items.forEach((item) => {
@@ -475,7 +489,7 @@ const checkSelectedWeek = async () => {
 const loadReport = async (report: WeeklyReportItem) => {
   previewLoading.value = true
   try {
-    const docRes = await $fetch<DocumentContentResponse>(`/api/documents/${report.uuid}`, { params: { uid: uid.value } })
+    const docRes = await $fetch<DocumentContentResponse>(moduleUrl(`/api/documents/${report.uuid}`))
     if (docRes.success && docRes.data) {
       previewContent.value = docRes.data.content || ''
       selectedReport.value = { uuid: report.uuid, title: report.title, readonly_flag: (docRes.data as Record<string, unknown>).readonly_flag as number | undefined }
@@ -493,13 +507,17 @@ const createReport = async () => {
   if (selectedWeek.value === null || !uid.value) return
   isCreating.value = true
   try {
-    const res = await $fetch<CreateWeeklyReportResponse>('/api/personal-weekly-reports/create', {
+    const payload = { year: selectedWeekYear.value, week: selectedWeek.value }
+    const attemptKey = weeklyReportCreationAttempt.keyFor(cacheKey('weekly-report-create'), payload)
+    const res = await $fetch<CreateWeeklyReportResponse>(moduleUrl('/api/personal-weekly-reports/create'), {
       method: 'POST',
+      headers: { 'Idempotency-Key': attemptKey },
       body: { owner_uid: uid.value, owner_realname: userRealname.value || '', year: selectedWeekYear.value, week: selectedWeek.value }
     })
     if (res.success && res.data) {
+      weeklyReportCreationAttempt.complete(attemptKey)
       await fetchReports()
-      navigateTo(`/documents/${res.data.uuid}`)
+      navigateTo(documentUrl(res.data.uuid))
     }
   } catch (err: unknown) {
     toast.add({ title: getErrorMessage(err, '创建周报失败'), color: 'error' })
@@ -515,7 +533,7 @@ const editReport = () => {
         content: previewContent.value
       })
     }
-    navigateTo(`/documents/${selectedReport.value.uuid}`)
+    navigateTo(documentUrl(selectedReport.value.uuid))
   }
 }
 
@@ -523,12 +541,14 @@ const editReport = () => {
 
 const submitCurrent = async () => {
   const target = mode.value === 'worklog' ? selectedLog.value : selectedReport.value
-  if (!target) return
+  if (!target || isSubmitting.value) return
+  const owner = uid.value
+  if (!await confirm({ title: '确认上报', message: `确认上报「${target.title}」？上报后文档将设为只读，不能继续修改。`, tone: 'warning', confirmLabel: '确认上报' })) return
+  if (uid.value !== owner || target !== (mode.value === 'worklog' ? selectedLog.value : selectedReport.value)) return
   isSubmitting.value = true
   try {
-    await $fetch(`/api/documents/${target.uuid}`, { method: 'PATCH', body: { readonly_flag: true } })
+    await $fetch(moduleUrl(`/api/documents/${target.uuid}`), { method: 'PATCH', body: { readonly_flag: true } })
     target.readonly_flag = 1
-    showSubmitConfirm.value = false
     toast.add({ title: `上报成功，${mode.value === 'worklog' ? '日志' : '周报'}已设为只读`, color: 'success' })
   } catch {
     toast.add({ title: '上报失败', color: 'error' })
@@ -536,11 +556,6 @@ const submitCurrent = async () => {
     isSubmitting.value = false
   }
 }
-
-const currentTitle = computed(() => {
-  if (mode.value === 'worklog') return selectedLog.value?.title
-  return selectedReport.value?.title
-})
 
 // ==================== 模式切换 ====================
 
@@ -581,6 +596,14 @@ onMounted(async () => {
 
 <template>
   <UDashboardPanel grow>
+    <div class="px-4 pt-4 sm:px-6 sm:pt-6">
+      <ContentPageHeader
+        :hosted="hosted"
+        title="工作汇报"
+        description="填写并查看个人工作日志与周报。"
+        breadcrumb="工作台 / 我的工作"
+      />
+    </div>
     <div v-if="panelCollapsed" class="flex justify-end gap-2 px-4 py-2 border-b border-default">
       <UButton
         class="hidden md:flex"
@@ -605,7 +628,7 @@ onMounted(async () => {
           <button
             class="hover:text-default flex-1 text-center text-sm py-1.5 rounded-md transition-colors font-medium"
             :class="mode === 'worklog'
-              ? 'bg-white dark:bg-gray-700 text-primary shadow-sm'
+              ? 'bg-default text-primary shadow-sm'
               : 'text-muted hover:text-default'"
             variant="outline"
             @click="switchMode('worklog')"
@@ -615,7 +638,7 @@ onMounted(async () => {
           <button
             class="flex-1 text-center text-sm py-1.5 rounded-md transition-colors font-medium"
             :class="mode === 'weekly'
-              ? 'bg-white dark:bg-gray-700 text-primary shadow-sm'
+              ? 'bg-default text-primary shadow-sm'
               : 'text-muted hover:text-default'"
             color="mode === 'weekly' ? 'primary' : 'neutral'"
             variant="outline"
@@ -676,7 +699,7 @@ onMounted(async () => {
                 class="flex items-center justify-center text-[10px] font-semibold"
                 :class="{
                   'text-primary': weekRow.isCurrent,
-                  'text-green-600 dark:text-green-400': (mode === 'worklog' ? weekRow.hasLog : weekRow.hasReport) && !weekRow.isCurrent,
+                  'text-success': (mode === 'worklog' ? weekRow.hasLog : weekRow.hasReport) && !weekRow.isCurrent,
                   'text-muted': !weekRow.isCurrent && !(mode === 'worklog' ? weekRow.hasLog : weekRow.hasReport)
                 }"
               >
@@ -692,12 +715,12 @@ onMounted(async () => {
                   :class="{
                     'text-muted bg-elevated': ((!day.isCurrentMonth) || (day.isCurrentMonth && day.isFuture && !day.isToday && !day.hasLog)) && selectedDate !== day.date,
                     'text-default': day.isCurrentMonth && !day.isFuture && !day.isToday && !day.hasLog,
-                    'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300 border-green-200 dark:border-green-800': day.hasLog && !day.isToday && selectedDate !== day.date,
+                    'bg-success/10 text-success border-success/25': day.hasLog && !day.isToday && selectedDate !== day.date,
                     'bg-primary/10 text-primary font-semibold border-primary': day.isToday && selectedDate !== day.date,
                     'ring-2 ring-primary bg-primary/12 text-primary font-semibold border-primary': selectedDate === day.date && !day.isFuture,
-                    'ring-2 ring-gray-500 bg-gray-100 text-gray-800 font-semibold border-gray-300 dark:ring-gray-400 dark:bg-gray-900/70 dark:text-gray-100 dark:border-gray-700': selectedDate === day.date && day.isFuture,
-                    'hover:bg-gray-100 dark:hover:bg-gray-800': day.isCurrentMonth && !day.isFuture && !day.hasLog,
-                    'hover:bg-gray-50 dark:hover:bg-gray-900/60': day.isCurrentMonth && day.isFuture && !day.hasLog && selectedDate !== day.date
+                    'ring-2 ring-neutral bg-muted text-default font-semibold border-default': selectedDate === day.date && day.isFuture,
+                    'hover:bg-muted': day.isCurrentMonth && !day.isFuture && !day.hasLog,
+                    'hover:bg-default': day.isCurrentMonth && day.isFuture && !day.hasLog && selectedDate !== day.date
                   }"
                   @click="selectDay(day.date)"
                 >
@@ -705,7 +728,7 @@ onMounted(async () => {
                   <span
                     v-if="day.hasLog"
                     class="absolute bottom-0.5 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full bg-primary"
-                    :class="{ 'bg-white': day.isToday && selectedDate !== day.date }"
+                    :class="{ 'bg-default': day.isToday && selectedDate !== day.date }"
                   />
                 </button>
               </template>
@@ -716,9 +739,9 @@ onMounted(async () => {
                 class="col-span-7 grid grid-cols-7 text-center text-xs rounded-md border border-default bg-default transition-colors py-1.5"
                 :class="{
                   'ring-2 ring-primary bg-primary/10 font-semibold border-primary': isWeekSelected(weekRow.weekYear, weekRow.weekNum) && !weekRow.days.every(day => day.isFuture),
-                  'ring-2 ring-gray-500 bg-gray-100 text-gray-800 font-semibold border-gray-300 dark:ring-gray-400 dark:bg-gray-900/70 dark:text-gray-100 dark:border-gray-700': isWeekSelected(weekRow.weekYear, weekRow.weekNum) && weekRow.days.every(day => day.isFuture),
-                  'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800': weekRow.hasReport && !isWeekSelected(weekRow.weekYear, weekRow.weekNum),
-                  'hover:bg-gray-100 dark:hover:bg-gray-800': !isWeekSelected(weekRow.weekYear, weekRow.weekNum)
+                  'ring-2 ring-neutral bg-muted text-default font-semibold border-default': isWeekSelected(weekRow.weekYear, weekRow.weekNum) && weekRow.days.every(day => day.isFuture),
+                  'bg-success/10 border-success/25': weekRow.hasReport && !isWeekSelected(weekRow.weekYear, weekRow.weekNum),
+                  'hover:bg-muted': !isWeekSelected(weekRow.weekYear, weekRow.weekNum)
                 }"
                 @click="selectWeek(weekRow.weekYear, weekRow.weekNum)"
               >
@@ -761,7 +784,7 @@ onMounted(async () => {
               class="w-full text-left px-2 py-1.5 rounded-md text-xs transition-colors flex items-center gap-1.5"
               :class="selectedLog?.uuid === item.uuid
                 ? 'bg-primary/10 text-primary font-medium'
-                : 'text-default hover:bg-gray-100 dark:hover:bg-gray-800'"
+                : 'text-default hover:bg-muted'"
               @click="selectDay(item.date)"
             >
               <UIcon name="i-lucide-file-text" class="w-3.5 h-3.5 shrink-0 text-primary" />
@@ -783,7 +806,7 @@ onMounted(async () => {
       />
 
       <!-- 右侧：内容 -->
-      <main class="flex-1 flex flex-col overflow-hidden bg-gray-50 dark:bg-gray-950">
+      <main class="flex-1 flex flex-col overflow-hidden bg-default">
         <!-- 移动端月份选择 -->
         <div class="md:hidden flex items-center justify-between px-4 py-2 border-b border-default bg-default">
           <UButton
@@ -808,7 +831,7 @@ onMounted(async () => {
           <template v-if="mode === 'worklog'">
             <div v-if="!selectedDate" class="h-full flex items-center justify-center">
               <div class="text-center text-muted">
-                <UIcon name="i-lucide-calendar" class="w-12 h-12 mx-auto mb-3 text-gray-300" />
+                <UIcon name="i-lucide-calendar" class="w-12 h-12 mx-auto mb-3 text-dimmed" />
                 <p>请在左侧日历中选择日期</p>
               </div>
             </div>
@@ -821,7 +844,7 @@ onMounted(async () => {
               <div class="flex items-center justify-between mb-4">
                 <h2 class="text-lg font-semibold text-default">
                   {{ selectedDateLabel }}
-                  <span v-if="isReported" class="ml-2 text-xs font-normal text-green-600 bg-green-50 dark:bg-green-900/30 dark:text-green-400 px-1.5 py-0.5 rounded">已上报</span>
+                  <span v-if="isReported" class="ml-2 text-xs font-normal text-success bg-success/10 px-1.5 py-0.5 rounded">已上报</span>
                 </h2>
                 <div class="flex items-center gap-2">
                   <UButton
@@ -830,7 +853,7 @@ onMounted(async () => {
                     size="sm"
                     color="neutral"
                     variant="outline"
-                    @click="showSubmitConfirm = true"
+                    @click="submitCurrent"
                   >
                     上报
                   </UButton>
@@ -844,14 +867,14 @@ onMounted(async () => {
                   </UButton>
                 </div>
               </div>
-              <div class="bg-white dark:bg-gray-900 shadow-sm rounded-lg min-h-75 p-0">
+              <div class="bg-default shadow-sm rounded-lg min-h-75 p-0">
                 <EditorDocLazyPreview v-if="previewContent" :content="previewContent" />
               </div>
             </div>
 
             <div v-else class="h-full flex items-center justify-center">
               <div class="text-center">
-                <UIcon name="i-lucide-notebook-pen" class="w-16 h-16 mx-auto mb-4 text-gray-300 dark:text-gray-600" />
+                <UIcon name="i-lucide-notebook-pen" class="w-16 h-16 mx-auto mb-4 text-dimmed" />
                 <h3 class="text-lg font-semibold text-default mb-2">
                   {{ selectedDateLabel }}
                 </h3>
@@ -878,7 +901,7 @@ onMounted(async () => {
           <template v-else>
             <div v-if="selectedWeek === null" class="h-full flex items-center justify-center">
               <div class="text-center text-muted">
-                <UIcon name="i-lucide-calendar-range" class="w-12 h-12 mx-auto mb-3 text-gray-300" />
+                <UIcon name="i-lucide-calendar-range" class="w-12 h-12 mx-auto mb-3 text-dimmed" />
                 <p>请在左侧日历中选择一周</p>
               </div>
             </div>
@@ -891,7 +914,7 @@ onMounted(async () => {
               <div class="flex items-center justify-between mb-4">
                 <h2 class="text-lg font-semibold text-default">
                   {{ selectedWeekLabel }}
-                  <span v-if="isReported" class="ml-2 text-xs font-normal text-green-600 bg-green-50 dark:bg-green-900/30 dark:text-green-400 px-1.5 py-0.5 rounded">已上报</span>
+                  <span v-if="isReported" class="ml-2 text-xs font-normal text-success bg-success/10 px-1.5 py-0.5 rounded">已上报</span>
                 </h2>
                 <div class="flex items-center gap-2">
                   <UButton
@@ -900,7 +923,7 @@ onMounted(async () => {
                     size="sm"
                     color="neutral"
                     variant="outline"
-                    @click="showSubmitConfirm = true"
+                    @click="submitCurrent"
                   >
                     上报
                   </UButton>
@@ -914,14 +937,14 @@ onMounted(async () => {
                   </UButton>
                 </div>
               </div>
-              <div class="bg-white dark:bg-gray-900 shadow-sm rounded-lg min-h-75 p-0">
+              <div class="bg-default shadow-sm rounded-lg min-h-75 p-0">
                 <EditorDocLazyPreview v-if="previewContent" :content="previewContent" />
               </div>
             </div>
 
             <div v-else class="h-full flex items-center justify-center">
               <div class="text-center">
-                <UIcon name="i-lucide-file-text" class="w-16 h-16 mx-auto mb-4 text-gray-300 dark:text-gray-600" />
+                <UIcon name="i-lucide-file-text" class="w-16 h-16 mx-auto mb-4 text-dimmed" />
                 <h3 class="text-lg font-semibold text-default mb-2">
                   {{ selectedWeekLabel }}
                 </h3>
@@ -946,40 +969,5 @@ onMounted(async () => {
         </div>
       </main>
     </div>
-
-    <!-- 上报确认弹窗 -->
-    <UModal v-model:open="showSubmitConfirm">
-      <template #content>
-        <UCard>
-          <template #header>
-            <div class="flex items-center gap-2">
-              <UIcon name="i-lucide-alert-triangle" class="w-5 h-5 text-amber-500" />
-              <h3 class="text-lg font-semibold">
-                确认上报
-              </h3>
-            </div>
-          </template>
-
-          <p class="text-muted">
-            确定要上报{{ mode === 'worklog' ? '工作日志' : '工作周报' }}
-            <strong class="text-default">"{{ currentTitle }}"</strong> 吗？
-          </p>
-          <p class="text-sm text-amber-600 dark:text-amber-400 mt-2">
-            上报后将设为只读，不可再修改。
-          </p>
-
-          <template #footer>
-            <div class="flex justify-end gap-2">
-              <UButton color="neutral" variant="outline" @click="showSubmitConfirm = false">
-                取消
-              </UButton>
-              <UButton color="primary" :loading="isSubmitting" @click="submitCurrent">
-                确认上报
-              </UButton>
-            </div>
-          </template>
-        </UCard>
-      </template>
-    </UModal>
   </UDashboardPanel>
 </template>

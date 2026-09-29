@@ -68,6 +68,15 @@ func departmentDocumentReadAllowedByTrustedContext(doc map[string]any, query url
 }
 
 func (a *Adapter) documentByUUID(ctx context.Context, uuid string, includeDeleted bool) (map[string]any, error) {
+	return readDocumentByUUID(ctx, a.db, uuid, includeDeleted, false)
+}
+
+type documentReadDB interface {
+	QueryContext(context.Context, string, ...any) (*sql.Rows, error)
+	QueryRowContext(context.Context, string, ...any) *sql.Row
+}
+
+func readDocumentByUUID(ctx context.Context, db documentReadDB, uuid string, includeDeleted, lock bool) (map[string]any, error) {
 	uuid = strings.TrimSpace(uuid)
 	if uuid == "" {
 		return nil, httperror.New(http.StatusBadRequest, "invalid_document", "Document uuid is required")
@@ -76,7 +85,11 @@ func (a *Adapter) documentByUUID(ctx context.Context, uuid string, includeDelete
 	if !includeDeleted {
 		where += " AND status <> 0"
 	}
-	rows, err := a.db.QueryContext(ctx, "SELECT * FROM documents WHERE "+where+" LIMIT 1", uuid)
+	statement := "SELECT * FROM documents WHERE " + where + " LIMIT 1"
+	if lock {
+		statement += " FOR UPDATE"
+	}
+	rows, err := db.QueryContext(ctx, statement, uuid)
 	if err != nil {
 		return nil, err
 	}
@@ -92,12 +105,20 @@ func (a *Adapter) documentByUUID(ctx context.Context, uuid string, includeDelete
 }
 
 func (a *Adapter) sharePermission(ctx context.Context, docID int64, actorUID string) (string, error) {
+	return readDocumentSharePermission(ctx, a.db, docID, actorUID, false)
+}
+
+func readDocumentSharePermission(ctx context.Context, db documentReadDB, docID int64, actorUID string, lock bool) (string, error) {
 	var permission string
-	err := a.db.QueryRowContext(ctx, `
+	statement := `
       SELECT permission
       FROM document_shares
       WHERE document_id = ? AND shared_to_uid = ?
-      LIMIT 1`, docID, actorUID).Scan(&permission)
+      LIMIT 1`
+	if lock {
+		statement += " FOR UPDATE"
+	}
+	err := db.QueryRowContext(ctx, statement, docID, actorUID).Scan(&permission)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return "", nil

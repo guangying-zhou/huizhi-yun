@@ -2,6 +2,7 @@ package assets
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"net/http"
 	"net/url"
@@ -9,11 +10,61 @@ import (
 
 	"github.com/huizhi-yun/data-runtime/internal/apps/compat"
 	"github.com/huizhi-yun/data-runtime/internal/config"
+	"github.com/huizhi-yun/data-runtime/internal/enterprise"
 	"github.com/huizhi-yun/data-runtime/internal/httperror"
 )
 
 type Adapter struct {
 	*compat.Adapter
+	enterpriseWrites *enterpriseWriteBinding
+	enterpriseReads  *enterpriseWriteBinding
+}
+
+type enterpriseWriteBinding struct {
+	registry *enterprise.Registry
+	request  enterprise.ResolveRequest
+	binding  enterprise.Binding
+}
+
+// ConfigureEnterpriseWrites is an explicit startup-only dependency.  A nil
+// binding leaves Enterprise mutations unavailable; there is no legacy DB
+// fallback once the Host selects the unified writer.
+func (a *Adapter) ConfigureEnterpriseWrites(ctx context.Context, registry *enterprise.Registry, binding enterprise.Binding) error {
+	a.enterpriseWrites = nil
+	a.enterpriseReads = nil
+	if a == nil || a.Adapter == nil || registry == nil {
+		return enterprise.ErrBindingNotFound
+	}
+	domain, ok := binding.Domains["assets"]
+	if !ok || (domain.Write != enterprise.PathUnified && domain.Read != enterprise.PathUnified) {
+		return enterprise.ErrBindingNotFound
+	}
+	// Commands intentionally retain the owning-domain logical SQL names. Verify
+	// at startup that this adapter is connected to the registered Enterprise
+	// store and that every name used by the command transaction resolves through
+	// its declared compatibility view.
+	//
+	// service_command_receipt is deliberately absent: both aims and assets map
+	// that logical name to their own physical receipt table, and a schema-level
+	// view can only point at one of them. compatibilityViewSpecs rejects any
+	// cross-domain logical name for exactly that reason, so requiring a view
+	// here could never succeed. Receipt access resolves the physical table
+	// through Resolved.Table instead.
+	if err := enterprise.VerifyCompatibilityViews(ctx, a.DB(), binding, "assets", []string{"digital_assets", "ip_assets", "asset_events"}); err != nil {
+		return err
+	}
+	request := enterprise.ResolveRequest{
+		Key: binding.Key, Domain: "assets", OwnerDeployment: domain.OwnerDeployment,
+		SchemaVersion: binding.SchemaVersion, Generation: binding.Generation, Operation: enterprise.Write,
+	}
+	if domain.Write == enterprise.PathUnified {
+		a.enterpriseWrites = &enterpriseWriteBinding{registry: registry, request: request}
+	}
+	if domain.Read == enterprise.PathUnified {
+		request.Operation = enterprise.Read
+		a.enterpriseReads = &enterpriseWriteBinding{registry: registry, request: request, binding: binding}
+	}
+	return nil
 }
 
 type dictionaryOption struct {
@@ -111,8 +162,12 @@ func New(cfg config.AssetsConfig) (*Adapter, error) {
 }
 
 func (a *Adapter) HandleRuntime(ctx context.Context, method string, path string, query url.Values, body map[string]any) (any, string, error) {
-    if result, operation, handled, err := a.handleProductAdoptionRuntime(ctx, method, path, query, body); handled { return result, operation, err }
-	if result,operation,handled,err:=a.handleProductCatalogRuntime(ctx,method,path,query);handled{return result,operation,err}
+	if result, operation, handled, err := a.handleProductAdoptionRuntime(ctx, method, path, query, body); handled {
+		return result, operation, err
+	}
+	if result, operation, handled, err := a.handleProductCatalogRuntime(ctx, method, path, query); handled {
+		return result, operation, err
+	}
 	if result, operation, handled, err := a.handleCustomRuntime(ctx, method, path, query, body); handled {
 		return result, operation, err
 	}
@@ -132,129 +187,44 @@ func (a *Adapter) HandleRuntime(ctx context.Context, method string, path string,
 	return a.Adapter.HandleRuntime(ctx, method, path, query, body)
 }
 
+// EnterpriseDictionaries is a read-only projection used by the Enterprise
+// Host after it has established the caller's asset_items:view permission.
+func (a *Adapter) EnterpriseDictionaries(ctx context.Context) (map[string]any, error) {
+	items, err := a.listDictionaries(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return map[string]any{"items": items}, nil
+}
+
 func (a *Adapter) listDictionaries(ctx context.Context) ([]dictionaryDefinition, error) {
-	rows, err := a.DB().QueryContext(ctx, `
-		SELECT param_key, param_value
-		FROM system_parameters
-		WHERE param_key LIKE 'dictionary.%'
-		ORDER BY param_key ASC
-	`)
+	tx, err := a.DB().BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelRepeatableRead, ReadOnly: true})
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-
-	items := make([]dictionaryDefinition, 0)
-	for rows.Next() {
-		var key string
-		var value string
-		if err := rows.Scan(&key, &value); err != nil {
-			return nil, err
-		}
-		var item dictionaryDefinition
-		if err := json.Unmarshal([]byte(value), &item); err != nil {
-			continue
-		}
-		if item.Code == "" {
-			item.Code = strings.TrimPrefix(key, "dictionary.")
-		}
-		if isManagedDictionary(item.Code) {
-			continue
-		}
-		items = append(items, item)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-
-	managed, err := a.managedCategoryDictionaries(ctx)
+	defer tx.Rollback()
+	result, err := (productMasterReader{tx: tx}).listDictionaries(ctx)
 	if err != nil {
 		return nil, err
 	}
-	items = append(items, managed...)
-	return items, nil
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+	return result, nil
 }
 
 func (a *Adapter) managedCategoryDictionaries(ctx context.Context) ([]dictionaryDefinition, error) {
-	rows, err := a.DB().QueryContext(ctx, `
-		SELECT category_scope, category_value, category_label, short_code, description, enabled, sort_order
-		FROM asset_category_groups
-		ORDER BY category_scope ASC, sort_order ASC, id ASC
-	`)
+	tx, err := a.DB().BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelRepeatableRead, ReadOnly: true})
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-
-	type categoryRow struct {
-		Scope       string
-		Value       string
-		Label       string
-		ShortCode   string
-		Description string
-		Enabled     bool
-		SortOrder   int64
-	}
-	byScope := map[string][]categoryRow{}
-	for rows.Next() {
-		var scope string
-		var value string
-		var label string
-		var shortCode *string
-		var description *string
-		var enabled int64
-		var sortOrder int64
-		if err := rows.Scan(&scope, &value, &label, &shortCode, &description, &enabled, &sortOrder); err != nil {
-			return nil, err
-		}
-		byScope[scope] = append(byScope[scope], categoryRow{
-			Scope:       scope,
-			Value:       value,
-			Label:       label,
-			ShortCode:   stringPtrValue(shortCode),
-			Description: stringPtrValue(description),
-			Enabled:     enabled != 0,
-			SortOrder:   sortOrder,
-		})
-	}
-	if err := rows.Err(); err != nil {
+	defer tx.Rollback()
+	result, err := (productMasterReader{tx: tx}).managedCategoryDictionaries(ctx)
+	if err != nil {
 		return nil, err
 	}
-
-	metas := []struct {
-		Scope string
-		Meta  categoryScopeMeta
-	}{
-		{Scope: "physical", Meta: categoryScopeMeta{DictionaryCode: "asset_physical_subtype", Name: "资产子类", Description: "维护实物资产子类和适用的实物细类。"}},
-		{Scope: "resource", Meta: categoryScopeMeta{DictionaryCode: "asset_resource_subtype", Name: "资源子类", Description: "维护资源资产子类。"}},
-		{Scope: "product", Meta: categoryScopeMeta{DictionaryCode: "product_line", Name: "产品线", Description: "维护产品资产的产品线分类。"}},
-		{Scope: "ip", Meta: categoryScopeMeta{DictionaryCode: "ip_asset_type", Name: "资产类型", Description: "维护知识产权资产类型。"}},
-		{Scope: "digital", Meta: categoryScopeMeta{DictionaryCode: "digital_asset_type", Name: "资产类型", Description: "维护数字资产类型。"}},
-	}
-
-	result := make([]dictionaryDefinition, 0, len(metas))
-	for _, item := range metas {
-		rows := byScope[item.Scope]
-		if len(rows) == 0 {
-			continue
-		}
-		options := make([]dictionaryOption, 0, len(rows))
-		for _, row := range rows {
-			options = append(options, dictionaryOption{
-				Label:       row.Label,
-				Value:       row.Value,
-				ShortCode:   row.ShortCode,
-				Description: row.Description,
-				Enabled:     boolPtr(row.Enabled),
-				SortOrder:   row.SortOrder,
-			})
-		}
-		result = append(result, dictionaryDefinition{
-			Code:        item.Meta.DictionaryCode,
-			Name:        item.Meta.Name,
-			Description: item.Meta.Description,
-			Options:     options,
-		})
+	if err := tx.Commit(); err != nil {
+		return nil, err
 	}
 	return result, nil
 }

@@ -40,6 +40,18 @@ type FeatureRoadmapView struct {
 
 // Roadmap arrangement is projected from cycle decisions, never written on features.
 func ReadFeatureRoadmap(ctx context.Context, db *sql.DB, code, uid string, planningPermit, featurePermit AuthorizationPermit, q FeatureRoadmapQuery) (FeatureRoadmapView, error) {
+	tx, err := db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
+	if err != nil {
+		return FeatureRoadmapView{}, err
+	}
+	defer tx.Rollback()
+	out, err := ReadFeatureRoadmapInTransaction(ctx, tx, code, uid, planningPermit, featurePermit, q)
+	if err != nil {
+		return out, err
+	}
+	return out, tx.Commit()
+}
+func ReadFeatureRoadmapInTransaction(ctx context.Context, tx *sql.Tx, code, uid string, planningPermit, featurePermit AuthorizationPermit, q FeatureRoadmapQuery) (FeatureRoadmapView, error) {
 	var out FeatureRoadmapView
 	for _, value := range []string{q.FeatureBizID, q.CycleBizID} {
 		id, err := uuid.Parse(value)
@@ -50,11 +62,9 @@ func ReadFeatureRoadmap(ctx context.Context, db *sql.DB, code, uid string, plann
 	if err := ValidatePlanningPageQuery(PlanningPageQuery{Page: q.Page, PageSize: q.PageSize}); err != nil {
 		return out, err
 	}
-	tx, err := db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
-	if err != nil {
-		return out, err
+	if tx == nil {
+		return out, invalid("product_transaction_required", "事务不可用")
 	}
-	defer tx.Rollback()
 	if err := AuthorizeWorkspaceTransaction(ctx, tx, code, uid, "product_priorities", "view", planningPermit); err != nil {
 		return out, err
 	}
@@ -110,5 +120,5 @@ func ReadFeatureRoadmap(ctx context.Context, db *sql.DB, code, uid string, plann
 	}
 	out.FeatureBizID, out.CycleBizID, out.WorkspaceRevision = q.FeatureBizID, q.CycleBizID, planningPermit.Facts.Revision
 	out.Page, out.PageSize = q.Page, q.PageSize
-	return out, tx.Commit()
+	return out, nil
 }

@@ -1,0 +1,17 @@
+{
+  "publicKey": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEAYvBx82cdkgPWRxW3ReuRQmj6yjVBW7j16CKBOeW58jU=\n-----END PUBLIC KEY-----\n",
+  "context": {
+    "issuer": "https://platform.example",
+    "tenant": "tenant-1",
+    "environment": "test",
+    "deployment": "console-test",
+    "now": 1000000
+  },
+  "envelope": {
+    "schema": "hzy-policy-envelope.v1",
+    "alg": "Ed25519",
+    "kid": "fixture-key",
+    "body": "{\"issuer\":\"https://platform.example\",\"tenant\":\"tenant-1\",\"environment\":\"test\",\"deployments\":[\"console-test\",\"enterprise-test\"],\"bundleVersion\":\"pv_test_12\",\"policyRevision\":12,\"status\":\"active\",\"issuedAt\":1000000,\"expiresAt\":1300000,\"policyExpiresAt\":null,\"payload\":\"{\\\"tenant\\\":{\\\"tenantCode\\\":\\\"tenant-1\\\"},\\\"environment\\\":\\\"test\\\",\\\"policyRevision\\\":12,\\\"deployments\\\":[{\\\"deploymentCode\\\":\\\"console-test\\\",\\\"environment\\\":\\\"test\\\",\\\"status\\\":\\\"active\\\"},{\\\"deploymentCode\\\":\\\"enterprise-test\\\",\\\"environment\\\":\\\"test\\\",\\\"status\\\":\\\"active\\\"}],\\\"label\\\":\\\"企业策略 < & >\\\",\\\"grants\\\":[]}\",\"purpose\":\"enterprise-policy\",\"payloadHash\":\"sha256_c5b872caee3d56924247f7a4c941246b2fac87a0836dbcdc69a4d7831b0eaae4\"}",
+    "signature": "-w5bkyDp447m2K7PSGajcUbk0u07kWwCfxYjThuNts_zZNARHDWDJO4vsWmAiMsGB9b9tYPnxya40QXBRMXGBw"
+  }
+}

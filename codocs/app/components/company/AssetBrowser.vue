@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import { useCodocsModule } from '../../../layer/useCodocsModule'
+import { useResizablePanel } from '../../composables/useResizablePanel'
+import { useViewerWatermark } from '../../composables/useViewerWatermark'
 /**
  * 组织资产浏览器 — 左侧目录/文件列表 + 右侧文档预览
  * Props: subdir (OSS company 子目录名), title (页面标题)
@@ -11,7 +14,7 @@ interface AssetItem {
 }
 
 interface AssetListResponse {
-  data?: AssetItem[]
+  data?: { items: AssetItem[], total: number, page: number, pageSize: number }
 }
 
 interface FetchErrorLike {
@@ -24,6 +27,14 @@ const props = defineProps<{ subdir: string, title: string, hideExport?: boolean 
 usePageTitle(props.title)
 
 const toast = useToast()
+const { moduleUrl } = useCodocsModule()
+const mutationKeys = new Map<string, string>()
+function mutationBody(action: string, body: Record<string, unknown>) {
+  const key = `${action}:${JSON.stringify(body)}`
+  if (!mutationKeys.has(key)) mutationKeys.set(key, crypto.randomUUID())
+  return { key, body: { ...body, operationId: mutationKeys.get(key) } }
+}
+const { confirm } = useConfirm()
 const { panelWidth, panelCollapsed, onResizeStart, showPanel } = useResizablePanel(288)
 const { hasPermission } = usePermissions()
 const isAdmin = computed(() => hasPermission('company', 'admin'))
@@ -38,16 +49,25 @@ const currentDirectoryLabel = computed(() => currentRelPath.value ? `/${currentR
 
 // 文件列表
 const items = ref<AssetItem[]>([])
+const page = ref(1)
+const pageSize = 20
+const total = ref(0)
 const pending = ref(false)
+let loadEpoch = 0
 
 const refresh = async () => {
+  const epoch = ++loadEpoch
   pending.value = true
   try {
-    const result = await $fetch<AssetListResponse>('/api/company-assets/list', {
-      params: { subdir: props.subdir, path: currentRelPath.value || undefined }
+    const result = await $fetch<AssetListResponse>(moduleUrl('/api/company-assets/list'), {
+      params: { subdir: props.subdir, path: currentRelPath.value || undefined, page: page.value, pageSize }
     })
-    items.value = result.data || []
+    if (epoch !== loadEpoch) return
+    if (!result.data || !Array.isArray(result.data.items) || !Number.isSafeInteger(result.data.total)) throw new Error('组织资产列表响应无效')
+    items.value = result.data.items
+    total.value = result.data.total
   } catch (error: unknown) {
+    if (epoch !== loadEpoch) return
     console.error('Failed to load company assets:', error)
     const err = error as FetchErrorLike
     toast.add({
@@ -56,11 +76,14 @@ const refresh = async () => {
       color: 'error'
     })
   } finally {
-    pending.value = false
+    if (epoch === loadEpoch) pending.value = false
   }
 }
 
 watch([() => props.subdir, currentRelPath], () => {
+  page.value = 1
+})
+watch([() => props.subdir, currentRelPath, page], () => {
   refresh()
 }, { immediate: true })
 
@@ -70,14 +93,17 @@ const previewContent = ref('')
 const previewLoading = ref(false)
 const previewUrl = ref('')
 const previewFileExt = ref('')
+let previewEpoch = 0
 
 const selectFile = async (item: AssetItem) => {
+  const epoch = ++previewEpoch
   if (item.isDirectory) {
     pathStack.value = [...pathStack.value, { name: item.name, path: item.path }]
     selectedFile.value = null
     previewContent.value = ''
     previewUrl.value = ''
     previewFileExt.value = ''
+    previewLoading.value = false
     return
   }
   selectedFile.value = item
@@ -86,25 +112,29 @@ const selectFile = async (item: AssetItem) => {
   previewUrl.value = ''
   previewFileExt.value = ''
   try {
-    const res = await $fetch<{ code: number, data: { content?: string, preview_url?: string, file_ext?: string } }>('/api/company-assets/preview', { params: { path: item.path } })
+    const res = await $fetch<{ code: number, data: { content?: string, preview_url?: string, file_ext?: string } }>(moduleUrl('/api/company-assets/preview'), { params: { path: item.path } })
+    if (epoch !== previewEpoch) return
     previewContent.value = res.data?.content || ''
     previewUrl.value = res.data?.preview_url || ''
     previewFileExt.value = res.data?.file_ext || ''
   } catch {
+    if (epoch !== previewEpoch) return
     previewContent.value = ''
     toast.add({ title: '无法加载文件内容', color: 'error' })
   } finally {
-    previewLoading.value = false
+    if (epoch === previewEpoch) previewLoading.value = false
   }
 }
 
 // 导航到面包屑
 const navigateTo_ = (index: number) => {
+  previewEpoch++
   pathStack.value = pathStack.value.slice(0, index)
   selectedFile.value = null
   previewContent.value = ''
   previewUrl.value = ''
   previewFileExt.value = ''
+  previewLoading.value = false
 }
 
 // Admin: 新建目录
@@ -112,11 +142,13 @@ const showMkdir = ref(false)
 const newDirName = ref('')
 const mkdir = async () => {
   if (!newDirName.value.trim()) return
+  const intent = mutationBody('mkdir', { subdir: props.subdir, path: currentRelPath.value || undefined, name: newDirName.value.trim() })
   try {
-    await $fetch('/api/company-assets/mkdir', {
+    await $fetch(moduleUrl('/api/company-assets/mkdir'), {
       method: 'POST',
-      body: { subdir: props.subdir, path: currentRelPath.value || undefined, name: newDirName.value.trim() }
+      body: intent.body
     })
+    mutationKeys.delete(intent.key)
     toast.add({ title: '目录已创建', color: 'success' })
     newDirName.value = ''
     showMkdir.value = false
@@ -134,28 +166,19 @@ const onKnowledgeImported = async () => {
 }
 
 // Admin: 删除空目录
-const deleteDirTarget = ref<AssetItem | null>(null)
-const showDeleteDirConfirm = computed({
-  get: () => Boolean(deleteDirTarget.value),
-  set: (open: boolean) => {
-    if (!open) deleteDirTarget.value = null
-  }
-})
 const deletingDir = ref(false)
-const requestDeleteDirectory = (item: AssetItem) => {
+const requestDeleteDirectory = async (item: AssetItem) => {
   if (!item.isDirectory) return
-  deleteDirTarget.value = item
-}
-const deleteEmptyDirectory = async () => {
-  if (!deleteDirTarget.value) return
+  if (!await confirm({ title: '删除目录', message: `确定删除空目录「${item.name}」？包含文件或子目录时系统会拒绝。`, tone: 'danger', confirmLabel: '删除' })) return
+  const intent = mutationBody('delete-directory', { subdir: props.subdir, dirPath: item.path })
   deletingDir.value = true
   try {
-    await $fetch('/api/company-assets/directory', {
+    await $fetch(moduleUrl('/api/company-assets/directory'), {
       method: 'DELETE',
-      body: { subdir: props.subdir, dirPath: deleteDirTarget.value.path }
+      body: intent.body
     })
+    mutationKeys.delete(intent.key)
     toast.add({ title: '目录已删除', color: 'success' })
-    deleteDirTarget.value = null
     await refresh()
   } catch (e: unknown) {
     const err = e as FetchErrorLike
@@ -170,11 +193,13 @@ const showMove = ref(false)
 const moveTargetDir = ref('')
 const moveFile = async () => {
   if (!selectedFile.value) return
+  const intent = mutationBody('move', { subdir: props.subdir, sourcePath: selectedFile.value.path, targetDir: moveTargetDir.value || undefined })
   try {
-    await $fetch('/api/company-assets/move', {
+    await $fetch(moduleUrl('/api/company-assets/move'), {
       method: 'POST',
-      body: { subdir: props.subdir, sourcePath: selectedFile.value.path, targetDir: moveTargetDir.value || undefined }
+      body: intent.body
     })
+    mutationKeys.delete(intent.key)
     toast.add({ title: '文件已移动', color: 'success' })
     showMove.value = false
     moveTargetDir.value = ''
@@ -195,12 +220,14 @@ const showArchiveConfirm = ref(false)
 const archiving = ref(false)
 const archiveFile = async () => {
   if (!selectedFile.value) return
+  const intent = mutationBody('archive', { subdir: props.subdir, sourcePath: selectedFile.value.path })
   archiving.value = true
   try {
-    await $fetch('/api/company-assets/archive', {
+    await $fetch(moduleUrl('/api/company-assets/archive'), {
       method: 'POST',
-      body: { subdir: props.subdir, sourcePath: selectedFile.value.path }
+      body: intent.body
     })
+    mutationKeys.delete(intent.key)
     toast.add({ title: '文件已归档', color: 'success' })
     showArchiveConfirm.value = false
     selectedFile.value = null
@@ -306,6 +333,14 @@ const archiveFile = async () => {
               />
             </div>
           </template>
+        </div>
+        <div v-if="total > pageSize" class="border-t border-default p-2 flex justify-center">
+          <UPagination
+            v-model:page="page"
+            :total="total"
+            :items-per-page="pageSize"
+            size="sm"
+          />
         </div>
       </aside>
       <!-- 拖拽调整宽度把手 -->
@@ -432,30 +467,6 @@ const archiveFile = async () => {
             </div>
           </template>
         </UCard>
-      </template>
-    </UModal>
-
-    <!-- 删除空目录确认 Modal -->
-    <UModal v-model:open="showDeleteDirConfirm" title="删除目录">
-      <template #body>
-        <div class="p-4 space-y-3">
-          <p class="text-sm">
-            确定要删除目录 <span class="font-medium">「{{ deleteDirTarget?.name }}」</span> 吗？
-          </p>
-          <p class="text-sm text-muted">
-            仅空目录可删除；包含文件或子目录时系统会拒绝操作。
-          </p>
-        </div>
-      </template>
-      <template #footer>
-        <div class="flex justify-end gap-2">
-          <UButton variant="outline" color="neutral" @click="deleteDirTarget = null">
-            取消
-          </UButton>
-          <UButton color="error" :loading="deletingDir" @click="deleteEmptyDirectory">
-            删除
-          </UButton>
-        </div>
       </template>
     </UModal>
 

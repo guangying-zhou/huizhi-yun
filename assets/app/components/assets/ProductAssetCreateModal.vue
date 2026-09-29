@@ -1,5 +1,8 @@
 <script setup lang="ts">
-import type { ApiResponse } from '~/types'
+import AssetFormSurface from './AssetFormSurface.vue'
+import { useAssetDictionaries } from '../../composables/useAssetDictionaries'
+import { useAssetsModule } from '../../../layer/useAssetsModule'
+import type { ApiResponse } from '../../types'
 import {
   arrayToMultiline,
   buildStageOptions as buildStageFallbackOptions,
@@ -19,10 +22,13 @@ import {
   productLineFallbackOptions,
   productizationValueLevelOptions as productizationValueLevelFallbackOptions,
   supportedTerminalOptions as supportedTerminalFallbackOptions
-} from '~/utils/productAssets'
+} from '../../utils/productAssets'
+
+const { moduleUrl } = useAssetsModule()
 
 const props = defineProps<{
   open: boolean
+  page?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -38,8 +44,10 @@ const isOpen = computed({
 const { loadDictionaries, getOptions } = useAssetDictionaries()
 await loadDictionaries()
 
+const surface = ref<InstanceType<typeof AssetFormSurface> | null>(null)
 const toast = useToast()
 const submitting = ref(false)
+const submissionKey = ref('')
 const productLineOptions = computed(() => preferDictionaryOptions(getOptions('product_line'), productLineFallbackOptions))
 const customerDomainOptions = computed(() => preferModernOptions(getOptions('customer_domain'), customerDomainFallbackOptions))
 const businessDomainOptions = computed(() => preferModernOptions(getOptions('business_domain'), businessDomainFallbackOptions))
@@ -69,6 +77,10 @@ const state = reactive({
   notes: ''
 })
 
+watch(state, () => {
+  submissionKey.value = ''
+}, { deep: true, flush: 'sync' })
+
 function hydrate() {
   state.product_code = ''
   state.product_name = ''
@@ -92,7 +104,7 @@ watch(() => props.open, (open) => {
   if (open) {
     hydrate()
   }
-})
+}, { immediate: true })
 
 async function handleSubmit() {
   if (!state.product_name.trim()) {
@@ -108,8 +120,9 @@ async function handleSubmit() {
   submitting.value = true
 
   try {
-    const response = await $fetch<ApiResponse<{ id: number }>>('/api/v1/products', {
+    const response = await $fetch<ApiResponse<{ id: number }>>(moduleUrl('/api/v1/products'), {
       method: 'POST',
+      headers: { 'Idempotency-Key': submissionKey.value ||= crypto.randomUUID() },
       body: {
         product_code: state.product_code.trim() || null,
         product_name: state.product_name.trim(),
@@ -137,6 +150,7 @@ async function handleSubmit() {
       icon: 'i-lucide-check'
     })
 
+    surface.value?.markSaved()
     emit('created', response.data.id)
     isOpen.value = false
   } catch (error) {
@@ -154,8 +168,12 @@ async function handleSubmit() {
 </script>
 
 <template>
-  <UModal
+  <AssetFormSurface
+    ref="surface"
     v-model:open="isOpen"
+    :page="props.page"
+    :draft="JSON.stringify(state)"
+    :busy="submitting"
     title="新增产品主档"
     description="登记产品基本画像、分级分域、终端和版本信息。"
     :ui="{ content: 'sm:max-w-4xl' }"
@@ -308,5 +326,5 @@ async function handleSubmit() {
         </UButton>
       </div>
     </template>
-  </UModal>
+  </AssetFormSurface>
 </template>

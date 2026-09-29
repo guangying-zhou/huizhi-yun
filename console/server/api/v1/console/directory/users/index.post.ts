@@ -10,6 +10,7 @@ import { getDirectoryUserForAdmin, ok } from '~~/server/utils/directoryRuntime'
 import { requireIdempotencyKey } from '~~/server/utils/idempotency'
 import { requireConsoleRequestUid } from '~~/server/utils/requestIdentity'
 import { setResponseStatus } from 'h3'
+import { directoryUserCreateResponse, ldapUserCreateResponse } from '~~/server/utils/directoryUserCreateResponse'
 
 async function deliverActivationLink(
   event: Parameters<typeof sendNotification>[0]['event'],
@@ -69,7 +70,7 @@ export default defineEventHandler(async (event) => {
     const data = (operation as { data?: Record<string, unknown> }).data || {}
     const activationToken = String(data.activationToken || '')
     const activationCredentialId = String(data.activationCredentialId || '')
-    if (!activationToken || !activationCredentialId) return operation
+    if (!activationToken || !activationCredentialId) return ldapUserCreateResponse(operation)
 
     // 激活令牌只能直达员工本人。它绝不回传给调用方——People 受控入职按约束
     // 不得接收明文凭据，HR 也不需要经手。这里发送后从响应里剔除令牌，
@@ -82,12 +83,11 @@ export default defineEventHandler(async (event) => {
       activationCredentialId,
       String(data.activationExpiresAt || '')
     )
-    const { activationToken: _token, ...safeData } = data
-    return { ...operation, data: { ...safeData, activationDelivered: delivered } }
+    return ldapUserCreateResponse(operation, delivered)
   }
   const { provisioningTarget: _provisioningTarget, ...directoryBody } = body
   await createConsoleDirectoryUser(event, directoryBody as Record<string, unknown>)
 
   const uid = String(body.uid || '').trim()
-  return ok(await getDirectoryUserForAdmin(uid))
+  return ok(directoryUserCreateResponse(await getDirectoryUserForAdmin(uid)))
 })

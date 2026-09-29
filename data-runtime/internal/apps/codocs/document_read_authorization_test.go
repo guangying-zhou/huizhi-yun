@@ -68,6 +68,7 @@ func TestHandleRuntimeDocumentGetOwnerPreservesEnvelopeAndWritableProjection(t *
 
 	adapter := &Adapter{db: db}
 	expectDocumentRead(mock, 11, "doc-owner", "owner-uid", "private", "", 0, 1)
+	expectSnapshotGeneration(mock, "doc-owner", 0)
 
 	response, operation, err := adapter.HandleRuntime(context.Background(), http.MethodGet, "/v1/codocs/documents/doc-owner", url.Values{
 		"current_user": {"owner-uid"},
@@ -101,6 +102,7 @@ func TestHandleRuntimeDocumentGetShareAndRelationMaintainReadACL(t *testing.T) {
 		mock.ExpectQuery(regexp.QuoteMeta("SELECT permission\n      FROM document_shares\n      WHERE document_id = ? AND shared_to_uid = ?\n      LIMIT 1")).
 			WithArgs(int64(12), "viewer-uid").
 			WillReturnRows(sqlmock.NewRows([]string{"permission"}).AddRow("write"))
+		expectSnapshotGeneration(mock, "doc-share", 0)
 
 		response, _, err := adapter.HandleRuntime(context.Background(), http.MethodGet, "/v1/codocs/documents/doc-share", url.Values{
 			"current_user": {"viewer-uid"},
@@ -133,6 +135,7 @@ func TestHandleRuntimeDocumentGetShareAndRelationMaintainReadACL(t *testing.T) {
 		mock.ExpectQuery(`(?s)SELECT COUNT\(\*\).*FROM document_relations.*document_id = \? AND related_uid = \? AND status = 1 AND can_read = 1.*source_type <> 'project_preview_access'.*updated_at >= DATE_SUB\(NOW\(\), INTERVAL 12 HOUR\)`).
 			WithArgs(int64(13), "viewer-uid").
 			WillReturnRows(sqlmock.NewRows([]string{"COUNT(*)"}).AddRow(1))
+		expectSnapshotGeneration(mock, "doc-relation", 0)
 
 		response, _, err := adapter.HandleRuntime(context.Background(), http.MethodGet, "/v1/codocs/documents/doc-relation", url.Values{
 			"current_user": {"viewer-uid"},
@@ -175,6 +178,9 @@ func TestHandleRuntimeDocumentGetDepartmentOnlyAllowsExactTrustedDepartment(t *t
 			mock.ExpectQuery(`(?s)SELECT COUNT\(\*\).*FROM document_relations.*source_type <> 'project_preview_access'.*INTERVAL 12 HOUR`).
 				WithArgs(int64(14), "viewer-uid").
 				WillReturnRows(sqlmock.NewRows([]string{"COUNT(*)"}).AddRow(0))
+			if test.wantStatus == 0 {
+				expectSnapshotGeneration(mock, "doc-department", 0)
+			}
 
 			response, _, err := adapter.HandleRuntime(context.Background(), http.MethodGet, "/v1/codocs/documents/doc-department", url.Values{
 				"current_user":                      {"viewer-uid"},

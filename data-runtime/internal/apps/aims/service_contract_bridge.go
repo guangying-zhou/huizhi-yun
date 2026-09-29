@@ -335,6 +335,10 @@ func (a *Adapter) createProjectFromContractTx(ctx context.Context, tx *sql.Tx, b
 		return nil, httperror.New(http.StatusBadRequest, "project_manager_required", "leaderUid or ownerUserId is required")
 	}
 	lifecycleStatus := allowedProjectLifecycle(firstBodyText(body, "lifecycleStatus", "lifecycle_status"), "active")
+	accessWhitelist, err := accessWhitelistJSONText(body, "accessWhitelist", "access_whitelist")
+	if err != nil {
+		return nil, err
+	}
 	project, err := createServiceProjectTx(ctx, tx, serviceProjectCreation{
 		ProjectCode: projectCode, Name: name, ShortName: shortName,
 		InternalCode: firstBodyText(body, "internalCode", "internal_code"), Description: firstBodyText(body, "description", "remark"),
@@ -344,7 +348,7 @@ func (a *Adapter) createProjectFromContractTx(ctx context.Context, tx *sql.Tx, b
 		DeptCode: firstBodyText(body, "deptCode", "dept_code", "ownerDeptCode", "owner_dept_code"), LeaderUID: leaderUID,
 		SecurityLevel:        firstNonEmptyText(firstBodyText(body, "securityLevel", "security_level"), "company"),
 		ConfidentialityLevel: firstNonEmptyText(firstBodyText(body, "confidentialityLevel", "confidentiality_level"), "L1"),
-		AccessWhitelist:      bodyJSONText(body, "accessWhitelist", "access_whitelist"),
+		AccessWhitelist:      accessWhitelist,
 		StartDate:            firstBodyText(body, "startDate", "start_date", "effectiveDate", "effective_date"), EndDate: firstBodyText(body, "endDate", "end_date"),
 		OppID: nullableOptionalID(body, "oppId", "opp_id", "opportunityId", "opportunity_id"), ContractID: nullableOptionalID(body, "contractId", "contract_id"),
 		CustomerCode: firstBodyText(body, "customerCode", "customer_code"), CustomerName: firstBodyText(body, "customerName", "customer_name"), ContractCode: contractCode,

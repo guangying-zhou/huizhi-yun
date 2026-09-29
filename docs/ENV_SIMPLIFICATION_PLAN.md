@@ -59,7 +59,7 @@ Console 保留企业端基础运行配置：
 - Console 自身数据库：`DB_*`
 - Platform 激活材料：`HZY_PLATFORM_*`
 - Console vault master key：`HZY_CONSOLE_VAULT_MASTER_KEY`
-- Console-managed Collab Runtime：`CONSOLE_COLLAB_MODE`、`HZY_TENANT_RUNTIME_URL` / `COLLAB_CODOCS_RUNTIME_URL`、迁移期 `COLLAB_REDIS_*`、`COLLABORATION_AUTH_SECRET`；OSS 持久化默认从 Console `oss.default` 集成配置和 vault secret 注入，standalone/迁移期才使用 `COLLAB_OSS_*`
+- Console-managed Collab Runtime：`CONSOLE_COLLAB_MODE`、`HZY_TENANT_RUNTIME_URL` / `COLLAB_CODOCS_RUNTIME_URL`、迁移期 `COLLAB_REDIS_*`、`COLLABORATION_AUTH_SECRET`；旧 v1 文档的 OSS 持久化可从 Console `oss.default` 注入，standalone/迁移期沿用 `COLLAB_OSS_*`。v2 快照字节经 Runtime 读写，v2 路径不持有 OSS 密钥
 - 迁移期上游认证源：`CAS_*`、LDAP、企业微信/钉钉集成初始化材料
 
 第三方集成和 secret 进入 Console 后，应通过 Console 管理页写入 `integrations + vault`，不再分发到业务应用 env。
@@ -125,7 +125,7 @@ Platform 是平台控制面，不纳入 Data Runtime Agent 覆盖范围；Platfo
 仍需保留或后续处理的存量项：
 
 - Platform 不再为业务应用生成 `license.lic`；Console 的签名 license 以 `HZY_PLATFORM_LICENSE_TOKEN` 写入 Console env，业务应用服务调用统一走 Console service token。
-- Collab Runtime 已从 Codocs 模块拆出为可复用 `collab` runtime 包，并由 Console 默认内嵌启动，仍监听 3021 供统一网关转发；standalone 模式保留用于独立扩容或迁移期并行部署。当前默认 provider 为 hocuspocus，内嵌模式已从 Console `oss.default` resolve 服务端 OSS 配置并按文档类型选择默认 bucket 或项目文档 bucket；Redis 与协作 WebSocket secret 后续继续迁到 Console managed secret。
+- Collab Runtime 已从 Codocs 模块拆出为可复用 `collab` runtime 包，并由 Console 默认内嵌启动，仍监听 3021 供统一网关转发；standalone 模式保留用于独立扩容或迁移期并行部署。当前默认 provider 为 hocuspocus；旧 v1 路径的内嵌模式可从 Console `oss.default` 解析 OSS 配置，v2 快照字节改由 Runtime 使用 vault 绑定的 `oss.default` 读写。Redis 与旧协作 WebSocket secret 后续继续迁到 Console managed secret。
 - Altoc 文档创建、已有文档校验与预览已统一切到 Codocs v1 service-token API；前端打开编辑器仍使用 Console runtime/统一网关推导出的 Codocs home URL。
 - Insights Python 后端中心配置已去掉生产形态的默认数据库地址、默认数据库密码和默认平台密钥；但 Insights 仍是较独立的 legacy 形态，Nuxt 前端、FastAPI 后端、采集脚本和 GitLab/Account 配置需要单独迁移到 Foundation/Console runtime。
 - 业务数据库凭证如需迁入 Console，应新增 `database_runtime` 或 `integrationCode=database.{appCode}` 口径：Console vault 保存 DB password，业务应用通过稳定 app identity 换取仅本应用可用的 DB credential，并把各模块 `server/utils/db.ts` 改为异步初始化和带缓存/轮换的连接池。
@@ -135,7 +135,7 @@ Platform 是平台控制面，不纳入 Data Runtime Agent 覆盖范围；Platfo
 | 存量项 | 当前处理 | 后续前置条件 |
 | --- | --- | --- |
 | Altoc→Codocs 文档接口 | 已迁到 Codocs v1 service-token API，移除旧 Cookie 透传调用 | 无 |
-| Collab Runtime | `collab` 包默认由 Console 内嵌启动；Codocs 上下文通过 tenant-runtime 获取；OSS 配置已与 Codocs Nuxt 服务共用 Console `oss.default` resolved secret，standalone/迁移期保留 `COLLAB_OSS_*`；暂保留 `CONSOLE_COLLAB_MODE`、`COLLAB_REDIS_*`、协作鉴权 secret | Redis 与协作鉴权 secret 仍需要 Console managed-secret/bootstrap 收口 |
+| Collab Runtime | `collab` 包默认由 Console 内嵌启动；Codocs 上下文通过 tenant-runtime 获取；旧 v1 路径内嵌时使用 Console `oss.default` resolved secret，standalone/迁移期保留 `COLLAB_OSS_*`；v2 快照字节经 Runtime，v2 路径不持有 OSS 密钥；暂保留 `CONSOLE_COLLAB_MODE`、`COLLAB_REDIS_*`、旧协作鉴权 secret | Redis 与旧协作鉴权 secret 仍需要 Console managed-secret/bootstrap 收口 |
 | Insights | 先去掉 Python 后端中心配置中的敏感默认值；暂不迁 Nuxt/FastAPI/脚本入口 | 需要把 Insights 纳入 app manifest/Foundation 层，定义 GitLab integration code、Account/Directory 替代 API 和采集脚本的服务身份 |
 | 业务数据库凭证 | 暂保留各应用 `DB_*` | 需要 Console `database_runtime`/vault 模型和应用侧异步连接池初始化 |
 
@@ -144,6 +144,6 @@ Platform 是平台控制面，不纳入 Data Runtime Agent 覆盖范围；Platfo
 1. **新模块基线**：所有新模块从 `nuxt-template` 开始，只配置 DB、app identity、base path；跨模块服务调用统一走 Console service token。
 2. **Finance**：保持当前轻量 env；后续接入 Workflow、钉钉/企业微信、OSS 时一律经 Console integration。
 3. **Assets / Altoc**：审批动作同步和 Altoc→Codocs 文档接口已改用 Console service token；继续清理仅 legacy Account bridge 需要的配置。
-4. **Codocs / Collab**：Codocs 的 OSS、GitLab、企业微信通知迁到 Console integration/vault；Collab Runtime 默认由 Console 内嵌启动，OSS 持久化使用同一份 `oss.default`，继续收口 Redis 与协作鉴权 secret。
+4. **Codocs / Collab**：Codocs 的 OSS、GitLab、企业微信通知迁到 Console integration/vault；Collab Runtime 默认由 Console 内嵌启动，旧 v1 OSS 持久化仍可使用 Console 注入的 `oss.default`，v2 快照由 Runtime 使用 vault 绑定的 `oss.default`，继续收口 Redis 与旧协作鉴权 secret。
 5. **认证收口**：业务应用移除 `CAS_*` 和 legacy callback，默认走 Console OIDC。
 6. **App license 清理**：已停止生成业务应用 `license.lic`；后续只清理存量部署文件和旧文档引用。

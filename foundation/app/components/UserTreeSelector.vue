@@ -16,7 +16,7 @@
  *
  * 特性：
  * - 部门显示顺序与数据库 sort_order 一致；委员会统一排在部门之后
- * - 委员会可见时通过 user_departments 显示成员（需 /api/directory/user-departments）
+ * - 独立应用中委员会可见时通过 user_departments 显示成员；Enterprise Host 只加载部门树与员工主部门
  * - 隐藏委员会时只加载部门和用户主部门，不请求委员会成员关系
  * - 点击部门行：只展开/折叠，不选中；只有点击 checkbox 才勾选
  * - 点击员工行：切换勾选
@@ -24,6 +24,8 @@
 import type { TreeItem } from '@nuxt/ui'
 import { inputIdInjectionKey, useFormField } from '#ui/composables/useFormField'
 import type { TreeItemSelectEvent } from 'reka-ui'
+import { sharedApiPath } from '../utils/sharedApiPath'
+import { resolveAvatarSrc } from '../composables/useAvatar'
 
 // Bind the enclosing field to the trigger, not every input in the popup.
 const { id: triggerId, ariaAttrs: fieldAriaAttrs } = useFormField({ id: useId() })
@@ -97,6 +99,11 @@ const emit = defineEmits<{
   (e: 'update:users', users: SelectableUser[]): void
 }>()
 
+// Console deliberately does not expose tenant-wide memberships or committee
+// member enumeration to the Enterprise Host. Regular departments and users
+// remain available through the two scoped directory lists below.
+const hosted = useRuntimeConfig().public.appCode === 'enterprise'
+
 interface DeptsResp {
   code: number
   data?: { tree?: DeptLike[], flat?: DeptLike[] }
@@ -148,7 +155,7 @@ async function loadCommitteeMembersFallback(committeeCodes: string[]) {
   const map = new Map<string, string[]>()
   await Promise.all(committeeCodes.map(async (code) => {
     try {
-      const res = await $fetch<DeptMembersResp>(`/api/directory/departments/${encodeURIComponent(code)}/members`)
+      const res = await $fetch<DeptMembersResp>(`${sharedApiPath('/api/directory/departments')}/${encodeURIComponent(code)}/members`)
       if (res?.code === 0 && Array.isArray(res.data)) {
         map.set(code, res.data.map(m => m.uid))
       }
@@ -169,12 +176,16 @@ async function loadData() {
   loadPromise = (async () => {
     loading.value = true
     try {
-      const shouldLoadMemberships = !props.hideCommittees
+      const shouldLoadMemberships = !hosted && !props.hideCommittees
       const [deptRes, userRes, udRes] = await Promise.all([
-        $fetch<DeptsResp>('/api/directory/departments'),
-        $fetch<UsersResp>('/api/directory/users', { params: { pageSize: 1000 } }),
+        $fetch<DeptsResp>(sharedApiPath('/api/directory/departments')).catch((err) => {
+          if (err?.statusCode !== 404 && err?.status !== 404) throw err
+          console.warn('[UserTreeSelector] 部门目录不可用，改用员工列表', err?.message || err)
+          return null
+        }),
+        $fetch<UsersResp>(sharedApiPath('/api/directory/users'), { params: { pageSize: 1000 } }),
         shouldLoadMemberships
-          ? $fetch<UserDeptsResp>('/api/directory/user-departments').catch((err) => {
+          ? $fetch<UserDeptsResp>(sharedApiPath('/api/directory/user-departments')).catch((err) => {
               console.warn('[UserTreeSelector] /api/directory/user-departments 不可用，将回退按委员会逐个拉取', err?.message || err)
               return { code: -1 } as UserDeptsResp
             })
@@ -183,10 +194,9 @@ async function loadData() {
       if (deptRes?.code === 0 && deptRes.data?.tree) {
         departments.value = deptRes.data.tree
       }
-      if (userRes?.code === 0 && userRes.data) {
-        const data = userRes.data
-        allUsers.value = Array.isArray(data) ? data : (data.items || [])
-      }
+      if (userRes?.code !== 0 || !userRes.data) throw new Error('员工目录响应不完整')
+      const data = userRes.data
+      allUsers.value = Array.isArray(data) ? data : (data.items || [])
       if (shouldLoadMemberships) {
         if (udRes?.code === 0 && Array.isArray(udRes.data) && udRes.data.length > 0) {
           userDeptPairs.value = udRes.data
@@ -222,7 +232,9 @@ const availableUserMap = computed<Map<string, SelectableUser>>(() => {
       realName: u.realName || u.uid,
       deptCode: u.deptCode || null,
       deptName: u.deptName || null,
-      avatar: u.avatar || null
+      // Directory rows carry OSS object paths; a bare path would resolve
+      // against the current page URL (e.g. /enterprise/directory/<file>.png).
+      avatar: resolveAvatarSrc(u.avatar)
     })
   }
   return m
@@ -283,7 +295,7 @@ function orderDepts(nodes: DeptLike[]): DeptLike[] {
   const regular: DeptLike[] = []
   const committees: DeptLike[] = []
   for (const n of nodes) {
-    if (props.hideCommittees && n.orgType === 'committee') continue
+    if ((hosted || props.hideCommittees) && n.orgType === 'committee') continue
     if (n.orgType === 'committee') committees.push(n)
     else regular.push(n)
   }
@@ -343,7 +355,19 @@ function buildTree(nodes: DeptLike[], depth = 0): TreeNode[] {
   return out
 }
 
-const fullTree = computed<TreeNode[]>(() => buildTree(departments.value))
+const fullTree = computed<TreeNode[]>(() => {
+  if (departments.value.length > 0) return buildTree(departments.value)
+  if (props.scopeDeptCode) return []
+  return [...availableUserMap.value.values()]
+    .sort((a, b) => a.realName.localeCompare(b.realName, 'zh-CN'))
+    .map(user => ({
+      key: `user:${user.uid}`,
+      kind: 'user',
+      uid: user.uid,
+      label: user.realName,
+      user
+    }))
+})
 
 function findSubtree(nodes: TreeNode[], deptCode: string): TreeNode | null {
   for (const n of nodes) {

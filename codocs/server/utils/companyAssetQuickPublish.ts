@@ -1,8 +1,11 @@
 import { createError } from 'h3'
+import { parseBodyRef, readBodyByRef } from './documentBodyRef'
 
 export interface QuickPublishItem {
   sourceUuid: string
+  /** v1 源正文位置；v2 源为空，改由 bodyRef 给出精确快照。 */
   sourcePath: string
+  bodyRef?: unknown
   title: string
   newUuid: string
   ossPath: string
@@ -13,7 +16,7 @@ interface HeadResult {
 }
 export interface QuickPublishStorage {
   head: (path: string) => Promise<HeadResult>
-  get: (path: string) => Promise<{ content: Buffer, res: { headers: Record<string, string> } }>
+  get: (path: string, options?: { versionId?: string }) => Promise<{ content: Buffer, res: { headers: Record<string, string> } }>
   put: (target: string, content: Buffer, options: { forbidOverwrite: boolean, headers: Record<string, string>, meta: Record<string, string> }) => Promise<unknown>
 }
 function missing(error: unknown) {
@@ -37,12 +40,25 @@ function evidence(item: QuickPublishItem, head: HeadResult, operationId: string)
   if (!etag || !Number.isSafeInteger(size) || size < 0) throw createError({ statusCode: 502, message: '无法验证已复制的文档' })
   return { newUuid: item.newUuid, ossPath: item.ossPath, etag, size }
 }
+async function readLegacySource(client: QuickPublishStorage, item: QuickPublishItem) {
+  if (!item.sourcePath) throw createError({ statusCode: 502, message: '发布计划缺少源文档位置' })
+  const source = await client.get(item.sourcePath)
+  return { content: source.content, etag: String(source.res.headers.etag || '') }
+}
+/** v2 source: the exact published version, length and SHA-256 verified; the derived mirror is never read. */
+async function readSnapshotSource(client: QuickPublishStorage, item: QuickPublishItem) {
+  const ref = parseBodyRef(item.bodyRef)
+  const content = await readBodyByRef(client, ref)
+  return { content, etag: `snapshot-g${ref.generation}-${ref.sha256}` }
+}
 /** Destination is reserved in Runtime. Conditional upload prevents races or retries from overwriting any object. */
 export async function copyQuickPublishDocument(client: QuickPublishStorage, operationId: string, item: QuickPublishItem) {
   const existing = await optionalHead(client, item.ossPath)
   if (existing) return evidence(item, existing, operationId)
-  const source = await client.get(item.sourcePath)
-  const etag = String(source.res.headers.etag || '')
+  const source = item.bodyRef
+    ? await readSnapshotSource(client, item)
+    : await readLegacySource(client, item)
+  const etag = source.etag
   if (!etag) throw createError({ statusCode: 502, message: '无法验证源文档版本' })
   try {
     await client.put(item.ossPath, source.content, {

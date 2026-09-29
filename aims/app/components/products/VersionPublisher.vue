@@ -1,18 +1,21 @@
 <script setup lang="ts">
-import type { ProductVersionAcceptancePreview, VersionAcceptanceDetail } from '~/types/productVersionAcceptance'
+import { useAimsModule } from '../../../layer/useAimsModule'
+const { moduleUrl, cacheKey } = useAimsModule()
+import type { ProductVersionAcceptancePreview, VersionAcceptanceDetail } from '../../types/productVersionAcceptance'
 
 const props = defineProps<{ productCode: string, versionId: string, record: VersionAcceptanceDetail }>()
 const emit = defineEmits<{ busy: [value: boolean] }>()
-const base = computed(() => `/api/v1/products/${encodeURIComponent(props.productCode)}/versions/${encodeURIComponent(props.versionId)}`)
+const base = computed(() => moduleUrl(`/api/v1/products/${encodeURIComponent(props.productCode)}/versions/${encodeURIComponent(props.versionId)}`))
 const { data: preview, error, status, refresh } = await useFetch(() => `${base.value}/acceptance-preview`, {
   server: false,
+  key: computed(() => cacheKey(`version-publish-preview:${props.productCode}:${props.versionId}`)),
   transform: (response: { code: number, data: ProductVersionAcceptancePreview }) => {
     const p = response.data
     if (response.code !== 0 || p?.version?.product_code !== props.productCode || String(p.version.id) !== props.versionId || ![p.workspace_revision, p.version.revision, p.version.scope_revision].every(v => Number.isSafeInteger(v) && v > 0) || !Array.isArray(p.execution?.targets) || !Array.isArray(p.execution.open_defects)) throw new Error('发布检查响应不完整')
     return p
   }
 })
-const { data: permission, error: permissionError, refresh: refreshPermission } = await useFetch<{ code: number, data: { product_code: string, actor_uid: string, publish: boolean } }>(() => `/api/v1/products/${encodeURIComponent(props.productCode)}/versions/permissions`, { server: false })
+const { data: permission, error: permissionError, refresh: refreshPermission } = await useFetch<{ code: number, data: { product_code: string, actor_uid: string, publish: boolean } }>(() => moduleUrl(`/api/v1/products/${encodeURIComponent(props.productCode)}/versions/permissions`), { server: false, key: computed(() => cacheKey(`version-publish-permission:${props.productCode}`)) })
 const alert = useApiErrorAlert(error, { fallbackTitle: '发布检查加载失败' })
 const permissionAlert = useApiErrorAlert(permissionError, { fallbackTitle: '发布权限加载失败' })
 const authorized = computed(() => permission.value?.code === 0 && permission.value.data.product_code === props.productCode && permission.value.data.publish === true)
@@ -96,7 +99,7 @@ onBeforeRouteUpdate(() => !busy.value)
     <UAlert v-if="preview?.execution.restricted_item_count" color="warning" title="部分项目明细不可见，请补齐查看权限后再核验发布" />
     <template v-if="completed">
       <UAlert color="success" title="版本已正式发布" description="发布内容已冻结保存；客户环境不会自动部署。" />
-      <UButton :to="`/products/${encodeURIComponent(productCode)}/versions/${encodeURIComponent(versionId)}/releases/${completed}`">
+      <UButton :to="moduleUrl(`/products/${encodeURIComponent(productCode)}/versions/${encodeURIComponent(versionId)}/releases/${completed}`)">
         查看发布快照
       </UButton>
     </template>

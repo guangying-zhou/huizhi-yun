@@ -1,11 +1,10 @@
 import { createHash } from 'node:crypto'
 import { requireConsoleAuthContext } from '@hzy/foundation/server/utils/consoleOidc'
-import {
-  hashServiceCommandPayload,
-  verifyServiceCommandRuntimeHeaders
-} from '@hzy/foundation/server/utils/tenantRuntimeClient'
+import { verifyServiceCommandRuntimeHeaders } from '@hzy/foundation/server/utils/tenantRuntimeClient'
 import { getHeader, getRequestURL, type H3Event } from 'h3'
 import { callCodocsTenantRuntime } from './codocsRuntime'
+import { matchesCompanySummaryCommandDigest } from './companyWeeklySummaryCommandDigest'
+import { companySummaryOssVersionId } from './companyWeeklySummaryOssVersion'
 import { uploadDocument } from './oss'
 import {
   AIMS_COMPANY_WEEKLY_SUMMARY_PUBLISH_SERVICE_AUTH,
@@ -87,7 +86,8 @@ export async function publishAimsCompanyWeeklySummary(event: H3Event, periodKey:
     ? body.serviceCommand as RuntimeRow
     : {}
   const command = normalizeCommand(rawEnvelope.command)
-  const commandSha256 = await hashServiceCommandPayload(command)
+  // Runtime's Go map digest and the independent Aims TS producer's original
+  // insertion-order digest both bind the same allowlisted, normalized command.
   const envelope: ServiceCommandEnvelope = {
     operationId: text(rawEnvelope.operationId),
     targetApp: text(rawEnvelope.targetApp),
@@ -105,7 +105,7 @@ export async function publishAimsCompanyWeeklySummary(event: H3Event, periodKey:
     || envelope.operationCode !== 'aims.company-weekly-summary.codocs-publish.v1'
     || envelope.requiredCapability !== 'codocs:company-weekly-summary:publish'
     || envelope.commandSchemaVersion !== 'v1'
-    || envelope.commandSha256 !== commandSha256
+    || !matchesCompanySummaryCommandDigest(command, envelope.commandSha256)
     || envelope.idempotencyKey !== command.idempotencyKey
     || command.periodKey !== periodKey
     || !/^[0-9]{4}-W(?:0[1-9]|[1-4][0-9]|5[0-3])$/.test(command.periodKey)
@@ -139,15 +139,16 @@ export async function publishAimsCompanyWeeklySummary(event: H3Event, periodKey:
 
   const ossPath = `codocs/publish/company/${periodKey}/company-weekly-summary.md`
   const uploaded = await uploadDocument(ossPath, markdownContent, 'company')
-  const ossVersionId = text(uploaded.versionId) || `sha256-${command.markdownSha256}`
+  const ossVersionId = companySummaryOssVersionId(uploaded.versionId, command.markdownSha256)
   const receipt = await callCodocsTenantRuntime<RuntimeRow>(
     event,
     `/v1/codocs/service/company-weekly-summaries/${encodeURIComponent(periodKey)}:publish`,
     {
       method: 'POST',
       scope: 'codocs.write',
+      // The operator is bound inside the signed command (`operatorUid`); the
+      // shared actor delegation only understands `actorUid`, so it is not used.
       serviceTokenSourceBinding: 'service-client-policy',
-      serviceCommandActor: { uid: command.operatorUid },
       body: {
         serviceCommand: envelope,
         markdownContent,

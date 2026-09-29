@@ -36,6 +36,10 @@ func enqueueFeedbackProgressTx(ctx context.Context, tx *sql.Tx, trusted integrat
 	if len(sources) == 0 {
 		return nil
 	}
+	operationTable, tableErr := trusted.OperationTable()
+	if tableErr != nil {
+		return invalid("feedback_outbox_context_invalid", "反馈发件箱表映射无效")
+	}
 	if trusted.SourceApp != "aims" || trusted.TenantCode == "" || trusted.DeploymentCode == "" || actor == "" || revision == 0 || revision > 9007199254740991 {
 		return invalid("feedback_outbox_context_invalid", "反馈状态需要可信来源与产品修订")
 	}
@@ -74,7 +78,7 @@ func enqueueFeedbackProgressTx(ctx context.Context, tx *sql.Tx, trusted integrat
 			return err
 		}
 		key := fmt.Sprintf("aims:product-feedback:progress:%s:%d", item.id, revision)
-		_, err = tx.ExecContext(ctx, `INSERT INTO integration_operation(operation_id,operation_key,correlation_key,tenant_code,deployment_code,source_app,target_app,operation_code,required_capability,source_biz_type,source_biz_code,idempotency_key,command_schema_version,command_json,command_sha256,status,next_attempt_at,original_actor_uid) VALUES(?,?,?,?,?,'aims','altoc','aims.altoc.product-feedback.update-progress.v1','altoc:product-feedback:update-progress','product_request',?,?,'product-feedback-progress.v1',?,?,'pending',UTC_TIMESTAMP(3),?)`, uuid.NewString(), key, key, trusted.TenantCode, trusted.DeploymentCode, item.id, key, string(encoded), hash, actor)
+		_, err = tx.ExecContext(ctx, `INSERT INTO `+operationTable+`(operation_id,operation_key,correlation_key,tenant_code,deployment_code,source_app,target_app,operation_code,required_capability,source_biz_type,source_biz_code,idempotency_key,command_schema_version,command_json,command_sha256,status,next_attempt_at,original_actor_uid) VALUES(?,?,?,?,?,'aims','altoc','aims.altoc.product-feedback.update-progress.v1','altoc:product-feedback:update-progress','product_request',?,?,'product-feedback-progress.v1',?,?,'pending',UTC_TIMESTAMP(3),?)`, uuid.NewString(), key, key, trusted.TenantCode, trusted.DeploymentCode, item.id, key, string(encoded), hash, actor)
 		if err != nil {
 			return err
 		}

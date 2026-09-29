@@ -3,6 +3,7 @@ package codocs
 import (
 	"context"
 	"net/url"
+	"strings"
 	"testing"
 
 	"github.com/DATA-DOG/go-sqlmock"
@@ -21,6 +22,7 @@ func TestDocumentsListRetainsTrustedActorPaginationFiltersAndArgumentOrder(t *te
 	query.Set("limit", "10")
 	query.Set("type", "private")
 	query.Set("owner", "owner-1")
+	query.Set("search", "architecture")
 	query.Set("last_editor", "editor-1")
 	query.Set("uuid", "doc-1")
 	query.Set("dept_code", "D1")
@@ -33,10 +35,10 @@ func TestDocumentsListRetainsTrustedActorPaginationFiltersAndArgumentOrder(t *te
 	query.Set("exclude_worklogs", "1")
 	query.Set("exclude_weekly_reports", "true")
 
-	mock.ExpectQuery(`(?s)SELECT COUNT\(\*\) FROM documents d WHERE .*d\.doc_type = \?.*d\.owner_uid = \?.*d\.last_editor_uid = \?.*d\.uuid = \?.*d\.dept_code = \?.*d\.project_code = \?.*d\.oss_path = \?.*d\.star_flag = 1.*d\.home_flag = 1.*d\.folder_id = \?.*d\.publish_info IS NOT NULL.*worklogs.*weekly-reports`).
-		WithArgs("viewer", "viewer", "viewer", "private", "owner-1", "editor-1", "doc-1", "D1", "P1", "codocs/private/doc-1.md", "42").WillReturnRows(sqlmock.NewRows([]string{"COUNT(*)"}).AddRow(0))
+	mock.ExpectQuery(`(?s)SELECT COUNT\(\*\) FROM documents d WHERE .*d\.doc_type = \?.*d\.owner_uid = \?.*d\.title LIKE \? ESCAPE '!'.*d\.last_editor_uid = \?.*d\.uuid = \?.*d\.dept_code = \?.*d\.project_code = \?.*d\.oss_path = \?.*d\.star_flag = 1.*d\.home_flag = 1.*d\.folder_id = \?.*d\.publish_info IS NOT NULL.*worklogs.*weekly-reports`).
+		WithArgs("viewer", "viewer", "viewer", "private", "owner-1", "%architecture%", "editor-1", "doc-1", "D1", "P1", "codocs/private/doc-1.md", "42").WillReturnRows(sqlmock.NewRows([]string{"COUNT(*)"}).AddRow(0))
 	mock.ExpectQuery(`(?s)SELECT .* FROM documents d.*LIMIT \? OFFSET \?`).
-		WithArgs("viewer", "viewer", "viewer", "private", "owner-1", "editor-1", "doc-1", "D1", "P1", "codocs/private/doc-1.md", "42", 10, 20).WillReturnRows(emptyDocumentListRows())
+		WithArgs("viewer", "viewer", "viewer", "private", "owner-1", "%architecture%", "editor-1", "doc-1", "D1", "P1", "codocs/private/doc-1.md", "42", 10, 20).WillReturnRows(emptyDocumentListRows())
 
 	result, err := adapter.documentsList(context.Background(), query)
 	if err != nil {
@@ -47,6 +49,31 @@ func TestDocumentsListRetainsTrustedActorPaginationFiltersAndArgumentOrder(t *te
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Fatalf("list query did not preserve predicate/filter argument order: %v", err)
+	}
+}
+
+func TestDocumentsListSearchTreatsWildcardsAndBackslashLiterally(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("sqlmock.New: %v", err)
+	}
+	defer db.Close()
+	adapter := &Adapter{db: db}
+	query := trustedDocumentListQuery("viewer")
+	query.Set("search", `50%_\`)
+	mock.ExpectQuery(`(?s)SELECT COUNT\(\*\) FROM documents d WHERE .*d\.title LIKE \? ESCAPE '!'`).
+		WithArgs("viewer", "viewer", "viewer", `%50!%!_!\%`).WillReturnRows(sqlmock.NewRows([]string{"COUNT(*)"}).AddRow(0))
+	mock.ExpectQuery(`(?s)SELECT .* FROM documents d.*d\.title LIKE \? ESCAPE '!'.*LIMIT \? OFFSET \?`).
+		WithArgs("viewer", "viewer", "viewer", `%50!%!_!\%`, 5000, 0).WillReturnRows(emptyDocumentListRows())
+	if _, err := adapter.documentsList(context.Background(), query); err != nil {
+		t.Fatalf("documentsList: %v", err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("literal search: %v", err)
+	}
+	query.Set("search", strings.Repeat("字", 101))
+	if _, err := adapter.documentsList(context.Background(), query); err == nil {
+		t.Fatal("overlong title search accepted")
 	}
 }
 
@@ -205,5 +232,39 @@ func TestDocumentsTrashSelectsCompleteTrashProjection(t *testing.T) {
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Fatalf("trash projection query expectations: %v", err)
+	}
+}
+
+func TestDocumentsTrashPaginationCountUsesVisibleFilteredSnapshot(t *testing.T) {
+	db, m, err := sqlmock.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	query := trustedDocumentListQuery("viewer")
+	query.Set("type", "private")
+	query.Set("owner", "viewer")
+	query.Set("page", "2")
+	query.Set("pageSize", "20")
+	m.ExpectBegin()
+	m.ExpectQuery(`(?s)SELECT COUNT\(\*\).*FROM documents d.*WHERE d.status = 0 AND d.deleted_at IS NOT NULL.*d.doc_type = \? AND d.owner_uid = \?`).WithArgs("viewer", "viewer", "viewer", "private", "viewer").WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(21))
+	m.ExpectQuery(`(?s)SELECT d.id.*WHERE d.status = 0 AND d.deleted_at IS NOT NULL.*d.doc_type = \? AND d.owner_uid = \?.*ORDER BY d.deleted_at DESC, d.id DESC LIMIT \? OFFSET \?`).WithArgs("viewer", "viewer", "viewer", "private", "viewer", 20, 20).WillReturnRows(sqlmock.NewRows([]string{"id", "uuid"}).AddRow(7, "safe"))
+	m.ExpectCommit()
+	out, err := (&Adapter{db: db}).documentsTrash(context.Background(), query)
+	if err != nil || out["total"] != int64(21) || out["page"] != 2 {
+		t.Fatalf("page %#v %v", out, err)
+	}
+	if err = m.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+func TestTrashPaginationBoundsAndLegacyOmission(t *testing.T) {
+	if _, _, paged, e := trashPagination(url.Values{}); paged || e != nil {
+		t.Fatal("legacy changed")
+	}
+	for _, q := range []url.Values{{"page": {""}}, {"page": {"01"}}, {"page": {"1", "2"}}, {"pageSize": {"101"}}, {"page": {"1000001"}}} {
+		if _, _, _, e := trashPagination(q); e == nil {
+			t.Fatal("invalid page accepted")
+		}
 	}
 }

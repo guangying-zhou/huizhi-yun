@@ -19,10 +19,14 @@ const quickPublishTrustedQueryKey = "codocs_trusted_company_quick_publish"
 
 type quickPublishItem struct {
 	SourceUUID string `json:"sourceUuid"`
-	SourcePath string `json:"sourcePath"`
-	Title      string `json:"title"`
-	NewUUID    string `json:"newUuid"`
-	OSSPath    string `json:"ossPath"`
+	// SourcePath is the v1 body location. A v2 (snapshot-backed) source has an
+	// empty SourcePath and an exact BodyRef instead: the mirror path is never
+	// handed out, so an unaware copier fails rather than publishing a stale draft.
+	SourcePath string         `json:"sourcePath"`
+	BodyRef    map[string]any `json:"bodyRef,omitempty"`
+	Title      string         `json:"title"`
+	NewUUID    string         `json:"newUuid"`
+	OSSPath    string         `json:"ossPath"`
 }
 type quickPublishPlan struct {
 	OperationID string             `json:"operationId"`
@@ -89,6 +93,7 @@ func (a *Adapter) quickPublishPrepare(ctx context.Context, query url.Values, bod
 	payload, _ := json.Marshal([]any{actor, prefix, ids})
 	digest := sha256.Sum256(payload)
 	hash := hex.EncodeToString(digest[:])
+	bodyRefs := a.prefetchBodyRefs(ctx, ids)
 	tx, err := a.db.BeginTx(ctx, nil)
 	if err != nil {
 		return nil, err
@@ -131,6 +136,10 @@ func (a *Adapter) quickPublishPrepare(ctx context.Context, query url.Values, bod
 			if dept == "" || source == "" || !strings.HasPrefix(source, "codocs/") || strings.Contains(source, "/../") {
 				return nil, httperror.New(http.StatusBadRequest, "quick_publish_source_invalid", "Department document has no valid stored content")
 			}
+			ref, e := verifyPlannedBodyRef(ctx, tx, uuid, bodyRefs[uuid])
+			if e != nil {
+				return nil, e
+			}
 			newUUID, e := randomUUID()
 			if e != nil {
 				return nil, e
@@ -143,7 +152,11 @@ func (a *Adapter) quickPublishPrepare(ctx context.Context, query url.Values, bod
 			if len([]rune(filename)) > 80 {
 				filename = string([]rune(filename)[:80])
 			}
-			plan.Items = append(plan.Items, quickPublishItem{SourceUUID: uuid, SourcePath: source, Title: title, NewUUID: newUUID, OSSPath: prefix + filename + "-" + newUUID + ".md"})
+			item := quickPublishItem{SourceUUID: uuid, SourcePath: source, Title: title, NewUUID: newUUID, OSSPath: prefix + filename + "-" + newUUID + ".md"}
+			if ref != nil {
+				item.SourcePath, item.BodyRef = "", ref.Map()
+			}
+			plan.Items = append(plan.Items, item)
 		}
 		data, _ := json.Marshal(plan)
 		if _, err = tx.ExecContext(ctx, `UPDATE company_asset_quick_publish_operations SET plan_json=? WHERE operation_id=?`, string(data), id); err != nil {

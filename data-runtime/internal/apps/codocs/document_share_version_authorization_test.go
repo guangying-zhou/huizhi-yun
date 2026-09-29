@@ -26,6 +26,7 @@ func TestDocumentShareVersionAndReadRejectUnsignedActorBeforeStorage(t *testing.
 	}{
 		{"share-list", func() error { _, err := adapter.documentShares(context.Background(), "doc-1", query); return err }},
 		{"version-list", func() error { _, err := adapter.documentVersions(context.Background(), "doc-1", query); return err }},
+		{"version-view", func() error { _, err := adapter.documentVersion(context.Background(), "doc-1", "7", query); return err }},
 		{"mark-read", func() error {
 			_, err := adapter.markDocumentRead(context.Background(), "doc-1", query, map[string]any{"uid": "victim"})
 			return err
@@ -66,6 +67,7 @@ func TestDocumentShareVersionAndReadRoutesRejectUndelegatedActorBeforeStorage(t 
 	}{
 		{"share-list", http.MethodGet, "/v1/codocs/documents/doc-1/shares", nil, "codocs.documents.shares.list"},
 		{"version-list", http.MethodGet, "/v1/codocs/documents/doc-1/versions", nil, "codocs.documents.versions.list"},
+		{"version-view", http.MethodGet, "/v1/codocs/documents/doc-1/versions/7", nil, "codocs.documents.versions.view"},
 		{"mark-read", http.MethodPost, "/v1/codocs/documents/doc-1/read", map[string]any{"uid": "victim"}, "codocs.documents.read"},
 		{"version-delete", http.MethodDelete, "/v1/codocs/documents/doc-1/versions/7", nil, "codocs.documents.versions.delete"},
 	}
@@ -85,6 +87,67 @@ func TestDocumentShareVersionAndReadRoutesRejectUndelegatedActorBeforeStorage(t 
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Fatalf("undelegated share/version routes must not query or mutate storage: %v", err)
+	}
+}
+
+func TestDocumentVersionReadsExactIDWithinAuthorizedDocument(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("sqlmock.New: %v", err)
+	}
+	defer db.Close()
+	adapter := &Adapter{db: db}
+	query := url.Values{"current_user": {"owner-a"}, "hzy_runtime_actor_delegated": {"1"}}
+	mock.ExpectQuery("SELECT \\* FROM documents WHERE uuid = \\? AND status <> 0 LIMIT 1").
+		WithArgs("doc-1").WillReturnRows(sqlmock.NewRows([]string{"id", "owner_uid", "status", "readonly_flag"}).AddRow(9, "owner-a", 1, 0))
+	mock.ExpectQuery("SELECT \\* FROM document_versions WHERE id = \\? AND document_id = \\? LIMIT 1").
+		WithArgs(int64(7), int64(9)).WillReturnRows(sqlmock.NewRows([]string{"id", "version_num"}).AddRow(7, 3))
+	response, operation, err := adapter.HandleRuntime(context.Background(), http.MethodGet, "/v1/codocs/documents/doc-1/versions/7", query, nil)
+	if err != nil || operation != "codocs.documents.versions.view" {
+		t.Fatalf("response=%#v operation=%q err=%v", response, operation, err)
+	}
+	if data := response.(map[string]any)["data"].(map[string]any); int64Value(data["id"]) != 7 {
+		t.Fatalf("wrong version: %#v", data)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestDocumentVersionRejectsInvalidIDBeforeStorage(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("sqlmock.New: %v", err)
+	}
+	defer db.Close()
+	adapter := &Adapter{db: db}
+	query := url.Values{"current_user": {"owner-a"}, "hzy_runtime_actor_delegated": {"1"}}
+	for _, id := range []string{"", "0", "01", "other", "7/extra"} {
+		if _, err := adapter.documentVersion(context.Background(), "doc-1", id, query); err == nil {
+			t.Fatalf("accepted version id %q", id)
+		}
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestDocumentVersionMissingIDDoesNotReadOtherDocumentVersion(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("sqlmock.New: %v", err)
+	}
+	defer db.Close()
+	adapter := &Adapter{db: db}
+	query := url.Values{"current_user": {"owner-a"}, "hzy_runtime_actor_delegated": {"1"}}
+	mock.ExpectQuery("SELECT \\* FROM documents WHERE uuid = \\? AND status <> 0 LIMIT 1").
+		WithArgs("doc-1").WillReturnRows(sqlmock.NewRows([]string{"id", "owner_uid", "status", "readonly_flag"}).AddRow(9, "owner-a", 1, 0))
+	mock.ExpectQuery("SELECT \\* FROM document_versions WHERE id = \\? AND document_id = \\? LIMIT 1").
+		WithArgs(int64(7), int64(9)).WillReturnRows(sqlmock.NewRows([]string{"id", "version_num"}))
+	_, err = adapter.documentVersion(context.Background(), "doc-1", "7", query)
+	assertDocumentShareHTTPStatus(t, err, http.StatusNotFound)
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
 	}
 }
 

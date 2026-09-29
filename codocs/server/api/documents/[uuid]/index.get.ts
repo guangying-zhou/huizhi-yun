@@ -10,6 +10,7 @@ import { getCodocsDocumentMetadata } from '~~/server/utils/codocsRuntime'
 import { requireDepartmentReadAccess } from '~~/server/utils/departmentAccess'
 import { recordCompanyAssetAccess } from '~~/server/utils/companyAssetAccessRecords'
 import { setHeader } from 'h3'
+import { assertLegacyBodyDocument } from '~~/server/utils/documentBodyRef'
 
 function queryText(value: unknown) {
   return String(value || '').trim()
@@ -45,6 +46,8 @@ export default defineEventHandler(async (event) => {
     }
 
     const metadata = await getCodocsDocumentMetadata(event, uuid, metadataQuery)
+    // v2 文档的 oss_path 只是派生镜像：读正文前失败关闭，元数据（skip_content）仍可读。
+    if (!skipContent) assertLegacyBodyDocument(metadata)
     const doc = {
       ...metadata,
       readonly_flag: metadata.readonly ? 1 : metadata.readonly_flag

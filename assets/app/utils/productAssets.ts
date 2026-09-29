@@ -1,4 +1,4 @@
-import type { AssetDictionaryOption } from '~~/shared/assetsDictionaries'
+import type { AssetDictionaryOption } from '../../shared/assetsDictionaries'
 
 export type ProductArrayField = string[] | string | null | undefined
 

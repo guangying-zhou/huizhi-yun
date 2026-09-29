@@ -79,17 +79,23 @@ describe('committee management contract', () => {
 
   test('management page follows list, permission, confirmation, and responsive contracts', () => {
     const page = source('app/pages/directory/committees.vue')
+    const editor = source('../foundation/app/components/DirectoryCommitteeEditor.vue')
     const permissions = source('app/config/permissions.ts')
 
     assert.match(page, /useDebouncedSearch\(\)/)
     assert.match(page, /useListPage\(/)
     assert.match(page, /page: page\.value/)
     assert.match(page, /v-model:page="page"/)
-    assert.match(page, /<CommonEmptyState/)
-    assert.match(page, /useConfirm\(\)/)
+    for (const tableName of ['DirectoryCommitteesTable', 'DirectoryCommitteeMembersTable']) {
+      assert.ok((page + editor).includes(`<${tableName}`), 'Console must use the shared committee table')
+      const table = source(`../foundation/app/components/${tableName}.vue`)
+      assert.match(table, /<CommonEmptyState/)
+      assert.match(table, /:loading="loading"/)
+    }
+    assert.match(editor, /useConfirm\(\)/)
     assert.match(page, /hasPermission\('directory_departments', 'edit'\)/)
-    assert.match(page, /<UserTreeSelector/)
-    assert.match(page, /hide-committees/)
+    assert.match(editor, /<UserTreeSelector/)
+    assert.match(editor, /hide-committees/)
     assert.match(page, /sm:grid-cols-/)
     assert.match(permissions, /to: '\/directory\/committees'/)
     assert.match(permissions, /pattern: '\/directory\/committees'/)

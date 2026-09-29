@@ -4,11 +4,37 @@
  * Validates the short-lived document token issued by Codocs.
  */
 
-import type { Extension, onAuthenticatePayload } from '@hocuspocus/server'
+import type { beforeHandleMessagePayload, connectedPayload, Extension, onAuthenticatePayload } from '@hocuspocus/server'
 import { createHookError, resolveDocumentContext } from '../utils/document-context.js'
 import { verifyCollaborationToken } from '../utils/collaboration-auth.js'
+import { isV2Ticket, type V2Snapshots } from '../utils/v2-snapshots.js'
 
 export class AuthenticationExtension implements Extension {
+  private v2: V2Snapshots | null = null
+
+  useV2(v2: V2Snapshots | null) {
+    this.v2 = v2
+  }
+
+  /**
+   * v2: remember which connection belongs to which user so the service can
+   * disconnect exactly the users the Runtime revokes.
+   */
+  async connected(data: connectedPayload): Promise<void> {
+    const context = data.context as { mode?: string, actorUid?: string, readonly?: boolean } | undefined
+    if (!this.v2 || context?.mode !== 'v2' || !context.actorUid) return
+    const unregister = this.v2.registerConnection(data.documentName, context.actorUid, event => data.connection.close(event), context.readonly !== true)
+    data.connection.onClose(() => unregister())
+  }
+
+  /** v2: drop any message from a user the Runtime revoked, so it never reaches the Y.Doc or a later save. */
+  async beforeHandleMessage(data: beforeHandleMessagePayload): Promise<void> {
+    const context = data.context as { mode?: string, actorUid?: string } | undefined
+    if (this.v2 && context?.mode === 'v2' && context.actorUid && this.v2.isRevoked(data.documentName, context.actorUid)) {
+      throw createHookError('collaboration_access_revoked')
+    }
+  }
+
   /**
    * 用户认证回调
    * 在 WebSocket 连接建立时调用
@@ -24,7 +50,31 @@ export class AuthenticationExtension implements Extension {
     actorName: string
     sharePermission: 'read' | 'write' | null
     readonly: boolean
+  } | {
+    user: { id: string, name: string, color: string }
+    mode: 'v2'
+    sessionId: string
+    docUuid: string
+    actorUid: string
+    readonly: boolean
   }> {
+    const token = String(data.token || '').trim()
+    if (isV2Ticket(token)) {
+      // v2: redeem the one-time ticket before any document state is loaded.
+      if (!this.v2) throw createHookError('authentication-required')
+      const admission = await this.v2.admit(token, data.documentName).catch(() => {
+        throw createHookError('authentication-required')
+      })
+      data.connectionConfig.readOnly = admission.access !== 'write'
+      return {
+        user: { id: admission.userUid, name: admission.userUid, color: this.generateUserColor(admission.userUid) },
+        mode: 'v2',
+        sessionId: admission.sessionId,
+        docUuid: admission.documentUuid,
+        actorUid: admission.userUid,
+        readonly: admission.access !== 'write'
+      }
+    }
     const identity = await this.resolveIdentity(data)
     const documentContext = identity.documentContext || await resolveDocumentContext({
       documentName: data.documentName,

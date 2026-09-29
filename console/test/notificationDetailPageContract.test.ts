@@ -5,16 +5,20 @@ import { test } from 'node:test'
 test('Console provides both an in-app notification modal and a unified deep-link message center', () => {
   const indexPage = readFileSync(new URL('../app/pages/notifications/index.vue', import.meta.url), 'utf8')
   const detailPage = readFileSync(new URL('../app/pages/notifications/[notificationId].vue', import.meta.url), 'utf8')
-  const center = readFileSync(new URL('../app/components/NotificationCenter.vue', import.meta.url), 'utf8')
+  const center = readFileSync(new URL('../../foundation/app/components/NotificationCenter.vue', import.meta.url), 'utf8')
   const layout = readFileSync(new URL('../app/layouts/default.vue', import.meta.url), 'utf8')
   const appLastRoute = readFileSync(new URL('../../foundation/app/utils/appLastRoute.ts', import.meta.url), 'utf8')
   const slideover = readFileSync(new URL('../../foundation/app/components/NotificationsSlideover.vue', import.meta.url), 'utf8')
 
-  assert.match(indexPage, /<NotificationCenter\s*\/>/)
-  assert.match(detailPage, /<NotificationCenter :notification-id="notificationId"\s*\/>/)
+  assert.match(indexPage, /<NotificationCenter list-path="\/notifications" :detail-path="detailPath"/)
+  assert.match(detailPage, /<NotificationCenter\s+:notification-id="notificationId"\s+list-path="\/notifications"/)
   assert.match(center, /const detail = await loadDetail\(notificationId\)/)
-  assert.match(center, /resolveNotificationActionUrl\(selectedDetail\.value, apps\.value, window\.location\.origin\)/)
-  assert.match(center, /await router\.push\(`\/notifications\/\$\{encodeURIComponent\(item\.notificationId\)\}`\)/)
+  assert.match(center, /resolveNotificationActionUrl\(selectedDetail\.value, apps\.value, window\.location\.origin, hostNotificationTarget\(\)\)/)
+  assert.match(center, /await router\.push\(props\.detailPath\(item\.notificationId\)\)/)
+  for (const page of [indexPage, detailPage]) {
+    assert.match(page, /`\/notifications\/\$\{encodeURIComponent\(/)
+    assert.match(page, /:panel-ui="dashboardPanelUi"/)
+  }
   assert.match(center, /消息列表/)
   assert.match(center, /消息内容/)
   assert.match(center, /返回消息列表/)
@@ -26,6 +30,6 @@ test('Console provides both an in-app notification modal and a unified deep-link
 
   assert.match(slideover, /<UModal\b/)
   assert.match(slideover, /const detail = await loadDetail\(item\.notificationId\)/)
-  assert.match(slideover, /resolveNotificationActionUrl\(selectedDetail\.value, apps\.value, window\.location\.origin\)/)
+  assert.match(slideover, /resolveNotificationActionUrl\(selectedDetail\.value, apps\.value, window\.location\.origin, hostNotificationTarget\(\)\)/)
   assert.doesNotMatch(slideover, /resolveNotificationDetailPageUrl\(/)
 })

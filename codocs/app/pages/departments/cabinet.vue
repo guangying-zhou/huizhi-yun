@@ -1,7 +1,7 @@
 <script setup lang="ts">
-definePageMeta({
-  layout: 'default'
-})
+import { useCodocsModule } from '../../../layer/useCodocsModule'
+
+const { hosted, moduleUrl, cacheKey } = useCodocsModule()
 
 usePageTitle('部门文件柜')
 
@@ -23,7 +23,7 @@ interface CabinetFile {
 
 interface CabinetListResponse {
   success: boolean
-  data: { items: CabinetFile[] }
+  data: { items: CabinetFile[], total?: number, page?: number, pageSize?: number }
 }
 
 interface UploadResult {
@@ -78,7 +78,7 @@ interface CabinetFolder {
 
 interface CabinetFoldersResponse {
   success: boolean
-  data: { items: CabinetFolder[] }
+  data: { items: CabinetFolder[], total?: number, page?: number, pageSize?: number }
 }
 
 interface DeptTreeNode {
@@ -100,6 +100,13 @@ interface DepartmentMembersResponse {
 }
 
 const toast = useToast()
+const { confirm } = useConfirm()
+const intentKeys = new Map<string, string>()
+const intentKey = (intent: unknown) => {
+  const id = JSON.stringify([deptCode.value, intent])
+  if (!intentKeys.has(id)) intentKeys.set(id, crypto.randomUUID())
+  return { id, headers: hosted ? { 'Idempotency-Key': intentKeys.get(id)! } : undefined }
+}
 const apiFetch = useRequestFetch()
 const { user, userDeptCode } = useAuth()
 const { setPayload: setDocumentPreviewBootstrap } = useDocumentPreviewBootstrap()
@@ -145,7 +152,7 @@ const selectedDept = computed({
 })
 
 const loadDepartmentAccess = async () => {
-  if (!currentUid.value || !deptCode.value) {
+  if (!deptCode.value || (!hosted && !currentUid.value)) {
     isDepartmentManager.value = false
     departmentCanWrite.value = false
     return
@@ -153,6 +160,12 @@ const loadDepartmentAccess = async () => {
 
   departmentAccessPending.value = true
   try {
+    if (hosted) {
+      const response = await $fetch<{ code: number, data: { canRead: boolean, canManage: boolean, canEdit: boolean } }>(moduleUrl('/api/dept-cabinet/access'), { query: { dept_code: deptCode.value } })
+      isDepartmentManager.value = response.data?.canManage === true
+      departmentCanWrite.value = response.data?.canManage === true && response.data?.canEdit === true
+      return
+    }
     const response = await apiFetch<DepartmentMembersResponse>('/api/account/department-members', {
       params: { deptCode: deptCode.value }
     })
@@ -180,6 +193,14 @@ const loadDepartmentAccess = async () => {
 }
 
 const initDeptCode = async () => {
+  if (hosted) {
+    try {
+      const response = await $fetch<{ code: number, data: { departments: DeptTreeNode[], primaryDeptCode: string | null } }>(moduleUrl('/api/dept-assets/departments'))
+      userDepartments.value = response.data?.departments || []
+      deptCode.value = response.data?.primaryDeptCode || userDepartments.value[0]?.deptCode || ''
+    } catch { toast.add({ title: '部门目录暂不可用', color: 'error' }) }
+    return
+  }
   if (!user.value) return
 
   const cachedDepartments = departmentsCache.value
@@ -273,18 +294,28 @@ const switchDepartment = (newDeptCode: string) => {
 const currentFolderId = ref<number | null>(null)
 const folderPath = ref<CabinetFolder[]>([]) // 面包屑路径
 const allFolders = ref<CabinetFolder[]>([])
+const folderPage = ref(1)
+const folderTotal = ref(0)
+const folderPageSize = 20
+watch([deptCode, currentFolderId], () => {
+  folderPage.value = 1
+})
+watch(folderPage, () => {
+  if (hosted) refreshFolderList()
+})
 
 // 当前目录下的子文件夹
 const currentSubFolders = computed(() => {
-  return allFolders.value.filter(f => f.parent_id === currentFolderId.value)
+  return hosted ? allFolders.value : allFolders.value.filter(f => f.parent_id === currentFolderId.value)
 })
 
 // 获取文件夹列表
 const fetchFolderList = async () => {
   if (!deptCode.value) return []
-  const response = await $fetch<CabinetFoldersResponse>('/api/dept-cabinet/folders', {
-    query: { dept_code: deptCode.value }
+  const response = await $fetch<CabinetFoldersResponse>(moduleUrl('/api/dept-cabinet/folders'), {
+    query: { dept_code: deptCode.value, ...(hosted ? { parent_id: currentFolderId.value ?? 'null', page: folderPage.value, pageSize: folderPageSize } : {}) }
   })
+  folderTotal.value = response?.data?.total ?? response?.data?.items?.length ?? 0
   return response?.data?.items || []
 }
 
@@ -295,17 +326,19 @@ const refreshFolderList = async () => {
 // 进入文件夹
 const enterFolder = (folder: CabinetFolder) => {
   currentFolderId.value = folder.id
-  folderPath.value = buildFolderPath(folder.id)
+  folderPath.value = hosted ? [...folderPath.value, folder] : buildFolderPath(folder.id)
   deselectFile()
   refresh()
+  if (hosted) refreshFolderList()
 }
 
 // 返回上级目录
 const goToFolder = (folderId: number | null) => {
   currentFolderId.value = folderId
-  folderPath.value = folderId ? buildFolderPath(folderId) : []
+  folderPath.value = hosted ? folderPath.value.slice(0, folderId ? folderPath.value.findIndex(folder => folder.id === folderId) + 1 : 0) : folderId ? buildFolderPath(folderId) : []
   deselectFile()
   refresh()
+  if (hosted) refreshFolderList()
 }
 
 // 构建面包屑路径
@@ -335,16 +368,20 @@ const openNewFolderModal = () => {
 const createFolder = async () => {
   if (!newFolderName.value.trim()) return
   isCreatingFolder.value = true
+  const intent = intentKey(['folder-create', newFolderName.value.trim(), currentFolderId.value])
   try {
-    await $fetch('/api/dept-cabinet/folders', {
+    await $fetch(moduleUrl('/api/dept-cabinet/folders'), {
       method: 'POST',
-      body: {
-        name: newFolderName.value.trim(),
-        dept_code: deptCode.value,
-        parent_id: currentFolderId.value,
-        owner_uid: uid.value
-      }
+      query: hosted ? { dept_code: deptCode.value } : undefined,
+      headers: intent.headers,
+      body: hosted
+        ? { name: newFolderName.value.trim(), folder_id: currentFolderId.value }
+        : {
+            name: newFolderName.value.trim(), dept_code: deptCode.value,
+            parent_id: currentFolderId.value, owner_uid: uid.value
+          }
     })
+    intentKeys.delete(intent.id)
     toast.add({ title: '文件夹创建成功', color: 'success' })
     showNewFolderModal.value = false
     await refreshFolderList()
@@ -368,11 +405,15 @@ const startRenameFolder = (folder: CabinetFolder) => {
 
 const executeRenameFolder = async () => {
   if (!renamingFolderId.value || !renamingFolderName.value.trim()) return
+  const intent = intentKey(['folder-rename', renamingFolderId.value, renamingFolderName.value.trim()])
   try {
-    await $fetch(`/api/dept-cabinet/folders/${renamingFolderId.value}`, {
+    await $fetch(moduleUrl(`/api/dept-cabinet/folders/${renamingFolderId.value}`), {
       method: 'PATCH',
+      query: hosted ? { dept_code: deptCode.value } : undefined,
+      headers: intent.headers,
       body: { name: renamingFolderName.value.trim() }
     })
+    intentKeys.delete(intent.id)
     toast.add({ title: '重命名成功', color: 'success' })
     await refreshFolderList()
     // 更新面包屑
@@ -412,12 +453,15 @@ const executeRenameFile = async (file: CabinetFile) => {
     renamingFileUuid.value = null
     return
   }
+  const intent = intentKey(['file-rename', file.uuid, newName])
   try {
-    await $fetch(`/api/dept-cabinet/${file.uuid}`, {
+    await $fetch(moduleUrl(`/api/dept-cabinet/${file.uuid}`), {
       method: 'PATCH',
       query: { dept_code: deptCode.value },
+      headers: intent.headers,
       body: { filename: newName }
     })
+    intentKeys.delete(intent.id)
     file.original_name = newName
     toast.add({ title: '重命名成功', color: 'success' })
   } catch (err: unknown) {
@@ -437,17 +481,23 @@ const showDeleteFolderConfirm = ref(false)
 const deleteFolderTarget = ref<CabinetFolder | null>(null)
 const isDeletingFolder = ref(false)
 
-const confirmDeleteFolder = (folder: CabinetFolder) => {
+const confirmDeleteFolder = async (folder: CabinetFolder) => {
   if (!ensureWritable()) return
   deleteFolderTarget.value = folder
+  if (hosted) {
+    if (await confirm({ title: '删除目录', message: `确认删除目录「${folder.name}」？目录必须为空。`, tone: 'danger', confirmLabel: '删除' })) await executeDeleteFolder()
+    return
+  }
   showDeleteFolderConfirm.value = true
 }
 
 const executeDeleteFolder = async () => {
   if (!deleteFolderTarget.value) return
   isDeletingFolder.value = true
+  const intent = intentKey(['folder-delete', deleteFolderTarget.value.id])
   try {
-    await $fetch(`/api/dept-cabinet/folders/${deleteFolderTarget.value.id}`, { method: 'DELETE' })
+    await $fetch(moduleUrl(`/api/dept-cabinet/folders/${deleteFolderTarget.value.id}`), { method: 'DELETE', query: hosted ? { dept_code: deptCode.value } : undefined, headers: intent.headers })
+    intentKeys.delete(intent.id)
     toast.add({ title: '文件夹已删除', color: 'success' })
     await refreshFolderList()
   } catch (err: unknown) {
@@ -474,12 +524,15 @@ const openMoveModal = (file: CabinetFile) => {
 
 const executeMove = async () => {
   if (!moveTarget.value) return
+  const intent = intentKey(['file-move', moveTarget.value.uuid, moveToFolderId.value])
   try {
-    await $fetch(`/api/dept-cabinet/${moveTarget.value.uuid}`, {
+    await $fetch(moduleUrl(`/api/dept-cabinet/${moveTarget.value.uuid}`), {
       method: 'PATCH',
       query: { dept_code: deptCode.value },
+      headers: intent.headers,
       body: { folder_id: moveToFolderId.value }
     })
+    intentKeys.delete(intent.id)
     toast.add({ title: '文件已移动', color: 'success' })
     showMoveModal.value = false
     await refresh()
@@ -491,7 +544,9 @@ const executeMove = async () => {
 
 // 权限
 const { hasPermission } = usePermissions()
-const isAdmin = computed(() => hasPermission('departments', 'admin'))
+const isAdmin = computed(() => hosted
+  ? hasPermission('company', 'publish') && hasPermission('admin', 'admin')
+  : hasPermission('departments', 'admin'))
 
 // ==================== 文件柜 ====================
 const { panelWidth, panelCollapsed, onResizeStart } = useResizablePanel(260)
@@ -527,15 +582,19 @@ const publishTargets = [
 const handlePublishPdf = async () => {
   if (!previewFile.value || !publishTarget.value) return
   publishing.value = true
+  const intent = intentKey(['publish-pdf', previewFile.value.uuid, publishTarget.value])
   try {
-    await $fetch('/api/dept-cabinet/publish', {
+    await $fetch(moduleUrl('/api/dept-cabinet/publish'), {
       method: 'POST',
-      body: {
-        fileUuid: previewFile.value.uuid,
-        targetCategory: publishTarget.value,
-        deptCode: deptCode.value
-      }
+      query: hosted ? { dept_code: deptCode.value } : undefined,
+      headers: intent.headers,
+      body: hosted
+        ? { fileUuid: previewFile.value.uuid, targetCategory: publishTarget.value }
+        : {
+            fileUuid: previewFile.value.uuid, targetCategory: publishTarget.value, deptCode: deptCode.value
+          }
     })
+    intentKeys.delete(intent.id)
     toast.add({ title: '发布成功', color: 'success' })
     showPublishModal.value = false
     publishTarget.value = ''
@@ -559,23 +618,34 @@ const deleteTarget = ref<CabinetFile | null>(null)
 const isDeleting = ref(false)
 
 // Fetch files
+const page = ref(1)
+const pageSize = 20
+const filesTotal = ref(0)
+watch([deptCode, currentFolderId], () => {
+  page.value = 1
+})
 const fetchFiles = async () => {
   if (!deptCode.value) return []
   const query: Record<string, unknown> = { dept_code: deptCode.value }
+  if (hosted) {
+    query.page = page.value
+    query.pageSize = pageSize
+  }
   if (currentFolderId.value !== null) {
     query.folder_id = currentFolderId.value
   }
-  const response = await $fetch<CabinetListResponse>('/api/dept-cabinet', {
+  const response = await $fetch<CabinetListResponse>(moduleUrl('/api/dept-cabinet'), {
     query
   })
+  filesTotal.value = response?.data?.total ?? response?.data?.items?.length ?? 0
   return response?.data?.items || []
 }
 
 const { data: files, pending, refresh } = await useAsyncData(
-  'dept-cabinet-files',
+  () => `${cacheKey('dept-cabinet-files')}:${deptCode.value}`,
   fetchFiles,
   {
-    watch: [deptCode, currentFolderId],
+    watch: [deptCode, currentFolderId, page],
     immediate: true,
     getCachedData: () => undefined
   }
@@ -670,7 +740,7 @@ const selectFile = async (file: CabinetFile) => {
   showMobileSidebar.value = false
 
   try {
-    const response = await $fetch<PreviewResponse>(`/api/dept-cabinet/${file.uuid}/preview`, {
+    const response = await $fetch<PreviewResponse>(moduleUrl(`/api/dept-cabinet/${file.uuid}/preview`), {
       query: { dept_code: deptCode.value }
     })
     if (response.success) {
@@ -684,7 +754,7 @@ const selectFile = async (file: CabinetFile) => {
 
   if (file.converted_doc_uuid) {
     try {
-      const info = await $fetch<ConvertedInfoResponse>(`/api/dept-cabinet/${file.uuid}/converted-info`, {
+      const info = await $fetch<ConvertedInfoResponse>(moduleUrl(`/api/dept-cabinet/${file.uuid}/converted-info`), {
         query: { dept_code: deptCode.value }
       })
       if (info.success && info.data) {
@@ -722,7 +792,7 @@ const openConvertedDoc = async () => {
   viewingDocContent.value = ''
 
   try {
-    const response = await $fetch<{ success: boolean, data: { content?: string } }>(`/api/documents/${convertedInfo.value.doc_uuid}`)
+    const response = await $fetch<{ success: boolean, data: { content?: string } }>(moduleUrl(`/api/documents/${convertedInfo.value.doc_uuid}`))
     if (requestId !== viewingDocRequestId) return
 
     if (response.success && response.data) {
@@ -763,7 +833,7 @@ const deselectFile = () => {
 // Upload
 const ensureWritable = () => {
   if (departmentCanWrite.value) return true
-  toast.add({ title: '当前身份仅可查看该部门文件柜', color: 'warning' })
+  toast.add({ title: '部门文件柜仅部门经理可上传和管理', color: 'warning' })
   return false
 }
 
@@ -806,18 +876,24 @@ const handleFileUpload = async (event: Event) => {
   uploadProgress.value = `正在上传 ${validFiles.length} 个文件...`
 
   const formData = new FormData()
-  formData.append('owner_uid', uid.value)
-  formData.append('dept_code', deptCode.value)
+  if (!hosted) {
+    formData.append('owner_uid', uid.value)
+    formData.append('dept_code', deptCode.value)
+  }
   if (currentFolderId.value !== null) {
     formData.append('folder_id', String(currentFolderId.value))
   }
   validFiles.forEach(file => formData.append('files', file))
+  const intent = intentKey(['upload', currentFolderId.value, validFiles.map(file => [file.name, file.size, file.lastModified])])
 
   try {
-    const result = await $fetch<UploadResult>('/api/dept-cabinet/upload', {
+    const result = await $fetch<UploadResult>(moduleUrl('/api/dept-cabinet/upload'), {
       method: 'POST',
+      query: hosted ? { dept_code: deptCode.value } : undefined,
+      headers: intent.headers,
       body: formData
     })
+    if (result.failed === 0) intentKeys.delete(intent.id)
 
     if (result.success > 0) {
       toast.add({ title: `成功上传 ${result.success} 个文件`, color: 'success' })
@@ -851,7 +927,7 @@ const handleFileUpload = async (event: Event) => {
 // Download
 const downloadFile = (uuid: string) => {
   const link = document.createElement('a')
-  link.href = `/api/dept-cabinet/${encodeURIComponent(uuid)}/download?dept_code=${encodeURIComponent(deptCode.value)}`
+  link.href = moduleUrl(`/api/dept-cabinet/${encodeURIComponent(uuid)}/download?dept_code=${encodeURIComponent(deptCode.value)}`)
   link.download = ''
   document.body.appendChild(link)
   link.click()
@@ -859,21 +935,28 @@ const downloadFile = (uuid: string) => {
 }
 
 // Delete
-const confirmDelete = (file: CabinetFile) => {
+const confirmDelete = async (file: CabinetFile) => {
   if (!ensureWritable()) return
   deleteTarget.value = file
+  if (hosted) {
+    if (await confirm({ title: '删除文件', message: `确认删除文件「${file.original_name}」？已转存文档不受影响。`, tone: 'danger', confirmLabel: '删除' })) await executeDelete()
+    return
+  }
   showDeleteConfirm.value = true
 }
 
 const executeDelete = async () => {
   if (!deleteTarget.value) return
   isDeleting.value = true
+  const intent = intentKey(['file-delete', deleteTarget.value.uuid])
 
   try {
-    await $fetch(`/api/dept-cabinet/${deleteTarget.value.uuid}`, {
+    await $fetch(moduleUrl(`/api/dept-cabinet/${deleteTarget.value.uuid}`), {
       method: 'DELETE',
-      query: { dept_code: deptCode.value }
+      query: { dept_code: deptCode.value },
+      headers: intent.headers
     })
+    intentKeys.delete(intent.id)
     toast.add({ title: '文件已删除', color: 'success' })
 
     if (previewFile.value?.uuid === deleteTarget.value.uuid) {
@@ -908,10 +991,21 @@ interface FolderRecord {
 
 // 获取部门文件夹列表（用于转存时选择目录）
 const { data: deptFolders, refresh: refreshFolders } = await useAsyncData(
-  'dept-cabinet-folders',
+  () => `${cacheKey('dept-cabinet-folders')}:${deptCode.value}`,
   async () => {
     if (!deptCode.value) return []
-    const response = await apiFetch<{ data: { items: FolderRecord[] } }>('/api/folders', {
+    if (hosted) {
+      const result: FolderRecord[] = []
+      for (let pageIndex = 1; pageIndex <= 100; pageIndex++) {
+        const response = await $fetch<{ data: { items: FolderRecord[], total: number } }>(moduleUrl('/api/dept-cabinet/document-folders'), {
+          query: { dept_code: deptCode.value, page: pageIndex, pageSize: 100 }
+        })
+        result.push(...response.data.items)
+        if (result.length >= response.data.total) return result
+      }
+      throw new Error('部门目录数量超过选择器上限')
+    }
+    const response = await apiFetch<{ data: { items: FolderRecord[] } }>(moduleUrl('/api/folders'), {
       query: { folder_type: 'department', dept_code: deptCode.value }
     })
     return response?.data?.items || []
@@ -933,16 +1027,19 @@ const executeConvert = async () => {
   if (!convertTargetFile.value || !convertDocName.value.trim()) return
 
   isConverting.value = true
+  const intent = intentKey(['convert', convertTargetFile.value.uuid, convertDocName.value.trim(), convertFolderId.value])
   try {
-    const result = await $fetch<ToDocumentResponse>(`/api/dept-cabinet/${convertTargetFile.value.uuid}/to-document`, {
+    const result = await $fetch<ToDocumentResponse>(moduleUrl(`/api/dept-cabinet/${convertTargetFile.value.uuid}/to-document`), {
       method: 'POST',
       query: { dept_code: deptCode.value },
+      headers: intent.headers,
       body: {
         title: convertDocName.value.trim(),
         folder_id: convertFolderId.value
       }
     })
     if (result.success && result.data) {
+      intentKeys.delete(intent.id)
       toast.add({
         title: `已转存为文档「${result.data.title}」`,
         color: 'success'
@@ -953,7 +1050,7 @@ const executeConvert = async () => {
         previewFile.value.converted_doc_uuid = result.data.uuid
       }
       try {
-        const info = await $fetch<ConvertedInfoResponse>(`/api/dept-cabinet/${convertTargetFile.value!.uuid}/converted-info`, {
+        const info = await $fetch<ConvertedInfoResponse>(moduleUrl(`/api/dept-cabinet/${convertTargetFile.value!.uuid}/converted-info`), {
           query: { dept_code: deptCode.value }
         })
         if (info.success && info.data) {
@@ -1131,10 +1228,7 @@ const handleDrop = async (e: DragEvent) => {
 
           <!-- Empty (no folders and no files) -->
           <div v-else-if="currentSubFolders.length === 0 && (!files || files.length === 0)" class="px-4 py-8 text-center">
-            <UIcon name="i-lucide-archive" class="w-10 h-10 text-gray-300 dark:text-gray-700 mx-auto mb-3" />
-            <p class="text-sm text-muted mb-3">
-              {{ currentFolderId !== null ? '当前目录为空' : '部门文件柜是空的' }}
-            </p>
+            <CommonEmptyState icon="i-lucide-archive" :title="currentFolderId !== null ? '当前目录为空' : '部门文件柜是空的'" />
             <UButton
               v-if="departmentCanWrite"
               icon="i-lucide-upload"
@@ -1208,7 +1302,7 @@ const handleDrop = async (e: DragEvent) => {
 
             <!-- 文件列表 -->
             <div v-if="files && files.length > 0" class="px-2 py-1.5 text-xs text-muted">
-              共 {{ files.length }} 个文件
+              共 {{ hosted ? filesTotal : files.length }} 个文件
             </div>
             <div
               v-for="file in files"
@@ -1284,6 +1378,22 @@ const handleDrop = async (e: DragEvent) => {
                 />
               </UDropdownMenu>
             </div>
+          </div>
+          <div v-if="hosted && folderTotal > folderPageSize" class="border-t border-default p-2 flex justify-center">
+            <UPagination
+              v-model:page="folderPage"
+              :total="folderTotal"
+              :items-per-page="folderPageSize"
+              size="sm"
+            />
+          </div>
+          <div v-if="hosted && filesTotal > pageSize" class="border-t border-default p-2 flex justify-center">
+            <UPagination
+              v-model:page="page"
+              :total="filesTotal"
+              :items-per-page="pageSize"
+              size="sm"
+            />
           </div>
         </div>
       </aside>
@@ -1465,7 +1575,7 @@ const handleDrop = async (e: DragEvent) => {
               </div>
 
               <p class="text-xs text-muted">
-                {{ departmentCanWrite ? '支持拖拽上传，单文件不超过 100MB' : '当前身份仅可查看该部门文件柜' }}
+                {{ departmentCanWrite ? '支持拖拽上传，单文件不超过 100MB' : '部门文件柜仅部门经理可上传和管理，成员可查看与下载（需导出权限）' }}
               </p>
             </div>
           </div>
@@ -1528,6 +1638,7 @@ const handleDrop = async (e: DragEvent) => {
                     预览
                   </UButton>
                   <UButton
+                    v-if="!hosted || hasPermission('departments', 'export')"
                     icon="i-lucide-download"
                     :color="previewData.previewable ? 'neutral' : 'primary'"
                     :variant="previewData.previewable ? 'outline' : 'solid'"

@@ -1,6 +1,8 @@
 import { callAimsScheduledRuntime } from '~~/server/utils/scheduledRuntime'
+import { isUnifiedMilestoneRolloverOwner } from '~~/server/utils/milestoneRolloverOwner'
 
 interface RolloverDueResult {
+  skipped?: 'unified_scheduler_owner'
   scanned?: number
   rolled_over?: number
   pending?: number
@@ -35,6 +37,10 @@ export default defineTask({
       )
       return { result }
     } catch (err) {
+      if (isUnifiedMilestoneRolloverOwner(err)) {
+        console.log('[milestones:rollover] skipped: owned by the unified scheduler wake')
+        return { result: { skipped: 'unified_scheduler_owner' as const } }
+      }
       console.error('[milestones:rollover] failed:', err)
       throw err
     }

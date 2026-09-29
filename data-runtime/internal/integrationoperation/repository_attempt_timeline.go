@@ -47,7 +47,7 @@ func (r *Repository) ListAttemptTimeline(ctx context.Context, input AttemptTimel
 	if input.Limit < 1 || input.Limit > 100 {
 		return nil, fmt.Errorf("attempt timeline limit must be between 1 and 100")
 	}
-	rows, err := r.db.QueryContext(ctx, `
+	rows, err := r.db.QueryContext(ctx, r.sql(`
 SELECT
   a.attempt_id, a.operation_id, a.operation_code, a.attempt_no, a.trigger_type,
   a.result_status,
@@ -60,7 +60,7 @@ WHERE o.tenant_code = ?
   AND o.source_app = ?
   AND o.operation_id = ?
 ORDER BY a.attempt_no ASC
-LIMIT ?`, input.TenantCode, input.DeploymentCode, input.SourceApp, input.OperationID, input.Limit)
+LIMIT ?`), input.TenantCode, input.DeploymentCode, input.SourceApp, input.OperationID, input.Limit)
 	if err != nil {
 		return nil, err
 	}

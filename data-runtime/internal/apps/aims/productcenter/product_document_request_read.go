@@ -3,6 +3,7 @@ package productcenter
 import (
 	"context"
 	"database/sql"
+	"github.com/huizhi-yun/data-runtime/internal/integrationoperation"
 
 	"github.com/google/uuid"
 )
@@ -20,7 +21,7 @@ type ProductDocumentRequestDetail struct {
 
 // Internal only: the BFF must check Codocs ACL before exposing document identity.
 // Requires edit because the result drives creation recovery and linking.
-func ReadProductDocumentRequest(ctx context.Context, db *sql.DB, code, uid, bizID string, permit AuthorizationPermit) (ProductDocumentRequestDetail, error) {
+func ReadProductDocumentRequest(ctx context.Context, db *sql.DB, outbox integrationoperation.TrustedContext, code, uid, bizID string, permit AuthorizationPermit) (ProductDocumentRequestDetail, error) {
 	out := ProductDocumentRequestDetail{ProductCode: code}
 	parsed, err := uuid.Parse(bizID)
 	if err != nil || parsed == uuid.Nil || parsed.String() != bizID {
@@ -35,7 +36,7 @@ func ReadProductDocumentRequest(ctx context.Context, db *sql.DB, code, uid, bizI
 		return out, err
 	}
 	out.WorkspaceRevision = permit.Facts.Revision
-	err = tx.QueryRowContext(ctx, `SELECT r.biz_id,r.document_uuid,r.purpose,o.operation_key,o.status,COALESCE(r.relation_biz_id,'') FROM product_document_creation_requests r JOIN integration_operation o ON o.operation_id=r.operation_id AND o.source_app='aims' AND o.target_app='codocs' AND o.operation_code='aims.codocs.product-document.create.v1' AND o.source_biz_type='product_document_request' AND o.source_biz_code=r.biz_id WHERE r.product_code=? AND r.biz_id=?`, code, bizID).Scan(&out.BizID, &out.DocumentUUID, &out.Purpose, &out.OperationKey, &out.Status, &out.RelationBizID)
+	err = tx.QueryRowContext(ctx, outbox.SQL(`SELECT r.biz_id,r.document_uuid,r.purpose,o.operation_key,o.status,COALESCE(r.relation_biz_id,'') FROM product_document_creation_requests r JOIN integration_operation o ON o.operation_id=r.operation_id AND o.source_app='aims' AND o.target_app='codocs' AND o.operation_code='aims.codocs.product-document.create.v1' AND o.source_biz_type='product_document_request' AND o.source_biz_code=r.biz_id WHERE r.product_code=? AND r.biz_id=?`), code, bizID).Scan(&out.BizID, &out.DocumentUUID, &out.Purpose, &out.OperationKey, &out.Status, &out.RelationBizID)
 	if err == sql.ErrNoRows {
 		return out, invalid("product_document_not_found", "文档创建请求不存在")
 	}

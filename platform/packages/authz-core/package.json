@@ -6,7 +6,8 @@
   "main": "./src/index.ts",
   "exports": {
     ".": "./src/index.ts",
-    "./testing": "./src/testing.ts"
+    "./testing": "./src/testing.ts",
+    "./policy-envelope": "./src/policy-envelope.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit -p tsconfig.json",

@@ -1,0 +1,146 @@
+{
+  "prefix": {
+    "client": "console.runtime",
+    "audience": "data-runtime",
+    "scopePrefix": "console:"
+  },
+  "exact": [
+    {
+      "client": "enterprise.runtime",
+      "audience": "console",
+      "scope": "console:policy-bundle:read"
+    },
+    {
+      "client": "console.runtime",
+      "audience": "workflow",
+      "scope": "workflow:proxy"
+    },
+    {
+      "client": "console.runtime",
+      "audience": "aims",
+      "scope": "aims:notification-details:authorize"
+    },
+    {
+      "client": "console.runtime",
+      "audience": "altoc",
+      "scope": "altoc:notification-details:authorize"
+    },
+    {
+      "client": "console.runtime",
+      "audience": "assets",
+      "scope": "assets:notification-details:authorize"
+    },
+    {
+      "client": "console.runtime",
+      "audience": "finance",
+      "scope": "finance:notification-details:authorize"
+    },
+    {
+      "client": "console.runtime",
+      "audience": "people",
+      "scope": "people:notification-details:authorize"
+    },
+    {
+      "client": "console.runtime",
+      "audience": "workflow",
+      "scope": "workflow:notification-details:authorize"
+    },
+    {
+      "client": "console.runtime",
+      "audience": "connector-runtime",
+      "scope": "connector-runtime:diagnostics:view"
+    },
+    {
+      "client": "console.runtime",
+      "audience": "connector-runtime",
+      "scope": "connector-runtime:identity:exchange"
+    },
+    {
+      "client": "console.runtime",
+      "audience": "connector-runtime",
+      "scope": "connector-runtime:identity:dingtalk:exchange"
+    },
+    {
+      "client": "console.runtime",
+      "audience": "connector-runtime",
+      "scope": "connector-runtime:jobs:cancel"
+    },
+    {
+      "client": "console.runtime",
+      "audience": "connector-runtime",
+      "scope": "connector-runtime:jobs:view"
+    },
+    {
+      "client": "console.runtime",
+      "audience": "connector-runtime",
+      "scope": "connector-runtime:notifications:send"
+    },
+    {
+      "client": "console.runtime",
+      "audience": "connector-runtime",
+      "scope": "connector-runtime:people:sync"
+    },
+    {
+      "client": "console.runtime",
+      "audience": "notification-runtime",
+      "scope": "notification-runtime:send"
+    },
+    {
+      "client": "console.runtime",
+      "audience": "data-runtime",
+      "scope": "data-runtime:runtime:update"
+    },
+    {
+      "client": "console.runtime",
+      "audience": "tenant-runtime",
+      "scope": "tenant-runtime:runtime:update"
+    },
+    {
+      "client": "console.runtime",
+      "audience": "webdev",
+      "scope": "webdev:issue:read"
+    },
+    {
+      "client": "console.runtime",
+      "audience": "webdev",
+      "scope": "webdev:issue:write"
+    },
+    {
+      "client": "codocs.runtime",
+      "audience": "data-runtime",
+      "scope": "credential_vault:resolve"
+    },
+    {
+      "client": "codocs.runtime",
+      "audience": "data-runtime",
+      "scope": "integration_config:view"
+    }
+  ],
+  "excluded": [
+    {
+      "client": "console.runtime",
+      "audience": "connector-runtime",
+      "scope": "connector-runtime:directory:sync"
+    },
+    {
+      "client": "console.runtime",
+      "audience": "data-runtime",
+      "scope": "console.schema.read"
+    },
+    {
+      "client": "console.runtime",
+      "audience": "workflow",
+      "scope": "workflow:action_defs:sync"
+    },
+    {
+      "client": "codocs.runtime",
+      "audience": "tenant-runtime",
+      "scope": "credential_vault:resolve"
+    },
+    {
+      "client": "codocs.runtime",
+      "audience": "tenant-runtime",
+      "scope": "integration_config:view"
+    }
+  ]
+}

@@ -27,6 +27,7 @@ export interface ClaimedDeliveryOperation extends RuntimeRow {
 }
 
 export interface ServiceTicketDeliveryOperationIO {
+  callWorkflowWorkItemCompletion?: (envelope: RuntimeRow, operation: ClaimedDeliveryOperation) => Promise<RuntimeRow>
   callFinanceProductCostRules?: (envelope: RuntimeRow, operation: ClaimedDeliveryOperation) => Promise<RuntimeRow>
   callAltocProductFeedbackStatus?: (envelope: RuntimeRow, operation: ClaimedDeliveryOperation) => Promise<RuntimeRow>
   callAltocProductFeedbackProgress?: (envelope: RuntimeRow, operation: ClaimedDeliveryOperation) => Promise<RuntimeRow>

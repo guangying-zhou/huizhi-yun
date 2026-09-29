@@ -1,0 +1,26 @@
+{
+  "bindings": {
+    "tenant": "C000001",
+    "deployments": {
+      "enterprise": "C000001-prod-enterprise",
+      "workflow": "C000001-workflow",
+      "aims": "C000001-aims",
+      "codocs": "C000001-codocs",
+      "console": "C000001-console",
+      "collab": "C000001-collab"
+    }
+  },
+  "tokenEndpoint": "https://<approved-console-origin>/oauth/token",
+  "clientSecretFiles": {
+    "enterprise.runtime": "<protected-enterprise-secret-file>",
+    "workflow.runtime": "<protected-workflow-secret-file>",
+    "aims.runtime": "<protected-aims-secret-file>",
+    "codocs.runtime": "<protected-codocs-secret-file>",
+    "console.runtime": "<protected-console-secret-file>",
+    "collab.runtime": "<protected-collab-secret-file>"
+  },
+  "expiredTokenProbe": {
+    "url": "https://<approved-console-origin>/api/v1/console/profile",
+    "tokenFile": "<protected-expired-service-token-file>"
+  }
+}

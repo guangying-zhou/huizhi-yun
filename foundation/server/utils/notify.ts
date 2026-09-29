@@ -116,6 +116,10 @@ export function resolveExternalRecipients(
   return params.externalRecipients || undefined
 }
 
+export function hzy0InAppOnlyNotifications(env: { HZY0_LOCAL_ENTERPRISE?: string, HZY0_NOTIFICATIONS_IN_APP_ONLY?: string }) {
+  return env.HZY0_LOCAL_ENTERPRISE === 'true' && env.HZY0_NOTIFICATIONS_IN_APP_ONLY === 'true'
+}
+
 function getConfigValue(config: Record<string, unknown>, keys: string[]) {
   for (const key of keys) {
     let current: unknown = config
@@ -199,10 +203,12 @@ async function resolveNotificationSourceAppCode(params: NotifyParams) {
 export async function orchestrateNotificationDelivery(
   params: NotifyParams,
   dependencies: NotificationDeliveryDependencies,
-  options: { externalRecipients?: string | string[] } = {}
+  options: { externalRecipients?: string | string[], inAppOnly?: boolean } = {}
 ): Promise<NotificationDeliveryResult> {
   const recipients = normalizeRecipientUids(params.touser, 'touser')
-  const externalRecipients = normalizeRecipientUids(options.externalRecipients || params.touser, 'external touser')
+  const externalRecipients = options.inAppOnly
+    ? []
+    : normalizeRecipientUids(options.externalRecipients || params.touser, 'external touser')
   const sourceAppCode = stringValue(params.sourceAppCode) || stringValue(await dependencies.resolveSourceAppCode(params))
   if (!sourceAppCode) {
     throw createError({ statusCode: 503, message: 'Notification source app is required' })
@@ -237,6 +243,16 @@ export async function orchestrateNotificationDelivery(
       inApp: { status: 'rejected', reason: error },
       external: { status: 'skipped', reason: 'in_app_failed' }
     }, params.channel || 'wecom')
+  }
+
+  if (options.inAppOnly) {
+    return {
+      sourceAppCode,
+      recipients,
+      externalRecipients,
+      inApp: { status: 'fulfilled', value: inAppValue },
+      external: { status: 'skipped', reason: 'in_app_only' }
+    }
   }
 
   try {
@@ -399,8 +415,14 @@ async function sendExternalNotification(params: NotifyParams, touser: string) {
  */
 export async function sendNotification(params: NotifyParams) {
   validateNotificationIdempotencyKey(params.idempotencyKey)
+  // The hzy0 runner derives both values from its validated private profile.
+  // Production and other local stacks keep dual-channel delivery unchanged.
+  const inAppOnly = hzy0InAppOnlyNotifications({
+    HZY0_LOCAL_ENTERPRISE: process.env.HZY0_LOCAL_ENTERPRISE,
+    HZY0_NOTIFICATIONS_IN_APP_ONLY: process.env.HZY0_NOTIFICATIONS_IN_APP_ONLY
+  })
   const config = useRuntimeConfig(params.event || undefined)
-  const redirectTo = (params.channel || 'wecom') === 'wecom'
+  const redirectTo = !inAppOnly && (params.channel || 'wecom') === 'wecom'
     ? stringValue(config.notifyRedirectTo)
     : ''
   if (redirectTo) {
@@ -417,6 +439,7 @@ export async function sendNotification(params: NotifyParams) {
     publishInApp: publishNotification,
     sendExternal: sendExternalNotification
   }, {
-    externalRecipients: resolveExternalRecipients(params, config.notifyRedirectTo)
+    externalRecipients: inAppOnly ? undefined : resolveExternalRecipients(params, config.notifyRedirectTo),
+    inAppOnly
   })
 }

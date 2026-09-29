@@ -115,7 +115,7 @@ func (a *Adapter) listProjectMilestones(ctx context.Context, rawProjectID string
 		return nil, err
 	}
 
-	rows, err := a.DB().QueryContext(ctx, `
+	rows, err := a.milestoneDB(ctx).QueryContext(ctx, `
 		SELECT
 			m.id,
 			m.project_id,
@@ -227,7 +227,7 @@ func (a *Adapter) listDirectMilestones(ctx context.Context, query url.Values) (m
 
 	page := projectWorkItemsPage(query)
 	var total int64
-	if err := a.DB().QueryRowContext(ctx, `
+	if err := a.milestoneDB(ctx).QueryRowContext(ctx, `
 		SELECT COUNT(*) AS total
 		FROM milestones m
 		JOIN aims_projects p ON p.id = m.project_id
@@ -237,7 +237,7 @@ func (a *Adapter) listDirectMilestones(ctx context.Context, query url.Values) (m
 		return nil, fmt.Errorf("count direct milestones: %w", err)
 	}
 
-	rows, err := a.DB().QueryContext(ctx, `
+	rows, err := a.milestoneDB(ctx).QueryContext(ctx, `
 		SELECT
 			m.id,
 			m.project_id,
@@ -361,13 +361,18 @@ func (a *Adapter) getDirectMilestone(ctx context.Context, rawMilestoneID string,
 	return item, nil
 }
 
-func (a *Adapter) createProjectMilestone(ctx context.Context, rawProjectID string, query url.Values, body map[string]any) (map[string]any, error) {
+func (a *Adapter) createProjectMilestoneBody(ctx context.Context, rawProjectID string, query url.Values, body map[string]any) (map[string]any, error) {
+	if err := validateManualMilestoneCreate(body); err != nil {
+		return nil, err
+	}
 	projectID, err := parseID(rawProjectID, "project_id")
 	if err != nil {
 		return nil, err
 	}
-	if err := a.requireProjectUpdateAccess(ctx, "/v1/aims/projects/"+rawProjectID, query, body, rawProjectID); err != nil {
-		return nil, err
+	if _, locked := ctx.Value(enterpriseMilestoneTxKey{}).(*sql.Tx); !locked {
+		if err := a.requireProjectUpdateAccess(ctx, "/v1/aims/projects/"+rawProjectID, query, body, rawProjectID); err != nil {
+			return nil, err
+		}
 	}
 
 	uid := currentUserFrom(query, body)
@@ -392,7 +397,7 @@ func (a *Adapter) createProjectMilestone(ctx context.Context, rawProjectID strin
 	}
 	if paymentTermID > 0 {
 		var contractID sql.NullInt64
-		if err := a.DB().QueryRowContext(ctx, `
+		if err := a.milestoneDB(ctx).QueryRowContext(ctx, `
 			SELECT contract_id
 			FROM aims_projects
 			WHERE id = ?
@@ -411,7 +416,7 @@ func (a *Adapter) createProjectMilestone(ctx context.Context, rawProjectID strin
 	if paymentTermID > 0 {
 		paymentTermValue = paymentTermID
 	}
-	result, err := a.DB().ExecContext(ctx, `
+	result, err := a.milestoneDB(ctx).ExecContext(ctx, `
 		INSERT INTO milestones
 			(project_id, name, description, mode, pivr_stage, payment_term_id, start_date, end_date, recurrence_rule, created_by)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -444,7 +449,20 @@ func (a *Adapter) createProjectMilestone(ctx context.Context, rawProjectID strin
 	return map[string]any{"id": milestoneID}, nil
 }
 
-func (a *Adapter) updateDirectMilestone(ctx context.Context, rawMilestoneID string, query url.Values, body map[string]any) (any, error) {
+// Manual creation never writes template_key. A periodic milestone without that
+// stable series identity cannot be rolled over by either the manual or scheduled
+// path. Template creation uses its separate, template-keyed path.
+func validateManualMilestoneCreate(body map[string]any) error {
+	if firstBodyText(body, "mode") == "periodic" {
+		return httperror.New(http.StatusBadRequest, "manual_periodic_milestone_forbidden", "周期里程碑只能通过模板创建")
+	}
+	return nil
+}
+
+func (a *Adapter) updateDirectMilestoneBody(ctx context.Context, rawMilestoneID string, query url.Values, body map[string]any) (any, error) {
+	if err := validateMilestoneUpdateDates(body); err != nil {
+		return nil, err
+	}
 	milestoneID, err := parseID(rawMilestoneID, "milestone_id")
 	if err != nil {
 		return nil, err
@@ -454,12 +472,16 @@ func (a *Adapter) updateDirectMilestone(ctx context.Context, rawMilestoneID stri
 	if err != nil {
 		return nil, err
 	}
-	if err := a.requireMilestoneCompletionUnlocked(ctx, milestoneID); err != nil {
-		return nil, err
+	if _, locked := ctx.Value(enterpriseMilestoneTxKey{}).(*sql.Tx); !locked {
+		if err := a.requireMilestoneCompletionUnlocked(ctx, milestoneID); err != nil {
+			return nil, err
+		}
 	}
 	uid := currentUserFrom(query, body)
-	if err := a.requireProjectManagerOrScopedAdmin(ctx, record.ProjectID, uid, query); err != nil {
-		return nil, err
+	if _, locked := ctx.Value(enterpriseMilestoneTxKey{}).(*sql.Tx); !locked {
+		if err := a.requireProjectManagerOrScopedAdmin(ctx, record.ProjectID, uid, query); err != nil {
+			return nil, err
+		}
 	}
 
 	fields := make([]string, 0)
@@ -551,7 +573,7 @@ func (a *Adapter) updateDirectMilestone(ctx context.Context, rawMilestoneID stri
 
 	if len(fields) > 0 {
 		params = append(params, milestoneID)
-		if _, err := a.DB().ExecContext(ctx, `
+		if _, err := a.milestoneDB(ctx).ExecContext(ctx, `
 			UPDATE milestones
 			SET `+strings.Join(fields, ", ")+`
 			WHERE id = ?
@@ -569,7 +591,7 @@ func (a *Adapter) updateDirectMilestone(ctx context.Context, rawMilestoneID stri
 	return nil, nil
 }
 
-func (a *Adapter) deleteDirectMilestone(ctx context.Context, rawMilestoneID string, query url.Values) (any, error) {
+func (a *Adapter) deleteDirectMilestoneBody(ctx context.Context, rawMilestoneID string, query url.Values) (any, error) {
 	milestoneID, err := parseID(rawMilestoneID, "milestone_id")
 	if err != nil {
 		return nil, err
@@ -579,15 +601,19 @@ func (a *Adapter) deleteDirectMilestone(ctx context.Context, rawMilestoneID stri
 	if err != nil {
 		return nil, err
 	}
-	if err := a.requireMilestoneCompletionUnlocked(ctx, milestoneID); err != nil {
-		return nil, err
+	if _, locked := ctx.Value(enterpriseMilestoneTxKey{}).(*sql.Tx); !locked {
+		if err := a.requireMilestoneCompletionUnlocked(ctx, milestoneID); err != nil {
+			return nil, err
+		}
 	}
-	if err := a.requireProjectManagerOrScopedAdmin(ctx, record.ProjectID, strings.TrimSpace(query.Get("current_user")), query); err != nil {
-		return nil, err
+	if _, locked := ctx.Value(enterpriseMilestoneTxKey{}).(*sql.Tx); !locked {
+		if err := a.requireProjectManagerOrScopedAdmin(ctx, record.ProjectID, strings.TrimSpace(query.Get("current_user")), query); err != nil {
+			return nil, err
+		}
 	}
 
 	var workItemCount int64
-	if err := a.DB().QueryRowContext(ctx, `
+	if err := a.milestoneDB(ctx).QueryRowContext(ctx, `
 		SELECT COUNT(*)
 		FROM work_items
 		WHERE milestone_id = ?
@@ -602,7 +628,7 @@ func (a *Adapter) deleteDirectMilestone(ctx context.Context, rawMilestoneID stri
 		)
 	}
 
-	if _, err := a.DB().ExecContext(ctx, `
+	if _, err := a.milestoneDB(ctx).ExecContext(ctx, `
 		DELETE FROM milestones
 		WHERE id = ?
 	`, milestoneID); err != nil {
@@ -617,7 +643,7 @@ func (a *Adapter) directMilestone(ctx context.Context, milestoneID int64) (proje
 	var paymentTermID sql.NullInt64
 	var createdAt, updatedAt sql.NullString
 	var totalWeight, completedWeight float64
-	err := a.DB().QueryRowContext(ctx, `
+	err := a.milestoneDB(ctx).QueryRowContext(ctx, `
 		SELECT
 			m.id,
 			m.project_id,
@@ -733,7 +759,7 @@ func scanProjectMilestoneListRow(rows *sql.Rows) (projectMilestone, error) {
 func (a *Adapter) directMilestoneRecord(ctx context.Context, milestoneID int64) (directProjectMilestoneRecord, error) {
 	var record directProjectMilestoneRecord
 	var pivrStage, endDate sql.NullString
-	err := a.DB().QueryRowContext(ctx, `
+	err := a.milestoneDB(ctx).QueryRowContext(ctx, `
 		SELECT
 			id,
 			project_id,
@@ -762,7 +788,7 @@ func (a *Adapter) directMilestoneRecord(ctx context.Context, milestoneID int64) 
 
 func (a *Adapter) requireProjectContractForMilestone(ctx context.Context, projectID int64) error {
 	var contractID sql.NullInt64
-	if err := a.DB().QueryRowContext(ctx, `
+	if err := a.milestoneDB(ctx).QueryRowContext(ctx, `
 		SELECT contract_id
 		FROM aims_projects
 		WHERE id = ?
@@ -791,7 +817,7 @@ func (a *Adapter) projectMilestoneDeliverablesMap(ctx context.Context, projectID
 		args = append(args, id)
 	}
 
-	rows, err := a.DB().QueryContext(ctx, `
+	rows, err := a.milestoneDB(ctx).QueryContext(ctx, `
 		SELECT
 			COALESCE(d.milestone_owner_id, wi.milestone_id) AS milestone_owner_id,
 			d.id,
@@ -857,7 +883,7 @@ func (a *Adapter) projectMilestoneDeliverablesMap(ctx context.Context, projectID
 	for _, id := range milestoneIDs {
 		reqArgs = append(reqArgs, id)
 	}
-	reqRows, err := a.DB().QueryContext(ctx, `
+	reqRows, err := a.milestoneDB(ctx).QueryContext(ctx, `
 		SELECT milestone_id, title, status, `+"`required`"+`
 		FROM work_items
 		WHERE project_id = ?
@@ -907,7 +933,7 @@ func (a *Adapter) projectMilestoneDeliverablesMap(ctx context.Context, projectID
 func (a *Adapter) syncProjectMilestoneDeliverables(ctx context.Context, projectID int64, milestoneID int64, createdBy string, rawItems any) error {
 	normalized := normalizeProjectMilestoneDeliverables(rawItems)
 
-	rows, err := a.DB().QueryContext(ctx, `
+	rows, err := a.milestoneDB(ctx).QueryContext(ctx, `
 		SELECT id, name, `+"`required`"+`, status
 		FROM deliverables
 		WHERE project_id = ?
@@ -931,7 +957,7 @@ func (a *Adapter) syncProjectMilestoneDeliverables(ctx context.Context, projectI
 	}
 
 	if len(normalized) == 0 {
-		_, err := a.DB().ExecContext(ctx, `
+		_, err := a.milestoneDB(ctx).ExecContext(ctx, `
 			DELETE FROM deliverables
 			WHERE project_id = ?
 			  AND milestone_owner_id = ?
@@ -940,7 +966,7 @@ func (a *Adapter) syncProjectMilestoneDeliverables(ctx context.Context, projectI
 	}
 
 	var projectCode sql.NullString
-	if err := a.DB().QueryRowContext(ctx, `
+	if err := a.milestoneDB(ctx).QueryRowContext(ctx, `
 		SELECT project_code
 		FROM aims_projects
 		WHERE id = ?
@@ -961,7 +987,7 @@ func (a *Adapter) syncProjectMilestoneDeliverables(ctx context.Context, projectI
 	for _, name := range names {
 		deleteArgs = append(deleteArgs, name)
 	}
-	if _, err := a.DB().ExecContext(ctx, `
+	if _, err := a.milestoneDB(ctx).ExecContext(ctx, `
 		DELETE FROM deliverables
 		WHERE project_id = ?
 		  AND milestone_owner_id = ?
@@ -981,7 +1007,7 @@ func (a *Adapter) syncProjectMilestoneDeliverables(ctx context.Context, projectI
 					return err
 				}
 			}
-			if _, err := a.DB().ExecContext(ctx, `
+			if _, err := a.milestoneDB(ctx).ExecContext(ctx, `
 				UPDATE deliverables
 				SET `+"`required`"+` = ?, sort_order = ?, status = ?
 				WHERE id = ?
@@ -994,7 +1020,7 @@ func (a *Adapter) syncProjectMilestoneDeliverables(ctx context.Context, projectI
 			return httperror.New(http.StatusConflict, "deliverable_quality_gate_required", "new required document deliverable cannot be created as approved before quality review")
 		}
 
-		if _, err := a.DB().ExecContext(ctx, `
+		if _, err := a.milestoneDB(ctx).ExecContext(ctx, `
 			INSERT INTO deliverables
 				(project_owner_id, milestone_owner_id, target_id, matter_id,
 				 name, description, acceptance_criteria, deliverable_type, `+"`required`"+`, sort_order,
@@ -1150,4 +1176,14 @@ func jsTruthy(value any) bool {
 	default:
 		return true
 	}
+}
+
+// Empty date strings must not reach MySQL; null retains the existing clear contract.
+func validateMilestoneUpdateDates(body map[string]any) error {
+	for _, key := range []string{"startDate", "start_date", "endDate", "end_date"} {
+		if value, ok := body[key].(string); ok && strings.TrimSpace(value) == "" {
+			return httperror.New(http.StatusBadRequest, "invalid_milestone_date", "里程碑日期无效")
+		}
+	}
+	return nil
 }

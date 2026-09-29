@@ -20,7 +20,15 @@ const (
 // command. Project/member/role facts remain at Aims; the only actor fact that
 // reaches Codocs is the request-target HMAC-bound user actor.
 func projectDocumentServiceCommand(body map[string]any, uuid string, query url.Values) (string, string, error) {
-	return scopedDocumentServiceCommand(body, uuid, query, documentServiceContract{ContextField: "projectCode", Capability: aimsProjectDocumentContentCapability, Operation: aimsProjectDocumentContentOperation, Schema: aimsProjectDocumentContentSchema, Action: "content:read"})
+	sourceApp := "aims"
+	// ADR-018 物理宿主身份，与 Assets metadata 那条同形：宿主是与 Aims 并列的
+	// 来源，不是放宽 Aims。Codocs BFF 认来源，Runtime 在下面继续要求
+	// source client 精确等于 <sourceApp>.runtime，因此 aims 令牌配
+	// enterprise.runtime（或反向）依然被拒。
+	if strings.TrimSpace(firstTextValue(body, integrationoperation.TrustedServiceCommandSourceAppKey)) == "enterprise" {
+		sourceApp = "enterprise"
+	}
+	return scopedDocumentServiceCommand(body, uuid, query, documentServiceContract{SourceApp: sourceApp, ContextField: "projectCode", Capability: aimsProjectDocumentContentCapability, Operation: aimsProjectDocumentContentOperation, Schema: aimsProjectDocumentContentSchema, Action: "content:read"})
 }
 
 type documentServiceContract struct{ ContextField, Capability, Operation, Schema, Action, SourceApp string }
@@ -80,6 +88,12 @@ func (a *Adapter) projectDocumentServiceContent(ctx context.Context, uuid string
 	}
 	if int64Value(document["status"]) != 1 {
 		return nil, httperror.New(http.StatusForbidden, "project_document_scope_invalid", "document is not active")
+	}
+	// A project may reference a private/department document. Once that
+	// document is snapshot-backed its oss_path is only a derived mirror, so this
+	// path-based grant fails closed instead of returning stale content.
+	if err := refuseSnapshotV2Document(ctx, a.db, uuid); err != nil {
+		return nil, err
 	}
 	ossPath := strings.TrimSpace(firstTextValue(document, "oss_path"))
 	if ossPath == "" {

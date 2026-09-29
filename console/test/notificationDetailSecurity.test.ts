@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { describe, test } from 'node:test'
 import {
+  enterpriseNotificationSnapshotDetail,
   notificationActionTargetAppCode,
   notificationAuthorizationDescriptor,
   notificationDetailSourceAuthorizationTarget,
@@ -97,6 +98,43 @@ function fact(overrides: Partial<NotificationDetailFact> = {}): NotificationDeta
 }
 
 describe('notification detail security contract', () => {
+  test('Enterprise Codocs detail exposes only a recipient-bound stored message snapshot', () => {
+    const row = fact({
+      sourceAppCode: 'enterprise',
+      title: '文档共享通知',
+      body: '文档已共享给您，请查阅。',
+      actionUrl: '/codocs/documents/deleted-document',
+      bizType: 'document_share',
+      bizId: 'share-7',
+      metadataJson: {
+        notificationKind: 'business_event',
+        moduleAppCode: 'codocs',
+        documentUuid: 'deleted-document',
+        internalToken: 'must-not-leak'
+      }
+    })
+    const detail = enterpriseNotificationSnapshotDetail(row)
+    assert.equal(detail?.detailMode, 'notification_snapshot')
+    assert.equal(detail?.title, row.title)
+    assert.equal(detail?.body, row.body)
+    assert.equal(detail?.actionUrl, null)
+    assert.equal(detail?.bizType, null)
+    assert.equal(detail?.bizId, null)
+    assert.equal(JSON.stringify(detail).includes('deleted-document'), false)
+    assert.equal(JSON.stringify(detail).includes('must-not-leak'), false)
+    for (const metadataJson of [
+      { notificationKind: 'business_event', moduleAppCode: 'unknown' },
+      { notificationKind: 'other', moduleAppCode: 'codocs' },
+      { notificationKind: 'business_event', moduleAppCode: 'codocs' }
+    ]) {
+      assert.equal(enterpriseNotificationSnapshotDetail(fact({
+        ...row,
+        bizType: metadataJson.moduleAppCode === 'codocs' && metadataJson.notificationKind === 'business_event' ? 'unknown' : row.bizType,
+        metadataJson
+      })), null)
+    }
+  })
+
   async function assertAuthorizationError(
     verifier: NotificationDetailAuthorizationPolicyVerifier | null,
     expected: 'notification_detail_restricted' | 'notification_detail_unavailable'
@@ -746,15 +784,22 @@ describe('notification detail security contract', () => {
     assert.equal(refreshCalls, 0)
   })
 
-  test('source permission statuses are restricted but contract and availability failures are unavailable', async () => {
+  test('source permission statuses are restricted but contract and availability failures are unavailable', async (t) => {
+    const warn = t.mock.method(console, 'warn', () => {})
     for (const statusCode of [401, 403, 404]) {
       await assertAuthorizationError(
         async () => {
-          throw { statusCode }
+          throw { statusCode, uid: 'u-secret' }
         },
         'notification_detail_restricted'
       )
     }
+    assert.deepEqual(
+      warn.mock.calls.map(call => call.arguments[1]),
+      [401, 403, 404].map(causeStatus => ({ sourceAppCode: 'aims', stage: 'verify', causeStatus }))
+    )
+    assert.ok(warn.mock.calls.every(call => String(call.arguments[0]).startsWith('[NotificationDetail] source verifier rejected')))
+    assert.ok(!JSON.stringify(warn.mock.calls.map(call => call.arguments)).includes('u-secret'))
     for (const statusCode of [400, 429, 500, 503]) {
       await assertAuthorizationError(
         async () => {

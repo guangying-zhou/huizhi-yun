@@ -147,6 +147,9 @@ func TestJWTAuthenticatorAllowsExplicitCrossAppScopeFromEnrolledSourceDeployment
 	if err != nil {
 		t.Fatalf("Authenticate Finance -> Aims read: %v", err)
 	}
+	if ctx.Audience != "data-runtime" {
+		t.Fatalf("verified Runtime audience = %q", ctx.Audience)
+	}
 	if ctx.AppCode != "finance" || ctx.Deployment != "tenant-a-finance-prod" {
 		t.Fatalf("source context = app %q deployment %q", ctx.AppCode, ctx.Deployment)
 	}

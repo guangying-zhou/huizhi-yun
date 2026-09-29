@@ -1,5 +1,8 @@
 <script setup lang="ts">
 import type { FetchError } from 'ofetch'
+import { createCreationAttempt } from '../../../layer/creationAttempt.mjs'
+import { createShareCreationAttempt } from '../../../layer/shareCreationAttempt.mjs'
+import { useCodocsModule } from '../../../layer/useCodocsModule'
 
 interface ShareRecord {
   id: number
@@ -56,11 +59,10 @@ const isWritePermission = ref(false)
 const shareMessage = ref('')
 
 const toast = useToast()
-const { userRealname, userNickname, user } = useAuth()
-
-const currentUserName = computed(() => {
-  return userRealname.value || userNickname.value || user.value || '有人'
-})
+const { moduleUrl, cacheKey } = useCodocsModule()
+const shareAttempt = createShareCreationAttempt()
+const revokeAttempt = createCreationAttempt()
+const { user } = useAuth()
 
 const selectedPermission = computed(() => isWritePermission.value ? 'write' : 'read')
 const actionButtonLabel = computed(() => props.deptCode ? '共享/提醒' : '共享')
@@ -79,15 +81,19 @@ const shareOrRemind = async () => {
     const shouldRemind = !!props.deptCode && targetUser.deptCode === props.deptCode
     const actionLabel = shouldRemind ? '提醒' : '共享'
     try {
-      const response = await $fetch<SharePostResponse>(`/api/documents/${props.docId}/shares`, {
+      const payload = {
+        sharedToUid: targetUser.uid,
+        permission: shouldRemind ? 'write' : selectedPermission.value,
+        message: shareMessage.value.trim() || null
+      }
+      const attemptScope = cacheKey(`document-share:${user.value || 'unverified'}:${props.docId}:${targetUser.uid}:${payload.permission}`)
+      const attemptKey = await shareAttempt.keyFor(attemptScope, payload)
+      const response = await $fetch<SharePostResponse>(moduleUrl(`/api/documents/${props.docId}/shares`), {
         method: 'POST',
-        body: {
-          sharedToUid: targetUser.uid,
-          permission: shouldRemind ? 'write' : selectedPermission.value,
-          ownerName: currentUserName.value,
-          message: shareMessage.value.trim() || undefined
-        }
+        headers: { 'Idempotency-Key': attemptKey },
+        body: payload
       })
+      shareAttempt.complete(attemptScope, attemptKey)
 
       if (shouldRemind || response.data?.notifiedOnly) {
         remindCount++
@@ -135,7 +141,7 @@ const shareOrRemind = async () => {
 // 获取已共享列表
 const fetchShares = async () => {
   try {
-    const res = await $fetch<SharesResponse>(`/api/documents/${props.docId}/shares`)
+    const res = await $fetch<SharesResponse>(moduleUrl(`/api/documents/${props.docId}/shares`))
     shares.value = res.data || []
   } catch (error) {
     console.error('Fetch shares failed:', error)
@@ -145,9 +151,13 @@ const fetchShares = async () => {
 // 移除共享
 const removeShare = async (share: ShareRecord) => {
   try {
-    await $fetch(`/api/documents/${props.docId}/shares/${share.id}`, {
-      method: 'DELETE'
+    const payload = { documentId: props.docId, shareId: share.id }
+    const attemptKey = revokeAttempt.keyFor(cacheKey(`document-share-revoke:${props.docId}:${share.id}`), payload)
+    await $fetch(moduleUrl(`/api/documents/${props.docId}/shares/${share.id}`), {
+      method: 'DELETE',
+      headers: { 'Idempotency-Key': attemptKey }
     })
+    revokeAttempt.complete(attemptKey)
     shares.value = shares.value.filter(s => s.id !== share.id)
     toast.add({ title: '已取消共享', color: 'success' })
   } catch (error: unknown) {

@@ -1,14 +1,22 @@
 <script setup lang="ts">
-import { projectSecurityLevelConfig, projectStatusConfig, getProjectCategoryLabel, projectCategoryOptions, selectableProjectCategoryOptions } from '~/config/project'
+import { projectSecurityLevelConfig, projectStatusConfig, getProjectCategoryLabel, projectCategoryOptions, selectableProjectCategoryOptions } from '../../config/project'
 import type {
   AimsProject,
   ProjectPortfolio,
   ProjectCategory,
   LifecycleStatus,
   UpdatePortfolioRequest
-} from '~/types/aims'
+} from '../../types/aims'
+import { useProjectContext } from '../../composables/useProjectContext'
+import { usePortfolioStore } from '../../stores/portfolio'
+import { useProjectStore } from '../../stores/project'
+import { readProjectListState, writeProjectListState } from '../../utils/project-list-state.mjs'
+import { useTimeEntryReadPage } from '../../composables/useTimeEntryPage'
+import { isProjectProjection, type ProjectOverviewPage, type ProjectGroupPage } from '../../utils/projectOverviewPagination'
+import { useAimsModule } from '../../../layer/useAimsModule'
 
 definePageMeta({
+  hostContentInset: false,
   layoutHeader: true,
   layoutHeaderTitle: '项目总览',
   layoutHeaderProjectSwitcher: false
@@ -18,6 +26,9 @@ const projectStore = useProjectStore()
 const portfolioStore = usePortfolioStore()
 const toast = useToast()
 const { enterProject } = useProjectContext()
+const { hosted, moduleUrl } = useAimsModule()
+const route = useRoute()
+const router = useRouter()
 const { user: authUser } = useAuth()
 const { loaded: permissionsLoaded, loadPermissions, hasPermission } = usePermissions()
 const canManagePortfolios = computed(() => hasPermission('portfolios', 'admin'))
@@ -124,7 +135,7 @@ const { search: searchText, debounced: debouncedSearchText } = useDebouncedSearc
 
 // 弹窗
 const showEditPortfolioModal = ref(false)
-const showDeletePortfolioConfirm = ref(false)
+const { confirm } = useConfirm()
 const showAssignPortfolioModal = ref(false)
 const showUnauthorizedProjectModal = ref(false)
 const updatingPortfolio = ref(false)
@@ -143,7 +154,114 @@ const statusColor = Object.fromEntries(
 
 const categoryOptions = projectCategoryOptions
 
-const projectOverviewPageSize = 500
+const projectOverviewPageSize = hosted ? 20 : 500
+const rootPage = ref(/^[1-9]\d*$/.test(String(route.query.groupPage || '')) && Number(route.query.groupPage) <= 1_000_000 ? Number(route.query.groupPage) : 1)
+const rootRead = useTimeEntryReadPage<ProjectOverviewPage>(isProjectProjection)
+const groupPages = ref<Record<string, number>>({})
+const groupData = shallowRef<Record<string, ProjectGroupPage>>({})
+const groupErrors = ref<Record<string, boolean>>({})
+const groupTotals = ref<Record<string, number>>({})
+const assignmentRead = useTimeEntryReadPage<ProjectOverviewPage>(isProjectProjection)
+const assignmentPage = ref(1)
+const { search: assignmentSearch, debounced: assignmentSearchDebounced } = useDebouncedSearch()
+async function readAssignmentRoots(page = 1) {
+  assignmentPage.value = page
+  await assignmentRead.read(moduleUrl('/api/v1/projects'), { projection: 'portfolios', rootSearch: assignmentSearchDebounced.value || undefined, page, pageSize: 20 })
+  if ([401, 403].includes(assignmentRead.errorStatus.value || 0)) {
+    const deniedStatus = assignmentRead.errorStatus.value
+    rootRead.clear()
+    clearOverview()
+    rootRead.error.value = true
+    rootRead.errorStatus.value = deniedStatus
+  }
+}
+watch(assignmentSearchDebounced, () => {
+  if (hosted && showAssignPortfolioModal.value) void readAssignmentRoots()
+})
+const groupReadPool = Array.from({ length: 21 }, () => useTimeEntryReadPage<ProjectGroupPage>(isProjectProjection))
+const groupReads = new Map<number, ReturnType<typeof useTimeEntryReadPage<ProjectGroupPage>>>()
+let overviewGeneration = 0
+function clearOverview() {
+  overviewGeneration++
+  assignmentRead.clear()
+  for (const read of groupReadPool) read.clear()
+  groupReads.clear()
+  groupData.value = {}
+  groupErrors.value = {}
+  groupTotals.value = {}
+  groupPages.value = {}
+  portfolioStore.portfolios = []
+  projectStore.projects = []
+  showEditPortfolioModal.value = false
+  editingPortfolio.value = null
+  showAssignPortfolioModal.value = false
+  assigningProject.value = null
+  showUnauthorizedProjectModal.value = false
+  unauthorizedProject.value = null
+}
+watch(rootRead.fingerprint, clearOverview, { flush: 'sync' })
+onScopeDispose(clearOverview)
+function overviewQuery(searchValue = debouncedSearchText.value) {
+  const source = buildProjectListQuery(searchValue)
+  return { category: source.category, lifecycle_status: source.lifecycleStatus, portfolio_id: source.portfolioId,
+    search: source.search, participating_only: source.participatingOnly ? '1' : undefined }
+}
+async function readGroup(id: number, page = 1) {
+  const epoch = overviewGeneration
+  if (filterPortfolio.value !== 'all' && Number(filterPortfolio.value) !== id) return
+  let read = groupReads.get(id)
+  if (!read) {
+    read = groupReadPool[groupReads.size]!
+    groupReads.set(id, read)
+  }
+  groupPages.value[id] = page
+  groupData.value = Object.fromEntries(Object.entries(groupData.value).filter(([key]) => key !== String(id)))
+  groupErrors.value[id] = false
+  const result = await read.read(moduleUrl('/api/v1/projects'), { ...overviewQuery(), projection: 'projects', portfolio_id: id, page, pageSize: 20 })
+  if (epoch !== overviewGeneration) return
+  if (result) {
+    groupData.value = { ...groupData.value, [id]: { ...result, items: result.items.map(projectStore.normalizeProject) } }
+    groupTotals.value[id] = result.total
+  } else if (read.error.value) {
+    groupErrors.value[id] = true
+    if ([401, 403].includes(read.errorStatus.value || 0)) {
+      const deniedStatus = read.errorStatus.value
+      rootRead.clear()
+      clearOverview()
+      rootRead.error.value = true
+      rootRead.errorStatus.value = deniedStatus
+    }
+  }
+}
+async function loadOverview(searchValue?: string) {
+  clearOverview()
+  const epoch = overviewGeneration
+  const result = await rootRead.read(moduleUrl('/api/v1/projects'), { ...overviewQuery(searchValue), projection: 'portfolios', page: rootPage.value, pageSize: 20 })
+  if (!result || epoch !== overviewGeneration) return
+  portfolioStore.portfolios = result.items.map(item => portfolioStore.normalizePortfolio({ ...item.portfolio, canDelete: item.canDelete }))
+  groupTotals.value = { ...result.summary.portfolioCounts }
+  await Promise.all([...result.items.filter(item => Number(item.portfolio.projectCount || 0) > 0).map(item => Number(item.portfolio.id)), ...(result.summary.portfolioCounts['0'] ? [0] : [])].map(id => readGroup(id)))
+}
+function rootPageChanged(page: number) {
+  rootPage.value = page
+  void router.replace({ query: { ...route.query, groupPage: String(page) } })
+  void loadOverview()
+}
+watch(rootRead.fingerprint, () => {
+  if (hosted && rootRead.fingerprint.value) void loadOverview()
+})
+const restoredSearch = ref<string | undefined>(undefined)
+
+if (hosted) {
+  const initial = readProjectListState(route.query)
+  filterCategory.value = initial.category
+  filterStatus.value = initial.status
+  filterPortfolio.value = initial.portfolio
+  filterMyProjects.value = initial.participatingOnly
+  viewMode.value = initial.view
+  searchText.value = initial.search
+  restoredSearch.value = initial.search || undefined
+}
 
 const editPortfolioForm = ref<UpdatePortfolioRequest>({
   name: '',
@@ -161,23 +279,24 @@ const currentEditingPortfolio = computed(() => {
   return portfolioStore.portfolios.find(pf => pf.id === editingPortfolio.value?.id) || editingPortfolio.value
 })
 
-const canDeleteEditingPortfolio = computed(() => Number(currentEditingPortfolio.value?.projectCount ?? 0) === 0)
+const canDeleteEditingPortfolio = computed(() => hosted ? currentEditingPortfolio.value?.canDelete === true : Number(currentEditingPortfolio.value?.projectCount ?? 0) === 0)
 
-function buildProjectListQuery() {
+function buildProjectListQuery(searchValue = debouncedSearchText.value) {
   return {
     category: (filterCategory.value !== 'all' ? filterCategory.value : undefined) as ProjectCategory | undefined,
     lifecycleStatus: (filterStatus.value !== 'all' ? filterStatus.value : undefined) as LifecycleStatus | undefined,
     portfolioId: filterPortfolio.value !== 'all' ? Number(filterPortfolio.value) : undefined,
-    search: debouncedSearchText.value || undefined,
+    search: searchValue || undefined,
     participatingOnly: filterMyProjects.value,
     pageSize: projectOverviewPageSize
   }
 }
 
 // 加载数据
-async function loadData() {
+async function loadData(searchValue?: string) {
+  if (hosted) return loadOverview(searchValue)
   await Promise.all([
-    projectStore.fetchProjects(buildProjectListQuery()),
+    projectStore.fetchProjects(buildProjectListQuery(searchValue)),
     portfolioStore.fetchPortfolios()
   ])
 }
@@ -186,12 +305,47 @@ onMounted(async () => {
   if (!permissionsLoaded.value) {
     await loadPermissions()
   }
-  loadData()
+  loadData(restoredSearch.value)
 })
 
+let restoringFromUrl = false
+function syncProjectListUrl() {
+  if (!hosted || restoringFromUrl) return
+  const next = writeProjectListState({
+    category: filterCategory.value,
+    status: filterStatus.value,
+    portfolio: filterPortfolio.value,
+    search: searchText.value,
+    participatingOnly: filterMyProjects.value,
+    view: viewMode.value
+  })
+  const query = Object.fromEntries(Object.entries(route.query).filter(([key]) => !['category', 'status', 'portfolio', 'search', 'participatingOnly', 'view'].includes(key)))
+  Object.assign(query, next, hosted ? { groupPage: String(rootPage.value) } : {})
+  void router.replace({ query })
+}
+
 watch([filterCategory, filterStatus, filterPortfolio, filterMyProjects, debouncedSearchText], () => {
-  projectStore.fetchProjects(buildProjectListQuery())
+  if (hosted) {
+    rootPage.value = 1
+    void loadOverview()
+  } else projectStore.fetchProjects(buildProjectListQuery())
+  syncProjectListUrl()
 })
+watch(viewMode, syncProjectListUrl)
+watch(() => route.query, (query) => {
+  if (!hosted || restoringFromUrl) return
+  const next = readProjectListState(query)
+  restoringFromUrl = true
+  filterCategory.value = next.category
+  filterStatus.value = next.status
+  filterPortfolio.value = next.portfolio
+  filterMyProjects.value = next.participatingOnly
+  viewMode.value = next.view
+  searchText.value = next.search
+  nextTick(() => {
+    restoringFromUrl = false
+  })
+}, { deep: true })
 
 // ---- 计算属性：按项目集分组 ----
 
@@ -201,6 +355,7 @@ interface PortfolioGroup {
 }
 
 const visibleProjects = computed(() => {
+  if (hosted) return Object.values(groupData.value).flatMap(group => group.items)
   return projectStore.projects.filter((project) => {
     if (project.lifecycleStatus === 'archived') return false
     if (filterMyProjects.value && !project.currentUserRole) return false
@@ -228,11 +383,11 @@ const groupedProjects = computed<PortfolioGroup[]>(() => {
 
   // 有匹配项目的项目集优先展示；当前筛选下为空的项目集放到列表末尾。
   for (const pf of portfolioStore.portfolios) {
-    const projects = portfolioMap.get(pf.id) || []
+    const projects = hosted ? (groupData.value[pf.id]?.items || []) : (portfolioMap.get(pf.id) || [])
     const group = { portfolio: pf, projects }
     if (pf.defaultCategory === 'routine') {
       routineGroups.push(group)
-    } else if (projects.length > 0) {
+    } else if (hosted ? (pf.projectCount || 0) > 0 : projects.length > 0) {
       groups.push(group)
     } else {
       emptyGroups.push(group)
@@ -240,7 +395,7 @@ const groupedProjects = computed<PortfolioGroup[]>(() => {
   }
 
   // 独立项目
-  if (ungrouped.length > 0) {
+  if (hosted ? !!rootRead.data.value?.summary.portfolioCounts['0'] : ungrouped.length > 0) {
     groups.push({ portfolio: null, projects: ungrouped })
   }
 
@@ -255,10 +410,11 @@ interface ProjectYearGroup {
 }
 
 function projectYearGroups(projects: AimsProject[]): ProjectYearGroup[] {
-  const latestByLine = new Map<string, number>()
+  const latestByLine = new Map<string, number>(hosted ? Object.entries({ ...rootRead.data.value?.summary.latestByLine, ...Object.assign({}, ...Object.values(groupData.value).map(group => group.summary.latestByLine)) }) : [])
+  const lineKey = (project: AimsProject) => hosted ? `${project.portfolioId || 0}:${project.serviceLineCode}` : project.serviceLineCode!
   for (const project of projects) {
     if (!project.serviceLineCode || !project.servicePeriodSeq) continue
-    latestByLine.set(project.serviceLineCode, Math.max(latestByLine.get(project.serviceLineCode) || 0, project.servicePeriodSeq))
+    latestByLine.set(lineKey(project), Math.max(latestByLine.get(lineKey(project)) || 0, project.servicePeriodSeq))
   }
 
   const current: AimsProject[] = []
@@ -268,7 +424,7 @@ function projectYearGroups(projects: AimsProject[]): ProjectYearGroup[] {
       project.category === 'maintenance'
       && project.serviceLineCode
       && project.servicePeriodSeq
-      && project.servicePeriodSeq < (latestByLine.get(project.serviceLineCode) || 0)
+      && project.servicePeriodSeq < (latestByLine.get(lineKey(project)) || 0)
     )
     if (!isHistorical) {
       current.push(project)
@@ -314,7 +470,7 @@ const treeData = computed<TreeRow[]>(() => {
         name: group.portfolio.name,
         isPortfolio: true,
         portfolio: group.portfolio,
-        projectCount: group.projects.length,
+        projectCount: getPortfolioProjectCount(group.portfolio, group.projects),
         children: group.projects.map(p => ({
           id: `p-${p.id}`,
           name: p.name,
@@ -394,7 +550,7 @@ watch(groupedProjects, (groups) => {
     const portfolioId = group.portfolio.id
     visiblePortfolioIds.add(portfolioId)
 
-    if (group.projects.length === 0) {
+    if (hosted ? !group.portfolio.projectCount : group.projects.length === 0) {
       nextExpanded.delete(portfolioId)
       nextAutoCollapsed.add(portfolioId)
       continue
@@ -482,15 +638,17 @@ async function handleUpdatePortfolio() {
 }
 
 async function handleDeletePortfolio() {
-  if (!editingPortfolio.value) return
+  if (!editingPortfolio.value || updatingPortfolio.value) return
   if (!canManagePortfolios.value) {
     toast.add({ title: '仅 AIMS 管理员可以删除项目集', color: 'warning' })
     return
   }
+  const target = editingPortfolio.value
+  if (!await confirm({ title: '删除项目集', message: `确认删除项目集「${target.name}」？只能删除没有项目的项目集，删除后不可恢复。`, tone: 'danger', confirmLabel: '删除项目集' })) return
+  if (editingPortfolio.value?.id !== target.id || updatingPortfolio.value) return
   updatingPortfolio.value = true
   try {
     await portfolioStore.deletePortfolio(editingPortfolio.value.id)
-    showDeletePortfolioConfirm.value = false
     showEditPortfolioModal.value = false
     editingPortfolio.value = null
     await loadData()
@@ -503,6 +661,10 @@ function openAssignPortfolio(project: AimsProject) {
   assigningProject.value = project
   assignPortfolioId.value = project.portfolioId
   showAssignPortfolioModal.value = true
+  if (hosted) {
+    assignmentSearch.value = ''
+    void readAssignmentRoots()
+  }
 }
 
 function isProjectAccessible(project: AimsProject | null | undefined) {
@@ -552,7 +714,7 @@ function formatDate(date: string | null) {
 }
 
 function getPortfolioProjectCount(portfolio: ProjectPortfolio | null | undefined, visibleProjects: AimsProject[] = []) {
-  if (!portfolio) return visibleProjects.length
+  if (hosted) return groupTotals.value[portfolio?.id || 0] ?? (portfolio?.projectCount || 0)
   return visibleProjects.length
 }
 
@@ -593,11 +755,14 @@ const portfolioAssignOptions = computed(() => {
   const opts: { label: string, value: number | null }[] = [
     { label: '不归属任何项目集', value: null }
   ]
-  for (const pf of portfolioStore.portfolios) {
+  for (const pf of hosted ? (assignmentRead.data.value?.items || []).map(item => item.portfolio) : portfolioStore.portfolios) {
     opts.push({
       label: pf.defaultCategory ? `${pf.name} · ${getProjectCategoryLabel(pf.defaultCategory)}` : pf.name,
       value: pf.id
     })
+  }
+  if (hosted && assignPortfolioId.value && !opts.some(item => item.value === assignPortfolioId.value)) {
+    opts.push({ label: `项目集 #${assignPortfolioId.value}`, value: assignPortfolioId.value })
   }
   return opts
 })
@@ -609,8 +774,16 @@ const portfolioAssignOptions = computed(() => {
     :ui="{ root: 'relative flex flex-col min-w-0 h-full shrink-0', body: 'flex flex-col flex-1 min-h-0 p-0 overflow-hidden' }"
   >
     <template #body>
-      <div class="flex h-full min-h-0 flex-col">
-        <div class="shrink-0 border-b border-default bg-default/95 px-6 pt-0 pb-4 backdrop-blur supports-backdrop-filter:bg-default/80">
+      <div class="flex h-full min-h-0 flex-col projects-page-container" style="container-type: inline-size">
+        <div v-if="hosted" class="shrink-0 px-4 pt-4 sm:px-6 sm:pt-6">
+          <ContentPageHeader
+            :hosted="hosted"
+            title="项目总览"
+            description="浏览企业项目并按项目集、状态和类型筛选。"
+            breadcrumb="交付与服务 / 项目管理"
+          />
+        </div>
+        <div class="shrink-0 border-b border-default bg-default/95 px-4 py-3 sm:px-6 backdrop-blur supports-backdrop-filter:bg-default/80">
           <div class="space-y-4">
             <!-- ========== 筛选栏 ========== -->
             <div class="flex flex-wrap items-center gap-3">
@@ -665,10 +838,10 @@ const portfolioAssignOptions = computed(() => {
           </div>
         </div>
 
-        <div class="flex-1 min-h-0 overflow-y-auto px-6 pt-4 pb-12">
+        <div class="flex-1 min-h-0 overflow-y-auto px-4 pt-4 pb-8 sm:px-6">
           <!-- 加载中 -->
           <div
-            v-if="projectStore.loading"
+            v-if="hosted ? rootRead.loading.value : projectStore.loading"
             class="flex justify-center py-16"
           >
             <UIcon
@@ -677,9 +850,28 @@ const portfolioAssignOptions = computed(() => {
             />
           </div>
 
+          <UAlert
+            v-if="hosted && rootRead.error.value"
+            color="error"
+            title="项目总览读取失败"
+            class="mb-4"
+          />
+          <UButton v-if="hosted && rootRead.error.value" label="重试" @click="loadOverview()" />
+          <div v-if="hosted && rootRead.data.value" class="mb-4 flex flex-wrap items-center gap-3">
+            <span>共 {{ rootRead.data.value.total }} 个项目集 · {{ rootRead.data.value.summary.projectCount }} 个可见项目</span>
+            <UPagination
+              :sibling-count="0"
+              size="xs"
+              :page="rootPage"
+              :items-per-page="20"
+              :total="rootRead.data.value.total"
+              @update:page="rootPageChanged"
+            />
+          </div>
+
           <!-- 空状态 -->
           <div
-            v-else-if="visibleProjects.length === 0 && portfolioStore.portfolios.length === 0"
+            v-if="visibleProjects.length === 0 && portfolioStore.portfolios.length === 0 && !(hosted && (rootRead.loading.value || rootRead.error.value)) && !(!hosted && projectStore.loading)"
             class="py-16 text-center"
           >
             <UIcon
@@ -692,7 +884,7 @@ const portfolioAssignOptions = computed(() => {
           </div>
 
           <!-- ========== 卡片视图：按项目集分组 ========== -->
-          <template v-else-if="viewMode === 'card'">
+          <template v-else-if="viewMode === 'card' && !(hosted ? (rootRead.loading.value || rootRead.error.value) : projectStore.loading)">
             <div
               v-for="group in groupedProjects"
               :key="group.portfolio?.id ?? 'ungrouped'"
@@ -700,7 +892,7 @@ const portfolioAssignOptions = computed(() => {
             >
               <!-- 项目集分组头 -->
               <div
-                v-if="group.portfolio && (!filterMyProjects || (filterMyProjects && getPortfolioProjectCount(group.portfolio, group.projects) > 0))"
+                v-if="group.portfolio && (hosted || !filterMyProjects || (filterMyProjects && getPortfolioProjectCount(group.portfolio, group.projects) > 0))"
                 class="flex cursor-pointer select-none items-center gap-3"
                 @click="toggleExpand(group.portfolio!.id)"
               >
@@ -712,11 +904,15 @@ const portfolioAssignOptions = computed(() => {
                   square
                 />
                 <NuxtLink
+                  v-if="!hosted"
                   :to="`/portfolios/${group.portfolio.id}`"
                   class="text-xl font-bold transition-colors hover:text-primary"
                 >
                   {{ group.portfolio.name }}
                 </NuxtLink>
+                <span v-else class="text-xl font-bold">
+                  {{ group.portfolio.name }}
+                </span>
                 <span class="text-base text-muted">
                   ({{ getPortfolioProjectCount(group.portfolio, group.projects) }} 个项目)
                 </span>
@@ -784,11 +980,12 @@ const portfolioAssignOptions = computed(() => {
                       class="size-4 text-muted"
                     />
                     <span class="font-medium">历史服务年度 · {{ yearGroup.label }}</span>
-                    <span class="text-muted">({{ yearGroup.projects.length }} 个项目)</span>
+                    <span class="text-muted">({{ hosted ? (groupData[group.portfolio?.id || 0]?.summary.historicalCounts || rootRead.data.value?.summary.historicalCounts)?.[`${group.portfolio?.id || 0}:${yearGroup.key}`] || 0 : yearGroup.projects.length }} 个项目)</span>
                   </button>
                   <div
                     v-if="!yearGroup.historical || expandedHistoricalYears.has(historicalYearKey(group.portfolio?.id, yearGroup.key))"
-                    class="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4"
+                    class="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3 projects-page-grid"
+                    :class="hosted ? 'is-hosted' : ''"
                   >
                     <UPageCard
                       v-for="project in yearGroup.projects"
@@ -900,6 +1097,23 @@ const portfolioAssignOptions = computed(() => {
                 </template>
               </div>
 
+              <div v-if="hosted && (!group.portfolio || expandedPortfolios.has(group.portfolio.id))" class="flex flex-wrap items-center gap-3">
+                <span>共 {{ getPortfolioProjectCount(group.portfolio, group.projects) }} 条</span>
+                <UPagination
+                  :sibling-count="0"
+                  size="xs"
+                  :page="groupPages[group.portfolio?.id ?? 0] || 1"
+                  :items-per-page="20"
+                  :total="groupTotals[group.portfolio?.id ?? 0] || 0"
+                  @update:page="readGroup(group.portfolio?.id ?? 0, $event)"
+                />
+                <UButton
+                  v-if="groupErrors[group.portfolio?.id ?? 0]"
+                  color="error"
+                  label="读取失败，重试"
+                  @click="readGroup(group.portfolio?.id ?? 0, groupPages[group.portfolio?.id ?? 0] || 1)"
+                />
+              </div>
               <!-- 项目集为空 -->
               <div
                 v-if="group.portfolio && group.projects.length === 0 && expandedPortfolios.has(group.portfolio.id)"
@@ -917,7 +1131,7 @@ const portfolioAssignOptions = computed(() => {
 
           <!-- ========== 列表视图：树状展示 ========== -->
           <div
-            v-else
+            v-else-if="!(hosted ? (rootRead.loading.value || rootRead.error.value) : projectStore.loading)"
             class="overflow-hidden rounded-lg border border-default"
           >
             <table class="w-full text-sm">
@@ -1161,6 +1375,20 @@ const portfolioAssignOptions = computed(() => {
               </tbody>
             </table>
           </div>
+          <div v-if="hosted && viewMode === 'list'" class="flex flex-wrap gap-4 px-4 py-3">
+            <div v-for="group in groupedProjects" :key="group.portfolio?.id ?? 0" class="flex flex-wrap items-center gap-2">
+              <span>{{ group.portfolio?.name || '独立项目' }} · 共 {{ getPortfolioProjectCount(group.portfolio, group.projects) }} 条</span>
+              <UPagination
+                :sibling-count="0"
+                size="xs"
+                :page="groupPages[group.portfolio?.id ?? 0] || 1"
+                :items-per-page="20"
+                :total="groupTotals[group.portfolio?.id ?? 0] || 0"
+                @update:page="readGroup(group.portfolio?.id ?? 0, $event)"
+              />
+              <UButton v-if="groupErrors[group.portfolio?.id ?? 0]" label="重试" @click="readGroup(group.portfolio?.id ?? 0, groupPages[group.portfolio?.id ?? 0] || 1)" />
+            </div>
+          </div>
         </div>
 
         <!-- ========== 项目访问受限弹窗 ========== -->
@@ -1198,7 +1426,7 @@ const portfolioAssignOptions = computed(() => {
         </UModal>
 
         <!-- ========== 编辑项目集弹窗 ========== -->
-        <UModal v-model:open="showEditPortfolioModal">
+        <USlideover v-model:open="showEditPortfolioModal" :ui="{ content: 'w-full sm:max-w-2xl' }">
           <template #header>
             <h3 class="text-lg font-semibold">
               编辑项目集{{ editingPortfolio ? ` · ${editingPortfolio.name}` : '' }}
@@ -1317,7 +1545,7 @@ const portfolioAssignOptions = computed(() => {
                 label="删除项目集"
                 color="error"
                 variant="soft"
-                @click="showDeletePortfolioConfirm = true"
+                @click="handleDeletePortfolio"
               />
               <UButton
                 label="取消"
@@ -1333,36 +1561,7 @@ const portfolioAssignOptions = computed(() => {
               />
             </div>
           </template>
-        </UModal>
-
-        <UModal v-model:open="showDeletePortfolioConfirm">
-          <template #header>
-            <h3 class="text-lg font-semibold">
-              确认删除项目集
-            </h3>
-          </template>
-          <template #body>
-            <div class="p-4 text-sm">
-              确定要删除项目集 <strong>{{ editingPortfolio?.name }}</strong> 吗？此操作不可撤销。
-            </div>
-          </template>
-          <template #footer>
-            <div class="flex justify-end gap-2">
-              <UButton
-                label="取消"
-                color="neutral"
-                variant="ghost"
-                @click="showDeletePortfolioConfirm = false"
-              />
-              <UButton
-                label="确认删除"
-                color="error"
-                :loading="updatingPortfolio"
-                @click="handleDeletePortfolio"
-              />
-            </div>
-          </template>
-        </UModal>
+        </USlideover>
 
         <!-- ========== 设置项目所属项目集弹窗 ========== -->
         <UModal v-model:open="showAssignPortfolioModal" :ui="{ content: 'w-lg' }">
@@ -1373,6 +1572,19 @@ const portfolioAssignOptions = computed(() => {
           </template>
           <template #body>
             <div class="space-y-4">
+              <div v-if="hosted" class="space-y-2">
+                <UInput v-model="assignmentSearch" placeholder="搜索项目集名称" class="w-full" />
+                <span class="text-xs text-muted">共 {{ assignmentRead.data.value?.total || 0 }} 条</span>
+                <UPagination
+                  :sibling-count="0"
+                  size="xs"
+                  :page="assignmentPage"
+                  :items-per-page="20"
+                  :total="assignmentRead.data.value?.total || 0"
+                  @update:page="readAssignmentRoots"
+                />
+                <UButton v-if="assignmentRead.error.value" label="读取失败，重试" @click="readAssignmentRoots(assignmentPage)" />
+              </div>
               <UFormField label="选择项目集">
                 <USelect
                   v-model="assignPortfolioId"
@@ -1394,6 +1606,7 @@ const portfolioAssignOptions = computed(() => {
               <UButton
                 label="确定"
                 color="primary"
+                :disabled="hosted && (assignmentRead.loading.value || assignmentRead.error.value)"
                 @click="handleAssignPortfolio"
               />
             </div>
@@ -1403,3 +1616,11 @@ const portfolioAssignOptions = computed(() => {
     </template>
   </UDashboardPanel>
 </template>
+
+<style scoped>
+@container (min-width: 56rem) {
+  .projects-page-grid.is-hosted {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+</style>

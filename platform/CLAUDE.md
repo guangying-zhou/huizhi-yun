@@ -37,7 +37,7 @@ pnpm --dir platform typecheck
 pnpm --dir platform build
 ```
 
-Run lint/typecheck before commit or after critical changes. Docs-only changes do not need code checks unless they include generated code or schema snippets.
+Choose affected checks under root `CLAUDE.md` Execution Style; the commands above are available entry points. Reuse applicable passing evidence when the relevant code and configuration have not changed; committing alone does not require rerunning checks. Docs-only changes need content, reference and formatting checks; executable generated code or schema changes need the corresponding validation.
 
 Deployment, PM2, Cloudflare, runtime isolation, public routing, diagnostics and signing-key operational details are runbook material. For those tasks, read the relevant scripts and docs first, especially:
 
@@ -97,6 +97,18 @@ When changing schema, API contracts, module boundaries or app-registration behav
 - Do not reintroduce `deployment_signing_keys`; deployment signing keys stay in customer-side `console/`.
 
 ## API Layout
+
+完整策略信封：两个既有正式 Console/runtime bundle GET 支持显式
+`format=hzy-policy-envelope.v1`，使用现有 signer 及私有配置
+`HZY_PLATFORM_POLICY_ENVELOPE_ISSUER`。只签当前 tenant/environment 最新且修订一致
+的 active 行；不续签指定历史版本，不跳过撤销/到期行回退旧包，不使用 304。
+2026-09-21 已仅部署开发 Platform `hzy.wiztek.cn`，公网签名/双部署校验通过；
+生产未部署，hzy0 同步器/Runtime 尚未切换。详见根 `docs/Console-Enterprise-Policy-Verification-Contract.md` §11。
+同两个端点支持 `format=hzy-policy-revision.v1` 轻量修订查询（不签名、不含正文）。租户
+suspended/disabled 签发当前修订的 suspended/revoked 信封；拒绝返回固定错误码
+（`policy_envelope_current_missing` 409、`policy_deployment_inactive` 403），Platform 侧故障仍返回 503。
+签发有效期读取 `HZY_PLATFORM_POLICY_ENVELOPE_MAX_AGE_MS`，默认 5 分钟，见合同 §14。
+2026-09-22 已仅发布到开发环境 Platform `hzy.wiztek.cn`（`policy-renewal-20260922`，回执见 `deploy/test-env/artifacts/C000001.platform-policy-renewal-deployment.json`）；生产未发布。
 
 External runtime contract lives under `server/api/v1`:
 

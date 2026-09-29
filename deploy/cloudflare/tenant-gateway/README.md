@@ -1,6 +1,6 @@
 # Tenant Gateway Worker
 
-Policy bundle sync: configure `HZY_POLICY_SYNC_HOSTS` with exact tenant hosts for the independent minute cron. Empty means disabled. The existing five-minute integration drain remains separate. Console must have the Runtime policy store schema and exact grants ready and a first successful sync before serving traffic. See [policy storage runbook](../../../console/deploy/cloudflare/POLICY_BUNDLE_STORAGE.md). Public HTTP cannot invoke `/api/internal/policy-bundle/sync`.
+Policy bundle sync: configure `HZY_POLICY_SYNC_HOSTS` with exact tenant hosts for the independent minute cron (`* * * * *`, currently not in `wrangler.jsonc`). Empty means disabled. **Do not re-enable** without the capacity acceptance in `docs/Policy-Sync-Cadence-Assessment-20260922.md` §4 阶段 E: the 2026-09-07 production run exceeded the Workers Free 10 ms CPU limit, and a verified-runtime renewal verifies a ~727 KB signed envelope several times. The Console sync endpoint now runs the revision-probe check mode, which avoids the full envelope on most minutes but not on the 15-minute renewal. The existing five-minute integration drain remains separate. Console must have the Runtime policy store schema and exact grants ready and a first successful sync before serving traffic. See [policy storage runbook](../../../console/deploy/cloudflare/POLICY_BUNDLE_STORAGE.md). Public HTTP cannot invoke `/api/internal/policy-bundle/sync`.
 
 This Worker is the first Cloudflare-side routing layer for the SaaS tenant
 domain shape:
@@ -145,8 +145,9 @@ calls the internal Platform endpoint
 `/api/platform/internal/tenant-gateway/scheduler-page`, derived from the normal
 resolve URL unless `HZY_TENANT_GATEWAY_SCHEDULER_REGISTRY_URL` is set. The page
 contains only tenant host, tenant code, environment, the Console target
-deployment, and enabled `aims`/`altoc`/`console`/`finance`/`people`/`workflow`
-app codes. It uses a
+deployment, and enabled `aims`/`altoc`/`assets`/`console`/`finance`/`people`/`workflow`
+app codes. Assets is woken only when its persisted scheduler selection is
+`unified` or `recovered`. The page uses a
 time-rotated bounded window, stable shard and opaque cursor; it never returns a
 runtime token or login secret.
 
@@ -172,7 +173,7 @@ Production routing uses same-account Cloudflare Service Bindings for bound
 Console and business applications, as well as Platform registry reads and scheduled drain
 wakes. Keep
 `HZY_PLATFORM_SERVICE`, `HZY_CONSOLE_SERVICE`, `HZY_AIMS_SERVICE`,
-`HZY_ALTOC_SERVICE` and `HZY_PEOPLE_SERVICE` bound to the corresponding Workers in `wrangler.jsonc`
+`HZY_ASSETS_SERVICE`, `HZY_ALTOC_SERVICE` and `HZY_PEOPLE_SERVICE` bound to the corresponding Workers in `wrangler.jsonc`
 (and keep the Workflow binding when Workflow is enabled). A tenant route such
 as `/aims/**` must dispatch through its binding when present instead of fetching
 the application's reserved public hostname: that hostname is also covered by
@@ -180,11 +181,44 @@ the wildcard Gateway route, so a public round trip adds a second Gateway Worker
 hop and can be rejected before the target application is reached. Applications
 without a binding retain the configured origin fallback.
 
-Default bounds are 4 registry pages, 50 tenants, concurrency 4, 45 seconds and
-a 30-second per-wake timeout. The current single-tenant production binding sets
-`HZY_TENANT_GATEWAY_SCHEDULER_SHARD_COUNT=1`, so every tenant is considered on
-each five-minute trigger; increase the shard count only when scale requires
-spreading wakes across intervals and the added lifecycle latency is acceptable.
+Default bounds are 4 registry pages, **8 attempted app wakes per cron** (hard
+configurable ceiling 32), concurrency 4, 45 seconds and a 30-second per-wake
+timeout. The registry window is at most `floor(maxWakes / 7)` tenants (minimum
+one), also bounded by the configured tenant limit of 50. The Platform cursor
+rotates this window on later rounds; within a tenant, first-pass app order
+rotates by slot so a tight wake budget cannot always starve the same app.
+Repeated busy drains also consume the same wake budget. These count and wall
+bounds are a CPU safety gate, not a measured CPU duration: before enabling a
+new tenant owner, record cron CPU p50/p95/p99, exceededCpu, attempted wakes,
+window rotation and backlog reduction in staging. Stop or lower the bound if
+the Cloudflare account CPU limit is approached.
+
+The checked-in production binding sets `HZY_TENANT_GATEWAY_SCHEDULER_SHARD_COUNT=1`
+and does not override `MAX_WAKES`, so **all eligible tenants are in shard 0**,
+but only one tenant is selected per five-minute slot with the default budget.
+The Platform registry computes `round=floor(slot/shardCount)` and
+`startOffset=(round*windowSize)%eligibleCount` in
+`platform/server/utils/tenantGatewaySchedulerRegistry.ts`; a stable shard of
+N eligible tenants therefore visits each one every `5*N` minutes at the
+default one-tenant window. For the planned single wiztek production tenant,
+that is five minutes between Workflow wakes; this depends on confirming the
+production registry has exactly one eligible site. With N=2 it is ten minutes,
+which misses a five-minute approval/notification target. If the configured
+shard count were 12, the same tenant would be considered only once every
+60 minutes even with no other tenant in its shard. For `CRC32(tenant|environment)
+% 12`, `wiztek|prod` maps to shard 9 and `C000001|test` to shard 8; with
+`shardCount=1` both map to 0. C000001 uses a separate test Gateway, whose
+last recorded cron was daily policy sync; this production cron configuration
+does not make its Workflow drain periodic.
+
+For the five-minute production gate keep `shardCount=1` and verify the eligible
+site count. One seven-app tenant can use `MAX_WAKES=8`; for two tenants use
+`MAX_WAKES=28` (up to three passes for the first tenant and one first pass for
+the second). With three or more seven-app tenants, the hard 32-wake ceiling
+cannot guarantee one first pass for every tenant when earlier tenants stay
+busy; revise the scheduling/fairness design before registering them. Measure
+the **same** shard/window/wake settings in gate 3 CPU acceptance, including
+Workflow wake intervals and backlog, before relying on gate 5 latency.
 A failed app wake is logged and counted without starving the same tenant's
 remaining apps; other tenants also continue. Database operations remain the
 durable queue and make repeated wakes safe.
@@ -420,3 +454,25 @@ ON DUPLICATE KEY UPDATE source = 'local', status = 'active', updated_at = UTC_TI
 Repeat for `post_logout` using `/api/auth/oidc-post-logout`, and for each
 business app path. In the target product this should come from Platform tenant
 deployment settings and the generated policy bundle rather than manual SQL.
+
+## Gateway service assertion (default off)
+
+The reviewed exchange uses an ops-registered Ed25519 Gateway key. The Worker signs only an authenticated source whose tenant/environment/deployment exactly matches the resolved registry. It strips incoming proof and Gateway headers, forwards a narrow trusted-header allowlist through the Console Service Binding, and uses the single Foundation fallback contract.
+
+Do not enable the Gateway lane before Runtime keyset sync, Runtime exchange, and the Console flag. Disable the Gateway lane first during rollback. All selected grants need exact tenant/deployment bindings; report gaps rather than repair them implicitly. Provision private JWK material only as a test Worker secret after environment review. See [the code contract and staged rollout](../../../docs/Gateway-Service-Assertion-Rollout.md); no environment was changed by the code batch.
+
+## Self-hosted site pins (unset in the managed cloud)
+
+Two optional variables are set only by the self-hosted Node host
+(`deploy/self-hosted/gateway/`); when absent the Worker behaves exactly as before.
+
+- `HZY_ENTERPRISE_HOST_ALLOWLIST_JSON`: JSON list of `{host, tenantCode, environment, deploymentCode}`.
+  Besides the pinned C000001/test pilot on `hzy-test.huizhi.yun`, the Enterprise Host
+  route is enabled on a listed host only when the registry answer matches the entry's
+  tenant, environment and Enterprise deployment exactly. Malformed values enable nothing.
+- `HZY_TENANT_GATEWAY_EXPECTED_BINDINGS_JSON`: `{ "<host>": {tenantCode, environment, apps: {<app>: <deploymentCode>}, dataRuntime: {endpoint, runtimeCode}} }`.
+  Requests, policy sync and scheduler wakes for that host fail closed (503 / failed tenant)
+  unless the Platform registry answer matches every pinned value.
+
+`runScheduledIntegrationDrains` also accepts `dependencies.loadPage` so a single-site
+host can supply its own scheduler page instead of the Platform-wide shard.

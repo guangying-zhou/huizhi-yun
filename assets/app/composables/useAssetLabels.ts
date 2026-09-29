@@ -1,3 +1,4 @@
+import { useAssetDictionaries } from './useAssetDictionaries'
 const staticDictionaryLabels: Record<string, Record<string, string>> = {
   asset_category: {
     physical: '实物资产',
@@ -143,8 +144,8 @@ function normalizeLegacyDictionaryValue(code: string, value: string) {
   return value
 }
 
-export function useAssetLabels() {
-  const { loadDictionaries, getDictionary } = useAssetDictionaries()
+export function useAssetLabels(scope: 'default' | 'asset-items' = 'default') {
+  const { loadDictionaries, getDictionary } = useAssetDictionaries(scope)
 
   function getLabel(code: string, value: string | null | undefined, fallback = '-') {
     if (!value) {

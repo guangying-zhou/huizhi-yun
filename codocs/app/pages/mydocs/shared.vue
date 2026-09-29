@@ -1,11 +1,15 @@
 <script setup lang="ts">
-definePageMeta({
-  layout: 'default'
-})
+import { useDocumentPreviewBootstrap } from '../../composables/useDocumentPreviewBootstrap'
+import { useResizablePanel } from '../../composables/useResizablePanel'
+import { useCodocsModule } from '../../../layer/useCodocsModule'
+import { useAccountStore } from '@hzy/foundation/app/stores/account'
+
+definePageMeta({ hostContentInset: false })
 
 usePageTitle('协同文档中心')
 
 const { user } = useAuth()
+const { moduleUrl, documentUrl, cacheKey, hosted } = useCodocsModule()
 const router = useRouter()
 const accountStore = useAccountStore()
 const { hasPermission, loadPermissions } = usePermissions()
@@ -39,6 +43,10 @@ interface CollabDocsResponse {
   data?: {
     items: CollabDocItem[]
     total: number
+    page: number
+    pageSize: number
+    ownerUids: string[]
+    deptCodes: string[]
   }
 }
 
@@ -46,6 +54,8 @@ interface CollabDocsState {
   items: CollabDocItem[]
   total: number
   queryKey: string
+  ownerUids: string[]
+  deptCodes: string[]
 }
 
 interface DocumentPreviewResponse {
@@ -60,7 +70,7 @@ interface DocumentPreviewResponse {
 const category = ref<'shared' | 'original' | 'outside'>('shared')
 const scope = ref('all')
 const sharedTab = ref<'received' | 'sent'>('received')
-const searchKeyword = ref('')
+const { search: searchKeyword, debounced: debouncedKeyword, flush: flushSearch, reset: resetSearch } = useDebouncedSearch()
 const selectedDeptCode = ref('')
 const selectedOwnerUid = ref('')
 const selectedDocUuid = ref('')
@@ -108,46 +118,56 @@ const ensureScope = () => {
   }
 }
 
+const { page, pageSize } = useListPage({ pageSize: 20, filters: { category, scope, sharedTab, keyword: searchKeyword, dept_code: selectedDeptCode, owner_uid: selectedOwnerUid } })
 watch(category, () => {
   ensureScope()
   selectedDeptCode.value = ''
   selectedOwnerUid.value = ''
 })
+ensureScope()
 
 const currentQueryKey = computed(() => JSON.stringify({
   category: category.value,
   scope: scope.value,
-  keyword: searchKeyword.value || '',
+  keyword: debouncedKeyword.value || '',
   deptCode: selectedDeptCode.value || '',
-  ownerUid: selectedOwnerUid.value || ''
+  ownerUid: selectedOwnerUid.value || '',
+  sharedTab: category.value === 'shared' ? sharedTab.value : '',
+  page: page.value,
+  viewer: cacheKey('collab-docs')
 }))
 
-const fetchCollabDocs = async () => {
-  const res = await $fetch<CollabDocsResponse>('/api/collab-docs', {
-    params: {
-      category: category.value,
-      scope: scope.value,
-      keyword: searchKeyword.value || undefined,
-      dept_code: selectedDeptCode.value || undefined,
-      owner_uid: selectedOwnerUid.value || undefined
-    }
-  })
-
-  return {
-    items: res.data?.items || [],
-    total: res.data?.total || 0,
-    queryKey: currentQueryKey.value
-  } satisfies CollabDocsState
+const data = ref<CollabDocsState | null>(null)
+const pending = ref(false)
+const loadError = ref('')
+let generation = 0
+let controller: AbortController | undefined
+const refresh = async () => {
+  const epoch = ++generation
+  controller?.abort(); controller = new AbortController()
+  data.value = null; loadError.value = ''
+  if (!user.value) { pending.value = false; return }
+  pending.value = true
+  const key = currentQueryKey.value
+  try {
+    const res = await $fetch<CollabDocsResponse>(moduleUrl('/api/collab-docs'), { params: {
+      category: category.value, scope: scope.value, keyword: debouncedKeyword.value || undefined,
+      dept_code: selectedDeptCode.value || undefined, owner_uid: selectedOwnerUid.value || undefined,
+      sharedTab: category.value === 'shared' ? sharedTab.value : undefined, page: page.value, pageSize
+    }, signal: controller.signal })
+    if (epoch !== generation || key !== currentQueryKey.value) return
+    const value = res.data
+    if (res.code !== 0 || !value || !Array.isArray(value.items) || !Number.isSafeInteger(value.total) || value.total < 0 || value.page !== page.value || value.pageSize !== pageSize || value.items.length > pageSize || ![value.ownerUids, value.deptCodes].every(values => Array.isArray(values) && values.every(v => typeof v === 'string'))) throw new Error('Invalid collaboration page')
+    const lastPage = Math.max(1, Math.ceil(value.total / pageSize))
+    if (page.value > lastPage) { page.value = lastPage; return }
+    data.value = { items: value.items, total: value.total, ownerUids: value.ownerUids, deptCodes: value.deptCodes, queryKey: key }
+  } catch {
+    if (epoch === generation) loadError.value = '协同文档加载失败，请重试'
+  } finally { if (epoch === generation) pending.value = false }
 }
-
-const { data, pending, refresh } = await useAsyncData(
-  'collab-docs',
-  fetchCollabDocs,
-  {
-    watch: [category, scope, searchKeyword, selectedDeptCode, selectedOwnerUid],
-    getCachedData: () => undefined
-  }
-)
+await refresh()
+watch(currentQueryKey, refresh)
+onScopeDispose(() => { generation++; controller?.abort() })
 
 const items = computed(() => {
   if (data.value?.queryKey !== currentQueryKey.value) return []
@@ -166,13 +186,9 @@ const sharedTabs = computed(() => [
   }
 ])
 
-const visibleItems = computed(() => {
-  if (category.value !== 'shared') return items.value
-  if (sharedTab.value === 'received') {
-    return items.value.filter(item => item.relationTypes.includes('shared_to_me'))
-  }
-  return items.value.filter(item => item.relationTypes.includes('shared_by_me'))
-})
+// The owning reader merges relations and applies sharedTab before total/page.
+const visibleItems = items
+const total = computed(() => data.value?.queryKey === currentQueryKey.value ? data.value.total : 0)
 
 const selectedDoc = computed(() => visibleItems.value.find(item => item.uuid === selectedDocUuid.value) || null)
 
@@ -183,7 +199,7 @@ const ownerOptions = computed(() => {
     ]
   }
 
-  const owners = [...new Set(visibleItems.value.map(item => item.ownerUid).filter(Boolean))]
+  const owners = (data.value?.queryKey === currentQueryKey.value ? data.value.ownerUids : [])
   return [
     { label: '发起人', value: '' },
     ...owners.map(ownerUid => ({
@@ -194,7 +210,7 @@ const ownerOptions = computed(() => {
 })
 
 const deptOptions = computed(() => {
-  const deptCodes = [...new Set(visibleItems.value.map(item => item.deptCode).filter((value): value is string => Boolean(value)))]
+  const deptCodes = (data.value?.queryKey === currentQueryKey.value ? data.value.deptCodes : [])
   return [
     { label: '部门', value: '' },
     ...deptCodes.map(deptCode => ({
@@ -276,7 +292,12 @@ const canConfirmReceive = computed(() => {
     && selectedDoc.value.relationTypes.includes('outside_sender')
 })
 
+let previewGeneration = 0
+let previewController: AbortController | undefined
+onScopeDispose(() => { previewGeneration++; previewController?.abort() })
 const loadPreview = async (uuid: string) => {
+  const epoch = ++previewGeneration
+  previewController?.abort(); previewController = new AbortController()
   previewLoading.value = true
   previewContent.value = ''
   previewAbstract.value = ''
@@ -284,17 +305,19 @@ const loadPreview = async (uuid: string) => {
   previewReadonly.value = true
 
   try {
-    const response = await $fetch<DocumentPreviewResponse>(`/api/documents/${uuid}`)
+    const response = await $fetch<DocumentPreviewResponse>(moduleUrl(`/api/documents/${uuid}`), { signal: previewController.signal })
+    if (epoch !== previewGeneration) return
     if (response.success) {
       previewContent.value = response.data?.content || ''
       previewAbstract.value = response.data?.ai_abstract || ''
       previewReadonly.value = response.data?.readonly_flag === 1
     }
   } catch (error: unknown) {
+    if (epoch !== previewGeneration) return
     const err = error as { data?: { message?: string }, message?: string }
     previewError.value = err.data?.message || err.message || '预览加载失败'
   } finally {
-    previewLoading.value = false
+    if (epoch === previewGeneration) previewLoading.value = false
   }
 }
 
@@ -312,12 +335,21 @@ const selectDocument = async (item: CollabDocItem | null) => {
 }
 
 const clearSelection = () => {
+  previewGeneration++; previewController?.abort(); previewLoading.value = false
+  showSealModal.value = false; showSendModal.value = false; showReceiveModal.value = false
   selectedDocUuid.value = ''
   previewContent.value = ''
   previewAbstract.value = ''
   previewError.value = ''
   previewReadonly.value = true
 }
+
+watch(() => cacheKey('collab-docs'), () => {
+  generation++; controller?.abort(); data.value = null; pending.value = false; clearSelection()
+  if (page.value !== 1) page.value = 1
+  else void refresh()
+}, { flush: 'sync' })
+watch(currentQueryKey, clearSelection, { flush: 'sync' })
 
 const bootstrapSelection = async () => {
   await loadRelatedMetadata()
@@ -341,7 +373,7 @@ const openDocument = () => {
     })
   }
 
-  router.push(`/documents/${selectedDoc.value.uuid}?fromCollab=1`)
+  router.push({ path: documentUrl(selectedDoc.value.uuid), query: { fromCollab: '1' } })
 }
 
 const handleSealSuccess = async () => {
@@ -365,6 +397,14 @@ const handleReceiveSuccess = async () => {
 
 <template>
   <UDashboardPanel grow>
+    <div class="px-4 pt-4 sm:px-6 sm:pt-6">
+      <ContentPageHeader
+        :hosted="hosted"
+        title="协同文档"
+        description="查看共享给你的协作文档。"
+        breadcrumb="文档 / 文档协作"
+      />
+    </div>
     <div class="flex items-center justify-between gap-2 px-4 py-2 border-b border-default flex-wrap">
       <UTabs
         v-model="category"
@@ -374,7 +414,14 @@ const handleReceiveSuccess = async () => {
         color="secondary"
         size="md"
       />
-      <div class="flex items-center gap-2">
+      <div class="flex flex-wrap items-center gap-2">
+        <UInput
+          v-model="searchKeyword"
+          icon="i-lucide-search"
+          placeholder="搜索文档"
+          aria-label="搜索协同文档"
+          @keyup.enter="flushSearch"
+        />
         <USelectMenu
           v-if="category !== 'shared'"
           v-model="scope"
@@ -400,6 +447,12 @@ const handleReceiveSuccess = async () => {
           label-key="label"
           class="w-28"
           :search-input="false"
+        />
+        <UButton
+          label="重置"
+          color="neutral"
+          variant="ghost"
+          @click="resetSearch(); scope = 'all'; selectedDeptCode = ''; selectedOwnerUid = ''"
         />
         <UButton
           icon="i-lucide-refresh-cw"
@@ -445,9 +498,13 @@ const handleReceiveSuccess = async () => {
         </div>
 
         <div class="px-3 py-2 text-sm text-muted flex justify-center">
-          共 {{ visibleItems.length }} 条
+          共 {{ total }} 条
         </div>
 
+        <div class="px-3 pb-2 flex justify-center">
+          <UPagination v-model:page="page" :items-per-page="pageSize" :total="total" :sibling-count="0" size="xs" />
+        </div>
+        <UAlert v-if="loadError" color="error" :title="loadError" class="m-2" />
         <div class="flex-1 overflow-y-auto p-2 space-y-2">
           <div v-if="pending && visibleItems.length === 0" class="flex justify-center py-6">
             <UIcon name="i-lucide-loader-2" class="w-5 h-5 animate-spin text-muted" />
@@ -494,7 +551,7 @@ const handleReceiveSuccess = async () => {
         @mousedown.prevent="onResizeStart"
       />
 
-      <main class="flex-1 flex flex-col overflow-hidden bg-gray-50 dark:bg-gray-950">
+      <main class="flex-1 flex flex-col overflow-hidden bg-default">
         <div
           v-if="selectedDoc"
           class="flex flex-col sm:flex-row sm:items-center justify-between px-4 py-3 border-b border-default bg-default gap-3 sm:gap-0"
@@ -574,7 +631,7 @@ const handleReceiveSuccess = async () => {
                 </div>
                 <div class="shrink-0">
                   <span class="text-muted">协同关系：</span>
-                  <span class="font-medium">{{ selectedDoc.relationLabels.join('、') }}</span>
+                  <span class="font-medium">{{ selectedDoc.relationLabels.map(label => label === 'shared_with_me' ? '共享给我' : label).join('、') }}</span>
                 </div>
                 <div class="shrink-0 text-muted">
                   |
@@ -618,7 +675,7 @@ const handleReceiveSuccess = async () => {
                     <UIcon name="i-lucide-sparkles" class="w-4 h-4 text-primary mt-0.5 shrink-0" />
                     <div>
                       <span class="text-xs font-medium text-primary">AI 摘要</span>
-                      <p class="text-sm text-gray-700 dark:text-gray-300 leading-relaxed mt-0.5">
+                      <p class="text-sm text-default leading-relaxed mt-0.5">
                         {{ previewAbstract }}
                       </p>
                     </div>

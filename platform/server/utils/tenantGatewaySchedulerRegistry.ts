@@ -6,8 +6,8 @@ import type { RowDataPacket } from 'mysql2/promise'
 //
 // 走查 ISSUE-B-025：finance 加进网关 SCHEDULER_APPS 后仍然零唤醒，就是因为本表
 // 没有上报 finance，交集把它过滤掉了。
-const SCHEDULER_APP_CODES = new Set(['aims', 'altoc', 'console', 'finance', 'people', 'workflow'])
-type SchedulerAppCode = 'aims' | 'altoc' | 'console' | 'finance' | 'people' | 'workflow'
+const SCHEDULER_APP_CODES = new Set(['aims', 'altoc', 'assets', 'console', 'finance', 'people', 'workflow'])
+type SchedulerAppCode = 'aims' | 'altoc' | 'assets' | 'console' | 'finance' | 'people' | 'workflow'
 
 // 下面两处 SQL 的 IN 列表由上面的常量派生，避免同一清单在本文件里维护三份。
 const SCHEDULER_APP_CODE_SQL_LIST = [...SCHEDULER_APP_CODES]

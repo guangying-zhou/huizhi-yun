@@ -18,13 +18,28 @@ type ProductComponentMove struct {
 }
 
 func MoveProductComponent(ctx context.Context, db *sql.DB, identity CommandIdentity, permit AuthorizationPermit, input ProductComponentMove) (CommandResult, error) {
+	return moveProductComponent(ctx, identity, permit, input, func(authorize AuthorizeCommand, apply ApplyCommand) (CommandResult, error) {
+		return ExecuteCommand(ctx, db, identity, input, authorize, apply)
+	})
+}
+func MoveProductComponentInTransaction(ctx context.Context, tx *sql.Tx, identity CommandIdentity, permit AuthorizationPermit, input ProductComponentMove) (CommandResult, error) {
+	result, err := moveProductComponent(ctx, identity, permit, input, func(authorize AuthorizeCommand, apply ApplyCommand) (CommandResult, error) {
+		return ExecuteCommandInTransaction(ctx, tx, identity, input, authorize, apply)
+	})
+	if err != nil && tx != nil {
+		_ = tx.Rollback()
+	}
+	return result, err
+}
+func moveProductComponent(ctx context.Context, identity CommandIdentity, permit AuthorizationPermit, input ProductComponentMove, execute func(AuthorizeCommand, ApplyCommand) (CommandResult, error)) (CommandResult, error) {
+
 	if identity.Action != "product_components:move" {
 		return CommandResult{}, invalid("product_command_identity_invalid", "模块移动命令不匹配")
 	}
 	if input.ComponentID < 1 || (input.ParentID != nil && *input.ParentID < 1) || input.ExpectedRevision < 1 || input.ExpectedComponentRevision < 1 || strings.TrimSpace(input.Reason) == "" || !utf8.ValidString(input.Reason) || utf8.RuneCountInString(input.Reason) > 2000 || strings.ContainsRune(input.Reason, '\x00') {
 		return CommandResult{}, invalid("product_component_move_invalid", "模块移动参数或原因无效")
 	}
-	return ExecuteCommand(ctx, db, identity, input, func(ctx context.Context, tx *sql.Tx) error {
+	return execute(func(ctx context.Context, tx *sql.Tx) error {
 		return AuthorizeWorkspaceTransaction(ctx, tx, identity.ProductCode, identity.ActorUID, "product_components", "edit", permit)
 	}, func(ctx context.Context, tx *sql.Tx) (any, error) {
 		root, err := loadWorkspace(ctx, tx, identity.ProductCode)

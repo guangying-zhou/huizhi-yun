@@ -17,10 +17,11 @@
     "deploy:cloudflare:poc": "pnpm dlx wrangler@4 deploy --config wrangler.codocs-poc.jsonc",
     "preview:cloudflare:poc": "pnpm dlx wrangler@4 dev --config wrangler.codocs-poc.jsonc",
     "start": "node dist/server.js",
-    "test": "node --test --experimental-strip-types test/*.test.ts",
+    "test": "tsx --test test/*.test.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@hzy/foundation": "workspace:*",
     "@hocuspocus/common": "^3.4.4",
     "@hocuspocus/extension-redis": "^3.4.3",
     "@hocuspocus/server": "^3.4.3",

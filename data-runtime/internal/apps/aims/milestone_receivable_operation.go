@@ -11,6 +11,7 @@ import (
 )
 
 const (
+	milestoneReceivableTrustedContextKey  = "__aims_milestone_receivable_trusted_context"
 	milestoneReceivableOperationCode      = "aims.milestone.receivable-billable.v1"
 	milestoneReceivableRequiredCapability = "altoc:receivable:mark-billable"
 )
@@ -33,6 +34,16 @@ func (a *Adapter) enqueueMilestoneReceivableBillableOperationTx(
 	if err != nil {
 		return nil, err
 	}
+	if mapped, ok := body[milestoneReceivableTrustedContextKey].(integrationoperation.TrustedContext); ok {
+		if mapped.TenantCode != trusted.TenantCode || mapped.DeploymentCode != trusted.DeploymentCode || mapped.SourceApp != trusted.SourceApp || mapped.ServiceClientID != trusted.ServiceClientID || mapped.OutboxTables == nil {
+			return nil, integrationoperation.ErrInvalidIdentity
+		}
+		trusted = mapped
+	}
+	operationTable, err := trusted.OperationTable()
+	if err != nil {
+		return nil, err
+	}
 	project := strings.TrimSpace(projectCode.String)
 	operationKey := fmt.Sprintf("aims:milestone:%s:%d:accepted:v1", project, milestoneID)
 	if project == "" {
@@ -44,9 +55,9 @@ func (a *Adapter) enqueueMilestoneReceivableBillableOperationTx(
 	}
 
 	var existingStatus string
-	err = tx.QueryRowContext(ctx, `
+	lookupSQL := fmt.Sprintf(`
 		SELECT status
-		FROM integration_operation
+		FROM %s
 		WHERE operation_key = ?
 		  AND tenant_code = ?
 		  AND deployment_code = ?
@@ -58,7 +69,8 @@ func (a *Adapter) enqueueMilestoneReceivableBillableOperationTx(
 		  AND idempotency_key = ?
 		LIMIT 1
 		FOR UPDATE
-	`, operationKey, trusted.TenantCode, trusted.DeploymentCode, sourceBizCode, operationKey).Scan(&existingStatus)
+	`, operationTable)
+	err = tx.QueryRowContext(ctx, lookupSQL, operationKey, trusted.TenantCode, trusted.DeploymentCode, sourceBizCode, operationKey).Scan(&existingStatus)
 	if err == nil {
 		return milestoneReceivableOperationMetadata(operationKey, existingStatus), nil
 	}
@@ -100,8 +112,8 @@ func (a *Adapter) enqueueMilestoneReceivableBillableOperationTx(
 	if createdBy == "" {
 		createdBy = trusted.ServiceClientID
 	}
-	if _, err := tx.ExecContext(ctx, `
-		INSERT INTO integration_operation (
+	insertSQL := fmt.Sprintf(`
+		INSERT INTO %s (
 		  operation_id, operation_key, correlation_key, sequence_no, depends_on_operation_key,
 		  tenant_code, deployment_code, source_app, target_app, operation_code,
 		  required_capability, source_biz_type, source_biz_code, idempotency_key,
@@ -109,7 +121,8 @@ func (a *Adapter) enqueueMilestoneReceivableBillableOperationTx(
 		  original_request_id, original_actor_uid, service_client_id, created_by, updated_by,
 		  next_attempt_at
 		) VALUES (?, ?, ?, 1, NULL, ?, ?, 'aims', 'altoc', ?, ?, 'milestone', ?, ?, 'v1', ?, ?, 'pending', ?, ?, ?, ?, ?, UTC_TIMESTAMP(3))
-	`, operationID, operationKey, operationKey, trusted.TenantCode, trusted.DeploymentCode,
+	`, operationTable)
+	if _, err := tx.ExecContext(ctx, insertSQL, operationID, operationKey, operationKey, trusted.TenantCode, trusted.DeploymentCode,
 		milestoneReceivableOperationCode, milestoneReceivableRequiredCapability,
 		sourceBizCode, operationKey, string(commandJSON), commandSHA256,
 		nullableText(trusted.RequestID), nullableText(actorUID), nullableText(trusted.ServiceClientID),

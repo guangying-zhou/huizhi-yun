@@ -73,7 +73,7 @@ func TestInsertContractActivationOperationScopesReplayAndKeepsActorOutOfHash(t *
 	trusted := integrationoperation.TrustedContext{TenantCode: "tenant-1", DeploymentCode: "deployment-1", SourceApp: "altoc", ServiceClientID: "altoc.runtime"}
 	command := map[string]any{"contractCode": "CT-1", "projectCode": "PRJ-CT-1", "planKey": "delivery-main"}
 	hash, _ := integrationoperation.ValidateAndDigestCommand(command)
-	mock.ExpectQuery(`(?s)SELECT operation_id, operation_code, required_capability, command_sha256, status.*FROM integration_operation.*WHERE tenant_code = \? AND deployment_code = \? AND source_app = 'altoc' AND operation_key = \?.*FOR UPDATE`).
+	mock.ExpectQuery(`(?s)SELECT operation_id, operation_code, required_capability, command_sha256, status.*FROM \x60?integration_operation\x60?.*WHERE tenant_code = \? AND deployment_code = \? AND source_app = 'altoc' AND operation_key = \?.*FOR UPDATE`).
 		WithArgs("tenant-1", "deployment-1", "operation-key").
 		WillReturnRows(sqlmock.NewRows([]string{"operation_id", "operation_code", "required_capability", "command_sha256", "status"}).AddRow("123e4567-e89b-42d3-a456-426614174000", altocActivationProjectOperation, altocActivationAimsCapability, hash, "succeeded"))
 	got, status, err := insertContractActivationOperationTx(context.Background(), tx, trusted, "different-actor", "CT-1", "correlation", "operation-key", "", 1, altocActivationProjectOperation, command)

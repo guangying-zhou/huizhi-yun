@@ -21,6 +21,13 @@
   },
   "resources": [
     {
+      "code": "work-item-complete",
+      "name": "工作项完成审批服务",
+      "description": "服务能力 workflow:work-item-complete:create：接收Aims冻结的完成申请，不授予人员审批权限",
+      "actions": ["create"],
+      "sortOrder": 0
+    },
+    {
       "code": "workflow_workspace",
       "name": "工作台",
       "description": "审批工作台、待办摘要和流程概览",

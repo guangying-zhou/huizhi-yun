@@ -3,9 +3,9 @@ import type {
   ProjectTemplateDefinition,
   ProjectTemplateMilestoneDefinition,
   ProjectTemplateVersionDetail
-} from '~/types/aims'
-import { parseModuleConfig } from '~/utils/projectModuleConfig'
-import { getProjectCategoryLabel } from '~/config/project'
+} from '../types/aims'
+import { parseModuleConfig } from './projectModuleConfig'
+import { getProjectCategoryLabel } from '../config/project'
 
 export type RawProjectTemplateVersion = Partial<ProjectTemplateVersionDetail> & {
   template_set_id?: number

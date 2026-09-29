@@ -207,7 +207,8 @@ export async function fetchConsoleSessionApi<T>(
     throw createError({
       statusCode: 503,
       statusMessage: 'Service Unavailable',
-      message: 'Console session runtime is unavailable'
+      message: 'Console session runtime is unavailable',
+      data: { code: 'console_session_runtime_unavailable' }
     })
   }
 
@@ -232,6 +233,7 @@ export async function fetchConsoleSessionApi<T>(
           : statusCode === 503
             ? 'Console session runtime is unavailable'
             : 'Console session request was rejected',
+      data: statusCode === 503 ? { code: 'console_session_runtime_unavailable' } : undefined,
       cause: error
     })
   }

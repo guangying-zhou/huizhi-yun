@@ -1,7 +1,10 @@
 <script setup lang="ts">
-import type { ApiResponse, DigitalAssetItem } from '~/types'
+import AssetFormSurface from './AssetFormSurface.vue'
+import type { ApiResponse, DigitalAssetItem } from '../../types'
+import { useAssetDictionaries } from '../../composables/useAssetDictionaries'
+import { useAssetsModule } from '../../../layer/useAssetsModule'
 
-const props = defineProps<{ open: boolean, asset: DigitalAssetItem | null }>()
+const props = defineProps<{ open: boolean, page?: boolean, asset: DigitalAssetItem | null }>()
 const emit = defineEmits<{
   'update:open': [value: boolean]
   'updated': []
@@ -15,8 +18,11 @@ const isOpen = computed({
 const { loadDictionaries, getOptions } = useAssetDictionaries()
 await loadDictionaries()
 
+const surface = ref<InstanceType<typeof AssetFormSurface> | null>(null)
 const toast = useToast()
 const submitting = ref(false)
+const submissionKey = ref('')
+const { moduleUrl } = useAssetsModule()
 const typeOptions = computed(() => getOptions('digital_asset_type'))
 const statusOptions = computed(() => getOptions('digital_asset_status'))
 const accessScopeOptions = computed(() => getOptions('digital_access_scope'))
@@ -47,7 +53,7 @@ function hydrate() {
 
 watch(() => props.open, (open) => {
   if (open) hydrate()
-})
+}, { immediate: true })
 watch(() => props.asset, () => {
   if (props.open) hydrate()
 })
@@ -60,8 +66,9 @@ async function handleSubmit() {
   }
   submitting.value = true
   try {
-    await $fetch<ApiResponse<{ id: number }>>(`/api/v1/digital-assets/${props.asset.id}`, {
+    await $fetch<ApiResponse<{ id: number }>>(moduleUrl(`/api/v1/digital-assets/${props.asset.id}`), {
       method: 'PATCH',
+      headers: { 'Idempotency-Key': submissionKey.value ||= crypto.randomUUID() },
       body: {
         digital_name: state.digital_name.trim(),
         digital_type: state.digital_type || null,
@@ -75,6 +82,7 @@ async function handleSubmit() {
       }
     })
     toast.add({ title: '数字资产已更新', description: '主要信息已保存。', color: 'success', icon: 'i-lucide-check' })
+    surface.value?.markSaved()
     emit('updated')
     isOpen.value = false
   } catch (error) {
@@ -87,8 +95,12 @@ async function handleSubmit() {
 </script>
 
 <template>
-  <UModal
+  <AssetFormSurface
+    ref="surface"
     v-model:open="isOpen"
+    :page="props.page"
+    :draft="JSON.stringify(state)"
+    :busy="submitting"
     title="编辑数字资产"
     description="维护存储位置、访问权限、关联项目和状态。"
     :ui="{ content: 'sm:max-w-3xl' }"
@@ -168,5 +180,5 @@ async function handleSubmit() {
         </UButton>
       </div>
     </template>
-  </UModal>
+  </AssetFormSurface>
 </template>

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { ConsoleDirectorySelfProfile as CurrentDirectoryProfile } from '@hzy/foundation/app/types/consoleDirectory'
 import { dashboardPanelUi } from '~/utils/dashboardPanel'
 
 usePageTitle('个人资料')
@@ -19,17 +20,6 @@ const passwordForm = reactive({
 interface ApiResponse<T> {
   code: number
   data: T
-}
-
-interface CurrentDirectoryProfile {
-  uid: string
-  username: string | null
-  displayName: string
-  realName: string
-  email: string
-  avatar: string | null
-  deptCode: string | null
-  deptName: string | null
 }
 
 interface PasswordCapability {
@@ -304,38 +294,19 @@ async function changePassword() {
             </div>
           </div>
 
-          <div class="grid gap-4 sm:grid-cols-2">
-            <div>
-              <label class="text-sm font-medium text-muted">用户名</label>
-              <p class="mt-1">
-                {{ profileUsername || '-' }}
-              </p>
-            </div>
-            <div>
-              <label class="text-sm font-medium text-muted">真实姓名</label>
-              <p class="mt-1">
-                {{ profileRealName || '-' }}
-              </p>
-            </div>
-            <div>
-              <label class="text-sm font-medium text-muted">邮箱</label>
-              <p class="mt-1">
-                {{ profileEmail || '-' }}
-              </p>
-            </div>
-            <div>
-              <label class="text-sm font-medium text-muted">部门</label>
-              <p class="mt-1">
-                {{ profileDepartment || '-' }}
-              </p>
-            </div>
-            <div>
-              <label class="text-sm font-medium text-muted">部门编码</label>
-              <p class="mt-1">
-                {{ profileDeptCode || '-' }}
-              </p>
-            </div>
-          </div>
+          <DirectorySelfProfileDetails
+            :profile="{
+              ...currentDirectoryProfile,
+              uid: currentDirectoryProfile?.uid || '',
+              username: profileUsername,
+              displayName: profileRealName,
+              realName: profileRealName,
+              email: profileEmail,
+              avatar: currentDirectoryProfile?.avatar || null,
+              deptName: profileDepartment,
+              deptCode: profileDeptCode
+            }"
+          />
         </UCard>
 
         <UCard>

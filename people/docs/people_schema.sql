@@ -839,4 +839,52 @@ CREATE TABLE IF NOT EXISTS `integration_operation_dead_letter_actionable` (
   CONSTRAINT `chk_people_iopdla_recipient` CHECK (`recipient_uids` IS NULL OR JSON_TYPE(`recipient_uids`) = 'ARRAY')
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='People caller-owned dead-letter actionable lifecycle';
 
+-- Target-owned inbox for reliable Aims contribution commands.
+CREATE TABLE IF NOT EXISTS service_command_receipt (
+  receipt_id CHAR(36) PRIMARY KEY,
+  operation_id CHAR(36) NOT NULL,
+  operation_code VARCHAR(191) NOT NULL,
+  tenant_code VARCHAR(100) NOT NULL,
+  source_deployment_code VARCHAR(100) NOT NULL,
+  deployment_code VARCHAR(100) NOT NULL,
+  source_app VARCHAR(50) NOT NULL,
+  target_app VARCHAR(50) NOT NULL,
+  required_capability VARCHAR(191) NOT NULL,
+  idempotency_key VARCHAR(191) NOT NULL,
+  identity_sha256 BINARY(32) GENERATED ALWAYS AS (UNHEX(SHA2(CONCAT_WS('|', tenant_code, source_deployment_code, deployment_code, source_app, target_app, operation_code, idempotency_key), 256))) STORED,
+  command_schema_version VARCHAR(30) NOT NULL DEFAULT 'v1',
+  command_sha256 CHAR(64) NOT NULL,
+  status VARCHAR(32) NOT NULL DEFAULT 'processing',
+  locked_by VARCHAR(100) DEFAULT NULL,
+  locked_until DATETIME(3) DEFAULT NULL,
+  fencing_token BIGINT UNSIGNED NOT NULL DEFAULT 0,
+  version_no BIGINT UNSIGNED NOT NULL DEFAULT 1,
+  first_request_id VARCHAR(100) DEFAULT NULL,
+  last_request_id VARCHAR(100) DEFAULT NULL,
+  correlation_id VARCHAR(100) DEFAULT NULL,
+  original_actor_uid VARCHAR(100) DEFAULT NULL,
+  service_client_id VARCHAR(100) DEFAULT NULL,
+  target_biz_type VARCHAR(100) DEFAULT NULL,
+  target_biz_code VARCHAR(191) DEFAULT NULL,
+  response_http_status SMALLINT UNSIGNED DEFAULT NULL,
+  response_summary_sha256 CHAR(64) DEFAULT NULL,
+  last_error_code VARCHAR(100) DEFAULT NULL,
+  last_error_class VARCHAR(50) DEFAULT NULL,
+  last_error_summary VARCHAR(1000) DEFAULT NULL,
+  received_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  last_received_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  completed_at DATETIME(3) DEFAULT NULL,
+  created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+  UNIQUE KEY uk_scr_identity (identity_sha256),
+  UNIQUE KEY uk_scr_operation_id (operation_id),
+  INDEX idx_scr_status_lock (status, locked_until),
+  INDEX idx_scr_target_biz (tenant_code, deployment_code, target_app, target_biz_type, target_biz_code),
+  INDEX idx_scr_first_request (tenant_code, deployment_code, first_request_id),
+  INDEX idx_scr_last_request (tenant_code, deployment_code, last_request_id),
+  INDEX idx_scr_correlation (tenant_code, deployment_code, correlation_id),
+  CONSTRAINT chk_scr_cross_app CHECK (source_app <> target_app),
+  CONSTRAINT chk_scr_status CHECK (status IN ('processing', 'succeeded', 'rejected'))
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Target-owned reliable service-command receipt';
+
 SET FOREIGN_KEY_CHECKS = 1;

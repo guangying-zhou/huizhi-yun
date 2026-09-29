@@ -35,6 +35,12 @@ import (
 	"github.com/huizhi-yun/data-runtime/internal/audit"
 	"github.com/huizhi-yun/data-runtime/internal/auth"
 	"github.com/huizhi-yun/data-runtime/internal/config"
+	"github.com/huizhi-yun/data-runtime/internal/enterprise"
+	"github.com/huizhi-yun/data-runtime/internal/enterpriseassets"
+	"github.com/huizhi-yun/data-runtime/internal/enterprisecontracts"
+	"github.com/huizhi-yun/data-runtime/internal/enterpriseplanning"
+	"github.com/huizhi-yun/data-runtime/internal/enterprisescheduler"
+	"github.com/huizhi-yun/data-runtime/internal/gatewaykeys"
 	"github.com/huizhi-yun/data-runtime/internal/httperror"
 	"github.com/huizhi-yun/data-runtime/internal/integrationoperation"
 	"github.com/huizhi-yun/data-runtime/internal/updater"
@@ -42,18 +48,39 @@ import (
 )
 
 type Server struct {
-	cfg       config.Config
-	auth      *auth.Authenticator
-	finance   *finance.Adapter
-	workflow  *workflow.Adapter
-	webdev    *webdev.Adapter
-	assets    *assetsapp.Adapter
-	people    *peopleapp.Adapter
-	altoc     *altocapp.Adapter
-	aims      *aimsapp.Adapter
-	codocs    *codocsapp.Adapter
-	console   *consoleapp.Adapter
-	directory *directoryapp.Adapter
+	enterpriseAltocReads          *enterprisecontracts.BasicReadService
+	enterpriseAltocSalesReads     *enterprisecontracts.SalesReadService
+	enterpriseContractActivation  *enterprisecontracts.ActivationService
+	enterpriseMilestoneReceivable *enterprisecontracts.MilestoneReceivableService
+	enterpriseRegistry            *enterprise.Registry
+	enterpriseRequests            *enterpriseplanning.RequestService
+	enterpriseHandoff             *enterpriseplanning.LightweightHandoffService
+	enterpriseAssetsProducts      *enterpriseassets.ProductService
+	enterprisePlanning            *enterpriseplanning.PlanningService
+	enterpriseCatalog             *enterpriseplanning.CatalogService
+	enterpriseScheduler           *enterprisescheduler.Service
+	enterpriseAssetsScheduler     *enterprisescheduler.AssetsDueService
+	enterpriseOnboarding          *enterpriseplanning.OnboardingService
+	enterpriseComponents          *enterpriseplanning.ComponentService
+	enterpriseFeatures            *enterpriseplanning.FeatureService
+	enterpriseVersions            *enterpriseplanning.VersionService
+	gatewayKeys                   *gatewaykeys.Store
+	cfg                           config.Config
+	auth                          *auth.Authenticator
+	finance                       *finance.Adapter
+	workflow                      *workflow.Adapter
+	// Test-only override for the Workflow notification-detail verifier's live
+	// credential/grant check; nil in production.
+	workflowNotificationVerifierCredential enterpriseCredentialVerifier
+	webdev                                 *webdev.Adapter
+	assets                                 *assetsapp.Adapter
+	people                                 *peopleapp.Adapter
+	altoc                                  *altocapp.Adapter
+	aims                                   *aimsapp.Adapter
+	codocs                                 *codocsapp.Adapter
+	snapshotRetention                      snapshotRetentionCache
+	console                                *consoleapp.Adapter
+	directory                              *directoryapp.Adapter
 
 	updateMu         sync.Mutex
 	updateStatus     map[string]any
@@ -151,6 +178,24 @@ type pinger interface {
 }
 
 func New(cfg config.Config) (*Server, error) {
+	var gatewayKeys *gatewaykeys.Store
+	if cfg.GatewayKeyset.Enabled {
+		var err error
+		gatewayKeys, err = gatewaykeys.New(gatewaykeys.Binding{Tenant: cfg.Tenant, Environment: cfg.GatewayKeyset.Environment, RuntimeCode: cfg.Control.RuntimeCode, GatewayDeployment: cfg.GatewayKeyset.GatewayDeployment}, cfg.GatewayKeyset.PlatformKeyID, cfg.GatewayKeyset.PlatformPublicKey, filepath.Join(cfg.Control.ConfigDir, "gateway-keyset.json"))
+		if err != nil {
+			return nil, fmt.Errorf("gateway keyset configuration invalid")
+		}
+	}
+	registry, err := initializeEnterpriseRegistry(cfg)
+	if err != nil {
+		return nil, err
+	}
+	constructed := false
+	defer func() {
+		if !constructed && registry != nil {
+			_ = registry.Close()
+		}
+	}()
 	var consoleAdapter *consoleapp.Adapter
 	if cfg.Apps.Console.Enabled {
 		adapter, err := consoleapp.New(cfg.Apps.Console, cfg.Tenant)
@@ -225,6 +270,20 @@ func New(cfg config.Config) (*Server, error) {
 			return nil, err
 		}
 		assetsAdapter = adapter
+		if cfg.Enterprise.Enabled {
+			binding, bindingErr := cfg.EnterpriseBinding()
+			if bindingErr != nil {
+				return nil, bindingErr
+			}
+			if binding.Domains["assets"].Write == enterprise.PathUnified || binding.Domains["assets"].Read == enterprise.PathUnified {
+				ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+				configureErr := assetsAdapter.ConfigureEnterpriseWrites(ctx, registry, binding)
+				cancel()
+				if configureErr != nil {
+					return nil, configureErr
+				}
+			}
+		}
 	}
 
 	var peopleAdapter *peopleapp.Adapter
@@ -255,6 +314,20 @@ func New(cfg config.Config) (*Server, error) {
 			return nil, err
 		}
 		aimsAdapter = adapter
+		if cfg.Enterprise.Enabled {
+			binding, err := cfg.EnterpriseBinding()
+			if err != nil {
+				return nil, err
+			}
+			if binding.Domains["aims"].Write == enterprise.PathUnified {
+				ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+				err = aimsAdapter.ConfigureEnterpriseWrites(ctx, registry, binding, cfg.DeploymentBindings["enterprise"], cfg.DeploymentBindings["aims"])
+				cancel()
+				if err != nil {
+					return nil, err
+				}
+			}
+		}
 	}
 
 	var codocsAdapter *codocsapp.Adapter
@@ -266,19 +339,227 @@ func New(cfg config.Config) (*Server, error) {
 		codocsAdapter = adapter
 	}
 
+	var enterpriseRequests *enterpriseplanning.RequestService
+	var enterpriseHandoff *enterpriseplanning.LightweightHandoffService
+	var enterprisePlanning *enterpriseplanning.PlanningService
+	var enterpriseComponents *enterpriseplanning.ComponentService
+	var enterpriseFeatures *enterpriseplanning.FeatureService
+	var enterpriseVersions *enterpriseplanning.VersionService
+	if cfg.Enterprise.Enabled && cfg.Enterprise.Domains["aims"].Write == enterprise.PathUnified {
+		binding, err := cfg.EnterpriseBinding()
+		if err != nil {
+			return nil, err
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		source, err := cfg.EnterpriseAimsOutboundSource(registry, binding)
+		var sources []enterprise.OutboundSource
+		if source != nil {
+			sources = append(sources, *source)
+		}
+		if err == nil {
+			enterpriseRequests, err = enterpriseplanning.NewRequestService(ctx, registry, binding, sources...)
+		}
+		if err == nil {
+			enterpriseHandoff, err = enterpriseplanning.NewLightweightHandoffService(ctx, registry, binding)
+			if err != nil {
+				return nil, fmt.Errorf("initialize enterprise handoff: %w", err)
+			}
+			enterprisePlanning, err = enterpriseplanning.NewPlanningService(ctx, registry, binding, sources...)
+		}
+		if err == nil {
+			enterpriseComponents, err = enterpriseplanning.NewComponentService(ctx, registry, binding)
+		}
+		if err == nil {
+			enterpriseFeatures, err = enterpriseplanning.NewFeatureService(ctx, registry, binding, sources...)
+		}
+		if err == nil {
+			enterpriseVersions, err = enterpriseplanning.NewVersionService(ctx, registry, binding, sources...)
+		}
+		cancel()
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	var enterpriseOnboarding *enterpriseplanning.OnboardingService
+	if cfg.Enterprise.Enabled && cfg.Enterprise.Domains["aims"].Write == enterprise.PathUnified && cfg.Enterprise.Domains["aims"].Read == enterprise.PathUnified && cfg.Enterprise.Domains["assets"].Read == enterprise.PathUnified {
+		binding, err := cfg.EnterpriseBinding()
+		if err != nil {
+			return nil, err
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		enterpriseOnboarding, err = enterpriseplanning.NewOnboardingService(ctx, registry, binding)
+		cancel()
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	var enterpriseScheduler *enterprisescheduler.Service
+	if cfg.Enterprise.Enabled && cfg.Enterprise.Domains["aims"].Scheduler == enterprise.PathUnified {
+		binding, err := cfg.EnterpriseBinding()
+		if err != nil {
+			return nil, err
+		}
+		source, err := cfg.EnterpriseAimsOutboundSource(registry, binding)
+		if err != nil {
+			return nil, err
+		}
+		if source == nil {
+			return nil, config.ErrEnterpriseConfig
+		}
+		enterpriseScheduler, err = enterprisescheduler.New(registry, binding, *source)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	var enterpriseAssetsScheduler *enterprisescheduler.AssetsDueService
+	if cfg.Enterprise.Enabled && cfg.Enterprise.Domains["assets"].Scheduler == enterprise.PathUnified {
+		worker, err := cfg.EnterpriseAssetsSchedulerWorker()
+		if err != nil {
+			return nil, err
+		}
+		if worker == nil {
+			return nil, config.ErrEnterpriseConfig
+		}
+		binding, err := cfg.EnterpriseBinding()
+		if err != nil {
+			return nil, err
+		}
+		enterpriseAssetsScheduler, err = enterprisescheduler.NewAssetsDueService(registry, binding, worker.Deployment, worker.ServiceClientID)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	var enterpriseCatalog *enterpriseplanning.CatalogService
+	if cfg.Enterprise.Enabled && cfg.Enterprise.Domains["aims"].Read == enterprise.PathUnified && cfg.Enterprise.Domains["assets"].Read == enterprise.PathUnified {
+		binding, err := cfg.EnterpriseBinding()
+		if err != nil {
+			return nil, err
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		enterpriseCatalog, err = enterpriseplanning.NewCatalogService(ctx, registry, binding)
+		cancel()
+		if err != nil {
+			return nil, err
+		}
+	}
+	var enterpriseAssetsProducts *enterpriseassets.ProductService
+	if cfg.Enterprise.Enabled && cfg.Enterprise.Domains["assets"].Read == enterprise.PathUnified {
+		binding, err := cfg.EnterpriseBinding()
+		if err != nil {
+			return nil, err
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		enterpriseAssetsProducts, err = enterpriseassets.NewProductService(ctx, registry, binding, cfg.DeploymentBindings["assets"])
+		cancel()
+		if err != nil {
+			return nil, err
+		}
+	}
+	var enterpriseContractActivation *enterprisecontracts.ActivationService
+	if cfg.Enterprise.Enabled && cfg.Enterprise.EnableContractActivation {
+		binding, err := cfg.EnterpriseBinding()
+		if err != nil {
+			return nil, err
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		enterpriseContractActivation, err = enterprisecontracts.NewActivationService(ctx, registry, binding, enterprisecontracts.DeploymentBinding{AltocDeployment: cfg.DeploymentBindings["altoc"], AimsDeployment: cfg.DeploymentBindings["aims"], AltocClient: "altoc.runtime"}, altocAdapter, aimsAdapter)
+		cancel()
+		if err != nil {
+			return nil, err
+		}
+	}
+	var enterpriseAltocReads *enterprisecontracts.BasicReadService
+	if cfg.Enterprise.Enabled && cfg.Enterprise.Domains["altoc"].Read == enterprise.PathUnified {
+		binding, err := cfg.EnterpriseBinding()
+		if err != nil {
+			return nil, err
+		}
+		enterpriseAltocReads, err = enterprisecontracts.NewBasicReadService(registry, binding)
+		if err != nil {
+			return nil, fmt.Errorf("initialize enterprise Altoc reads: %w", err)
+		}
+	}
+	var enterpriseAltocSalesReads *enterprisecontracts.SalesReadService
+	if cfg.Enterprise.Enabled && cfg.Enterprise.Domains["altoc"].Read == enterprise.PathUnified {
+		binding, err := cfg.EnterpriseBinding()
+		if err != nil {
+			return nil, err
+		}
+		complete := true
+		for _, table := range altocapp.SalesReadTables {
+			if binding.Domains["altoc"].Tables[table] == "" {
+				complete = false
+			}
+		}
+		// A G1-only Registry remains usable; G2 routes fail closed as not ready.
+		if complete {
+			enterpriseAltocSalesReads, err = enterprisecontracts.NewSalesReadService(registry, binding)
+			if err != nil {
+				return nil, fmt.Errorf("initialize enterprise Altoc sales reads: %w", err)
+			}
+		}
+	}
+	var enterpriseMilestoneReceivable *enterprisecontracts.MilestoneReceivableService
+	if cfg.Enterprise.Enabled && cfg.Enterprise.EnableMilestoneReceivable {
+		binding, err := cfg.EnterpriseBinding()
+		if err != nil {
+			return nil, err
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		enterpriseMilestoneReceivable, err = enterprisecontracts.NewMilestoneReceivableService(ctx, registry, binding, enterprisecontracts.DeploymentBinding{AltocDeployment: cfg.DeploymentBindings["altoc"], AimsDeployment: cfg.DeploymentBindings["aims"], AltocClient: "altoc.runtime"}, altocAdapter, aimsAdapter)
+		cancel()
+		if err != nil {
+			return nil, err
+		}
+	}
+	if consoleAdapter != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		err := validateSharedOIDCTrust(ctx, consoleAdapter, &cfg)
+		cancel()
+		if err != nil {
+			return nil, err
+		}
+	}
+	authenticator := auth.New(cfg)
+	if consoleAdapter != nil {
+		consoleAdapter.SetOIDCSigningIssuerSource(authenticator.TrustedJWTIssuer)
+		consoleAdapter.SetOIDCSigningDeploymentBindings(cfg.Deployment, cfg.DeploymentBindings)
+	}
+	constructed = true
 	return &Server{
-		cfg:       cfg,
-		auth:      auth.New(cfg),
-		finance:   financeAdapter,
-		workflow:  workflowAdapter,
-		webdev:    webdevAdapter,
-		assets:    assetsAdapter,
-		people:    peopleAdapter,
-		altoc:     altocAdapter,
-		aims:      aimsAdapter,
-		codocs:    codocsAdapter,
-		console:   consoleAdapter,
-		directory: directoryAdapter,
+		gatewayKeys:                   gatewayKeys,
+		enterpriseContractActivation:  enterpriseContractActivation,
+		enterpriseMilestoneReceivable: enterpriseMilestoneReceivable,
+		enterpriseRegistry:            registry,
+		enterpriseAltocReads:          enterpriseAltocReads,
+		enterpriseAltocSalesReads:     enterpriseAltocSalesReads,
+		enterpriseAssetsProducts:      enterpriseAssetsProducts,
+		enterpriseRequests:            enterpriseRequests,
+		enterpriseHandoff:             enterpriseHandoff,
+		enterprisePlanning:            enterprisePlanning,
+		enterpriseCatalog:             enterpriseCatalog,
+		enterpriseScheduler:           enterpriseScheduler,
+		enterpriseAssetsScheduler:     enterpriseAssetsScheduler,
+		enterpriseOnboarding:          enterpriseOnboarding,
+		enterpriseComponents:          enterpriseComponents,
+		enterpriseFeatures:            enterpriseFeatures,
+		enterpriseVersions:            enterpriseVersions,
+		cfg:                           cfg,
+		auth:                          authenticator,
+		finance:                       financeAdapter,
+		workflow:                      workflowAdapter,
+		webdev:                        webdevAdapter,
+		assets:                        assetsAdapter,
+		people:                        peopleAdapter,
+		altoc:                         altocAdapter,
+		aims:                          aimsAdapter,
+		codocs:                        codocsAdapter,
+		console:                       consoleAdapter,
+		directory:                     directoryAdapter,
 	}, nil
 }
 
@@ -314,7 +595,278 @@ func (s *Server) consoleCutoverDeployment() string {
 }
 
 func (s *Server) route(r *http.Request) (routeResult, error) {
+	if r.Method == http.MethodPost && r.URL.Path == "/runtime/enterprise/cutover-activation" {
+		return s.routeEnterpriseCutoverActivation(r)
+	}
 	path := cleanPath(r.URL.Path)
+	if action, ok := enterpriseVersionActions[path]; ok && r.Method == http.MethodPost {
+		return s.routeEnterpriseVersionCommand(r, action)
+	}
+	if action, ok := enterpriseSchedulerNotificationActions[path]; ok && r.Method == http.MethodPost {
+		return s.routeEnterpriseSchedulerNotification(r, action)
+	}
+	if action, ok := enterpriseFeatureActions[path]; ok && r.Method == http.MethodPost {
+		return s.routeEnterpriseFeature(r, action)
+	}
+	if action, ok := enterpriseComponentActions[path]; ok && r.Method == http.MethodPost {
+		return s.routeEnterpriseComponentAction(r, action)
+	}
+	if action, ok := enterpriseOnboardActions[path]; ok && r.Method == http.MethodPost {
+		return s.routeEnterpriseOnboard(r, action)
+	}
+	if r.Method == http.MethodPost && path == "/v1/enterprise/aims/integration-operations:claim" {
+		return s.routeEnterpriseSchedulerClaim(r)
+	}
+	if r.Method == http.MethodPost && path == enterpriseMilestoneRolloverPath {
+		return s.routeEnterpriseMilestoneRollover(r)
+	}
+	if action, ok := enterpriseDueNotificationActions[path]; ok && r.Method == http.MethodPost {
+		return s.routeEnterpriseDueNotification(r, action)
+	}
+	if action, ok := enterpriseAssetsDueNotificationActions[path]; ok && r.Method == http.MethodPost {
+		return s.routeEnterpriseAssetsDueNotification(r, action)
+	}
+	if r.Method == http.MethodPost && path == enterpriseCompanyWeeklySummaryContentPath {
+		return s.routeEnterpriseSchedulerCompanyWeeklySummaryContent(r)
+	}
+	if r.Method == http.MethodPost && (path == "/v1/enterprise/aims/integration-operations:succeed" || path == "/v1/enterprise/aims/integration-operations:fail") {
+		return s.routeEnterpriseSchedulerComplete(r, strings.HasSuffix(path, ":succeed"))
+	}
+	if r.Method == http.MethodPost && path == "/v1/enterprise/aims/product-workspace:view" {
+		return s.routeEnterpriseProductWorkspace(r)
+	}
+	if _, ok := enterpriseDirectorySelfPaths[path]; ok && r.Method == http.MethodPost {
+		return s.routeEnterpriseDirectorySelf(r, path)
+	}
+	if r.Method == http.MethodPost && path == "/v1/enterprise/aims/product-list" {
+		return s.routeEnterpriseProductList(r)
+	}
+	if spec, ok := enterpriseAltocSalesReadPaths[path]; ok && r.Method == http.MethodPost {
+		return s.routeEnterpriseAltocSalesRead(r, spec)
+	}
+	if spec, ok := enterpriseAltocReadPaths[path]; ok && r.Method == http.MethodPost {
+		return s.routeEnterpriseAltocRead(r, spec)
+	}
+	if action, ok := enterpriseProjectReadActions[path]; ok && r.Method == http.MethodPost {
+		return s.routeEnterpriseProjectRead(r, action)
+	}
+	if path == enterpriseAdminProjectListPath && r.Method == http.MethodPost {
+		return s.routeEnterpriseAdminProjectList(r)
+	}
+	if action, ok := enterpriseProductDocumentActions[path]; ok && r.Method == http.MethodPost {
+		return s.routeEnterpriseProductDocuments(r, action)
+	}
+	if path == "/v1/enterprise/aims/product-documents:link" && r.Method == http.MethodPost {
+		return s.routeEnterpriseProductDocumentLink(r)
+	}
+	if path == "/v1/enterprise/aims/project-documents:accessible" && r.Method == http.MethodPost {
+		return s.routeEnterpriseProjectDocumentAccessible(r)
+	}
+	if path == "/v1/enterprise/aims/project-products:list" && r.Method == http.MethodPost {
+		return s.routeEnterpriseProjectProducts(r, "list")
+	}
+	if path == "/v1/enterprise/aims/project-products:link" && r.Method == http.MethodPost {
+		return s.routeEnterpriseProjectProducts(r, "link")
+	}
+	if route, ok := enterpriseCodocsReadRoutes[path]; ok && r.Method == http.MethodPost {
+		return s.routeEnterpriseCodocsRead(r, route)
+	}
+	if route, ok := enterpriseCodocsDepartmentAccessRoutes[path]; ok && r.Method == http.MethodPost {
+		return s.routeEnterpriseCodocsDepartmentAccess(r, route)
+	}
+	if route, ok := enterpriseCodocsDepartmentCollaborationRoutes[path]; ok && r.Method == http.MethodPost && s.departmentCollaborationEnabled() {
+		return s.routeEnterpriseCodocsDepartmentCollaboration(r, route)
+	}
+	if route, ok := enterpriseCodocsCompanyAssetsRoutes[path]; ok && r.Method == http.MethodPost {
+		return s.routeEnterpriseCodocsCompanyAssets(r, route)
+	}
+	if route, ok := enterpriseCodocsCollaborationRoutes[path]; ok && r.Method == http.MethodPost {
+		return s.routeEnterpriseCodocsOperation(r, route, enterpriseCodocsCollaborationQuery)
+	}
+	if route, ok := enterpriseCodocsPublishExecutionRoutes[path]; ok && r.Method == http.MethodPost {
+		return s.routeEnterpriseCodocsOperation(r, route, enterpriseCodocsPublishExecutionQuery)
+	}
+	if route, ok := enterpriseCodocsDocumentShareRoutes[path]; ok && r.Method == http.MethodPost {
+		return s.routeEnterpriseCodocsOperation(r, route, enterpriseCodocsDocumentShareQuery)
+	}
+	if route, ok := enterpriseCodocsReviewHistoryRoutes[path]; ok && r.Method == http.MethodPost {
+		return s.routeEnterpriseCodocsOperation(r, route, enterpriseCodocsReviewHistoryQuery)
+	}
+	if route, ok := enterpriseCodocsVersionRoutes[path]; ok && r.Method == http.MethodPost {
+		return s.routeEnterpriseCodocsOperation(r, route, enterpriseCodocsVersionQuery)
+	}
+	if route, ok := enterpriseCodocsAnnotationsRoutes[path]; ok && r.Method == http.MethodPost {
+		return s.routeEnterpriseCodocsOperation(r, route, enterpriseCodocsAnnotationsQuery)
+	}
+	if capability, ok := collaborationSnapshotActions[path]; ok && r.Method == http.MethodPost && s.cfg.Apps.Codocs.SnapshotV2Enabled && s.cfg.Apps.Codocs.CollaborationV2Enabled {
+		return s.routeCodocsCollaborationSnapshot(r, path, capability)
+	}
+	if route, ok := enterpriseCodocsCollaborationSessionRoutes[path]; ok && r.Method == http.MethodPost && s.cfg.Apps.Codocs.SnapshotV2Enabled && s.cfg.Apps.Codocs.CollaborationV2Enabled {
+		return s.routeEnterpriseCodocsOperation(r, route, enterpriseCodocsCollaborationSessionQuery)
+	}
+	if route, ok := enterpriseCodocsDocumentSnapshotRoutes[path]; ok && r.Method == http.MethodPost && s.cfg.Apps.Codocs.SnapshotV2Enabled {
+		return s.routeEnterpriseCodocsOperation(r, route, enterpriseCodocsDocumentSnapshotQuery)
+	}
+	if route, ok := enterpriseCodocsDocumentUpdateRoutes[path]; ok && r.Method == http.MethodPost {
+		return s.routeEnterpriseCodocsOperation(r, route, enterpriseCodocsDocumentUpdateQuery)
+	}
+	if route, ok := enterpriseCodocsDocumentTransferRoutes[path]; ok && r.Method == http.MethodPost {
+		return s.routeEnterpriseCodocsOperation(r, route, enterpriseCodocsDocumentTransferQuery)
+	}
+	if route, ok := enterpriseCodocsCabinetRoutes[path]; ok && r.Method == http.MethodPost {
+		return s.routeEnterpriseCodocsOperation(r, route, enterpriseCodocsCabinetQuery)
+	}
+	if route, ok := enterpriseCodocsDepartmentCabinetRoutes[path]; ok && r.Method == http.MethodPost {
+		return s.routeEnterpriseCodocsDepartmentCabinet(r, route)
+	}
+	if route, ok := enterpriseCodocsDepartmentSharesRoutes[path]; ok && r.Method == http.MethodPost {
+		return s.routeEnterpriseCodocsDepartmentShares(r, route)
+	}
+	if route, ok := enterpriseCodocsMetadataRoutes[path]; ok && r.Method == http.MethodPost {
+		return s.routeEnterpriseCodocsOperation(r, route, enterpriseCodocsMetadataQuery)
+	}
+	if route, ok := enterpriseCodocsFolderRoutes[path]; ok && r.Method == http.MethodPost {
+		return s.routeEnterpriseCodocsOperation(r, route, enterpriseCodocsFolderQuery)
+	}
+	if route, ok := enterpriseCodocsRecycleRoutes[path]; ok && r.Method == http.MethodPost {
+		return s.routeEnterpriseCodocsOperation(r, route, enterpriseCodocsRecycleQuery)
+	}
+	if route, ok := enterpriseCodocsRestoreRoutes[path]; ok && r.Method == http.MethodPost {
+		return s.routeEnterpriseCodocsOperation(r, route, enterpriseCodocsRestoreQuery)
+	}
+	if route, ok := enterpriseCodocsCreationRoutes[path]; ok && r.Method == http.MethodPost {
+		return s.routeEnterpriseCodocsOperation(r, route, enterpriseCodocsCreationQuery)
+	}
+	if route, ok := enterpriseCodocsAccessRecordRoutes[path]; ok && r.Method == http.MethodPost {
+		return s.routeEnterpriseCodocsOperation(r, route, enterpriseCodocsAccessRecordQuery)
+	}
+	if path == "/v1/enterprise/aims/time-entry-reviews:list" && r.Method == http.MethodPost {
+		return s.routeEnterpriseTimeEntryReviews(r)
+	}
+	if route, ok := enterpriseDelegatedRoutes[path]; ok && r.Method == http.MethodPost {
+		return s.routeEnterpriseDelegated(r, route)
+	}
+	if path == enterpriseProjectCreatePath && r.Method == http.MethodPost {
+		return s.routeEnterpriseProjectCreate(r)
+	}
+	if path == enterpriseProjectUpdatePath && r.Method == http.MethodPost {
+		return s.routeEnterpriseProjectUpdate(r, false)
+	}
+	if path == enterpriseAdminProjectUpdatePath && r.Method == http.MethodPost {
+		return s.routeEnterpriseProjectUpdate(r, true)
+	}
+	if spec, ok := enterpriseProjectMemberPaths[path]; ok && r.Method == http.MethodPost {
+		return s.routeEnterpriseProjectMemberWrite(r, spec)
+	}
+	if action, ok := enterpriseWorkItemWritePaths[path]; ok && r.Method == http.MethodPost {
+		return s.routeEnterpriseWorkItemWrite(r, action)
+	}
+	if r.Method == http.MethodPost && path == "/v1/aims/service/work-item-completion/workflow-callback" {
+		return s.routeAimsWorkItemCompletionCallback(r)
+	}
+	if action, ok := enterpriseWorkItemReadActions[path]; ok && r.Method == http.MethodPost {
+		return s.routeEnterpriseWorkItemRead(r, action)
+	}
+	if action, ok := enterpriseTimeEntryReadActions[path]; ok && r.Method == http.MethodPost {
+		return s.routeEnterpriseTimeEntryRead(r, action)
+	}
+	if action, ok := enterpriseWeeklyReportReadActions[path]; ok && r.Method == http.MethodPost {
+		return s.routeEnterpriseWeeklyReportRead(r, action)
+	}
+	if action, ok := enterpriseProjectRequirementReadActions[path]; ok && r.Method == http.MethodPost {
+		return s.routeEnterpriseProjectRequirementRead(r, action)
+	}
+	if action, ok := enterpriseProjectPlanReadActions[path]; ok && r.Method == http.MethodPost {
+		return s.routeEnterpriseProjectPlanRead(r, action)
+	}
+	if path == enterpriseProjectBoardPath && r.Method == http.MethodPost {
+		return s.routeEnterpriseProjectBoard(r)
+	}
+	if path == enterpriseTimesheetOverviewPath && r.Method == http.MethodPost {
+		return s.routeEnterpriseTimesheetOverview(r)
+	}
+	if path == enterpriseWeeklyReportOverviewPath && r.Method == http.MethodPost {
+		return s.routeEnterpriseWeeklyReportOverview(r)
+	}
+	if path == enterpriseProjectMemberListPath && r.Method == http.MethodPost {
+		return s.routeEnterpriseProjectMemberList(r)
+	}
+	if r.Method == http.MethodPost {
+		if action, ok := map[string]string{"/v1/enterprise/aims/versions:list": "list", "/v1/enterprise/aims/versions:view": "view", "/v1/enterprise/aims/versions:plan": "plan", "/v1/enterprise/aims/versions:plan-items": "plan-items"}[path]; ok {
+			return s.routeEnterpriseVersionRead(r, action)
+		}
+	}
+	if r.Method == http.MethodPost && path == "/v1/enterprise/aims/components:list" {
+		return s.routeEnterpriseProductComponents(r)
+	}
+	if action, ok := enterpriseRequestActions[path]; ok && r.Method == http.MethodPost {
+		return s.routeEnterpriseRequestAction(r, action)
+	}
+	if r.Method == http.MethodPost && path == "/v1/enterprise/altoc/contracts:activate-delivery" {
+		return s.routeEnterpriseContractActivation(r)
+	}
+	if action, ok := enterpriseAssetsProductActions[path]; ok && r.Method == http.MethodPost {
+		return s.routeEnterpriseAssetsProduct(r, action)
+	}
+	if action, ok := map[string]string{
+		"/v1/enterprise/assets/dictionaries:list": "dictionaries",
+		"/v1/enterprise/assets/assets:list":       "list",
+		"/v1/enterprise/assets/assets:view":       "view",
+	}[path]; ok && r.Method == http.MethodPost {
+		return s.routeEnterpriseAssetsRead(r, action)
+	}
+	if action, ok := map[string]string{
+		"/v1/enterprise/assets/digital-assets:list": "list",
+		"/v1/enterprise/assets/digital-assets:view": "view",
+	}[path]; ok && r.Method == http.MethodPost {
+		return s.routeEnterpriseDigitalAssetsRead(r, action)
+	}
+	if action, ok := map[string]string{
+		"/v1/enterprise/assets/digital-assets:create": "create",
+		"/v1/enterprise/assets/digital-assets:edit":   "edit",
+	}[path]; ok && r.Method == http.MethodPost {
+		return s.routeEnterpriseDigitalAssetsWrite(r, action)
+	}
+	if action, ok := map[string]string{
+		"/v1/enterprise/assets/ip-assets:list":     "list",
+		"/v1/enterprise/assets/ip-assets:view":     "view",
+		"/v1/enterprise/assets/ip-assets:products": "products",
+	}[path]; ok && r.Method == http.MethodPost {
+		return s.routeEnterpriseIPAssetsRead(r, action)
+	}
+	if action, ok := map[string]string{
+		"/v1/enterprise/assets/ip-assets:create": "create",
+		"/v1/enterprise/assets/ip-assets:edit":   "edit",
+	}[path]; ok && r.Method == http.MethodPost {
+		return s.routeEnterpriseIPAssetsWrite(r, action)
+	}
+	if path == "/v1/enterprise/assets/ip-assets:link-product" && r.Method == http.MethodPost {
+		return s.routeEnterpriseIPAssetsLinkProduct(r)
+	}
+	if action, ok := enterpriseHandoffActions[path]; ok && r.Method == http.MethodPost {
+		return s.routeEnterpriseHandoff(r, action)
+	}
+	if action, ok := enterprisePlanningActions[path]; ok && r.Method == http.MethodPost {
+		return s.routeEnterprisePlanningCommand(r, action)
+	}
+	if r.Method == http.MethodPost && (path == "/v1/enterprise/aims/product-requests:list" || path == "/v1/enterprise/aims/product-requests:view") {
+		return s.routeEnterpriseProductRequestRead(r, strings.HasSuffix(path, ":view"))
+	}
+	if r.Method == http.MethodPost && path == "/v1/enterprise/aims/product-authorization" {
+		return s.routeEnterpriseProductAuthorization(r)
+	}
+	if r.Method == http.MethodPost && path == "/v1/enterprise/aims/product-requests:create" {
+		return s.routeEnterpriseProductRequestCreate(r)
+	}
+	if r.Method == http.MethodPost && path == "/v1/enterprise/assets/product-directory" {
+		return s.routeEnterpriseProductDirectory(r)
+	}
+	if r.Method == http.MethodPost && path == "/v1/enterprise/assets/product-directory:resolve" {
+		return s.routeEnterpriseProductDirectoryResolve(r)
+	}
+	if r.Method == http.MethodPost && path == "/v1/enterprise/assets/product-adoption:read" {
+		return s.routeEnterpriseProductAdoption(r)
+	}
 
 	if r.Method == http.MethodGet && (path == "/runtime/health" || path == "/runtime/healthz") {
 		return routeResult{
@@ -660,6 +1212,16 @@ func (s *Server) route(r *http.Request) (routeResult, error) {
 		return routeResult{Operation: operation, Auth: &authCtx, Body: result}, err
 	}
 
+	if path == "/v1/console/verified-policy" && (r.Method == http.MethodGet || r.Method == http.MethodPut) {
+		return s.routeVerifiedPolicy(r)
+	}
+	if path == "/v1/enterprise/console-policy" {
+		return s.routeVerifiedPolicy(r)
+	}
+	if path == "/v1/console/verified-policy/renewal" {
+		return s.routeVerifiedPolicy(r)
+	}
+
 	if path == "/v1/console/policy-bundle" && (r.Method == http.MethodGet || r.Method == http.MethodPut) {
 		scope := "console:policy-bundle:read"
 		if r.Method == http.MethodPut {
@@ -676,7 +1238,11 @@ func (s *Server) route(r *http.Request) (routeResult, error) {
 		if authCtx.Mode == string(config.AuthJWT) {
 			state, stateErr := adapter.VerifyOIDCServiceTokenState(r.Context(), map[string]any{"clientId": authCtx.ClientID, "credentialId": authCtx.CredentialID, "scope": scope})
 			if stateErr != nil {
-				return routeResult{}, stateErr
+				var known httperror.Error
+				if errors.As(stateErr, &known) && (known.Status == http.StatusUnauthorized || known.Status == http.StatusForbidden) {
+					return routeResult{}, stateErr
+				}
+				return routeResult{}, httperror.New(http.StatusServiceUnavailable, "console_policy_state_unavailable", "Policy credential state is temporarily unavailable")
 			}
 			if state["active"] != true {
 				return routeResult{}, httperror.New(403, "console_policy_credential_inactive", "Policy storage credential or grant inactive")
@@ -829,9 +1395,17 @@ func (s *Server) route(r *http.Request) (routeResult, error) {
 	}
 
 	if r.Method == http.MethodPost && path == "/v1/console/auth/service-tokens/issue" {
-		authCtx, err := s.auth.Authenticate(r, auth.Requirement{
-			AppCode: "console", Scope: "console:service-token:issue", SourceAppCode: "console",
-		})
+		var authCtx auth.Context
+		var err error
+		// A Console key assertion is the Platform-independent alternative to
+		// the Platform bootstrap token; it is accepted on this route only.
+		if assertion := consoleAssertionBearer(r); assertion != "" {
+			authCtx, err = s.authenticateConsoleAssertion(r, assertion)
+		} else {
+			authCtx, err = s.auth.Authenticate(r, auth.Requirement{
+				AppCode: "console", Scope: "console:service-token:issue", SourceAppCode: "console",
+			})
+		}
 		if err != nil {
 			return routeResult{}, err
 		}
@@ -855,6 +1429,44 @@ func (s *Server) route(r *http.Request) (routeResult, error) {
 		return routeResult{
 			Operation: "console.auth.service_token.issue", Auth: &authCtx, Body: result,
 		}, err
+	}
+
+	if r.Method == http.MethodPost && path == gatewaykeys.ExchangePath {
+		return s.gatewayExchange(r)
+	}
+
+	if r.Method == http.MethodPost && path == "/v1/console/auth/service-tokens/exchange" {
+		authCtx, err := s.auth.Authenticate(r, auth.Requirement{
+			AppCode: "console", Scope: "console:service-token:exchange", SourceAppCode: "console",
+			StrictServiceClaims: true, RequireDeploymentBinding: true,
+		})
+		if err != nil {
+			return routeResult{}, err
+		}
+		if authCtx.ClientID != "console.runtime" || authCtx.Subject != "client:console.runtime" || authCtx.Mode != "jwt" {
+			return routeResult{}, httperror.New(http.StatusForbidden, "console_exchange_identity_invalid", "Console Runtime service identity required")
+		}
+		adapter, err := s.requireConsole()
+		if err != nil {
+			return routeResult{}, err
+		}
+		if err := adapter.VerifyConsoleExchangeCaller(r.Context(), authCtx.CredentialID); err != nil {
+			return routeResult{}, err
+		}
+		body, err := readJSONBody(r)
+		if err != nil {
+			return routeResult{}, err
+		}
+		result, err := adapter.ExchangeConsoleServiceClientToken(
+			r.Context(), body, authCtx.Tenant, authCtx.Deployment, consoleapp.AuditMutationMeta{
+				RequestID: requestID(r), ActorType: "service",
+				ActorID: authCtx.Subject, SourceApp: authCtx.AppCode,
+			},
+		)
+		if err == nil {
+			result = map[string]any{"code": 0, "data": result}
+		}
+		return routeResult{Operation: "console.auth.service_token.exchange", Auth: &authCtx, Body: result}, err
 	}
 
 	if r.Method == http.MethodPost &&
@@ -1374,6 +1986,8 @@ func (s *Server) route(r *http.Request) (routeResult, error) {
 			scope, operation = "console:directory-department:view", "console.directory.committees.read"
 		case r.Method == http.MethodPost && path == "/v1/console/directory/committees":
 			scope, operation = "console:directory-department:edit", "console.directory.committee.create"
+		case r.Method == http.MethodPost && isConsoleCommitteeMembersPath(path):
+			scope, operation = "console:directory-department:edit", "console.directory.committee.mutate"
 		case (r.Method == http.MethodGet || r.Method == http.MethodPatch || r.Method == http.MethodDelete) && strings.HasPrefix(path, "/v1/console/directory/committees/"):
 			scope, operation = "console:directory-department:view", "console.directory.committee.read"
 			if r.Method != http.MethodGet {
@@ -3283,6 +3897,9 @@ func (s *Server) route(r *http.Request) (routeResult, error) {
 		return routeResult{Operation: "workflow.instances.create", Auth: &authCtx, Body: result}, err
 	}
 
+	if r.Method == http.MethodPost && path == "/v1/workflow/service/aims-work-item-completion-approval" {
+		return s.routeWorkflowAimsCompletion(r)
+	}
 	if r.Method == http.MethodPost && path == "/v1/workflow/service/finance-invoice-approval" {
 		authCtx, err := s.auth.Authenticate(r, auth.Requirement{AppCode: "workflow", Scope: "workflow:invoice-request:create"})
 		if err != nil {
@@ -3312,14 +3929,51 @@ func (s *Server) route(r *http.Request) (routeResult, error) {
 		return routeResult{Operation: operation, Auth: &authCtx, Body: result}, err
 	}
 
-	if isWorkflowRuntimePath(path) {
-		scope := "workflow.read"
-		if r.Method != http.MethodGet {
-			scope = "workflow.write"
-		}
-		authCtx, err := s.auth.Authenticate(r, auth.Requirement{AppCode: "workflow", Scope: scope})
+	if r.Method == http.MethodPost && workflowDeliveryRecoveryRoute(path) {
+		authCtx, err := s.authenticateWorkflowEffectService(r, workflowDeliveryRecoveryScope, "workflow.maintenance")
 		if err != nil {
 			return routeResult{}, err
+		}
+		adapter, err := s.requireWorkflow()
+		if err != nil {
+			return routeResult{}, err
+		}
+		body, err := readJSONBody(r)
+		if err != nil {
+			return routeResult{}, err
+		}
+		reason, expectedVersion, err := workflowRecoveryInput(body)
+		if err != nil {
+			return routeResult{}, err
+		}
+		setRuntimeTrustedBody(body, authCtx, requestID(r))
+		body["hzy_runtime_credential_id"] = authCtx.CredentialID
+		body["reason"] = reason
+		body["expectedVersion"] = expectedVersion
+		result, operation, err := adapter.HandleRuntime(r.Context(), r.Method, path, r.URL.Query(), body)
+		return routeResult{Operation: operation, Auth: &authCtx, Body: result}, err
+	}
+
+	if isWorkflowRuntimePath(path) {
+		scope := workflowRuntimeRequiredScope(r.Method, path)
+		var authCtx auth.Context
+		var err error
+		if workflowIntegrationEffectRoute(r.Method, path) {
+			authCtx, err = s.authenticateWorkflowEffectService(r, workflowIntegrationOperationScope, "workflow.runtime")
+		} else if r.Method == http.MethodPost && path == "/v1/workflow/notification-details/authorize" {
+			authCtx, err = s.authenticateWorkflowNotificationDetailVerifier(r)
+		} else {
+			authCtx, err = s.auth.Authenticate(r, auth.Requirement{AppCode: "workflow", Scope: scope})
+		}
+		if err != nil {
+			return routeResult{}, err
+		}
+		// The viewer must arrive as a signed notification-detail delegation;
+		// otherwise Runtime would silently check the service identity instead.
+		if r.Method == http.MethodPost && path == "/v1/workflow/notification-details/authorize" {
+			if actor, _, purpose := runtimeActorContextDetails(r, authCtx); purpose != "notification-detail-authorization" || actor == "" || actor == strings.TrimSpace(authCtx.Subject) {
+				return routeResult{}, httperror.New(http.StatusForbidden, "trusted_notification_actor_required", "trusted notification detail actor delegation is required")
+			}
 		}
 		adapter, err := s.requireWorkflow()
 		if err != nil {
@@ -3354,6 +4008,20 @@ func (s *Server) route(r *http.Request) (routeResult, error) {
 			}
 		}
 		result, operation, err := adapter.HandleRuntime(r.Context(), r.Method, path, query, body)
+		if err == nil && r.Method == http.MethodGet && path == "/v1/workflow/delivery-effects/status" {
+			if s.console == nil {
+				return routeResult{}, httperror.New(http.StatusServiceUnavailable, "workflow_maintenance_diagnostics_unavailable", "Console diagnostics unavailable")
+			}
+			maintenance, diagnosticErr := s.console.WorkflowMaintenanceDiagnostics(r.Context())
+			if diagnosticErr != nil {
+				return routeResult{}, diagnosticErr
+			}
+			data, ok := result.Data.(map[string]any)
+			if !ok {
+				return routeResult{}, httperror.New(http.StatusServiceUnavailable, "workflow_maintenance_diagnostics_unavailable", "Workflow diagnostics unavailable")
+			}
+			data["maintenance"] = maintenance
+		}
 		if operation == "" {
 			operation = "workflow.runtime"
 		}
@@ -3368,6 +4036,12 @@ func (s *Server) route(r *http.Request) (routeResult, error) {
 		return s.routeWebDevRuntime(r, adapter)
 	}
 
+	if legacyAssetsDueNotificationOwnedByUnified(path, s.cfg.Enterprise.Enabled, s.cfg.Enterprise.Domains["assets"].Scheduler) {
+		return routeResult{}, httperror.New(http.StatusConflict, "assets_due_notifications_unified_owner", "Assets due notifications are owned by the unified scheduler")
+	}
+	if legacyAimsDueNotificationOwnedByUnified(path, s.cfg.Enterprise.Enabled, s.cfg.Enterprise.Domains["aims"].Scheduler) {
+		return routeResult{}, httperror.New(http.StatusConflict, "aims_due_notifications_unified_owner", "Aims due notifications are owned by the unified scheduler")
+	}
 	if r.Method == http.MethodPost {
 		if worker, ok := dueNotificationWorkerForPath(path); ok {
 			var adapter runtimeHandler
@@ -3413,6 +4087,9 @@ func (s *Server) route(r *http.Request) (routeResult, error) {
 		return s.routeAppRuntime(r, "altoc", adapter)
 	}
 
+	if legacyMilestoneRolloverOwnedByUnified(path, s.cfg.Enterprise.Enabled, s.cfg.Enterprise.Domains["aims"].Scheduler) {
+		return routeResult{}, httperror.New(http.StatusConflict, "aims_milestone_rollover_unified_owner", "Milestone rollover is owned by the unified scheduler")
+	}
 	if isAimsRuntimePath(path) {
 		adapter, err := s.requireAims()
 		if err != nil {
@@ -3887,6 +4564,24 @@ func isWebDevRuntimeServiceIssueClaimPath(path string) bool {
 	return id != "" && !strings.Contains(id, "/")
 }
 
+// Only the existing member upsert command may use POST below a committee.
+func isConsoleCommitteeMembersPath(path string) bool {
+	const prefix = "/v1/console/directory/committees/"
+	if !strings.HasPrefix(path, prefix) || !strings.HasSuffix(path, "/members") {
+		return false
+	}
+	code := strings.TrimSuffix(strings.TrimPrefix(path, prefix), "/members")
+	if code == "" || code == "." || code == ".." || len(code) > 128 {
+		return false
+	}
+	for _, c := range code {
+		if !((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_' || c == '.' || c == '-') {
+			return false
+		}
+	}
+	return true
+}
+
 func isConsoleDirectoryLifecyclePath(path string, action string) bool {
 	prefix := "/v1/console/directory/service/users/"
 	suffix := "/" + action
@@ -3978,6 +4673,14 @@ func (s *Server) routeAppRuntime(r *http.Request, appCode string, adapter runtim
 		if err := injectTrustedServiceCommandContext(r, authCtx, body); err != nil {
 			return routeResult{}, err
 		}
+	}
+	if appCode == "assets" {
+		if result, handled, err := s.routeLegacyUnifiedAssetProductCommand(r, authCtx, actorUID, actorDelegated, query, body); handled {
+			return result, err
+		}
+	}
+	if appCode == "aims" && s.cfg.Enterprise.EnableMilestoneReceivable && isAimsMilestoneReceivableWorkflowCallback(r.Method, path, body) {
+		return s.routeAimsMilestoneReceivableWorkflowCallback(r, authCtx, body)
 	}
 	result, operation, err := adapter.HandleRuntime(r.Context(), r.Method, path, query, body)
 	if operation == "" {
@@ -4157,6 +4860,12 @@ func readOnlyAppRuntimeScope(appCode, method, path string) string {
 			if code != "" && !strings.Contains(code, "/") {
 				return "aims.read"
 			}
+		}
+	}
+	if appCode == "codocs" && method == http.MethodPost && strings.HasPrefix(path, "/v1/codocs/service/assets-product-documents/") && strings.HasSuffix(path, "/metadata") {
+		id := strings.TrimSuffix(strings.TrimPrefix(path, "/v1/codocs/service/assets-product-documents/"), "/metadata")
+		if id != "" && !strings.Contains(id, "/") {
+			return "codocs.read"
 		}
 	}
 	if appCode == "codocs" && method == http.MethodPost && path == "/v1/codocs/service/product-documents/search" {
@@ -5065,6 +5774,12 @@ func writeError(w http.ResponseWriter, requestID string, err error) (int, string
 	body.Error.Retryable = retryableHTTPStatus(status)
 	body.Error.RequestID = requestID
 	body.Error.Details = map[string]any{}
+	var detailed interface{ ErrorDetails() map[string]any }
+	if errors.As(err, &detailed) {
+		if details := detailed.ErrorDetails(); details != nil {
+			body.Error.Details = details
+		}
+	}
 	writeJSON(w, requestID, status, body)
 	return status, code
 }
@@ -5302,6 +6017,69 @@ func isWorkflowRuntimePath(path string) bool {
 		return false
 	}
 	return strings.HasPrefix(path, "/v1/workflow/")
+}
+
+func workflowIntegrationEffectRoute(method string, path string) bool {
+	if method == http.MethodGet && path == "/v1/workflow/delivery-effects/status" {
+		return true
+	}
+	for _, base := range []string{"/v1/workflow/notification-effects/", "/v1/workflow/actionable-lifecycle-effects/", "/v1/workflow/callback-effects/"} {
+		if method == http.MethodGet && path == base+"pending" {
+			return true
+		}
+		if method != http.MethodPost || !strings.HasPrefix(path, base) {
+			continue
+		}
+		remaining := strings.TrimPrefix(path, base)
+		for _, suffix := range []string{"/ack", "/fail"} {
+			if !strings.HasSuffix(remaining, suffix) {
+				continue
+			}
+			id := strings.TrimSuffix(remaining, suffix)
+			if id == "" {
+				return false
+			}
+			for _, digit := range id {
+				if digit < '0' || digit > '9' {
+					return false
+				}
+			}
+			return true
+		}
+	}
+	return false
+}
+
+func workflowRuntimeRequiredScope(method string, path string) string {
+	if workflowIntegrationEffectRoute(method, path) {
+		return "workflow:integration_operation:execute"
+	}
+	// Notification detail authorization is a read-only viewer check that uses
+	// POST only to carry the descriptor; the Workflow verifier requests read.
+	if method == http.MethodPost && path == "/v1/workflow/notification-details/authorize" {
+		return "workflow.read"
+	}
+	if method != http.MethodGet {
+		return "workflow.write"
+	}
+	return "workflow.read"
+}
+
+func workflowDeliveryRecoveryRoute(path string) bool {
+	const base = "/v1/workflow/delivery-effects/"
+	if !strings.HasPrefix(path, base) || !strings.HasSuffix(path, "/recover") {
+		return false
+	}
+	parts := strings.Split(strings.TrimSuffix(strings.TrimPrefix(path, base), "/recover"), "/")
+	if len(parts) != 2 || (parts[0] != "notification" && parts[0] != "actionable" && parts[0] != "callback") || parts[1] == "" {
+		return false
+	}
+	for _, digit := range parts[1] {
+		if digit < '0' || digit > '9' {
+			return false
+		}
+	}
+	return true
 }
 
 func workflowRuntimeRequiresTrustedActor(path string) bool {

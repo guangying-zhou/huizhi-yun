@@ -31,15 +31,26 @@ type ProductReleaseDetail struct {
 // Only immutable release content is projected. Current scope/work-item content
 // is never substituted into a historical release. Execution detail is omitted.
 func ReadProductVersionRelease(ctx context.Context, db *sql.DB, code, uid string, permit AuthorizationPermit, versionID, recordID int64) (ProductReleaseDetail, error) {
+	tx, err := db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
+	if err != nil {
+		return ProductReleaseDetail{}, err
+	}
+	defer tx.Rollback()
+	out, err := ReadProductVersionReleaseInTransaction(ctx, tx, code, uid, permit, versionID, recordID)
+	if err != nil {
+		return out, err
+	}
+	return out, tx.Commit()
+}
+func ReadProductVersionReleaseInTransaction(ctx context.Context, tx *sql.Tx, code, uid string, permit AuthorizationPermit, versionID, recordID int64) (ProductReleaseDetail, error) {
 	out := ProductReleaseDetail{Scopes: []VersionAcceptanceScope{}, Checks: []VersionAcceptanceCheck{}, Exceptions: []VersionAcceptanceException{}}
 	if versionID <= 0 || recordID <= 0 {
 		return out, invalid("product_release_id_invalid", "发布记录标识无效")
 	}
-	tx, err := db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
-	if err != nil {
-		return out, err
+	if tx == nil {
+		return out, invalid("product_transaction_required", "History requires a transaction")
 	}
-	defer tx.Rollback()
+	var err error
 	if err = AuthorizeWorkspaceTransaction(ctx, tx, code, uid, "product_versions", "view", permit); err != nil {
 		return out, err
 	}
@@ -47,7 +58,7 @@ func ReadProductVersionRelease(ctx context.Context, db *sql.DB, code, uid string
 	if err != nil {
 		return out, err
 	}
-	return out, tx.Commit()
+	return out, nil
 }
 
 func loadProductVersionRelease(ctx context.Context, tx *sql.Tx, code string, versionID, recordID int64) (ProductReleaseDetail, error) {

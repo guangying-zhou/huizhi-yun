@@ -5,6 +5,7 @@
 import { downloadDocument } from '~~/server/utils/oss'
 import { requireRequestUid } from '~~/server/utils/authIdentity'
 import { requireOpenDepartmentDocument } from '~~/server/utils/openDepartmentDocs'
+import { assertLegacyBodyDocument } from '~~/server/utils/documentBodyRef'
 import { hasMeaningfulMarkdownContent, recoverMarkdownFromYjsSnapshot } from '~~/server/utils/yjsMarkdownRecovery'
 
 export default defineEventHandler(async (event) => {
@@ -14,7 +15,7 @@ export default defineEventHandler(async (event) => {
   }
 
   requireRequestUid(event)
-  const doc = await requireOpenDepartmentDocument(event, uuid)
+  const doc = assertLegacyBodyDocument(await requireOpenDepartmentDocument(event, uuid))
 
   let content = ''
   if (doc.oss_path) {

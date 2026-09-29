@@ -83,20 +83,20 @@ func (a *Adapter) handleDueNotificationRuntime(ctx context.Context, method strin
 	}
 	switch path {
 	case "/v1/aims/service/notifications:scan-due":
-		data, err := a.scanDueNotifications(ctx, body)
+		data, err := a.legacyDueStore().scanDueNotifications(ctx, body)
 		return data, "aims.notifications.due.scan", true, err
 	case "/v1/aims/service/notifications:acknowledge":
-		data, err := a.acknowledgeDueNotification(ctx, body)
+		data, err := a.legacyDueStore().acknowledgeDueNotification(ctx, body)
 		return data, "aims.notifications.due.acknowledge", true, err
 	case "/v1/aims/service/notifications:acknowledge-closure":
-		data, err := a.acknowledgeDueNotificationClosure(ctx, body)
+		data, err := a.legacyDueStore().acknowledgeDueNotificationClosure(ctx, body)
 		return data, "aims.notifications.due.closure_acknowledge", true, err
 	default:
 		return nil, "", false, nil
 	}
 }
 
-func (a *Adapter) scanDueNotifications(ctx context.Context, body map[string]any) (map[string]any, error) {
+func (s aimsDueStore) scanDueNotifications(ctx context.Context, body map[string]any) (map[string]any, error) {
 	stream := strings.TrimSpace(firstBodyText(body, "stream"))
 	if !validAimsDueStream(stream) {
 		return nil, httperror.New(http.StatusBadRequest, "aims_due_stream_invalid", "stream must be response_due, resolution_due or work_item_due")
@@ -115,10 +115,10 @@ func (a *Adapter) scanDueNotifications(ctx context.Context, body map[string]any)
 		limit = 100
 	}
 
-	if err := a.reconcileDueNotificationCheckpoints(ctx, stream, asOf); err != nil {
+	if err := s.reconcileDueNotificationCheckpoints(ctx, stream, asOf); err != nil {
 		return nil, err
 	}
-	facts, err := a.queryDueFacts(ctx, stream, asOf, cursor, limit+1)
+	facts, err := s.queryDueFacts(ctx, stream, asOf, cursor, limit+1)
 	if err != nil {
 		return nil, err
 	}
@@ -128,7 +128,7 @@ func (a *Adapter) scanDueNotifications(ctx context.Context, body map[string]any)
 	}
 	items := make([]aimsDueCandidate, 0, len(facts))
 	for _, fact := range facts {
-		candidate, pending, err := a.openDueNotificationCheckpoint(ctx, stream, asOf, fact)
+		candidate, pending, err := s.openDueNotificationCheckpoint(ctx, stream, asOf, fact)
 		if err != nil {
 			return nil, err
 		}
@@ -139,7 +139,7 @@ func (a *Adapter) scanDueNotifications(ctx context.Context, body map[string]any)
 			items = append(items, *candidate)
 		}
 	}
-	closures, err := a.pendingDueNotificationClosures(ctx, stream, limit)
+	closures, err := s.pendingDueNotificationClosures(ctx, stream, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -158,7 +158,7 @@ func (a *Adapter) scanDueNotifications(ctx context.Context, body map[string]any)
 	}, nil
 }
 
-func (a *Adapter) queryDueFacts(ctx context.Context, stream string, asOf time.Time, cursor *aimsDueCursor, limit int) ([]aimsDueFact, error) {
+func queryDueFactsWith(ctx context.Context, q aimsDueQuerier, stream string, asOf time.Time, cursor *aimsDueCursor, limit int) ([]aimsDueFact, error) {
 	dueColumn := "wse.response_due_at"
 	completionPredicate := "wse.first_responded_at IS NULL"
 	windowEnd := asOf.Add(4 * time.Hour)
@@ -207,7 +207,7 @@ func (a *Adapter) queryDueFacts(ctx context.Context, stream string, asOf time.Ti
 		args = append(args, cursorValue, cursorValue, cursor.ID)
 	}
 	args = append(args, limit)
-	rows, err := a.DB().QueryContext(ctx, `
+	rows, err := q.QueryContext(ctx, `
 		SELECT wi.id, wi.project_id, p.project_code, p.name, wi.item_key, wi.title,
 		       wi.status, wi.priority, wi.severity, wi.assignee_uid,
 		       EXISTS (SELECT 1 FROM aims_project_members due_pm WHERE due_pm.project_id=wi.project_id AND due_pm.uid=wi.assignee_uid AND due_pm.status='active') AS assignee_is_active_project_member,
@@ -251,7 +251,7 @@ func eligibleAimsDueAssignee(fact aimsDueFact) sql.NullString {
 	return sql.NullString{}
 }
 
-func (a *Adapter) reconcileDueNotificationCheckpoints(ctx context.Context, stream string, asOf time.Time) error {
+func reconcileDueNotificationCheckpointsWith(ctx context.Context, q aimsDueQuerier, stream string, asOf time.Time) error {
 	resolved := "wse.first_responded_at IS NOT NULL"
 	cancelled := "wse.response_due_at IS NULL OR wse.response_due_at > ?"
 	cancelledArgs := []any{asOf.Add(4 * time.Hour)}
@@ -266,7 +266,7 @@ func (a *Adapter) reconcileDueNotificationCheckpoints(ctx context.Context, strea
 		cancelledArgs = []any{asOf.AddDate(0, 0, 3)}
 		join = ""
 	}
-	_, err := a.DB().ExecContext(ctx, `
+	_, err := q.ExecContext(ctx, `
 		UPDATE aims_notification_checkpoint c
 		LEFT JOIN work_items wi ON wi.id = c.source_id
 		LEFT JOIN aims_projects p ON p.id = wi.project_id
@@ -279,7 +279,7 @@ func (a *Adapter) reconcileDueNotificationCheckpoints(ctx context.Context, strea
 	}
 	args := []any{stream}
 	args = append(args, cancelledArgs...)
-	_, err = a.DB().ExecContext(ctx, `
+	_, err = q.ExecContext(ctx, `
 		UPDATE aims_notification_checkpoint c
 		LEFT JOIN work_items wi ON wi.id = c.source_id
 		LEFT JOIN aims_projects p ON p.id = wi.project_id
@@ -290,12 +290,12 @@ func (a *Adapter) reconcileDueNotificationCheckpoints(ctx context.Context, strea
 	return err
 }
 
-func (a *Adapter) openDueNotificationCheckpoint(ctx context.Context, stream string, asOf time.Time, fact aimsDueFact) (*aimsDueCandidate, bool, error) {
+func (s aimsDueStore) openDueNotificationCheckpoint(ctx context.Context, stream string, asOf time.Time, fact aimsDueFact) (*aimsDueCandidate, bool, error) {
 	phase := aimsDuePhase(stream, asOf, fact.DueAt)
 	if phase == "" {
 		return nil, false, nil
 	}
-	tx, err := a.DB().BeginTx(ctx, nil)
+	tx, err := s.begin(ctx)
 	if err != nil {
 		return nil, false, err
 	}
@@ -386,8 +386,8 @@ func (a *Adapter) openDueNotificationCheckpoint(ctx context.Context, stream stri
 	return &candidate, state == "open" && !notificationID.Valid, nil
 }
 
-func (a *Adapter) pendingDueNotificationClosures(ctx context.Context, stream string, limit int) ([]aimsDueClosure, error) {
-	rows, err := a.DB().QueryContext(ctx, `
+func pendingDueNotificationClosuresWith(ctx context.Context, q aimsDueQuerier, stream string, limit int) ([]aimsDueClosure, error) {
+	rows, err := q.QueryContext(ctx, `
 		SELECT c.event_version, delivered.event_version, c.actionable_key, c.source_id,
 		       delivered.notified_recipient_uid, c.close_reason
 		FROM aims_notification_checkpoint c
@@ -429,14 +429,14 @@ func (a *Adapter) pendingDueNotificationClosures(ctx context.Context, stream str
 	return closures, rows.Err()
 }
 
-func (a *Adapter) acknowledgeDueNotification(ctx context.Context, body map[string]any) (map[string]any, error) {
+func acknowledgeDueNotificationWith(ctx context.Context, q aimsDueQuerier, body map[string]any) (map[string]any, error) {
 	eventVersion := strings.TrimSpace(firstBodyText(body, "eventVersion", "event_version"))
 	notificationID := strings.TrimSpace(firstBodyText(body, "notificationId", "notification_id"))
 	recipientUID := strings.TrimSpace(firstBodyText(body, "recipientUid", "recipient_uid"))
 	if eventVersion == "" || notificationID == "" || recipientUID == "" || strings.EqualFold(recipientUID, "@all") {
 		return nil, httperror.New(http.StatusBadRequest, "aims_due_ack_invalid", "eventVersion, notificationId and an explicit recipientUid are required")
 	}
-	result, err := a.DB().ExecContext(ctx, `
+	result, err := q.ExecContext(ctx, `
 		UPDATE aims_notification_checkpoint
 		SET notification_id = ?, notified_recipient_uid = ?, acknowledged_at = UTC_TIMESTAMP(), updated_at = UTC_TIMESTAMP()
 		WHERE event_version = ?
@@ -451,7 +451,7 @@ func (a *Adapter) acknowledgeDueNotification(ctx context.Context, body map[strin
 	if rows == 0 {
 		var state string
 		var existingNotificationID, existingRecipientUID sql.NullString
-		err := a.DB().QueryRowContext(ctx, `
+		err := q.QueryRowContext(ctx, `
 			SELECT state, notification_id, notified_recipient_uid
 			FROM aims_notification_checkpoint
 			WHERE event_version = ?
@@ -464,13 +464,13 @@ func (a *Adapter) acknowledgeDueNotification(ctx context.Context, body map[strin
 	return map[string]any{"eventVersion": eventVersion, "notificationId": notificationID, "recipientUid": recipientUID, "acknowledged": true}, nil
 }
 
-func (a *Adapter) acknowledgeDueNotificationClosure(ctx context.Context, body map[string]any) (map[string]any, error) {
+func acknowledgeDueNotificationClosureWith(ctx context.Context, q aimsDueQuerier, body map[string]any) (map[string]any, error) {
 	eventVersion := strings.TrimSpace(firstBodyText(body, "eventVersion", "event_version"))
 	nextVersion := strings.TrimSpace(firstBodyText(body, "nextVersion", "next_version"))
 	if eventVersion == "" || nextVersion == "" {
 		return nil, httperror.New(http.StatusBadRequest, "aims_due_closure_ack_invalid", "eventVersion and nextVersion are required")
 	}
-	result, err := a.DB().ExecContext(ctx, `
+	result, err := q.ExecContext(ctx, `
 		UPDATE aims_notification_checkpoint
 		SET lifecycle_closed_at = UTC_TIMESTAMP(), lifecycle_next_version = ?, updated_at = UTC_TIMESTAMP()
 		WHERE event_version = ? AND state = 'closed'
@@ -486,7 +486,7 @@ func (a *Adapter) acknowledgeDueNotificationClosure(ctx context.Context, body ma
 	if rows == 0 {
 		var storedNextVersion sql.NullString
 		var closedAt sql.NullTime
-		err := a.DB().QueryRowContext(ctx, `
+		err := q.QueryRowContext(ctx, `
 			SELECT lifecycle_next_version, lifecycle_closed_at
 			FROM aims_notification_checkpoint
 			WHERE event_version = ?
@@ -633,4 +633,96 @@ func nullStringPointer(value sql.NullString) *string {
 	}
 	result := strings.TrimSpace(value.String)
 	return &result
+}
+
+// aimsDueQuerier is satisfied by both *sql.DB and *sql.Tx.
+type aimsDueQuerier interface {
+	ExecContext(context.Context, string, ...any) (sql.Result, error)
+	QueryContext(context.Context, string, ...any) (*sql.Rows, error)
+	QueryRowContext(context.Context, string, ...any) *sql.Row
+}
+
+// aimsDueStore decides where due-notification statements run. The legacy store
+// keeps its original autocommit statements; the unified scheduler store runs
+// every step inside a generation-fenced transaction.
+type aimsDueStore struct {
+	statement func(context.Context, func(aimsDueQuerier) error) error
+	begin     func(context.Context) (*sql.Tx, error)
+}
+
+func (a *Adapter) legacyDueStore() aimsDueStore {
+	return aimsDueStore{
+		statement: func(ctx context.Context, run func(aimsDueQuerier) error) error { return run(a.DB()) },
+		begin:     func(ctx context.Context) (*sql.Tx, error) { return a.DB().BeginTx(ctx, nil) },
+	}
+}
+
+func schedulerDueStore(begin func(context.Context) (*sql.Tx, error)) aimsDueStore {
+	return aimsDueStore{
+		statement: func(ctx context.Context, run func(aimsDueQuerier) error) error {
+			tx, err := begin(ctx)
+			if err != nil {
+				return err
+			}
+			defer tx.Rollback()
+			if err = run(tx); err != nil {
+				return err
+			}
+			return tx.Commit()
+		},
+		begin: begin,
+	}
+}
+
+func (s aimsDueStore) queryDueFacts(ctx context.Context, stream string, asOf time.Time, cursor *aimsDueCursor, limit int) ([]aimsDueFact, error) {
+	var facts []aimsDueFact
+	err := s.statement(ctx, func(q aimsDueQuerier) error {
+		var err error
+		facts, err = queryDueFactsWith(ctx, q, stream, asOf, cursor, limit)
+		return err
+	})
+	return facts, err
+}
+
+func (s aimsDueStore) reconcileDueNotificationCheckpoints(ctx context.Context, stream string, asOf time.Time) error {
+	return s.statement(ctx, func(q aimsDueQuerier) error { return reconcileDueNotificationCheckpointsWith(ctx, q, stream, asOf) })
+}
+
+func (s aimsDueStore) pendingDueNotificationClosures(ctx context.Context, stream string, limit int) ([]aimsDueClosure, error) {
+	var closures []aimsDueClosure
+	err := s.statement(ctx, func(q aimsDueQuerier) error {
+		var err error
+		closures, err = pendingDueNotificationClosuresWith(ctx, q, stream, limit)
+		return err
+	})
+	return closures, err
+}
+
+func (s aimsDueStore) acknowledgeDueNotification(ctx context.Context, body map[string]any) (map[string]any, error) {
+	var out map[string]any
+	err := s.statement(ctx, func(q aimsDueQuerier) error {
+		var err error
+		out, err = acknowledgeDueNotificationWith(ctx, q, body)
+		return err
+	})
+	return out, err
+}
+
+func (s aimsDueStore) acknowledgeDueNotificationClosure(ctx context.Context, body map[string]any) (map[string]any, error) {
+	var out map[string]any
+	err := s.statement(ctx, func(q aimsDueQuerier) error {
+		var err error
+		out, err = acknowledgeDueNotificationClosureWith(ctx, q, body)
+		return err
+	})
+	return out, err
+}
+
+// Legacy entry points kept for the original adapter path and its tests.
+func (a *Adapter) openDueNotificationCheckpoint(ctx context.Context, stream string, asOf time.Time, fact aimsDueFact) (*aimsDueCandidate, bool, error) {
+	return a.legacyDueStore().openDueNotificationCheckpoint(ctx, stream, asOf, fact)
+}
+
+func (a *Adapter) queryDueFacts(ctx context.Context, stream string, asOf time.Time, cursor *aimsDueCursor, limit int) ([]aimsDueFact, error) {
+	return a.legacyDueStore().queryDueFacts(ctx, stream, asOf, cursor, limit)
 }

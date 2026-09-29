@@ -37,17 +37,38 @@ CREATE DATABASE IF NOT EXISTS hzy_workflow
 # 主表结构
 mysql -u root -p hzy_workflow < workflow/docs/workflow_schema.sql
 
-# 按文件名顺序执行 migrations 下的增量迁移和 fail-closed 校验脚本。
-# 任何脚本退出非 0 都必须终止部署；不能只部署 Worker 而跳过数据库迁移。
-ls workflow/docs/migrations/
-for f in workflow/docs/migrations/*.sql; do
-  echo "Running $f"
-  mysql --show-warnings -u root -p hzy_workflow < "$f" || exit 1
-done
+# 现有库只执行尚未应用的迁移，按下表逐项 apply→verify。
+# canonical schema 已含这些列，新库加载 workflow_schema.sql 后不要重放 ALTER。
+# 不得对 migrations/*.sql 做通配循环：verify 与非幂等 DDL 不能盲目重跑。
 ```
 
 `010_aims_milestone_completion_verify.sql` 会验证里程碑完成审批的动作定义、
 流程定义和默认路由均唯一且启用。缺少任一项时脚本会因 CHECK 约束失败，部署不得继续。
+
+既有库在审核过 001–012 的已应用水位后，本次有界投递按下列顺序执行；每一步都需要单独授权、写入前备份与隔离演练，且 verify 必须得到 `PASS`：
+
+| 顺序 | 迁移 | 验证 |
+| --- | --- | --- |
+| 13 | `workflow/docs/migrations/013_bounded_delivery_outbox.sql` | `workflow/docs/migrations/013_bounded_delivery_outbox_verify.sql` |
+| 14 | `workflow/docs/migrations/014_delivery_recovery_attribution.sql` | `workflow/docs/migrations/014_delivery_recovery_attribution_verify.sql` |
+
+在已完成备份、隔离演练并获该步授权后，从仓库根目录**逐条**执行。每条 DDL 的非零退出立即停止；verify 的每一行都必须是 `PASS`，行数也必须符合该脚本的检查项数量，否则不得执行下一条迁移。不要把下列命令改为通配循环，也不要对已应用的非幂等 DDL 重跑。
+
+```bash
+set -o pipefail
+
+# 013：四项检查全部 PASS 后才可继续 014。
+mysql --show-warnings -u root -p hzy_workflow < workflow/docs/migrations/013_bounded_delivery_outbox.sql || exit 1
+mysql --show-warnings --batch --skip-column-names -u root -p hzy_workflow < workflow/docs/migrations/013_bounded_delivery_outbox_verify.sql \
+  | awk -v expected=4 '{ print; count++; if ($0 != "PASS") failed=1 } END { if (failed || count != expected) exit 1 }' || exit 1
+
+# 014：一项检查必须 PASS。
+mysql --show-warnings -u root -p hzy_workflow < workflow/docs/migrations/014_delivery_recovery_attribution.sql || exit 1
+mysql --show-warnings --batch --skip-column-names -u root -p hzy_workflow < workflow/docs/migrations/014_delivery_recovery_attribution_verify.sql \
+  | awk -v expected=1 '{ print; count++; if ($0 != "PASS") failed=1 } END { if (failed || count != expected) exit 1 }' || exit 1
+```
+
+014 给 `flow_delivery_audit` 增加可空的 `credential_id`、`request_id`、`recovery_reason`；[canonical schema](./workflow_schema.sql) 已包含 013、014 的最终列与状态。旧审计行保持有效。执行时参照 [有界投递 Runbook](../../docs/Workflow-Bounded-Delivery-Runbook.md) 记录 MySQL 版本、每条 ALTER 实际算法与耗时；迁移不在事务中，失败按备份受控恢复。
 
 ---
 

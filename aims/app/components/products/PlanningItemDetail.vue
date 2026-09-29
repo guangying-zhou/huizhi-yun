@@ -1,7 +1,10 @@
 <script setup lang="ts">
+import { useAimsModule } from '../../../layer/useAimsModule'
+
+const { moduleUrl, hosted, cacheKey } = useAimsModule()
 const props = defineProps<{ productCode: string, itemId: string }>()
 interface Detail { biz_id: string, product_code: string, title: string, scope_summary: string, lifecycle: string, investment_category: string, urgency_level: string, deadline: string | null, requests: { biz_id: string, revision: number }[] }
-const { data, status, error, refresh } = await useFetch(() => `/api/v1/products/${encodeURIComponent(props.productCode)}/planning-items/${props.itemId}`, {
+const { data, status, error, refresh } = await useFetch(() => moduleUrl(`/api/v1/products/${encodeURIComponent(props.productCode)}/planning-items/${props.itemId}`), { ...(hosted ? { key: computed(() => cacheKey('aims/app/components/products/PlanningItemDetail.vue:0' + ':' + String(toValue(() => moduleUrl(`/api/v1/products/${encodeURIComponent(props.productCode)}/planning-items/${props.itemId}`))))) } : {}),
   server: false,
   transform: (response: { code: number, data: Detail }) => {
     if (response.code !== 0 || response.data?.biz_id !== props.itemId || response.data.product_code !== props.productCode || !Array.isArray(response.data.requests)) throw new Error('规划事项详情响应不完整')
@@ -59,7 +62,7 @@ const states: Record<string, string> = { proposed: '待规划', in_delivery: '�
       <p class="text-sm text-muted">
         已关联 {{ data.requests.length }} 条来源需求。来源数量不代表价值分数。
       </p>
-      <UButton :to="`/products/${encodeURIComponent(productCode)}/requests`" color="neutral" variant="outline">
+      <UButton :to="moduleUrl(`/products/${encodeURIComponent(productCode)}/requests`)" color="neutral" variant="outline">
         进入产品需求池
       </UButton>
     </template>

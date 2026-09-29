@@ -1,7 +1,10 @@
 <script setup lang="ts">
-import type { ApiResponse, IpAssetItem } from '~/types'
+import AssetFormSurface from './AssetFormSurface.vue'
+import type { ApiResponse, IpAssetItem } from '../../types'
+import { useAssetDictionaries } from '../../composables/useAssetDictionaries'
+import { useAssetsModule } from '../../../layer/useAssetsModule'
 
-const props = defineProps<{ open: boolean, asset: IpAssetItem | null }>()
+const props = defineProps<{ open: boolean, page?: boolean, asset: IpAssetItem | null }>()
 const emit = defineEmits<{
   'update:open': [value: boolean]
   'updated': []
@@ -15,8 +18,11 @@ const isOpen = computed({
 const { loadDictionaries, getOptions } = useAssetDictionaries()
 await loadDictionaries()
 
+const surface = ref<InstanceType<typeof AssetFormSurface> | null>(null)
 const toast = useToast()
 const submitting = ref(false)
+const submissionKey = ref('')
+const { moduleUrl } = useAssetsModule()
 const typeOptions = computed(() => getOptions('ip_asset_type'))
 const statusOptions = computed(() => getOptions('ip_asset_status'))
 
@@ -48,7 +54,7 @@ function hydrate() {
 
 watch(() => props.open, (open) => {
   if (open) hydrate()
-})
+}, { immediate: true })
 watch(() => props.asset, () => {
   if (props.open) hydrate()
 })
@@ -61,8 +67,9 @@ async function handleSubmit() {
   }
   submitting.value = true
   try {
-    await $fetch<ApiResponse<{ id: number }>>(`/api/v1/ip-assets/${props.asset.id}`, {
+    await $fetch<ApiResponse<{ id: number }>>(moduleUrl(`/api/v1/ip-assets/${props.asset.id}`), {
       method: 'PATCH',
+      headers: { 'Idempotency-Key': submissionKey.value ||= crypto.randomUUID() },
       body: {
         ip_name: state.ip_name.trim(),
         ip_type: state.ip_type || null,
@@ -77,6 +84,7 @@ async function handleSubmit() {
       }
     })
     toast.add({ title: '知识产权资产已更新', description: '主要信息已保存。', color: 'success', icon: 'i-lucide-check' })
+    surface.value?.markSaved()
     emit('updated')
     isOpen.value = false
   } catch (error) {
@@ -89,8 +97,12 @@ async function handleSubmit() {
 </script>
 
 <template>
-  <UModal
+  <AssetFormSurface
+    ref="surface"
     v-model:open="isOpen"
+    :page="props.page"
+    :draft="JSON.stringify(state)"
+    :busy="submitting"
     title="编辑知识产权资产"
     description="维护知识产权状态、权利信息和到期时间。"
     :ui="{ content: 'sm:max-w-3xl' }"
@@ -177,5 +189,5 @@ async function handleSubmit() {
         </UButton>
       </div>
     </template>
-  </UModal>
+  </AssetFormSurface>
 </template>

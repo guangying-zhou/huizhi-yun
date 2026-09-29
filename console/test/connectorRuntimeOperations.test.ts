@@ -45,7 +45,7 @@ test('Connector Runtime stale status is computed against database UTC and refres
   assert.match(enrollment, /"heartbeatStale":\s+heartbeatStale == 1/)
   assert.match(enrollment, /"lastHeartbeatAt":\s+nullableStringValue\(lastHeartbeat\)/)
   assert.match(page, /metadata\.value\.connector\?\.heartbeatStale === true/)
-  assert.match(page, /refreshMetadataPreservingCommand[\s\S]*current\?\.installCommand[\s\S]*current\.connector\?\.lastSeenAt === result\.data\.connector\?\.lastSeenAt/)
+  assert.match(page, /refreshMetadataPreservingCommand[\s\S]*previousLastSeenAt !== result\.data\.connector\?\.lastSeenAt\) clearInstallationCommand\(\)/)
   assert.match(page, /queueMetadataRefresh[\s\S]*setTimeout[\s\S]*refreshMetadataPreservingCommand\(\)[\s\S]*30_000/)
   assert.doesNotMatch(page, /Date\.now\(\).*lastHeartbeatAt/)
 })

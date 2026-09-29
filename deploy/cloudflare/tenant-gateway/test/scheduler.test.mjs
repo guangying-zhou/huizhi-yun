@@ -31,6 +31,7 @@ test('policy sync uses its own signed Console Binding path without business drai
   assert.equal(new URL(request.url).pathname, '/api/internal/policy-bundle/sync')
   assert.equal(h.get('x-hzy-app-code'), 'console')
   assert.equal(h.get('x-hzy-deployment'), 'console-policy-test')
+  assert.equal(calls[0].signal?.aborted, false)
   const canonical = ['POST', '/api/internal/policy-bundle/sync', h.get('x-request-id'), 'policy-test',
     'console-policy-test', 'console', 'prod', 'https://runtime-policy-test.example.test', 'policy-test.huizhi.yun', h.get('x-hzy-scheduler-issued-at')].join('\n')
   assert.equal(h.get('x-hzy-scheduler-signature'), createHmac('sha256', 'gateway-secret').update(canonical).digest('hex'))
@@ -56,10 +57,12 @@ function schedulerEnv(overrides = {}) {
     HZY_TENANT_GATEWAY_SCHEDULER_PAGE_SIZE: '2',
     HZY_TENANT_GATEWAY_SCHEDULER_MAX_PAGES: '2',
     HZY_TENANT_GATEWAY_SCHEDULER_MAX_TENANTS: '3',
+    HZY_TENANT_GATEWAY_SCHEDULER_MAX_WAKES: '32',
     HZY_TENANT_GATEWAY_SCHEDULER_CONCURRENCY: '2',
     HZY_TENANT_GATEWAY_SCHEDULER_MAX_WALL_TIME_MS: '1000',
     HZY_TENANT_GATEWAY_SCHEDULER_SHARD_COUNT: '4',
     HZY_TENANT_GATEWAY_SCHEDULER_SHARD_INDEX: '1',
+    HZY_POLICY_SYNC_CONSOLE_TIMEOUT_MS: '100000',
     ...overrides
   }
 }
@@ -146,6 +149,7 @@ test('wrangler declares a cron without embedding tenant runtime credentials', ()
       HZY_PLATFORM_SERVICE: 'hzy-platform',
       HZY_CONSOLE_SERVICE: 'hzy-console-prod',
       HZY_AIMS_SERVICE: 'hzy-aims',
+      HZY_ASSETS_SERVICE: 'hzy-assets',
       HZY_ALTOC_SERVICE: 'hzy-altoc',
       HZY_FINANCE_SERVICE: 'hzy-finance',
       HZY_PEOPLE_SERVICE: 'hzy-people',
@@ -320,6 +324,44 @@ test('one app wake failure is isolated and concurrency stays bounded', async () 
   for (const tenant of ['bad', 'good-a', 'good-b']) {
     assert.equal(wakeCalls.filter(request => request.headers.get('x-hzy-tenant') === tenant).length, 6, `${tenant} must not be starved by another tenant failure`)
   }
+})
+
+test('cron wake budget caps actual calls and rotates a bounded registry window', async () => {
+  const pages = []
+  const wakes = []
+  const fakeFetch = async (input, init = {}) => {
+    const request = asRequest(input, init)
+    const url = new URL(request.url)
+    if (url.pathname === '/internal/tenant-scheduler') {
+      pages.push(url)
+      return Response.json({ data: { items: [tenantRecord('tenant-a')], nextCursor: 'later-page' } })
+    }
+    if (url.pathname === '/internal/resolve') return Response.json({ data: resolvedTenantRecord('tenant-a') })
+    if (url.pathname === '/internal/runtime-bootstrap-token') {
+      return Response.json({ data: { token: 'bootstrap-tenant-a', expiresAt: new Date(Date.now() + 90_000).toISOString() } })
+    }
+    wakes.push(request)
+    return Response.json({ code: 0, data: { result: { claimed: 1 } } })
+  }
+  const result = await runScheduled(schedulerEnv({
+    HZY_TENANT_GATEWAY_SCHEDULER_MAX_WAKES: '5',
+    HZY_TENANT_GATEWAY_SCHEDULER_MAX_TENANTS: '50'
+  }), fakeFetch, { now: () => 100 })
+  assert.equal(wakes.length, 5)
+  assert.equal(result.attemptedWakes, 5)
+  assert.equal(result.stoppedBy, 'max_wakes')
+  assert.equal(pages.length, 1)
+  assert.equal(pages[0].searchParams.get('windowSize'), '1', 'next scheduler round must rotate a small registry window')
+  const firstApps = new Set(wakes.map(request => new URL(request.url).hostname))
+  wakes.length = 0
+  await tenantGatewayModule.runScheduledIntegrationDrains(
+    { cron: '*/5 * * * *', scheduledTime: 1_782_000_300_000 },
+    schedulerEnv({ HZY_TENANT_GATEWAY_SCHEDULER_MAX_WAKES: '5' }),
+    { fetchImpl: fakeFetch, now: () => 100 }
+  )
+  const nextApps = new Set(wakes.map(request => new URL(request.url).hostname))
+  assert.equal(nextApps.size, 5)
+  assert.notDeepEqual(nextApps, firstApps, 'the same trailing app must not starve on every slot')
 })
 
 test('busy lifecycle drains run claimed batches concurrently and continue inside the same scheduler wake', async () => {
@@ -500,26 +542,207 @@ test('user HTTP cannot invoke the internal scheduler wake path', async () => {
   }
 })
 
+test('opt-in Aims public block rejects pages and APIs without disabling the signed Binding wake', async () => {
+  let publicFetches = 0
+  const oldFetch = globalThis.fetch
+  globalThis.fetch = async () => { publicFetches += 1; return Response.json({ ok: true }) }
+  try {
+    for (const path of ['/aims', '/aims/', '/aims/projects', '/aims/api/v1/projects']) {
+      const response = await tenantGateway.fetch(new Request(`https://acme.huizhi.yun${path}`), schedulerEnv({
+        HZY_TENANT_GATEWAY_BLOCK_PUBLIC_AIMS: 'true', HZY_ALLOWED_TENANTS: 'acme', HZY_DEFAULT_TENANT: 'acme'
+      }))
+      assert.equal(response.status, 404, path)
+    }
+    assert.equal(publicFetches, 0)
+    const unblocked = await tenantGateway.fetch(new Request('https://acme.huizhi.yun/aims/api/v1/projects'), schedulerEnv({
+      HZY_ALLOWED_TENANTS: 'acme', HZY_DEFAULT_TENANT: 'acme'
+    }))
+    assert.equal(unblocked.status, 200, 'the release switch must default off')
+  } finally {
+    globalThis.fetch = oldFetch
+  }
+
+  const bindingCalls = []
+  const env = schedulerEnv({
+    HZY_TENANT_GATEWAY_BLOCK_PUBLIC_AIMS: 'true',
+    HZY_AIMS_SERVICE: { async fetch(input, init) {
+      const request = asRequest(input, init)
+      bindingCalls.push(request)
+      const h = request.headers
+      const canonical = ['POST', '/api/internal/integration-operations/drain', h.get('x-request-id'),
+        'binding-only', 'dep-binding-only', 'aims', 'prod', 'https://runtime-binding-only.example.test',
+        'binding-only.huizhi.yun', h.get('x-hzy-scheduler-issued-at')].join('\n')
+      if (h.get('x-hzy-scheduler-signature') !== createHmac('sha256', 'gateway-secret').update(canonical).digest('hex')) return new Response('Forbidden', { status: 403 })
+      return Response.json({ code: 0 })
+    } }
+  })
+  await runScheduled(env, async (input, init) => {
+    const request = asRequest(input, init)
+    const path = new URL(request.url).pathname
+    if (path === '/internal/tenant-scheduler') return Response.json({ data: { items: [{ ...tenantRecord('binding-only'), appCodes: ['aims'] }], nextCursor: null } })
+    if (path === '/internal/resolve') return Response.json({ data: resolvedTenantRecord('binding-only') })
+    if (path === '/internal/runtime-bootstrap-token') return Response.json({ data: { token: 'bootstrap', expiresAt: new Date(Date.now() + 90000).toISOString() } })
+    throw Error('Aims wake must use HZY_AIMS_SERVICE, not public fetch')
+  }, { now: () => 100 })
+  assert.equal(bindingCalls.length, 1)
+  assert.equal(new URL(bindingCalls[0].url).pathname, '/aims/api/internal/integration-operations/drain')
+})
+
 // 走查 ISSUE-B-025：finance 此前不在 SCHEDULER_APPS 中，即时派发一旦失败就被
 // catch 吞成 pending，operation 永久停摆且无任何错误记录；其静态 drain 又因缺
 // 专属 Console service client 而被 HZY_FINANCE_INTEGRATION_OPERATIONS_ENABLED
 // 关闭，等于完全没有重试兜底。
-test('all durable outbox apps are woken for scheduled integration operation drain', async () => {
+test('all scheduler apps have a wake entry and same-account service binding', async () => {
   const source = readFileSync(new URL('../src/index.js', import.meta.url), 'utf8')
   const schedulerApps = source.match(/const SCHEDULER_APPS = new Set\(\[([^\]]*)\]\)/)
   assert.ok(schedulerApps, 'SCHEDULER_APPS declaration must be present')
-  for (const app of ['aims', 'altoc', 'console', 'finance', 'people', 'workflow']) {
+  for (const app of ['aims', 'altoc', 'assets', 'console', 'finance', 'people', 'workflow']) {
     assert.match(schedulerApps[1], new RegExp(`'${app}'`), `${app} must be woken for drain`)
   }
   // 每个被唤醒的应用都必须有 Service Binding，否则唤醒会走公网被 WAF 拦掉。
   const bindings = source.match(/const APP_SERVICE_BINDINGS = Object\.freeze\(\{([\s\S]*?)\}\)/)
   assert.ok(bindings, 'APP_SERVICE_BINDINGS declaration must be present')
-  for (const app of ['aims', 'altoc', 'console', 'finance', 'people', 'workflow']) {
+  for (const app of ['aims', 'altoc', 'assets', 'console', 'finance', 'people', 'workflow']) {
     assert.match(bindings[1], new RegExp(`${app}: '`), `${app} must have a service binding`)
   }
   // 绑定必须同时在 wrangler 配置里声明，否则运行时取不到。
   const config = readFileSync(new URL('../wrangler.jsonc', import.meta.url), 'utf8')
-  for (const binding of ['HZY_AIMS_SERVICE', 'HZY_ALTOC_SERVICE', 'HZY_CONSOLE_SERVICE', 'HZY_FINANCE_SERVICE', 'HZY_PEOPLE_SERVICE', 'HZY_WORKFLOW_SERVICE']) {
+  for (const binding of ['HZY_AIMS_SERVICE', 'HZY_ALTOC_SERVICE', 'HZY_ASSETS_SERVICE', 'HZY_CONSOLE_SERVICE', 'HZY_FINANCE_SERVICE', 'HZY_PEOPLE_SERVICE', 'HZY_WORKFLOW_SERVICE']) {
     assert.match(config, new RegExp(binding), `${binding} must be declared in wrangler.jsonc`)
   }
+})
+
+test('unified Aims storage selection is signed per tenant without changing legacy wakes', async () => {
+  const wakes = []
+  await runScheduled(schedulerEnv(), async (input, init) => {
+    const request = asRequest(input, init)
+    const url = new URL(request.url)
+    if (url.pathname === '/internal/tenant-scheduler') return Response.json({ data: { items: [{ ...tenantRecord('unified-signature'), appCodes: ['aims'] }], nextCursor: null } })
+    if (url.pathname === '/internal/resolve') {
+      const record = resolvedTenantRecord('unified-signature')
+      record.apps.aims.enterpriseScheduler = { storage: 'unified', generation: '7' }
+      return Response.json({ data: record })
+    }
+    if (url.pathname === '/internal/runtime-bootstrap-token') return Response.json({ data: { token: 'bootstrap', expiresAt: new Date(Date.now() + 90000).toISOString() } })
+    wakes.push(request)
+    return Response.json({ code: 0 })
+  }, { now: () => 100 })
+  assert.equal(wakes.length, 1)
+  const h = wakes[0].headers
+  assert.equal(h.get('x-hzy-scheduler-storage'), 'unified')
+  assert.equal(h.get('x-hzy-scheduler-generation'), '7')
+  const canonical = ['POST', '/api/internal/integration-operations/drain', h.get('x-request-id'),
+    'unified-signature', 'dep-unified-signature', 'aims', 'prod', 'https://runtime-unified-signature.example.test',
+    'unified-signature.huizhi.yun', 'enterprise-scheduler-v1', 'unified', '7', h.get('x-hzy-scheduler-issued-at')].join('\n')
+  assert.equal(h.get('x-hzy-scheduler-signature'), createHmac('sha256', 'gateway-secret').update(canonical).digest('hex'))
+})
+
+test('disabled persisted scheduler selection never wakes a legacy worker', async () => {
+  let wakes = 0
+  await runScheduled(schedulerEnv(), async (input, init) => {
+    const request = asRequest(input, init)
+    const url = new URL(request.url)
+    if (url.pathname === '/internal/tenant-scheduler') return Response.json({ data: { items: [{ ...tenantRecord('disabled-selection'), appCodes: ['aims'] }], nextCursor: null } })
+    if (url.pathname === '/internal/resolve') {
+      const record = resolvedTenantRecord('disabled-selection')
+      record.apps.aims.enterpriseScheduler = { storage: 'disabled', generation: '7' }
+      return Response.json({ data: record })
+    }
+    if (url.pathname === '/internal/runtime-bootstrap-token') return Response.json({ data: { token: 'bootstrap', expiresAt: new Date(Date.now() + 90000).toISOString() } })
+    wakes++
+    return Response.json({ code: 0 })
+  }, { now: () => 100 })
+  assert.equal(wakes, 0)
+})
+
+test('malformed explicit scheduler selections never silently choose legacy storage', async () => {
+  const selections = [{}, null, { storage: 'unified', generation: 7 }, { storage: 'unified', generation: ' 7' },
+    { storage: 'unified', generation: '18446744073709551616' }, { storage: 'legacy', generation: '7' }]
+  for (const [index, selection] of selections.entries()) {
+    const code = `malformed-selection-${index}`
+    let wakes = 0
+    await runScheduled(schedulerEnv(), async (input, init) => {
+      const request = asRequest(input, init)
+      const url = new URL(request.url)
+      if (url.pathname === '/internal/tenant-scheduler') return Response.json({ data: { items: [{ ...tenantRecord(code), appCodes: ['aims'] }], nextCursor: null } })
+      if (url.pathname === '/internal/resolve') {
+        const record = resolvedTenantRecord(code)
+        record.apps.aims.enterpriseScheduler = selection
+        return Response.json({ data: record })
+      }
+      if (url.pathname === '/internal/runtime-bootstrap-token') return Response.json({ data: { token: 'bootstrap', expiresAt: new Date(Date.now() + 90000).toISOString() } })
+      wakes++
+      return Response.json({ code: 0 })
+    }, { now: () => 100 })
+    assert.equal(wakes, 0, `selection ${index} must fail closed`)
+  }
+})
+
+test('recovered Aims storage selection is signed per tenant without changing legacy wakes', async () => {
+  const wakes = []
+  await runScheduled(schedulerEnv(), async (input, init) => {
+    const request = asRequest(input, init)
+    const url = new URL(request.url)
+    if (url.pathname === '/internal/tenant-scheduler') return Response.json({ data: { items: [{ ...tenantRecord('recovered-signature'), appCodes: ['aims'] }], nextCursor: null } })
+    if (url.pathname === '/internal/resolve') {
+      const record = resolvedTenantRecord('recovered-signature')
+      record.apps.aims.enterpriseScheduler = { storage: 'recovered', generation: '7' }
+      return Response.json({ data: record })
+    }
+    if (url.pathname === '/internal/runtime-bootstrap-token') return Response.json({ data: { token: 'bootstrap', expiresAt: new Date(Date.now() + 90000).toISOString() } })
+    wakes.push(request)
+    return Response.json({ code: 0 })
+  }, { now: () => 100 })
+  assert.equal(wakes.length, 1)
+  const h = wakes[0].headers
+  assert.equal(h.get('x-hzy-scheduler-storage'), 'recovered')
+  assert.equal(h.get('x-hzy-scheduler-generation'), '7')
+  const canonical = ['POST', '/api/internal/integration-operations/drain', h.get('x-request-id'),
+    'recovered-signature', 'dep-recovered-signature', 'aims', 'prod', 'https://runtime-recovered-signature.example.test',
+    'recovered-signature.huizhi.yun', 'enterprise-scheduler-v1', 'recovered', '7', h.get('x-hzy-scheduler-issued-at')].join('\n')
+  assert.equal(h.get('x-hzy-scheduler-signature'), createHmac('sha256', 'gateway-secret').update(canonical).digest('hex'))
+})
+
+test('Assets is never woken without a persisted unified or recovered selection', async () => {
+  for (const selection of [undefined, { storage: 'disabled', generation: '7' }]) {
+    const wakes = []
+    await runScheduled(schedulerEnv(), async (input, init) => {
+      const request = asRequest(input, init)
+      const url = new URL(request.url)
+      if (url.pathname === '/internal/tenant-scheduler') return Response.json({ data: { items: [{ ...tenantRecord('assets-legacy'), appCodes: ['assets'] }], nextCursor: null } })
+      if (url.pathname === '/internal/resolve') {
+        const record = resolvedTenantRecord('assets-legacy')
+        record.apps.assets = { ...(record.apps.assets || {}), ...(selection ? { enterpriseScheduler: selection } : {}) }
+        return Response.json({ data: record })
+      }
+      if (url.pathname === '/internal/runtime-bootstrap-token') return Response.json({ data: { token: 'bootstrap', expiresAt: new Date(Date.now() + 90000).toISOString() } })
+      wakes.push(request)
+      return Response.json({ code: 0 })
+    }, { now: () => 100 })
+    assert.equal(wakes.length, 0, `assets woken with selection ${JSON.stringify(selection)}`)
+  }
+})
+
+test('unified Assets storage selection is signed for the Assets wake', async () => {
+  const wakes = []
+  await runScheduled(schedulerEnv(), async (input, init) => {
+    const request = asRequest(input, init)
+    const url = new URL(request.url)
+    if (url.pathname === '/internal/tenant-scheduler') return Response.json({ data: { items: [{ ...tenantRecord('assets-unified'), appCodes: ['assets'] }], nextCursor: null } })
+    if (url.pathname === '/internal/resolve') {
+      const record = resolvedTenantRecord('assets-unified')
+      record.apps.assets = { ...(record.apps.assets || {}), enterpriseScheduler: { storage: 'unified', generation: '9' } }
+      return Response.json({ data: record })
+    }
+    if (url.pathname === '/internal/runtime-bootstrap-token') return Response.json({ data: { token: 'bootstrap', expiresAt: new Date(Date.now() + 90000).toISOString() } })
+    wakes.push(request)
+    return Response.json({ code: 0 })
+  }, { now: () => 100 })
+  assert.equal(wakes.length, 1)
+  const h = wakes[0].headers
+  assert.equal(new URL(wakes[0].url).pathname.endsWith('/api/internal/integration-operations/drain'), true)
+  assert.equal(h.get('x-hzy-app-code'), 'assets')
+  assert.equal(h.get('x-hzy-scheduler-storage'), 'unified')
+  assert.equal(h.get('x-hzy-scheduler-generation'), '9')
+  assert.equal(h.get('x-hzy-scheduler-signature')?.length, 64)
 })

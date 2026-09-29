@@ -54,6 +54,7 @@ type WorkflowEffects struct {
 
 type WorkflowActionableLifecycle struct {
 	EffectID                  int64                  `json:"effectId,omitempty"`
+	VersionNo                 int64                  `json:"versionNo,omitempty"`
 	ActionableKey             string                 `json:"actionableKey"`
 	ExpectedVersion           string                 `json:"expectedVersion"`
 	NextVersion               string                 `json:"nextVersion"`
@@ -78,9 +79,10 @@ type WorkflowNotification struct {
 }
 
 type WorkflowCallback struct {
-	EffectID int64          `json:"effectId,omitempty"`
-	URL      string         `json:"url"`
-	Payload  map[string]any `json:"payload"`
+	EffectID  int64          `json:"effectId,omitempty"`
+	VersionNo int64          `json:"versionNo,omitempty"`
+	URL       string         `json:"url"`
+	Payload   map[string]any `json:"payload"`
 }
 
 type actionDefRecord struct {

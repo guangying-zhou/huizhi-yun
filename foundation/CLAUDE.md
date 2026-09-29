@@ -39,3 +39,4 @@ export default defineNuxtConfig({
 - 新平台授权、bundle、deployment heartbeat 等能力只由 Console 对接 Platform；业务应用通过 `platformBundleAuthorization.ts` 调 Console runtime 获取普通权限快照、scoped authorization 和实例级职责冲突解释，不得读取本地 policy bundle 或恢复业务侧 fallback。
 - 业务模块不得直接读取 `integration_credentials` 或调用 Console vault resolve；必须通过 Foundation integration adapter 按 `integrationCode` 消费。
 - `tenantRuntimeClient.ts` / `tenantRuntimeProxy.ts` 是 tenant-runtime/data-runtime 代理主路径 helper；迁入 ADR-016 阶段 2 的业务模块不得恢复本地 DB fallback。
+- 自托管单站点（G-10）没有 Cloudflare Service Binding：`consoleServiceBinding()` / `appServiceBinding()` 与 Runtime 拨号由启动校验的 `HZY_SELF_HOSTED_SERVICE_ORIGINS_JSON`、`HZY_SELF_HOSTED_RUNTIME_ENDPOINT` + `HZY_SELF_HOSTED_RUNTIME_DIAL_ORIGIN` 显式映射到本机回环（`selfHostedServiceTransport.ts`），不得回落公网入口；不得从请求头或 public 配置推导，不得与 `HZY0_*` 或 Cloudflare 构建同时设置。

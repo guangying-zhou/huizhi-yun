@@ -1,5 +1,7 @@
 # Aims 模块
 
+项目文档宿主链复用原 `projects/[id]/documents.vue`，Host 上传调用共享 `projectDocumentUpload`。项目搜索/摘要/创建/ACL 通过签名 Codocs `project-document-access` Service API，不得恢复 Aims → Codocs Runtime 直连。完整边界、幂等和测试状态见根 MODULE_CONTRACTS 的 2026-09-19 补充；浏览器全链验收尚待完成。
+
 > 业务模块 — 研发项目全生命周期管理 | 端口 3002 | 状态：开发中（MVP/Beta） | 数据库：tenant-runtime 托管（默认 hzy_aims）
 >
 > 📖 涉及认证、目录、审批、共享组件或 Server API 复用时，按需查 [`docs/FOUNDATION_CAPABILITIES.md`](../docs/FOUNDATION_CAPABILITIES.md)；简单局部改动不需要预读。
@@ -85,6 +87,7 @@ P4.2 已落地：
 - 工作项到期通知的候选收件人只允许当前 active 项目成员中的 assignee，或项目 leader；不再回退到部门经理。旧责任人 projection 必须先按既有 checkpoint/CAS 合同关闭。
 - 发布前必须通过 Console subject eligibility 服务确认目标用户 Directory 状态为 active，且对 Aims 固定目的 `work_items:view` 具有当前 normal-merged 访问资格。拒绝、inactive 或资格服务不可用时不得发布、不得 ack，保留原候选等待重试。
 - subject eligibility 只证明资源级读取资格；exact 工作项目标仍由 Aims 当前项目成员/leader 关系和目标页 runtime 重鉴权共同约束。
+- ADR-018 统一调度（Runtime Aims scheduler 为 `unified`）下，到期通知与周期里程碑滚动都只由 Gateway 签名 drain 唤醒执行，分别使用精确 `aims:notifications-due:execute` / `aims:milestone-rollover:execute` 与 scheduler generation；legacy 入口返回 409 owner 拒绝，本地 cron 记 skipped。合同见根 `docs/MODULE_CONTRACTS.md`。
 
 ## 数据库
 

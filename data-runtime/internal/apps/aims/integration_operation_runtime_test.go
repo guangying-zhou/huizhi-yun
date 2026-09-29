@@ -285,7 +285,7 @@ func TestFailAimsIntegrationOperationCheckpointUsesWorkerFenceAndTrustedIdentity
 			body["status"] = "succeeded"
 			body["nextAttemptAt"] = "2099-01-01T00:00:00Z"
 
-			mock.ExpectQuery(`(?s)SELECT target_app, operation_code, command_json.*FROM integration_operation.*WHERE operation_id = \?.*operation_key = \?.*tenant_code = \?.*deployment_code = \?.*source_app = 'aims'.*status = 'processing'.*locked_by = \?.*fencing_token = \?.*LIMIT 1`).
+			mock.ExpectQuery(`(?s)SELECT target_app, operation_code, command_schema_version, command_json.*FROM integration_operation.*WHERE operation_id = \?.*operation_key = \?.*tenant_code = \?.*deployment_code = \?.*source_app = 'aims'.*status = 'processing'.*locked_by = \?.*fencing_token = \?.*LIMIT 1`).
 				WithArgs(
 					testAimsIntegrationOperationID,
 					testServiceTicketDeliveryOperationKey,
@@ -294,9 +294,10 @@ func TestFailAimsIntegrationOperationCheckpointUsesWorkerFenceAndTrustedIdentity
 					testAimsIntegrationWorker,
 					int64(8),
 				).
-				WillReturnRows(sqlmock.NewRows([]string{"target_app", "operation_code", "command_json"}).AddRow(
+				WillReturnRows(sqlmock.NewRows([]string{"target_app", "operation_code", "command_schema_version", "command_json"}).AddRow(
 					"altoc",
 					serviceTicketDeliveryOperationCode,
+					"v1",
 					`{"ticketCode":"ST-1","workItemKey":"WI-1","deliveryStatus":"closed","idempotencyKey":"aims:work-item:WI-1:ticket-result:g1:v1"}`,
 				))
 
@@ -439,10 +440,10 @@ func TestSucceedAimsIntegrationOperationUsesTrustedWorkerFenceAndFrozenTarget(t 
 	body["targetBizCode"] = "ST-1"
 	body["responseSummarySha256"] = responseSummarySHA256
 
-	mock.ExpectQuery(`(?s)SELECT target_app, operation_code, command_json.*FROM integration_operation.*WHERE operation_id = \?.*operation_key = \?.*tenant_code = \?.*deployment_code = \?.*source_app = 'aims'.*status = 'processing'.*locked_by = \?.*fencing_token = \?.*LIMIT 1`).
+	mock.ExpectQuery(`(?s)SELECT target_app, operation_code, command_schema_version, command_json.*FROM integration_operation.*WHERE operation_id = \?.*operation_key = \?.*tenant_code = \?.*deployment_code = \?.*source_app = 'aims'.*status = 'processing'.*locked_by = \?.*fencing_token = \?.*LIMIT 1`).
 		WithArgs(testAimsIntegrationOperationID, testServiceTicketDeliveryOperationKey, "TENANT-TRUSTED", "DEPLOYMENT-TRUSTED", testAimsIntegrationWorker, int64(8)).
-		WillReturnRows(sqlmock.NewRows([]string{"target_app", "operation_code", "command_json"}).
-			AddRow("altoc", serviceTicketDeliveryOperationCode, `{"ticketCode":"ST-1","workItemKey":"WI-1","deliveryStatus":"closed","idempotencyKey":"aims:work-item:WI-1:ticket-result:g1:v1"}`))
+		WillReturnRows(sqlmock.NewRows([]string{"target_app", "operation_code", "command_schema_version", "command_json"}).
+			AddRow("altoc", serviceTicketDeliveryOperationCode, "v1", `{"ticketCode":"ST-1","workItemKey":"WI-1","deliveryStatus":"closed","idempotencyKey":"aims:work-item:WI-1:ticket-result:g1:v1"}`))
 	mock.ExpectBegin()
 	mock.ExpectQuery(`(?s)SELECT.*status.*locked_by.*locked_until.*fencing_token.*attempt_count.*max_attempts.*version_no.*created_at.*last_attempt_at.*FROM integration_operation.*WHERE operation_id = \?.*FOR UPDATE`).
 		WithArgs(testAimsIntegrationOperationID).
@@ -510,10 +511,10 @@ func TestSucceedProductDocumentOperationUsesFrozenDocumentAndSchema(t *testing.T
 	body["targetBizCode"] = "00000000-0000-4000-8000-000000000001"
 	body["responseSummarySha256"] = responseSummarySHA256
 
-	mock.ExpectQuery(`(?s)SELECT target_app, operation_code, command_json.*FROM integration_operation.*WHERE operation_id = \?.*operation_key = \?.*tenant_code = \?.*deployment_code = \?.*source_app = 'aims'.*status = 'processing'.*locked_by = \?.*fencing_token = \?.*LIMIT 1`).
+	mock.ExpectQuery(`(?s)SELECT target_app, operation_code, command_schema_version, command_json.*FROM integration_operation.*WHERE operation_id = \?.*operation_key = \?.*tenant_code = \?.*deployment_code = \?.*source_app = 'aims'.*status = 'processing'.*locked_by = \?.*fencing_token = \?.*LIMIT 1`).
 		WithArgs(testAimsIntegrationOperationID, testServiceTicketDeliveryOperationKey, "TENANT-TRUSTED", "DEPLOYMENT-TRUSTED", testAimsIntegrationWorker, int64(8)).
-		WillReturnRows(sqlmock.NewRows([]string{"target_app", "operation_code", "command_json"}).
-			AddRow("codocs", productDocumentCreateOperationCode, string(commandJSON)))
+		WillReturnRows(sqlmock.NewRows([]string{"target_app", "operation_code", "command_schema_version", "command_json"}).
+			AddRow("codocs", productDocumentCreateOperationCode, "product-document-create.v1", string(commandJSON)))
 	mock.ExpectBegin()
 	mock.ExpectQuery(`(?s)SELECT.*status.*locked_by.*locked_until.*fencing_token.*attempt_count.*max_attempts.*version_no.*created_at.*last_attempt_at.*FROM integration_operation.*WHERE operation_id = \?.*FOR UPDATE`).
 		WithArgs(testAimsIntegrationOperationID).

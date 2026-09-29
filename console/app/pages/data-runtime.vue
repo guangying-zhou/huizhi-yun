@@ -299,14 +299,17 @@ async function saveParameters() {
     await Promise.all([
       $fetch('/api/v1/console/settings/values/dataRuntime.runtimeApiUrl', {
         method: 'PUT',
+        headers: { 'Idempotency-Key': crypto.randomUUID() },
         body: { value: runtimeApiUrl.value.trim() }
       }),
       $fetch('/api/v1/console/settings/values/dataRuntime.packageBaseUrl', {
         method: 'PUT',
+        headers: { 'Idempotency-Key': crypto.randomUUID() },
         body: { value: packageBaseUrl.value.trim() }
       }),
       $fetch('/api/v1/console/settings/values/dataRuntime.audience', {
         method: 'PUT',
+        headers: { 'Idempotency-Key': crypto.randomUUID() },
         body: { value: audience.value.trim() }
       })
     ])

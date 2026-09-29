@@ -20,6 +20,8 @@ export interface ProductTreePage {
   items: ProductTreeItem[]
   groups?: ProductLineGroup[]
   total: number
+  page: number
+  pageSize: number
   catalog_generation: string | null
   catalog_updated_at: string | null
 }

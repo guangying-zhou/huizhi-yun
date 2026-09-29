@@ -1,5 +1,6 @@
 import type { MaybeRef } from 'vue'
-import type { PivrStage, Milestone } from '~/types/aims'
+import type { PivrStage, Milestone } from '../types/aims'
+import { useMilestoneStore } from '../stores/milestone'
 
 export interface StageProgress {
   total: number

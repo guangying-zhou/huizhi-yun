@@ -8,15 +8,16 @@ const authorizationSource = readFileSync(
 )
 
 describe('authorization SSR request context', () => {
-  test('forwards the incoming request context when loading the local permissions API', () => {
+  test('forwards the incoming request context and validates the snapshot envelope', () => {
     assert.match(
       authorizationSource,
       /if \(import\.meta\.server\) \{[\s\S]*useRequestFetch\(\)[\s\S]*\} else \{[\s\S]*\$fetch/
     )
-    assert.match(
-      authorizationSource,
-      /type AuthorizationSnapshotResponse = \{/
-    )
-    assert.match(authorizationSource, /const response = await requestFetch\('\/api\/auth\/permissions'\)/)
+    // The endpoint comes from the shared resolver (standalone root or Host per-module path).
+    assert.match(authorizationSource, /const response = await requestFetch\(source\.url\)/)
+    assert.match(authorizationSource, /return parseAuthorizationSnapshotResponse\(response, source\.expectedApp\)/)
+    assert.match(authorizationSource, /resolveAuthorizationSnapshotSource\(publicConfig, routeMeta\(\)\)/)
+    // No silent empty snapshot for an unexpected response.
+    assert.doesNotMatch(authorizationSource, /response\.code === 0 && response\.data/)
   })
 })

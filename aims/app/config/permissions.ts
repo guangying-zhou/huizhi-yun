@@ -240,6 +240,8 @@ export const routeRules: RouteRule[] = [
       { resource: 'admin', action: 'admin' }
     ]
   },
+  // 周报设置只认 weekly_reports:configure（与 Runtime/Host 合同一致），不借 admin:admin。
+  { pattern: '/admin/weekly-reporting-settings', resource: 'weekly_reports', action: 'configure' },
   {
     pattern: '/admin',
     resource: 'admin',
@@ -247,7 +249,8 @@ export const routeRules: RouteRule[] = [
     anyOf: [
       { resource: 'admin', action: 'admin' },
       { resource: 'projects', action: 'admin' },
-      { resource: 'project_templates', action: 'admin' }
+      { resource: 'project_templates', action: 'admin' },
+      { resource: 'weekly_reports', action: 'configure' }
     ]
   },
   {

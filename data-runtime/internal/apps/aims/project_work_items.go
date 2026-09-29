@@ -15,6 +15,7 @@ type projectWorkItemRow struct {
 	ID                          int64
 	ProjectID                   int64
 	MilestoneID                 *int64
+	VersionID                   *int64
 	ItemNumber                  int64
 	ItemKey                     string
 	Type                        string
@@ -80,6 +81,9 @@ func (a *Adapter) projectWorkItems(ctx context.Context, rawProjectID string, que
 	whereSQL := "WHERE " + strings.Join(where, " AND ")
 
 	if strings.TrimSpace(query.Get("view")) == "board" {
+		if query.Has("page") || query.Has("pageSize") || query.Has("page_size") {
+			return a.projectWorkItemsBoardPage(ctx, projectID, query)
+		}
 		rows, err := a.queryProjectWorkItemRows(ctx, whereSQL, args, 0, 0, "wi.sort_order ASC, wi.created_at ASC")
 		if err != nil {
 			return nil, err
@@ -97,24 +101,76 @@ func (a *Adapter) projectWorkItems(ctx context.Context, rawProjectID string, que
 	}
 
 	page := projectWorkItemsPage(query)
+	tx, err := a.DB().BeginTx(ctx, &sql.TxOptions{ReadOnly: true, Isolation: sql.LevelRepeatableRead})
+	if err != nil {
+		return nil, fmt.Errorf("begin project work item page: %w", err)
+	}
+	defer tx.Rollback()
 	var total int64
-	if err := a.DB().QueryRowContext(ctx, "SELECT COUNT(*) AS total FROM work_items wi LEFT JOIN work_item_service_ext wse ON wse.work_item_id = wi.id "+whereSQL, args...).Scan(&total); err != nil {
+	if err := tx.QueryRowContext(ctx, "SELECT COUNT(*) AS total FROM work_items wi LEFT JOIN work_item_service_ext wse ON wse.work_item_id = wi.id "+whereSQL, args...).Scan(&total); err != nil {
 		return nil, fmt.Errorf("count project work items: %w", err)
 	}
-	rows, err := a.queryProjectWorkItemRows(ctx, whereSQL, args, page.pageSize, page.offset, "wi.sort_order ASC, wi.created_at DESC")
+	rows, err := queryProjectWorkItemRowsFrom(ctx, tx, whereSQL, args, page.pageSize, page.offset, "wi.sort_order ASC, wi.created_at DESC, wi.id DESC")
 	if err != nil {
 		return nil, err
 	}
+	var ancestors []map[string]any
+	if query.Has("page") || query.Has("pageSize") || query.Has("page_size") {
+		ancestors, err = projectWorkItemAncestors(ctx, tx, projectID, rows)
+		if err != nil {
+			return nil, err
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, fmt.Errorf("commit project work item page: %w", err)
+	}
 	items := make([]map[string]any, 0, len(rows))
 	for _, row := range rows {
-		items = append(items, row.mapProjectWorkItem())
+		item := row.mapProjectWorkItem()
+		if query.Has("page") || query.Has("pageSize") || query.Has("page_size") {
+			item["versionId"] = row.VersionID
+		}
+		items = append(items, item)
 	}
-	return map[string]any{
+	result := map[string]any{
 		"items":    items,
 		"total":    total,
 		"page":     page.page,
 		"pageSize": page.pageSize,
-	}, nil
+	}
+	if ancestors != nil {
+		result["ancestors"] = ancestors
+	}
+	return result, nil
+}
+
+func (a *Adapter) projectBoard(ctx context.Context, rawProjectID string, query url.Values) (any, error) {
+	if err := a.requireProjectReadAccess(ctx, rawProjectID, query); err != nil {
+		return nil, err
+	}
+	projectID, err := parseID(rawProjectID, "project_id")
+	if err != nil {
+		return nil, err
+	}
+	project, err := a.projectWorkItemProject(ctx, projectID)
+	if err != nil {
+		return nil, err
+	}
+	boardQuery := cloneURLValues(query)
+	boardQuery.Set("view", "board")
+	boardQuery.Set("tier", "matter")
+	if project.Category == "routine" {
+		boardQuery.Set("type", "task")
+	}
+	return a.projectWorkItems(ctx, rawProjectID, boardQuery)
+}
+
+func cloneURLValues(source url.Values) url.Values {
+	target := url.Values{}
+	for key, values := range source {
+		target[key] = append([]string(nil), values...)
+	}
+	return target
 }
 
 func (a *Adapter) directWorkItems(ctx context.Context, query url.Values) (any, error) {
@@ -147,8 +203,13 @@ func (a *Adapter) directWorkItems(ctx context.Context, query url.Values) (any, e
 	}
 
 	page := projectWorkItemsPage(query)
+	tx, err := a.DB().BeginTx(ctx, &sql.TxOptions{ReadOnly: true, Isolation: sql.LevelRepeatableRead})
+	if err != nil {
+		return nil, fmt.Errorf("begin direct work item page: %w", err)
+	}
+	defer tx.Rollback()
 	var total int64
-	if err := a.DB().QueryRowContext(ctx, `
+	if err := tx.QueryRowContext(ctx, `
 		SELECT COUNT(*) AS total
 		FROM work_items wi
 		JOIN aims_projects p ON p.id = wi.project_id
@@ -158,13 +219,20 @@ func (a *Adapter) directWorkItems(ctx context.Context, query url.Values) (any, e
 	).Scan(&total); err != nil {
 		return nil, fmt.Errorf("count direct work items: %w", err)
 	}
-	rows, err := a.queryDirectWorkItemRows(ctx, whereSQL, args, page.pageSize, page.offset, "wi.sort_order ASC, wi.created_at DESC")
+	rows, err := queryDirectWorkItemRowsFrom(ctx, tx, whereSQL, args, page.pageSize, page.offset, "wi.sort_order ASC, wi.created_at DESC, wi.id DESC")
 	if err != nil {
 		return nil, err
 	}
+	if err := tx.Commit(); err != nil {
+		return nil, fmt.Errorf("commit direct work item page: %w", err)
+	}
 	items := make([]map[string]any, 0, len(rows))
 	for _, row := range rows {
-		items = append(items, row.mapProjectWorkItem())
+		item := row.mapProjectWorkItem()
+		if query.Has("page") || query.Has("pageSize") || query.Has("page_size") {
+			item["versionId"] = row.VersionID
+		}
+		items = append(items, item)
 	}
 	return map[string]any{
 		"items":    items,
@@ -175,6 +243,10 @@ func (a *Adapter) directWorkItems(ctx context.Context, query url.Values) (any, e
 }
 
 func (a *Adapter) createProjectWorkItem(ctx context.Context, rawProjectID string, query url.Values, body map[string]any) (map[string]any, error) {
+	return a.createProjectWorkItemWithExternalTx(ctx, nil, rawProjectID, query, body)
+}
+
+func (a *Adapter) createProjectWorkItemWithExternalTx(ctx context.Context, externalTx *sql.Tx, rawProjectID string, query url.Values, body map[string]any) (map[string]any, error) {
 	uid := strings.TrimSpace(query.Get("current_user"))
 	if uid == "" {
 		uid = strings.TrimSpace(query.Get("operator_uid"))
@@ -235,11 +307,14 @@ func (a *Adapter) createProjectWorkItem(ctx context.Context, rawProjectID string
 		}
 	}
 
-	tx, err := a.DB().BeginTx(ctx, nil)
-	if err != nil {
-		return nil, err
+	tx := externalTx
+	if tx == nil {
+		tx, err = a.DB().BeginTx(ctx, nil)
+		if err != nil {
+			return nil, err
+		}
+		defer tx.Rollback()
 	}
-	defer tx.Rollback()
 
 	itemNumber, err := nextDecomposeItemNumber(ctx, tx, projectID)
 	if err != nil {
@@ -307,8 +382,10 @@ func (a *Adapter) createProjectWorkItem(ctx context.Context, rawProjectID string
 	`, workItemID, itemKey, uid); err != nil {
 		return nil, err
 	}
-	if err := tx.Commit(); err != nil {
-		return nil, err
+	if externalTx == nil {
+		if err := tx.Commit(); err != nil {
+			return nil, err
+		}
 	}
 
 	return map[string]any{
@@ -457,20 +534,58 @@ func projectWorkItemsWhere(projectID int64, query url.Values) ([]string, []any, 
 		args = append(args, value)
 	}
 	if value := strings.TrimSpace(firstNonEmptyProjectParam(query, "milestoneId", "milestone_id")); value != "" {
-		id, err := parseID(value, "milestone_id")
-		if err != nil {
-			return nil, nil, err
+		if value == "__null__" {
+			where = append(where, "wi.milestone_id IS NULL")
+		} else {
+			id, err := parseID(value, "milestone_id")
+			if err != nil {
+				return nil, nil, err
+			}
+			where = append(where, "wi.milestone_id = ?")
+			args = append(args, id)
 		}
-		where = append(where, "wi.milestone_id = ?")
-		args = append(args, id)
 	}
 	if value := strings.TrimSpace(firstNonEmptyProjectParam(query, "assigneeUid", "assignee_uid")); value != "" {
 		where = append(where, "wi.assignee_uid = ?")
 		args = append(args, value)
 	}
+	switch strings.TrimSpace(query.Get("quickFilter")) {
+	case "", "all":
+	case "my_assigned", "my_reported":
+		uid := strings.TrimSpace(query.Get("current_user"))
+		if uid == "" {
+			return nil, nil, httperror.New(http.StatusUnauthorized, "missing_current_user", "current_user is required")
+		}
+		column := "wi.assignee_uid"
+		if query.Get("quickFilter") == "my_reported" {
+			column = "wi.reporter_uid"
+		}
+		where = append(where, column+" = ?")
+		args = append(args, uid)
+	case "unassigned":
+		where = append(where, "wi.assignee_uid IS NULL")
+	default:
+		return nil, nil, httperror.New(http.StatusBadRequest, "invalid_quick_filter", "invalid quick filter")
+	}
 	if value := strings.TrimSpace(query.Get("priority")); value != "" {
 		where = append(where, "wi.priority = ?")
 		args = append(args, value)
+	}
+	if value := strings.TrimSpace(query.Get("severity")); value != "" {
+		where = append(where, "wi.severity = ?")
+		args = append(args, value)
+	}
+	if value := strings.TrimSpace(firstNonEmptyProjectParam(query, "versionId", "version_id")); value != "" {
+		if value == "__null__" {
+			where = append(where, "wi.version_id IS NULL")
+		} else {
+			id, err := parseID(value, "version_id")
+			if err != nil {
+				return nil, nil, err
+			}
+			where = append(where, "wi.version_id = ?")
+			args = append(args, id)
+		}
 	}
 	if value := strings.TrimSpace(query.Get("search")); value != "" {
 		where = append(where, "(wi.title LIKE ? OR wi.item_key LIKE ? OR wse.source_ticket_code LIKE ? OR wse.customer_code LIKE ? OR wse.environment_code LIKE ?)")
@@ -635,11 +750,24 @@ func (a *Adapter) queryProjectWorkItemRows(
 	offset int,
 	orderBy string,
 ) ([]projectWorkItemRow, error) {
+	return queryProjectWorkItemRowsFrom(ctx, a.DB(), whereSQL, args, limit, offset, orderBy)
+}
+
+func queryProjectWorkItemRowsFrom(
+	ctx context.Context,
+	q aimsQueryer,
+	whereSQL string,
+	args []any,
+	limit int,
+	offset int,
+	orderBy string,
+) ([]projectWorkItemRow, error) {
 	sqlText := `
 		SELECT
 			wi.id,
 			wi.project_id,
 			wi.milestone_id,
+			wi.version_id,
 			wi.item_number,
 			wi.item_key,
 			wi.type,
@@ -697,7 +825,7 @@ func (a *Adapter) queryProjectWorkItemRows(
 		queryArgs = append(queryArgs, limit, offset)
 	}
 
-	rows, err := a.DB().QueryContext(ctx, sqlText, queryArgs...)
+	rows, err := q.QueryContext(ctx, sqlText, queryArgs...)
 	if err != nil {
 		return nil, fmt.Errorf("query project work items: %w", err)
 	}
@@ -725,11 +853,24 @@ func (a *Adapter) queryDirectWorkItemRows(
 	offset int,
 	orderBy string,
 ) ([]projectWorkItemRow, error) {
+	return queryDirectWorkItemRowsFrom(ctx, a.DB(), whereSQL, args, limit, offset, orderBy)
+}
+
+func queryDirectWorkItemRowsFrom(
+	ctx context.Context,
+	q aimsQueryer,
+	whereSQL string,
+	args []any,
+	limit int,
+	offset int,
+	orderBy string,
+) ([]projectWorkItemRow, error) {
 	sqlText := `
 		SELECT
 			wi.id,
 			wi.project_id,
 			wi.milestone_id,
+			wi.version_id,
 			wi.item_number,
 			wi.item_key,
 			wi.type,
@@ -788,7 +929,7 @@ func (a *Adapter) queryDirectWorkItemRows(
 		queryArgs = append(queryArgs, limit, offset)
 	}
 
-	rows, err := a.DB().QueryContext(ctx, sqlText, queryArgs...)
+	rows, err := q.QueryContext(ctx, sqlText, queryArgs...)
 	if err != nil {
 		return nil, fmt.Errorf("query direct work items: %w", err)
 	}
@@ -815,12 +956,13 @@ func scanProjectWorkItemRow(rows *sql.Rows) (projectWorkItemRow, error) {
 	var sourceTicketCode, customerCode, environmentCode, responseDueAt, resolutionDueAt, slaStatusSnapshot sql.NullString
 	var firstRespondedAt, resolvedAt, serviceExtLastSyncedAt sql.NullString
 	var estimatedHours sql.NullFloat64
-	var milestoneID, parentID, carryoverOriginMilestoneID sql.NullInt64
+	var milestoneID, versionID, parentID, carryoverOriginMilestoneID sql.NullInt64
 	var required, isUnplanned, carryoverGovernanceAbnormal sql.NullInt64
 	if err := rows.Scan(
 		&item.ID,
 		&item.ProjectID,
 		&milestoneID,
+		&versionID,
 		&item.ItemNumber,
 		&item.ItemKey,
 		&item.Type,
@@ -866,6 +1008,7 @@ func scanProjectWorkItemRow(rows *sql.Rows) (projectWorkItemRow, error) {
 	}
 	item.Description = nullableString(description)
 	item.MilestoneID = nullableInt64(milestoneID)
+	item.VersionID = nullableInt64(versionID)
 	item.StartDate = nullableString(startDate)
 	item.Severity = nullableString(severity)
 	item.AssigneeUID = nullableString(assigneeUID)

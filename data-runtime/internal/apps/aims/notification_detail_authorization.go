@@ -64,7 +64,7 @@ func (a *Adapter) handleNotificationDetailAuthorizationRuntime(
 		if trustedErr != nil {
 			return nil, "", true, httperror.New(http.StatusForbidden, "integration_operation_context_invalid", "trusted integration operation context is missing or invalid")
 		}
-		repository, repositoryErr := integrationoperation.NewRepository(a.DB())
+		repository, repositoryErr := a.integrationOperationRepository()
 		if repositoryErr != nil {
 			return nil, "", true, repositoryErr
 		}

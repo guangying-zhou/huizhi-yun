@@ -1,6 +1,7 @@
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto'
 import type { ResultSetHeader, RowDataPacket } from 'mysql2/promise'
-import { execute, queryRow } from '~~/server/utils/db'
+import { enterpriseStatusAt, type EnterpriseEntitlement } from './enterpriseEntitlement'
+import { execute, queryRow, withTransaction } from '~~/server/utils/db'
 
 const RUNTIME_TOKEN_PREFIX = 'hzy_rt_'
 
@@ -180,4 +181,26 @@ export async function revokeRuntimeToken(tenantCode: string) {
   )
 
   return result.affectedRows
+}
+
+/** Unified provisioning issues once; retries cannot rotate or restore an existing credential. */
+export async function issueInitialRuntimeToken(options: { tenantCode: string, issuedByAccountId?: number | null, expiresAt?: string | null }) {
+  return withTransaction(async (tx) => {
+    const tenant = await tx.queryRow<RowDataPacket & { status: string }>('SELECT status FROM tenants WHERE tenant_code = ? FOR UPDATE', [options.tenantCode])
+    if (tenant?.status !== 'active') throw new Error('enterprise_runtime_tenant_inactive')
+    const qualificationRow = await tx.queryRow<RowDataPacket & { revision: number, entitlement_json: unknown }>('SELECT c.revision, e.entitlement_json FROM tenant_enterprise_entitlement_current c INNER JOIN tenant_enterprise_entitlements e ON e.tenant_code = c.tenant_code AND e.revision = c.revision WHERE c.tenant_code = ? FOR UPDATE', [options.tenantCode])
+    const qualification = (typeof qualificationRow?.entitlement_json === 'string' ? JSON.parse(qualificationRow.entitlement_json) : qualificationRow?.entitlement_json) as EnterpriseEntitlement | undefined
+    if (!qualification || qualification.tenantCode !== options.tenantCode || qualification.schemaVersion !== 'enterprise-entitlement.v1' || qualification.productCode !== 'enterprise-full' || qualification.revision !== Number(qualificationRow?.revision) || enterpriseStatusAt(qualification, new Date().toISOString()) !== 'active') throw new Error('enterprise_runtime_qualification_inactive')
+    const existing = await tx.queryRow<RuntimeCredentialRow>('SELECT * FROM tenant_runtime_credentials WHERE tenant_code = ? FOR UPDATE', [options.tenantCode])
+    if (existing) {
+      if (existing.status !== 'active' || existing.revoked_at || (existing.expires_at && new Date(existing.expires_at).getTime() <= Date.now())) throw new Error('enterprise_runtime_credential_inactive')
+      return { token: null, tokenLast4: existing.runtime_token_last4, credential: toSnapshot(existing) }
+    }
+    const token = generateRuntimeToken()
+    const tokenLast4 = token.slice(-4)
+    await tx.execute<ResultSetHeader>('INSERT INTO tenant_runtime_credentials (tenant_code,credential_mode,runtime_token_hash,runtime_token_last4,status,issued_by_account_id,issued_at,expires_at,created_at,updated_at) VALUES (?,\'tenant\',?,?,\'active\',?,UTC_TIMESTAMP(),?,UTC_TIMESTAMP(),UTC_TIMESTAMP())', [options.tenantCode, hashRuntimeToken(token), tokenLast4, options.issuedByAccountId || null, options.expiresAt || null])
+    const created = await tx.queryRow<RuntimeCredentialRow>('SELECT * FROM tenant_runtime_credentials WHERE tenant_code = ?', [options.tenantCode])
+    if (!created) throw new Error('enterprise_runtime_credential_missing')
+    return { token, tokenLast4, credential: toSnapshot(created) }
+  })
 }

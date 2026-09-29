@@ -9,9 +9,13 @@ function stringValue(value: unknown) {
   return String(value || '').trim()
 }
 
-function errorMessage(error: unknown) {
-  if (error instanceof Error) return error.message
-  return String(error || 'unknown error')
+const TEST_FAILURE = '企业微信测试发送失败，请检查集成配置后重试。'
+const RESULT_FAILURE = '企业微信测试结果记录失败。'
+
+function safeTestError(error: unknown) {
+  const status = Number((error as { statusCode?: unknown, status?: unknown } | null)?.statusCode
+    || (error as { status?: unknown } | null)?.status || 502)
+  return createError({ statusCode: [400, 401, 403, 404, 409, 422, 429, 503].includes(status) ? status : 502, message: TEST_FAILURE })
 }
 
 function deliveryModeLabel(value: unknown) {
@@ -67,7 +71,7 @@ async function tryPublishWecomTestResultNotification(input: {
 
   try {
     const failed = input.status === 'failed'
-    const lastError = failed ? errorMessage(input.error) : null
+    const lastError = failed ? TEST_FAILURE : null
     const deliveryMode = stringValue(input.result?.deliveryMode)
     const deliveryModeText = deliveryModeLabel(deliveryMode)
     const statusText = failed ? '发送失败' : '发送成功'
@@ -134,11 +138,11 @@ async function tryPublishWecomTestResultNotification(input: {
       logged: true,
       notificationId: notification.notificationId
     }
-  } catch (notificationError) {
-    console.warn('[notification-runtime] failed to publish WeCom test result notification:', notificationError)
+  } catch {
+    console.warn('[notification-runtime] failed to publish WeCom test result notification', { code: 'wecom_test_result_record_failed' })
     return {
       logged: false,
-      error: errorMessage(notificationError)
+      error: RESULT_FAILURE
     }
   }
 }
@@ -175,7 +179,7 @@ export default defineEventHandler(async (event) => {
         error
       })
     }
-    throw error
+    throw safeTestError(error)
   }
 
   let replayVerified: boolean | null = null
@@ -206,7 +210,7 @@ export default defineEventHandler(async (event) => {
       status: 'sent',
       result
     })
-    throw error
+    throw safeTestError(error)
   }
 
   return ok({

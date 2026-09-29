@@ -58,19 +58,19 @@ func TestMySQLProductDocumentRequestAtomic(t *testing.T) {
 	if err = db.QueryRow(`SELECT COUNT(*) FROM product_document_creation_requests WHERE operation_id=? AND document_uuid=? AND created_by=?`, operation, target, actor).Scan(&linked); err != nil || linked != 1 {
 		t.Fatalf("request binding %d %v", linked, err)
 	}
-	detail, err := ReadProductDocumentRequest(context.Background(), db, "P-CREATE", "pm", firstValue["biz_id"].(string), permit())
+	detail, err := ReadProductDocumentRequest(context.Background(), db, integrationoperation.TrustedContext{}, "P-CREATE", "pm", firstValue["biz_id"].(string), permit())
 	if err != nil || detail.DocumentUUID != target || detail.Status != "pending" || detail.RelationBizID != "" {
 		t.Fatalf("request detail %+v %v", detail, err)
 	}
-	if _, err = ReadProductDocumentRequest(context.Background(), db, "P-OTHER", "pm", firstValue["biz_id"].(string), permit()); err == nil {
+	if _, err = ReadProductDocumentRequest(context.Background(), db, integrationoperation.TrustedContext{}, "P-OTHER", "pm", firstValue["biz_id"].(string), permit()); err == nil {
 		t.Fatal("accepted cross-product request read")
 	}
-	if _, err = ReadProductDocumentRequest(context.Background(), db, "P-CREATE", "other-user", firstValue["biz_id"].(string), permit()); err == nil {
+	if _, err = ReadProductDocumentRequest(context.Background(), db, integrationoperation.TrustedContext{}, "P-CREATE", "other-user", firstValue["biz_id"].(string), permit()); err == nil {
 		t.Fatal("accepted wrong actor")
 	}
 	linkIdentity := CommandIdentity{ProductCode: "P-CREATE", ActorUID: "pm", Action: "product_documents:link-created", IdempotencyKey: "link-created"}
 	linkInput := ProductDocumentRequestLink{ExpectedRevision: 2, RequestBizID: firstValue["biz_id"].(string)}
-	if _, err = LinkCreatedProductDocument(context.Background(), db, linkIdentity, permit(), linkInput); err == nil {
+	if _, err = LinkCreatedProductDocument(context.Background(), db, integrationoperation.TrustedContext{}, linkIdentity, permit(), linkInput); err == nil {
 		t.Fatal("linked pending operation")
 	}
 	if _, err = db.Exec(`UPDATE integration_operation SET status='succeeded',target_receipt_id='00000000-0000-4000-8000-000000000003',target_biz_type='product_document',target_biz_code=? WHERE operation_id=?`, target, operation); err != nil {
@@ -86,7 +86,7 @@ func TestMySQLProductDocumentRequestAtomic(t *testing.T) {
 		if _, err = db.Exec(mutation); err != nil {
 			t.Fatal(err)
 		}
-		if _, err = LinkCreatedProductDocument(context.Background(), db, linkIdentity, permit(), linkInput); err == nil {
+		if _, err = LinkCreatedProductDocument(context.Background(), db, integrationoperation.TrustedContext{}, linkIdentity, permit(), linkInput); err == nil {
 			t.Fatalf("accepted corrupted creation evidence: %s", mutation)
 		}
 		if _, err = db.Exec(`UPDATE integration_operation SET target_receipt_id='00000000-0000-4000-8000-000000000003',original_actor_uid='pm',command_schema_version='product-document-create.v1',required_capability='codocs:product-document:create'`); err != nil {
@@ -96,7 +96,7 @@ func TestMySQLProductDocumentRequestAtomic(t *testing.T) {
 	if _, err = db.Exec(`CREATE TRIGGER fail_link_request BEFORE UPDATE ON product_document_creation_requests FOR EACH ROW SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='test failure'`); err != nil {
 		t.Fatal(err)
 	}
-	if _, err = LinkCreatedProductDocument(context.Background(), db, linkIdentity, permit(), linkInput); err == nil {
+	if _, err = LinkCreatedProductDocument(context.Background(), db, integrationoperation.TrustedContext{}, linkIdentity, permit(), linkInput); err == nil {
 		t.Fatal("link failure ignored")
 	}
 	var count int
@@ -106,10 +106,10 @@ func TestMySQLProductDocumentRequestAtomic(t *testing.T) {
 	if _, err = db.Exec(`DROP TRIGGER fail_link_request`); err != nil {
 		t.Fatal(err)
 	}
-	if _, err = LinkCreatedProductDocument(context.Background(), db, linkIdentity, permit(), linkInput); err != nil {
+	if _, err = LinkCreatedProductDocument(context.Background(), db, integrationoperation.TrustedContext{}, linkIdentity, permit(), linkInput); err != nil {
 		t.Fatal(err)
 	}
-	linkedReplay, err := LinkCreatedProductDocument(context.Background(), db, linkIdentity, permit(), linkInput)
+	linkedReplay, err := LinkCreatedProductDocument(context.Background(), db, integrationoperation.TrustedContext{}, linkIdentity, permit(), linkInput)
 	if err != nil || !linkedReplay.Replayed {
 		t.Fatalf("link replay %v", err)
 	}
@@ -121,7 +121,7 @@ func TestMySQLProductDocumentRequestAtomic(t *testing.T) {
 	}
 	linkIdentity.IdempotencyKey = "link-after-removal"
 	linkInput.ExpectedRevision = 3
-	if _, err = LinkCreatedProductDocument(context.Background(), db, linkIdentity, permit(), linkInput); err == nil {
+	if _, err = LinkCreatedProductDocument(context.Background(), db, integrationoperation.TrustedContext{}, linkIdentity, permit(), linkInput); err == nil {
 		t.Fatal("implicitly restored removed relation")
 	}
 
@@ -130,15 +130,15 @@ func TestMySQLProductDocumentRequestAtomic(t *testing.T) {
 	if _, err = CreateProductDocumentRequest(context.Background(), db, identity, permit(), input, trusted); err != nil {
 		t.Fatal(err)
 	}
-	firstPage, err := ListProductDocumentRequests(context.Background(), db, "P-CREATE", "pm", permit(), PlanningPageQuery{Page: 1, PageSize: 1})
+	firstPage, err := ListProductDocumentRequests(context.Background(), db, integrationoperation.TrustedContext{}, "P-CREATE", "pm", permit(), PlanningPageQuery{Page: 1, PageSize: 1})
 	if err != nil || firstPage.Total != 2 || len(firstPage.Items) != 1 || firstPage.Items[0].Linked {
 		t.Fatalf("first request page %+v %v", firstPage, err)
 	}
-	secondPage, err := ListProductDocumentRequests(context.Background(), db, "P-CREATE", "pm", permit(), PlanningPageQuery{Page: 2, PageSize: 1})
+	secondPage, err := ListProductDocumentRequests(context.Background(), db, integrationoperation.TrustedContext{}, "P-CREATE", "pm", permit(), PlanningPageQuery{Page: 2, PageSize: 1})
 	if err != nil || secondPage.Total != 2 || len(secondPage.Items) != 1 || !secondPage.Items[0].Linked || secondPage.Items[0].BizID != firstValue["biz_id"] {
 		t.Fatalf("second request page %+v %v", secondPage, err)
 	}
-	if _, err = ListProductDocumentRequests(context.Background(), db, "P-CREATE", "other", permit(), PlanningPageQuery{Page: 1, PageSize: 1}); err == nil {
+	if _, err = ListProductDocumentRequests(context.Background(), db, integrationoperation.TrustedContext{}, "P-CREATE", "other", permit(), PlanningPageQuery{Page: 1, PageSize: 1}); err == nil {
 		t.Fatal("accepted unauthorized request listing")
 	}
 

@@ -1,17 +1,28 @@
 <script setup lang="ts">
-import { assetCategoryScopeDefinitions, assetCategoryScopeMap, type AssetCategoryScope } from '~~/shared/assetCategoryDefaults'
-import type { ApiResponse, AssetCategoryGroup } from '~/types'
-import { normalizeAssetCategoryGroups } from '~/utils/assetCategories'
+import CommonEmptyState from '../../../../foundation/app/components/common/EmptyState.vue'
+import { useAssetDictionaries } from '../../composables/useAssetDictionaries'
+import { useAssetsModule } from '../../../layer/useAssetsModule'
+import AssetsAssetCategoryEditModal from '../../components/assets/AssetCategoryEditModal.vue'
+
+import { assetCategoryScopeDefinitions, assetCategoryScopeMap, type AssetCategoryScope } from '../../../shared/assetCategoryDefaults'
+import type { ApiResponse, AssetCategoryGroup } from '../../types'
+import { normalizeAssetCategoryGroups } from '../../utils/assetCategories'
+
+definePageMeta({ hostContentInset: false })
+
+const { moduleUrl, cacheKey, hosted } = useAssetsModule()
 
 usePageTitle('资产类别管理')
 
 const route = useRoute()
 const router = useRouter()
+const returnTo = computed(() => encodeURIComponent(route.fullPath))
 const editOpen = ref(false)
 const selectedCategory = ref<AssetCategoryGroup | null>(null)
 const editorMode = ref<'create' | 'category' | 'items'>('create')
 
 function normalizeScope(input: unknown): AssetCategoryScope {
+  if (hosted) return 'product'
   return typeof input === 'string' && input in assetCategoryScopeMap
     ? input as AssetCategoryScope
     : 'physical'
@@ -32,12 +43,13 @@ watch(() => route.query.scope, (scope) => {
 })
 
 const currentScopeMeta = computed(() => assetCategoryScopeMap[activeScope.value])
-const tabItems = computed(() => assetCategoryScopeDefinitions.map(item => ({
+const tabItems = computed(() => assetCategoryScopeDefinitions.filter(item => !hosted || item.scope === 'product').map(item => ({
   label: item.label,
   value: item.scope
 })))
 
-const { data: response, refresh } = await useFetch<ApiResponse<{ items: AssetCategoryGroup[] }>>('/api/v1/admin/asset-categories', {
+const { data: response, refresh, error, status } = await useFetch<ApiResponse<{ items: AssetCategoryGroup[] }>>(moduleUrl('/api/v1/admin/asset-categories'), {
+  key: cacheKey('product-category-management'),
   query: computed(() => ({ scope: activeScope.value, pageSize: 500 })),
   watch: [activeScope]
 })
@@ -74,30 +86,36 @@ const columns = computed(() => [
 ])
 
 function handleCreate() {
+  if (hosted) return void navigateTo(moduleUrl(`/admin/asset-categories/new?returnTo=${returnTo.value}`))
   selectedCategory.value = null
   editorMode.value = 'create'
   editOpen.value = true
 }
 
 function handleRowSelect(_event: Event, row: { original: AssetCategoryGroup & { details_summary: string, item_count: number, status_label: string } }) {
+  if (hosted) return handleEditCategory(row.original)
   selectedCategory.value = row.original
   editorMode.value = 'category'
   editOpen.value = true
 }
 
 function handleEditCategory(category: AssetCategoryGroup) {
+  if (hosted) return void navigateTo(moduleUrl(`/admin/asset-categories/${category.id}/edit?mode=category&returnTo=${returnTo.value}`))
   selectedCategory.value = category
   editorMode.value = 'category'
   editOpen.value = true
 }
 
 function handleEditItems(category: AssetCategoryGroup) {
+  if (hosted) return void navigateTo(moduleUrl(`/admin/asset-categories/${category.id}/edit?mode=items&returnTo=${returnTo.value}`))
   selectedCategory.value = category
   editorMode.value = 'items'
   editOpen.value = true
 }
 
+const { loadDictionaries } = useAssetDictionaries()
 async function handleSaved() {
+  await loadDictionaries(true)
   await refresh()
 }
 </script>
@@ -105,7 +123,24 @@ async function handleSaved() {
 <template>
   <UDashboardPanel id="admin-asset-categories" grow>
     <template #body>
-      <div class="p-4 space-y-4">
+      <div class="space-y-4 p-4 sm:p-6">
+        <ContentPageHeader
+          :hosted="hosted"
+          title="产品字典"
+          description="配置产品线可用的产品类别。"
+          breadcrumb="控制台 / 业务配置"
+        >
+          <template #actions>
+            <UButton
+              icon="i-lucide-plus"
+              color="primary"
+              :disabled="Boolean(error) || status === 'pending'"
+              @click="handleCreate"
+            >
+              新增{{ currentScopeMeta.groupLabel }}
+            </UButton>
+          </template>
+        </ContentPageHeader>
         <UTabs
           v-model="activeScope"
           :items="tabItems"
@@ -118,11 +153,12 @@ async function handleSaved() {
           }"
         >
           <template #list-trailing>
-            <div class="ml-auto shrink-0">
+            <div v-if="!hosted" class="ml-auto shrink-0">
               <UButton
                 icon="i-lucide-plus"
                 color="primary"
                 variant="soft"
+                :disabled="Boolean(error) || status === 'pending'"
                 @click="handleCreate"
               >
                 新增{{ currentScopeMeta.groupLabel }}
@@ -131,7 +167,13 @@ async function handleSaved() {
           </template>
         </UTabs>
 
-        <UCard>
+        <UAlert
+          v-if="error"
+          color="error"
+          title="无法加载产品线"
+          :description="error.message"
+        />
+        <UCard v-else>
           <template #header>
             <div class="flex items-center justify-between gap-3">
               <span class="font-semibold">{{ currentScopeMeta.groupLabel }}</span>
@@ -141,7 +183,12 @@ async function handleSaved() {
             </div>
           </template>
 
-          <UTable :data="rows" :columns="columns" @select="handleRowSelect">
+          <UTable
+            :data="rows"
+            :columns="columns"
+            :loading="status === 'pending'"
+            @select="handleRowSelect"
+          >
             <template #details_summary-cell="{ row }">
               <div v-if="currentScopeMeta.itemsSupported" class="flex flex-wrap gap-2 py-1">
                 <UBadge
@@ -183,6 +230,9 @@ async function handleSaved() {
                   编辑{{ currentScopeMeta.itemLabel }}
                 </UButton>
               </div>
+            </template>
+            <template #empty>
+              <CommonEmptyState title="暂无记录" description="当前范围内没有可显示的记录。" />
             </template>
           </UTable>
         </UCard>

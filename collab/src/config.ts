@@ -28,6 +28,16 @@ export interface CodocsRuntimeConfig {
   token?: string
 }
 
+// Stage B v2 collaboration (default off). Credentials are the collab.runtime
+// Console service client; never a shared static Runtime token.
+export interface CollabV2Config {
+  enabled: boolean
+  tokenUrl: string
+  clientId: string
+  clientSecret: string
+  renewIntervalMs: number
+}
+
 export interface CollabConfig {
   appCode: string
   provider: string
@@ -39,6 +49,7 @@ export interface CollabConfig {
   codocsRuntime: CodocsRuntimeConfig
   redis: RedisConfig
   oss: OssConfig
+  v2: CollabV2Config
 }
 
 export interface LoadCollabConfigOptions {
@@ -135,6 +146,13 @@ export function loadCollabConfig(options: LoadCollabConfigOptions = {}): CollabC
       imagesEndpoint: envValue('COLLAB_OSS_IMAGES_ENDPOINT', 'ALIYUN_OSS_IMAGES_ENDPOINT'),
       imagesBucketDomain: envValue('COLLAB_OSS_IMAGES_BUCKET_DOMAIN', 'ALIYUN_OSS_IMAGES_BUCKET_DOMAIN'),
       recycleDays: intValue(process.env.COLLAB_OSS_RECYCLE_DAYS || process.env.ALIYUN_OSS_RECYCLE_DAYS, 30)
+    },
+    v2: {
+      enabled: boolValue(process.env.COLLAB_V2_ENABLED, false),
+      tokenUrl: envValue('COLLAB_CONSOLE_TOKEN_URL', 'HZY_CONSOLE_TOKEN_URL'),
+      clientId: envValue('COLLAB_SERVICE_CLIENT_ID') || 'collab.runtime',
+      clientSecret: envValue('COLLAB_SERVICE_CLIENT_SECRET'),
+      renewIntervalMs: intValue(process.env.COLLAB_V2_RENEW_INTERVAL_MS, 45_000)
     }
   }
 }

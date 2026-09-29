@@ -1,0 +1,37 @@
+{
+  "schemaVersion": "data-runtime-shared-alias-recovery.v1",
+  "recordedAt": "2026-09-14T16:55:00Z",
+  "scope": "shared huizhiyun/packages/hzy-data-runtime aliases",
+  "cause": "test candidate promotions wrote the shared latest aliases",
+  "baseline": {
+    "version": "0.3.216",
+    "manifestSha256": "270574eb5d340ab54600a8953a8ff06d19d6ff0b79822b85754c753eb55a33b0",
+    "releaseInventorySha256": "96a5858d2564ff6e00940713f34d43c2cb2388d5c0f47f53fa958dc547804929"
+  },
+  "restoredAliases": [
+    "latest/manifest.json",
+    "latest/manifest.json.sig",
+    "latest/hzy-data-runtime_linux_amd64.tar.gz",
+    "latest/hzy-data-runtime_linux_amd64.tar.gz.sig",
+    "latest/hzy-data-runtime_linux_amd64.tar.gz.sha256",
+    "latest/hzy-data-runtime_linux_arm64.tar.gz",
+    "latest/hzy-data-runtime_linux_arm64.tar.gz.sig",
+    "latest/hzy-data-runtime_linux_arm64.tar.gz.sha256",
+    "latest/install.sh",
+    "latest/install.sh.sig",
+    "install.sh",
+    "install.sh.sig",
+    "latest/version.txt"
+  ],
+  "verification": {
+    "publicNoCacheReadback": true,
+    "latestVersion": "0.3.216",
+    "allAliasHashesMatched": true
+  },
+  "testCandidateState": {
+    "immutableCandidate6Retained": true,
+    "immutableCandidate7Retained": true,
+    "testPlatformStableVersion": "0.3.219-test.adr018-candidate.7",
+    "testRuntimeVersion": "0.3.219-test.adr018-candidate.7"
+  }
+}

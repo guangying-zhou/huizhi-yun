@@ -1,0 +1,30 @@
+{
+  "schemaVersion": "enterprise-test-gateway-release.v1",
+  "tenant": "C000001",
+  "environment": "test",
+  "checkedAt": "2026-09-14T15:43:43.936355+00:00",
+  "worker": "hzy-test-gateway",
+  "versionId": "01b2d883-cc5c-4523-8247-6a01b1d78068",
+  "trafficPercent": 100,
+  "previousVersionId": "68fbd18a-c668-4346-bf5e-a332aad6799b",
+  "businessRoutingEnabled": true,
+  "registry": {
+    "before": "204800c68c34fb7df5b582307a76fbd55ecd2410ddeed2b847a0a1aafcc81907",
+    "after": "0a5f499b4b1a6828b72c05bf06ff0855afb40fd87b0cfe7d5e96fd8dc61824ad",
+    "version": "C000001-test-unified-g1-20260914",
+    "change": "apps.aims.enterpriseScheduler unified generation 1"
+  },
+  "registryReadbackVerified": true,
+  "scheduler": {
+    "storage": "unified",
+    "generation": "1"
+  },
+  "platformSignedActivationVerified": true,
+  "drainRelease": {
+    "revision": 5,
+    "mode": "open",
+    "generation": "1"
+  },
+  "signedSnapshotVerified": true,
+  "unresolvedActivities": 0
+}

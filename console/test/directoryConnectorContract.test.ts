@@ -144,8 +144,8 @@ test('activation credentials reach the employee directly and are never returned 
   // 令牌由 Console 直接投递给员工本人，并从响应里剔除。People 受控入职
   // 按约束不得接收明文凭据，HR 也不需要经手。
   assert.match(createRoute, /sendNotification/)
-  assert.match(createRoute, /const \{ activationToken: _token, \.\.\.safeData \} = data/)
-  assert.match(createRoute, /activationDelivered/)
+  assert.match(createRoute, /return ldapUserCreateResponse\(operation, delivered\)/)
+  assert.match(createRoute, /if \(!activationToken \|\| !activationCredentialId\) return ldapUserCreateResponse\(operation\)/)
   assert.doesNotMatch(createRoute, /data: \{ \.\.\.data \}/)
 
   // 兑换只回传 uid，不回传令牌、DN 或其他目录内部字段。

@@ -1,5 +1,8 @@
 <script setup lang="ts">
-import type { ProductReleasePage } from '~/types/productRelease'
+import { useAimsModule } from '../../../../../../../layer/useAimsModule'
+import type { ProductReleasePage } from '../../../../../../types/productRelease'
+
+const { moduleUrl, cacheKey } = useAimsModule()
 
 definePageMeta({ layoutHeader: true, layoutHeaderTitle: '发布历史', layoutHeaderProjectSwitcher: false })
 const route = useRoute()
@@ -11,7 +14,7 @@ const page = ref(1), pageSize = 20
 watch([code, id], () => {
   page.value = 1
 })
-const { data, status, error, refresh } = await useFetch(() => `/api/v1${base.value}/releases`, { server: false, query: { page, pageSize }, transform: (response: { code: number, data: ProductReleasePage }) => {
+const { data, status, error, refresh } = await useFetch(() => moduleUrl(`/api/v1${base.value}/releases`), { server: false, key: computed(() => cacheKey('history-releases-index:' + route.path)), query: { page, pageSize }, transform: (response: { code: number, data: ProductReleasePage }) => {
   const p = response.data
   if (response.code !== 0 || !Array.isArray(p?.items) || !Number.isSafeInteger(p.total) || p.total < 0 || p.items.some(item => String(item.version_id) !== id.value || !Number.isSafeInteger(item.id) || item.id < 1 || !Number.isSafeInteger(item.release_seq) || item.release_seq < 1)) throw new Error('发布历史响应不完整')
   return p
@@ -22,7 +25,7 @@ const alert = useApiErrorAlert(error, { fallbackTitle: '发布历史读取失败
 <template>
   <div class="mx-auto min-w-0 max-w-5xl space-y-4 p-4 sm:p-6">
     <div class="flex flex-wrap gap-2">
-      <UButton :to="{ path: base, query: versionPerspectiveQuery }" color="neutral" variant="ghost">
+      <UButton :to="{ path: moduleUrl(base), query: versionPerspectiveQuery }" color="neutral" variant="ghost">
         返回版本详情
       </UButton>
       <UButton
@@ -73,12 +76,12 @@ const alert = useApiErrorAlert(error, { fallbackTitle: '发布历史读取失败
           {{ item.released_at ? formatDateTime(item.released_at) : '发布时间未记录' }} · 发布人标识：{{ item.released_by || '未记录' }}
         </p>
         <div class="flex flex-wrap gap-2">
-          <UButton :to="{ path: `${base}/releases/${item.id}`, query: versionPerspectiveQuery }" color="neutral" variant="outline">
+          <UButton :to="{ path: moduleUrl(`${base}/releases/${item.id}`), query: versionPerspectiveQuery }" color="neutral" variant="outline">
             查看本次快照
           </UButton>
           <UButton
             v-if="item.supersedes_record_id"
-            :to="{ path: `${base}/releases/${item.supersedes_record_id}`, query: versionPerspectiveQuery }"
+            :to="{ path: moduleUrl(`${base}/releases/${item.supersedes_record_id}`), query: versionPerspectiveQuery }"
             color="neutral"
             variant="ghost"
           >

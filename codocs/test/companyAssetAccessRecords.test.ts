@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs'
 import { runInNewContext } from 'node:vm'
 import { test } from 'node:test'
 import ts from 'typescript'
+import { assertLegacyBodyDocument } from '../server/utils/documentBodyRef.ts'
 
 type Row = Record<string, unknown>
 // The VM loads both handlers and synchronous CSV exports dynamically.
@@ -251,7 +252,7 @@ test('PDF storage failures hide upstream details and do not record failed reads'
 })
 
 test('UUID reader records successful company content only, skipping metadata and failed reads', async () => {
-  for (const scenario of ['company', 'metadata', 'missing', 'department', 'denied']) {
+  for (const scenario of ['company', 'metadata', 'missing', 'department', 'denied', 'snapshot-v2']) {
     const calls: string[] = []
     const api = load('../server/api/documents/[uuid]/index.get.ts', {
       'h3': { setHeader: () => {} },
@@ -269,9 +270,10 @@ test('UUID reader records successful company content only, skipping metadata and
       },
       '~~/server/utils/codocsRuntime': { getCodocsDocumentMetadata: async () => {
         if (scenario === 'denied') throw failure(403)
-        return { uuid: 'doc-1', oss_path: scenario === 'department' ? 'codocs/departments/D001/a.md' : 'codocs/company/a.md', doc_type: 'company' }
+        return { uuid: 'doc-1', oss_path: scenario === 'department' ? 'codocs/departments/D001/a.md' : 'codocs/company/a.md', doc_type: 'company', snapshot_generation: scenario === 'snapshot-v2' ? 3 : 0 }
       } },
       '~~/server/utils/departmentAccess': { requireDepartmentReadAccess: async () => {} },
+      '~~/server/utils/documentBodyRef': { assertLegacyBodyDocument },
       '~~/server/utils/companyAssetAccessRecords': { recordCompanyAssetAccess: async () => { calls.push('record') } }
     }, {
       defineEventHandler: (fn: Fn) => fn,
@@ -280,7 +282,11 @@ test('UUID reader records successful company content only, skipping metadata and
       createError: ({ statusCode }: { statusCode: number }) => failure(statusCode),
       console: { error: () => {} }
     })
-    if (scenario === 'missing' || scenario === 'denied') {
+    if (scenario === 'snapshot-v2') {
+      // v2 bodies are never read from the derived mirror: 409 before any storage access.
+      await assert.rejects(api.default!({ context: {} }), { statusCode: 409 })
+      assert.deepEqual(calls, [])
+    } else if (scenario === 'missing' || scenario === 'denied') {
       await assert.rejects(api.default!({ context: {} }), { statusCode: scenario === 'missing' ? 404 : 403 })
     } else {
       await api.default!({ context: {} })

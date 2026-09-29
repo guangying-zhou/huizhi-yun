@@ -733,13 +733,20 @@ func cancelOpenObligationsAndSchedulesTx(ctx context.Context, tx *sql.Tx, contra
 }
 
 func insertContractDomainEventTx(ctx context.Context, tx *sql.Tx, eventKey string, eventType string, aggregateType string, aggregateID any, payload map[string]any, operator string) error {
-	exists, err := altocTableExists(ctx, tx, "domain_event_outbox")
-	if err != nil || !exists {
+	table := contractPhysicalTable(ctx, "domain_event_outbox")
+	exists, err := altocTableExists(ctx, tx, table)
+	if err != nil {
 		return err
+	}
+	if !exists {
+		if _, bound := ctx.Value(contractStorageKey{}).(ContractStorage); bound {
+			return fmt.Errorf("registered Altoc domain event table missing")
+		}
+		return nil
 	}
 	payloadJSON, _ := json.Marshal(payload)
 	_, err = tx.ExecContext(ctx, `
-		INSERT IGNORE INTO domain_event_outbox (
+		INSERT IGNORE INTO `+altocQuoteID(table)+` (
 		  event_key, event_type, aggregate_type, aggregate_id, payload_json, created_by, updated_by
 		) VALUES (?, ?, ?, ?, ?, ?, ?)
 	`, eventKey, eventType, aggregateType, aggregateID, payloadJSON, nullableText(operator), nullableText(operator))

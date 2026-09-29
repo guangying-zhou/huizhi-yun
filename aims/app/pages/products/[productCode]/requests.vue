@@ -1,7 +1,20 @@
 <script setup lang="ts">
+import { useAimsModule } from '../../../../layer/useAimsModule'
+import ProductsRequestMergedSources from '../../../components/products/RequestMergedSources.vue'
+import ProductsRequestSourceList from '../../../components/products/RequestSourceList.vue'
+import ProductsComponentPicker from '../../../components/products/ComponentPicker.vue'
+import ProductsRequestDecisionForm from '../../../components/products/RequestDecisionForm.vue'
+import ProductsPlanningItemForm from '../../../components/products/PlanningItemForm.vue'
+import ProductsRequestMergeTrail from '../../../components/products/RequestMergeTrail.vue'
+import ProductsVersionPicker from '../../../components/products/VersionPicker.vue'
+import ProductsRequestMergeForm from '../../../components/products/RequestMergeForm.vue'
+import ProductsRequestForm from '../../../components/products/RequestForm.vue'
+import ProductsRequestSourceForm from '../../../components/products/RequestSourceForm.vue'
 import type { TableColumn } from '@nuxt/ui'
-import type { ProductRequestRecord as RequestRow } from '~/types/productRequest'
-import { normalizeProductRequestQuery } from '~/config/productNavigation'
+import type { ProductRequestRecord as RequestRow } from '../../../types/productRequest'
+import { normalizeProductRequestQuery } from '../../../../layer/productNavigation'
+
+const { moduleUrl, hosted, cacheKey } = useAimsModule()
 
 definePageMeta({
   layoutHeader: true,
@@ -56,20 +69,20 @@ const query = computed(() => ({ page: page.value, pageSize, keyword: debounced.v
   includeDescendants: moduleId.value && includeDescendants.value ? 'true' : undefined,
   unassigned: unassigned.value ? 'true' : undefined
 }))
-const { data, status, error, refresh } = await useFetch(() => `/api/v1/products/${encodeURIComponent(code.value)}/requests`, {
+const { data, status, error, refresh } = await useFetch(() => moduleUrl(`/api/v1/products/${encodeURIComponent(code.value)}/requests`), { ...(hosted ? { key: computed(() => cacheKey('aims/app/pages/products/[productCode]/requests.vue:0' + ':' + String(toValue(() => moduleUrl(`/api/v1/products/${encodeURIComponent(code.value)}/requests`))))) } : {}),
   server: false, query,
   transform: (response: { code: number, data: { items: RequestRow[], total: number, unmerged_total: number, workspace_revision: number } }) => {
     if (response.code !== 0 || !Array.isArray(response.data?.items) || !Number.isSafeInteger(response.data.total) || response.data.total < 0 || !Number.isSafeInteger(response.data.unmerged_total) || response.data.unmerged_total < 0 || response.data.unmerged_total > response.data.total) throw new Error('需求列表响应不完整')
     return response.data
   }
 })
-const { data: permissions, status: permissionStatus, error: permissionError, refresh: refreshPermissions } = await useFetch(() => `/api/v1/products/${encodeURIComponent(code.value)}/requests/permissions`, {
+const { data: permissions, status: permissionStatus, error: permissionError, refresh: refreshPermissions } = await useFetch(() => moduleUrl(`/api/v1/products/${encodeURIComponent(code.value)}/requests/permissions`), { ...(hosted ? { key: computed(() => cacheKey('aims/app/pages/products/[productCode]/requests.vue:1' + ':' + String(toValue(() => moduleUrl(`/api/v1/products/${encodeURIComponent(code.value)}/requests/permissions`))))) } : {}),
   server: false, transform: (response: { code: number, data: { product_code: string, status: string, revision: number, create: boolean, edit: boolean, decide: boolean, delete: boolean } }) => {
     if (response.code !== 0 || response.data?.product_code !== code.value) throw new Error('需求操作权限响应不完整')
     return response.data
   }
 })
-const { data: planningPermissions, status: planningPermissionStatus, error: planningPermissionError, refresh: refreshPlanningPermissions } = await useFetch(() => `/api/v1/products/${encodeURIComponent(code.value)}/planning-items/permissions`, { server: false })
+const { data: planningPermissions, status: planningPermissionStatus, error: planningPermissionError, refresh: refreshPlanningPermissions } = await useFetch<{ code: number, data: { product_code: string, status: string, edit: boolean } }>(() => moduleUrl(`/api/v1/products/${encodeURIComponent(code.value)}/planning-items/permissions`), { ...(hosted ? { key: computed(() => cacheKey('aims/app/pages/products/[productCode]/requests.vue:2' + ':' + String(toValue(() => moduleUrl(`/api/v1/products/${encodeURIComponent(code.value)}/planning-items/permissions`))))) } : {}), server: false })
 const canPlan = computed(() => planningPermissionStatus.value === 'success' && planningPermissions.value?.code === 0 && planningPermissions.value.data?.product_code === code.value && planningPermissions.value.data.status === 'active' && planningPermissions.value.data.edit === true)
 const planningAlert = useApiErrorAlert(planningPermissionError, { fallbackTitle: '建设范围操作权限加载失败' })
 const planning = ref<{ request: RequestRow, revision: number } | null>(null)
@@ -138,7 +151,7 @@ function schedule(request: RequestRow) {
 }
 async function continueSchedule() {
   if (!scheduling.value || !selectedVersion.value) return
-  await navigateTo({ path: `/products/${encodeURIComponent(code.value)}/versions/${selectedVersion.value.id}/plan`, query: { addRequest: scheduling.value.biz_id } })
+  await navigateTo({ path: moduleUrl(`/products/${encodeURIComponent(code.value)}/versions/${selectedVersion.value.id}/plan`), query: { addRequest: scheduling.value.biz_id } })
 }
 const toast = useToast()
 async function refreshAll() {
@@ -203,7 +216,7 @@ onBeforeUnmount(clearRefresh)
         </p>
       </div>
       <UButton
-        :to="`/products/${encodeURIComponent(code)}/versions`"
+        :to="moduleUrl(`/products/${encodeURIComponent(code)}/versions`)"
         icon="i-lucide-package"
         color="neutral"
         variant="outline"
@@ -388,7 +401,7 @@ onBeforeUnmount(clearRefresh)
           </UButton>
           <div v-if="row.original.scheduled_version_id" class="px-2 text-xs text-muted">
             已安排：
-            <NuxtLink :to="`/products/${encodeURIComponent(code)}/versions/${row.original.scheduled_version_id}/plan`" class="text-primary hover:underline">
+            <NuxtLink :to="moduleUrl(`/products/${encodeURIComponent(code)}/versions/${row.original.scheduled_version_id}/plan`)" class="text-primary hover:underline">
               {{ row.original.scheduled_version_code || '查看版本' }}
             </NuxtLink>
             · {{ row.original.scheduled_plan_status === 'confirmed' ? '已确认' : '草案或待重新确认' }}
@@ -503,7 +516,7 @@ onBeforeUnmount(clearRefresh)
                 已安排版本
               </dt>
               <dd>
-                <NuxtLink :to="`/products/${encodeURIComponent(code)}/versions/${selected.scheduled_version_id}/plan`" class="text-primary hover:underline">
+                <NuxtLink :to="moduleUrl(`/products/${encodeURIComponent(code)}/versions/${selected.scheduled_version_id}/plan`)" class="text-primary hover:underline">
                   {{ selected.scheduled_version_code || '查看版本计划' }}
                 </NuxtLink>
                 · {{ selected.scheduled_plan_status === 'confirmed' ? '已确认' : '草案或待重新确认' }}

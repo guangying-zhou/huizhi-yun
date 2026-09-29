@@ -14,7 +14,8 @@
  *       * todo 阶段：确认/撤回任务分配
  *       * in_progress 阶段：确认完成评审（complete）
  */
-import type { PivrStage, WorkItemType } from '~/types/aims'
+import { useAimsModule } from '../../../../../../layer/useAimsModule'
+import type { PivrStage, WorkItemType } from '../../../../../types/aims'
 import {
   typeConfig,
   priorityConfig,
@@ -25,8 +26,18 @@ import {
   deliverableTypeIcon,
   reviewLevelLabel,
   MULTI_ASSIGN_DELIVERABLE_TYPES
-} from '~/config/work-item'
+} from '../../../../../config/work-item'
+import { useProjectStore } from '../../../../../stores/project'
+import AimsDocumentPreview from '../../../../../components/AimsDocumentPreview.vue'
+import MarkdownContent from '../../../../../components/MarkdownContent.vue'
+import ProjectNavbar from '../../../../../components/project/ProjectNavbar.vue'
 
+// 同一份代码供独立应用与企业宿主使用：非宿主模式下 moduleUrl 原样返回路径。
+const { moduleUrl, hosted } = useAimsModule()
+const breakdownVersion = ref('')
+let breakdownRetry: { payload: string, key: string } | undefined
+let appendRetry: { payload: string, key: string } | undefined
+const treeActionRetries = new Map<string, { payload: string, key: string }>()
 definePageMeta({
   layoutHeader: true,
   layoutHeaderTitle: '任务分配',
@@ -529,17 +540,7 @@ async function startTargetExecution() {
   if (!canStartTargetExecution.value) return
   startingExecution.value = true
   try {
-    await $fetch(`/api/v1/work-items/${workItemId.value}`, {
-      method: 'PUT',
-      body: { status: 'in_progress' }
-    })
-    toast.add({ title: '目标已开始执行', color: 'success' })
-    await loadContext()
-  } catch (err: unknown) {
-    const message = (err as { data?: { message?: string }, message?: string })?.data?.message
-      || (err as { message?: string })?.message
-      || '目标状态更新失败'
-    toast.add({ title: '开始执行失败', description: message, color: 'error' })
+    if (await runTreeAction('update-status', 'in_progress')) toast.add({ title: '目标已开始执行', color: 'success' })
   } finally {
     startingExecution.value = false
   }
@@ -683,7 +684,7 @@ async function reconcileCompletionReviewStatus(item: BreakdownContextData['item'
     const nextStatus = mapCompletionWorkflowStatusToWorkItemStatus(wfStatus)
     if (!nextStatus || nextStatus === item.status) return false
 
-    await $fetch(`/api/v1/work-items/${item.id}`, {
+    await $fetch(moduleUrl(`/api/v1/work-items/${item.id}`), {
       method: 'PUT',
       body: { status: nextStatus }
     })
@@ -749,25 +750,30 @@ async function saveAppendDrafts() {
   }
   savingAppend.value = true
   try {
-    await $fetch(`/api/v1/work-items/${workItemId.value}/append-tasks`, {
+    if (hosted && !/^[0-9a-f]{64}$/.test(breakdownVersion.value)) throw new Error('目标内容版本不可用，请刷新后重试')
+    const subtasks = appendDrafts.value.map(task => ({
+      assigneeUid: task.assigneeUid,
+      title: task.title.trim() || item.title,
+      description: task.description.trim() || null,
+      startDate: task.startDate || null,
+      dueDate: task.dueDate || null,
+      estimatedHours: task.estimatedHours ? Number(task.estimatedHours) : null,
+      deliverables: task.deliverables.map(d => ({
+        name: d.name.trim(),
+        description: d.description.trim() || null,
+        acceptanceCriteria: d.acceptanceCriteria.trim() || null,
+        deliverableType: d.deliverableType
+      }))
+    }))
+    const body = hosted ? { projectId: projectId.value, expectedVersion: breakdownVersion.value, subtasks } : { subtasks }
+    const payload = JSON.stringify(body)
+    if (hosted && appendRetry?.payload !== payload) appendRetry = { payload, key: crypto.randomUUID() }
+    await $fetch(moduleUrl(`/api/v1/work-items/${workItemId.value}/append-tasks`), {
       method: 'POST',
-      body: {
-        subtasks: appendDrafts.value.map(task => ({
-          assigneeUid: task.assigneeUid,
-          title: task.title.trim() || item.title,
-          description: task.description.trim() || null,
-          startDate: task.startDate || null,
-          dueDate: task.dueDate || null,
-          estimatedHours: task.estimatedHours ? Number(task.estimatedHours) : null,
-          deliverables: task.deliverables.map(d => ({
-            name: d.name.trim(),
-            description: d.description.trim() || null,
-            acceptanceCriteria: d.acceptanceCriteria.trim() || null,
-            deliverableType: d.deliverableType
-          }))
-        }))
-      }
+      body,
+      ...(hosted ? { headers: { 'Idempotency-Key': appendRetry!.key }, retry: 0 } : {})
     })
+    appendRetry = undefined
     toast.add({ title: '新增任务草稿已保存，可在右侧流程面板发起评审', color: 'success', icon: 'i-lucide-check' })
     await loadContext()
     return true
@@ -804,6 +810,34 @@ async function submitAppendTaskFromModal() {
 }
 
 // ====== 页面流程声明：确认/撤回任务分配 ======
+type TreeAction = 'confirm-distribute' | 'revoke-distribute' | 'confirm-append' | 'reject-append' | 'update-status'
+async function runTreeAction(action: TreeAction, status?: string) {
+  try {
+    if (hosted && !/^[0-9a-f]{64}$/.test(breakdownVersion.value)) throw new Error('目标内容版本不可用，请刷新后重试')
+    const body = hosted
+      ? { projectId: projectId.value, expectedVersion: breakdownVersion.value, ...(status ? { status } : {}) }
+      : status ? { status } : {}
+    const payload = JSON.stringify(body)
+    const previous = treeActionRetries.get(action)
+    if (hosted && previous?.payload !== payload) treeActionRetries.set(action, { payload, key: crypto.randomUUID() })
+    const path = `/api/v1/work-items/${workItemId.value}${action === 'update-status' ? '' : `/${action}`}`
+    const res = await $fetch<{ code: number, data?: { mattersUpdated?: number }, message?: string }>(moduleUrl(path), {
+      method: action === 'update-status' ? 'PUT' : 'POST',
+      body,
+      ...(hosted ? { headers: { 'Idempotency-Key': treeActionRetries.get(action)!.key }, retry: 0 } : {})
+    })
+    if (res.code !== 0) throw new Error(res.message || '操作失败')
+    treeActionRetries.delete(action)
+    await loadContext()
+    return res
+  } catch (err: unknown) {
+    const message = (err as { data?: { message?: string } })?.data?.message
+      || (err as { message?: string })?.message || '操作失败，请重试'
+    toast.add({ title: message, color: 'error', duration: 6000 })
+    return null
+  }
+}
+
 usePageWorkflow({
   appCode: 'aims',
   resourceCode: 'tasks',
@@ -858,30 +892,12 @@ usePageWorkflow({
           canSubmit: computed(() => appendIssues.value.length === 0),
           completenessIssues: appendIssues,
           async onApproved() {
-            try {
-              const res = await $fetch<{ code: number, data: { mattersUpdated: number } }>(
-                `/api/v1/work-items/${workItemId.value}/confirm-append`,
-                { method: 'POST' }
-              )
-              if (res.code === 0) {
-                toast.add({ title: `已生效 ${res.data.mattersUpdated} 个新增任务`, color: 'success' })
-              }
-            } catch (err: unknown) {
-              const msg = (err as { data?: { message?: string } })?.data?.message
-                || (err as { message?: string })?.message
-                || '确认新增任务失败'
-              toast.add({ title: msg, color: 'error', duration: 6000 })
-            } finally {
-              await loadContext()
-            }
+            const res = await runTreeAction('confirm-append')
+            if (res) toast.add({ title: `已生效 ${res.data?.mattersUpdated || 0} 个新增任务`, color: 'success' })
           },
           async onRejected() {
-            try {
-              await $fetch(`/api/v1/work-items/${workItemId.value}/reject-append`, { method: 'POST' })
-              toast.add({ title: '新增任务申请已驳回，草稿已清理', color: 'neutral' })
-            } finally {
-              await loadContext()
-            }
+            const res = await runTreeAction('reject-append')
+            if (res) toast.add({ title: '新增任务申请已驳回，草稿已清理', color: 'neutral' })
           }
         })
       }
@@ -892,25 +908,13 @@ usePageWorkflow({
         canSubmit: computed(() => item.status === 'in_progress' && completeIssues.value.length === 0),
         completenessIssues: completeIssues,
         async onSubmitted() {
-          await $fetch(`/api/v1/work-items/${workItemId.value}`, {
-            method: 'PUT',
-            body: { status: 'in_review' }
-          })
-          await loadContext()
+          await runTreeAction('update-status', 'in_review')
         },
         async onApproved() {
-          await $fetch(`/api/v1/work-items/${workItemId.value}`, {
-            method: 'PUT',
-            body: { status: 'completed' }
-          })
-          await loadContext()
+          await runTreeAction('update-status', 'completed')
         },
         async onRejected() {
-          await $fetch(`/api/v1/work-items/${workItemId.value}`, {
-            method: 'PUT',
-            body: { status: 'in_progress' }
-          })
-          await loadContext()
+          await runTreeAction('update-status', 'in_progress')
         }
       })
 
@@ -939,23 +943,8 @@ usePageWorkflow({
         canSubmit: computed(() => distributeIssues.value.length === 0),
         completenessIssues: distributeIssues,
         async onApproved() {
-          try {
-            const res = await $fetch<{ code: number, data: { targetStatus: string, mattersUpdated: number } }>(
-              `/api/v1/work-items/${workItemId.value}/confirm-distribute`,
-              { method: 'POST' }
-            )
-            if (res.code === 0) {
-              toast.add({ title: `已确认分配：${res.data.mattersUpdated} 个任务进入待办`, color: 'success' })
-            }
-          } catch (err: unknown) {
-            const msg = (err as { data?: { message?: string } })?.data?.message
-              || (err as { message?: string })?.message
-              || '确认分配失败'
-            toast.add({ title: msg, color: 'error', duration: 6000 })
-            console.error('[confirm-distribute] failed:', err)
-          } finally {
-            await loadContext()
-          }
+          const res = await runTreeAction('confirm-distribute')
+          if (res) toast.add({ title: `已确认分配：${res.data?.mattersUpdated || 0} 个任务进入待办`, color: 'success' })
         }
       }]
     }
@@ -966,23 +955,8 @@ usePageWorkflow({
         canSubmit: computed(() => revokeIssues.value.length === 0),
         completenessIssues: revokeIssues,
         async onApproved() {
-          try {
-            const res = await $fetch<{ code: number, data: { targetStatus: string, mattersUpdated: number } }>(
-              `/api/v1/work-items/${workItemId.value}/revoke-distribute`,
-              { method: 'POST' }
-            )
-            if (res.code === 0) {
-              toast.add({ title: `已撤回分配：${res.data.mattersUpdated} 个任务回退到规划中`, color: 'success' })
-            }
-          } catch (err: unknown) {
-            const msg = (err as { data?: { message?: string } })?.data?.message
-              || (err as { message?: string })?.message
-              || '撤回分配失败'
-            toast.add({ title: msg, color: 'error', duration: 6000 })
-            console.error('[revoke-distribute] failed:', err)
-          } finally {
-            await loadContext()
-          }
+          const res = await runTreeAction('revoke-distribute')
+          if (res) toast.add({ title: `已撤回分配：${res.data?.mattersUpdated || 0} 个任务回退到规划中`, color: 'success' })
         }
       }]
     }
@@ -1284,10 +1258,12 @@ const hoursOverflow = computed(() => {
 async function loadContext() {
   loading.value = true
   try {
-    const [projectRes, ctxRes] = await Promise.all([
+    const [projectRes, ctxRes, detailRes] = await Promise.all([
       projectStore.fetchProject(projectId.value),
-      $fetch<{ code: number, data: BreakdownContextData }>(`/api/v1/work-items/${workItemId.value}/breakdown-context`)
+      $fetch<{ code: number, data: BreakdownContextData }>(moduleUrl(`/api/v1/work-items/${workItemId.value}/breakdown-context`)),
+      hosted ? $fetch<{ data?: { editVersion?: string } }>(moduleUrl(`/api/v1/work-items/${workItemId.value}`)) : Promise.resolve(null)
     ])
+    if (hosted) breakdownVersion.value = detailRes?.data?.editVersion || ''
     void projectRes
     if (ctxRes.code === 0) {
       let nextContext = ctxRes.data
@@ -1295,7 +1271,7 @@ async function loadContext() {
       const reconciled = await reconcileCompletionReviewStatus(nextContext.item)
       if (reconciled) {
         const refreshed = await $fetch<{ code: number, data: BreakdownContextData }>(
-          `/api/v1/work-items/${workItemId.value}/breakdown-context`
+          moduleUrl(`/api/v1/work-items/${workItemId.value}/breakdown-context`)
         )
         if (refreshed.code === 0) {
           nextContext = refreshed.data
@@ -1365,28 +1341,33 @@ async function saveBreakdown() {
   }
   saving.value = true
   try {
-    await $fetch(`/api/v1/work-items/${workItemId.value}/breakdown`, {
+    const subtasks = tasks.value.map(task => ({
+      id: task.existingChildId,
+      assigneeUid: task.assigneeUid,
+      title: context.value!.item.title,
+      description: task.description.trim() || null,
+      startDate: task.startDate || null,
+      dueDate: task.dueDate || null,
+      estimatedHours: task.estimatedHours ? Number(task.estimatedHours) : null,
+      deliverables: task.deliverables.map(d => ({
+        id: d.id,
+        name: d.name.trim(),
+        description: d.description.trim() || null,
+        acceptanceCriteria: d.acceptanceCriteria.trim() || null,
+        deliverableType: d.deliverableType,
+        sourceDeliverableId: d.sourceDeliverableId
+      }))
+    }))
+    if (hosted && !/^[0-9a-f]{64}$/.test(breakdownVersion.value)) throw new Error('目标内容版本不可用，请刷新后重试')
+    const body = hosted ? { projectId: projectId.value, expectedVersion: breakdownVersion.value, subtasks } : { subtasks }
+    const payload = JSON.stringify(body)
+    if (hosted && breakdownRetry?.payload !== payload) breakdownRetry = { payload, key: crypto.randomUUID() }
+    await $fetch(moduleUrl(`/api/v1/work-items/${workItemId.value}/breakdown`), {
       method: 'PUT',
-      body: {
-        subtasks: tasks.value.map(task => ({
-          id: task.existingChildId,
-          assigneeUid: task.assigneeUid,
-          title: context.value!.item.title,
-          description: task.description.trim() || null,
-          startDate: task.startDate || null,
-          dueDate: task.dueDate || null,
-          estimatedHours: task.estimatedHours ? Number(task.estimatedHours) : null,
-          deliverables: task.deliverables.map(d => ({
-            id: d.id,
-            name: d.name.trim(),
-            description: d.description.trim() || null,
-            acceptanceCriteria: d.acceptanceCriteria.trim() || null,
-            deliverableType: d.deliverableType,
-            sourceDeliverableId: d.sourceDeliverableId
-          }))
-        }))
-      }
+      body,
+      ...(hosted ? { headers: { 'Idempotency-Key': breakdownRetry!.key }, retry: 0 } : {})
     })
+    breakdownRetry = undefined
     toast.add({ title: '任务分配已保存', color: 'success', icon: 'i-lucide-check' })
     await loadContext()
   } catch (err: unknown) {

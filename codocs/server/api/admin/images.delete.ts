@@ -2,30 +2,11 @@
  * 删除 OSS 图片（支持单个和批量删除）。
  * 只允许删除无元数据、关联文档不存在或未被文档引用的图片。
  */
-import { callCodocsTenantRuntime } from '~~/server/utils/codocsRuntime'
-import { deleteImage, deleteImages, downloadDocument, getImageMetadata } from '~~/server/utils/oss'
+import { findImageOwnerDocument, readImageOwnerDocumentContent } from '~~/server/utils/adminImageDocuments'
+import { isSnapshotV2Document } from '~~/server/utils/documentBodyRef'
+import { deleteImage, deleteImages, getImageMetadata } from '~~/server/utils/oss'
 import { requirePermission } from '~~/server/utils/checkPermission'
 import { normalizeCodocsUserImageObjectPath } from '~~/server/utils/ossImagePath'
-
-interface RuntimePage<T> {
-  items?: T[]
-}
-
-interface DocumentRow {
-  doc_type: string
-  oss_path: string
-}
-
-const findDocumentByOssPath = async (event: Parameters<typeof callCodocsTenantRuntime>[0], ossPath: string) => {
-  const page = await callCodocsTenantRuntime<RuntimePage<DocumentRow>>(event, '/v1/codocs/documents', {
-    query: {
-      oss_path: ossPath,
-      limit: 1
-    },
-    scope: 'codocs.read'
-  })
-  return page.items?.[0] || null
-}
 
 export default defineEventHandler(async (event) => {
   await requirePermission(event, 'admin', 'admin', '仅管理员可清理图片')
@@ -45,17 +26,21 @@ export default defineEventHandler(async (event) => {
     const docPath = rawDocPath ? decodeURIComponent(rawDocPath) : ''
     if (!docPath) continue
 
-    const doc = await findDocumentByOssPath(event, docPath)
+    const doc = await findImageOwnerDocument(event, docPath)
     if (!doc) continue
 
     try {
-      const content = await downloadDocument(doc.oss_path, doc.doc_type)
+      const content = await readImageOwnerDocumentContent(event, doc)
       const fileName = path.split('/').pop() || ''
       if (content && fileName && content.includes(fileName)) {
         normalPaths.push(path)
       }
-    } catch {
-      // 无法下载内容时按孤立图片处理，保持旧行为。
+    } catch (error) {
+      // v1 无法下载内容时按孤立图片处理，保持旧行为；v2 无法确认引用关系时失败关闭，绝不删除。
+      if (isSnapshotV2Document(doc)) {
+        console.error('[AdminImages] Cannot verify snapshot body, refusing to delete:', error)
+        throw createError({ statusCode: 503, message: '无法读取协作文档的当前正文，已拒绝删除图片，请稍后重试' })
+      }
     }
   }
 

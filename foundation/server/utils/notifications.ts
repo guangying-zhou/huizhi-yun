@@ -182,7 +182,7 @@ function tenantGatewayOrigin(event: H3Event) {
   return `${proto}://${host}`
 }
 
-async function resolveConsoleNotificationsServerBaseUrl(event: H3Event) {
+export async function resolveConsoleNotificationsServerBaseUrl(event: H3Event) {
   const configuredBaseUrl = await resolveConsoleNotificationsBaseUrl(event)
   const gatewayBaseUrl = tenantGatewayOrigin(event)
   if (configuredBaseUrl && (!gatewayBaseUrl || !sameOrigin(configuredBaseUrl, gatewayBaseUrl))) {
@@ -222,7 +222,8 @@ function tenantContextHeaders(event: H3Event) {
   return headers
 }
 
-function notificationUserForwardHeaders(event: H3Event) {
+// Also used by consoleUserApi.ts for other registered Console user APIs.
+export function notificationUserForwardHeaders(event: H3Event) {
   const auth = event.context.consoleAuth as {
     authenticated?: boolean
     token?: string | null

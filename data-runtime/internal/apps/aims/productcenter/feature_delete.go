@@ -32,13 +32,27 @@ func ValidateFeatureDelete(input FeatureDelete) error {
 }
 
 func DeleteProductFeature(ctx context.Context, db *sql.DB, identity CommandIdentity, permit AuthorizationPermit, input FeatureDelete) (CommandResult, error) {
+	return deleteProductFeature(ctx, identity, permit, input, func(authorize AuthorizeCommand, apply ApplyCommand) (CommandResult, error) {
+		return ExecuteCommand(ctx, db, identity, input, authorize, apply)
+	})
+}
+func DeleteProductFeatureInTransaction(ctx context.Context, tx *sql.Tx, identity CommandIdentity, permit AuthorizationPermit, input FeatureDelete) (CommandResult, error) {
+	result, err := deleteProductFeature(ctx, identity, permit, input, func(authorize AuthorizeCommand, apply ApplyCommand) (CommandResult, error) {
+		return ExecuteCommandInTransaction(ctx, tx, identity, input, authorize, apply)
+	})
+	if err != nil && tx != nil {
+		_ = tx.Rollback()
+	}
+	return result, err
+}
+func deleteProductFeature(ctx context.Context, identity CommandIdentity, permit AuthorizationPermit, input FeatureDelete, execute func(AuthorizeCommand, ApplyCommand) (CommandResult, error)) (CommandResult, error) {
 	if identity.Action != "product_features:delete" {
 		return CommandResult{}, invalid("product_command_identity_invalid", "功能删除命令不匹配")
 	}
 	if err := ValidateFeatureDelete(input); err != nil {
 		return CommandResult{}, err
 	}
-	return ExecuteCommand(ctx, db, identity, input, func(ctx context.Context, tx *sql.Tx) error {
+	return execute(func(ctx context.Context, tx *sql.Tx) error {
 		return AuthorizeWorkspaceTransaction(ctx, tx, identity.ProductCode, identity.ActorUID, "product_features", "delete", permit)
 	}, func(ctx context.Context, tx *sql.Tx) (any, error) {
 		root, err := loadWorkspace(ctx, tx, identity.ProductCode)

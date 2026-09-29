@@ -1,3 +1,4 @@
+import { optionalReadPagination } from '@hzy/foundation/shared/utils/optionalReadPagination'
 /**
  * 获取回收站文档列表 API
  * GET /api/documents/trash
@@ -13,6 +14,7 @@ import { withTrustedCodocsDocumentReadContext } from '~~/server/utils/documentRe
 export default defineEventHandler(async (event) => {
   try {
     const query = getQuery(event)
+    try { optionalReadPagination(query) } catch { throw createError({ statusCode: 400, message: '分页参数无效' }) }
     const { type, owner, dept_code, project_code } = query
     const actorUid = requireRequestUid(event)
     await requirePermission(event, 'documents', 'view', '缺少文档查看权限')
@@ -25,19 +27,19 @@ export default defineEventHandler(async (event) => {
     }
 
     const runtimeQuery = withTrustedCodocsDocumentReadContext(
-      { type, owner, dept_code, project_code },
+      { type, owner, dept_code, project_code, ...optionalReadPagination(query) },
       actorUid,
       dept_code ? String(dept_code) : ''
     )
 
-    const data = await callCodocsTenantRuntime<{ items: unknown[] }>(event, '/v1/codocs/documents/trash', {
+    const data = await callCodocsTenantRuntime<{ items: unknown[], total?: number, page?: number, pageSize?: number }>(event, '/v1/codocs/documents/trash', {
       query: runtimeQuery,
       scope: 'codocs.read'
     })
 
     return {
       success: true,
-      data: { items: data.items || [] }
+      data: { items: data.items || [], ...((query.page !== undefined || query.pageSize !== undefined) ? { total: data.total, page: data.page, pageSize: data.pageSize } : {}) }
     }
   } catch (err: unknown) {
     console.error('Failed to fetch trash documents:', err)

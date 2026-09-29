@@ -1,8 +1,11 @@
 package workflow
 
 import (
+	"context"
 	"reflect"
 	"testing"
+
+	"github.com/DATA-DOG/go-sqlmock"
 )
 
 func TestActionableLifecycleEffectsGroupOnlyExactTaskGeneration(t *testing.T) {
@@ -43,5 +46,59 @@ func TestActionablePrerequisitesKeepOnlyNewPendingProjectionNotifications(t *tes
 	result := actionablePrerequisiteNotifications([]WorkflowNotification{base, created, returned, rejected})
 	if !reflect.DeepEqual(result, []WorkflowNotification{created, returned}) {
 		t.Fatalf("unexpected prerequisite notification set: %#v", result)
+	}
+}
+
+func TestPendingActionableLifecycleOutboxBacksOffFailuresWithoutBlockingNewEffects(t *testing.T) {
+	adapter, mock, closeDB := newWorkflowRuntimeSQLMockAdapter(t)
+	defer closeDB()
+
+	mock.ExpectQuery(`(?s)FROM flow_actionable_outbox.*delivery_status = 'pending'.*attempt_count = 0 OR last_attempt_at IS NULL.*TIMESTAMPDIFF\(SECOND, last_attempt_at, NOW\(\)\).*attempt_count = 1 THEN 600.*attempt_count = 2 THEN 1200.*attempt_count = 3 THEN 2400.*ELSE 3600.*ORDER BY id.*LIMIT \?`).
+		WithArgs(100).
+		WillReturnRows(sqlmock.NewRows([]string{
+			"id", "version_no", "actionable_key", "expected_version", "next_version", "next_state", "recipients", "prerequisite_notifications",
+		}).AddRow(int64(42), int64(1), "workflow:tasks:g1", "flow_tasks:g1", "flow_actions:10", "resolved", `["u1"]`, `[]`))
+
+	response, _, err := adapter.pendingActionableLifecycleOutbox(context.Background(), 100)
+	if err != nil {
+		t.Fatalf("pendingActionableLifecycleOutbox: %v", err)
+	}
+	effects, ok := response.Data.([]WorkflowActionableLifecycle)
+	if !ok || len(effects) != 1 || effects[0].EffectID != 42 || effects[0].VersionNo != 1 || effects[0].ActionableKey != "workflow:tasks:g1" {
+		t.Fatalf("effects = %#v", response.Data)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("expectations: %v", err)
+	}
+}
+
+func TestFailedActionableLifecycleRemainsPendingWithRetryClock(t *testing.T) {
+	adapter, mock, closeDB := newWorkflowRuntimeSQLMockAdapter(t)
+	defer closeDB()
+
+	mock.ExpectBegin()
+	mock.ExpectQuery(`SELECT delivery_status, attempt_count, version_no FROM flow_actionable_outbox WHERE id = \? FOR UPDATE`).
+		WithArgs(int64(42)).WillReturnRows(sqlmock.NewRows([]string{"delivery_status", "attempt_count", "version_no"}).AddRow("pending", 0, 1))
+	mock.ExpectExec(`(?s)UPDATE flow_actionable_outbox SET delivery_status = \?, attempt_count = \?, version_no = version_no \+ 1`).
+		WithArgs("pending", int64(1), "actionable_not_found", int64(404), "pending", int64(42), "pending", int64(1)).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectExec(`(?s)INSERT INTO flow_delivery_audit`).
+		WithArgs("actionable", int64(42), "retry", "pending", "pending", int64(1), int64(2), int64(1), "workflow.runtime", "actionable_not_found", "C000001", "local-workflow").
+		WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectCommit()
+
+	response, _, err := adapter.failActionableLifecycleOutbox(context.Background(), "42", map[string]any{
+		"code": "actionable_not_found", "http_status": 404,
+		"hzy_runtime_tenant_code": "C000001", "hzy_runtime_deployment_code": "local-workflow", "hzy_runtime_service_client_id": "workflow.runtime", "expectedEffectVersion": int64(1),
+	})
+	if err != nil {
+		t.Fatalf("failActionableLifecycleOutbox: %v", err)
+	}
+	data, ok := response.Data.(map[string]any)
+	if !ok || data["pending"] != true {
+		t.Fatalf("response = %#v", response.Data)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("expectations: %v", err)
 	}
 }

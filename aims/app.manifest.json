@@ -76,6 +76,44 @@
       "sortOrder": 30
     },
     {
+      "code": "project-documents",
+      "name": "项目文档代理",
+      "description": "企业 Host 经 Aims 正式身份读取项目文档元数据、Codocs 内容与文件柜预览，并登记/删除项目文档索引；download 为导出性质、write 为写入性质的独立敏感动作，均不由 read 蕴含",
+      "actions": [
+        "read",
+        "download",
+        "write"
+      ],
+      "sortOrder": 28
+    },
+    {
+      "code": "project-document-sources",
+      "name": "项目文档候选来源只读代理",
+      "description": "企业 Host 经 Aims 正式身份读取可附加为项目文档的候选来源：部门 Codocs 文档、项目集 Codocs 文档、已绑定仓库的 Markdown 目录与正文；每条都按操作者本人的部门／项目／仓库访问权重新判定",
+      "actions": [
+        "read"
+      ],
+      "sortOrder": 28
+    },
+    {
+      "code": "project-document-access",
+      "name": "项目文档访问策略代理",
+      "description": "企业 Host 经 Aims 正式身份读取或修改项目文档访问策略、权限判定与访问审计；改策略的门槛是项目经理而非文档编辑者，因此 manage 与 read 分列，read 不蕴含 manage",
+      "actions": [
+        "read",
+        "manage"
+      ],
+      "sortOrder": 28
+    },
+    {
+      "code": "work-item-completion-callback",
+      "name": "工作项完成审批回执服务",
+      "actions": [
+        "execute"
+      ],
+      "sortOrder": 20
+    },
+    {
       "code": "board",
       "name": "看板",
       "description": "迭代看板与状态流转",
@@ -163,6 +201,24 @@
         "execute"
       ],
       "sortOrder": 84
+    },
+    {
+      "code": "milestone-rollover",
+      "name": "周期里程碑滚动服务",
+      "description": "统一调度路径按 generation 滚动到期周期里程碑的精确服务能力，不授予普通用户角色",
+      "actions": [
+        "execute"
+      ],
+      "sortOrder": 86
+    },
+    {
+      "code": "notifications-due",
+      "name": "到期通知检查点服务",
+      "description": "统一调度路径按 generation 扫描到期条件并保存通知检查点的精确服务能力，不授予普通用户角色",
+      "actions": [
+        "execute"
+      ],
+      "sortOrder": 87
     },
     {
       "code": "integration_operations",
@@ -483,6 +539,7 @@
       "suggestedPermissions": [
         "aims:aims_overview:view",
         "aims:projects:view",
+        "aims:requirements:view",
         "aims:work_items:view",
         "aims:board:view",
         "aims:timesheet:view",
@@ -496,6 +553,7 @@
       "suggestedPermissions": [
         "aims:aims_overview:view",
         "aims:projects:view",
+        "aims:requirements:view",
         "aims:work_items:edit",
         "aims:board:edit",
         "aims:timesheet:submit",
@@ -510,6 +568,7 @@
       "suggestedPermissions": [
         "aims:aims_overview:view",
         "aims:projects:view",
+        "aims:requirements:view",
         "aims:work_items:edit",
         "aims:board:edit",
         "aims:timesheet:submit",
@@ -528,6 +587,8 @@
         "aims:projects:create",
         "aims:projects:edit",
         "aims:projects:close",
+        "aims:requirements:view",
+        "aims:requirements:edit",
         "aims:work_items:view",
         "aims:work_items:create",
         "aims:work_items:edit",
@@ -559,6 +620,8 @@
         "aims:projects:create",
         "aims:projects:edit",
         "aims:projects:close",
+        "aims:requirements:view",
+        "aims:requirements:edit",
         "aims:work_items:view",
         "aims:board:view",
         "aims:timesheet:view",
@@ -576,6 +639,8 @@
         "aims:aims_overview:view",
         "aims:projects:view",
         "aims:projects:admin",
+        "aims:requirements:view",
+        "aims:requirements:edit",
         "aims:timesheet:view",
         "aims:weekly_reports:view",
         "aims:weekly_reports:review",
@@ -594,6 +659,7 @@
       "suggestedPermissions": [
         "aims:aims_overview:view",
         "aims:projects:view",
+        "aims:requirements:view",
         "aims:quality_reviews:view",
         "aims:quality_reviews:review",
         "aims:quality_reviews:configure",
@@ -608,6 +674,7 @@
         "aims:aims_overview:view",
         "aims:projects:view",
         "aims:projects:approve",
+        "aims:requirements:view",
         "aims:reports:view"
       ]
     },
@@ -620,6 +687,7 @@
         "aims:portfolios:admin",
         "aims:projects:create",
         "aims:projects:admin",
+        "aims:requirements:admin",
         "aims:work_items:edit",
         "aims:timesheet:admin",
         "aims:reports:view",

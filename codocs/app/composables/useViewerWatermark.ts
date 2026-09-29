@@ -10,9 +10,13 @@ interface ViewerApiResponse<T> {
 }
 
 export function useViewerWatermark() {
-  const { user, tenant, userRealname, userMobileTail } = useAuth()
+  const auth = useAuth()
+  const { user, tenant, userRealname } = auth
+  const userMobileTail = computed(() => 'userMobileTail' in auth ? String((auth.userMobileTail as { value?: unknown } | undefined)?.value || '') : '')
   const requestFetch = useRequestFetch()
   const { resolveCurrentAppPath } = useAppUrls()
+  const appCode = String(useRuntimeConfig().public.appCode || '')
+  const directoryMePath = appCode === 'enterprise' ? sharedApiPath('/api/directory/me') : resolveCurrentAppPath('/api/directory/me')
   const viewerKey = computed(() => JSON.stringify([tenant.value, user.value]))
 
   const { data: accountUser } = useAsyncData<(ViewerDirectoryUser & { viewerKey: string }) | null>(
@@ -26,7 +30,7 @@ export function useViewerWatermark() {
         // The self profile carries only the phone suffix. Shared directory
         // search deliberately excludes phone data and cannot supply a watermark.
         const response = await requestFetch<ViewerApiResponse<ViewerDirectoryUser>>(
-          resolveCurrentAppPath('/api/directory/me')
+          directoryMePath
         )
         if (requestViewerKey !== viewerKey.value || response.code !== 0 || response.data?.uid !== uid) return null
         return { ...response.data, viewerKey: requestViewerKey }

@@ -170,6 +170,40 @@ export async function ensureConsoleVaultMasterKey(input: {
   return secretValue
 }
 
+export type ConsoleVaultMasterKeyForIssuance
+  = | { mode: 'platform-held', key: string, fingerprint: string }
+    | { mode: 'customer-held' }
+
+/** License issuance does not need to retrieve a key already held by Tenant Runtime. */
+export async function resolveConsoleVaultMasterKeyForIssuance(input: {
+  deploymentId: number
+  tenantCode: string
+  appCode: string
+  executor?: BootstrapSecretExecutor
+}): Promise<ConsoleVaultMasterKeyForIssuance> {
+  let existing: DeploymentBootstrapSecretRow | null
+  try {
+    existing = await loadDeploymentBootstrapSecretAnyStatus(
+      input.deploymentId,
+      CONSOLE_VAULT_MASTER_KEY_SECRET_CODE,
+      input.executor
+    )
+  } catch (error) {
+    if (isMissingTableError(error)) throw missingTableError()
+    throw error
+  }
+  if (existing?.status === 'migrated') return { mode: 'customer-held' }
+
+  const key = await ensureConsoleVaultMasterKey(input)
+  return { mode: 'platform-held', key, fingerprint: fingerprintConsoleVaultMasterKey(key) }
+}
+
+export function consoleVaultLicenseMetadata(custody: ConsoleVaultMasterKeyForIssuance) {
+  return custody.mode === 'platform-held'
+    ? { masterKeyRequired: true, masterKeyFingerprint: custody.fingerprint, algorithm: 'aes-256-gcm' }
+    : null
+}
+
 export async function loadConsoleVaultMasterKeyForMigration(deploymentId: number, executor?: BootstrapSecretExecutor) {
   const secret = await loadDeploymentBootstrapSecret(
     deploymentId,

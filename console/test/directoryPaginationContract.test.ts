@@ -25,7 +25,10 @@ describe('directory management list pagination', () => {
   })
 
   test('management pages send pagination, reset filters, and render totals', () => {
-    for (const pagePath of ['app/pages/directory/users.vue', 'app/pages/directory/projects.vue']) {
+    for (const [pagePath, tableName] of [
+      ['app/pages/directory/users.vue', 'DirectoryUsersTable'],
+      ['app/pages/directory/projects.vue', 'DirectoryProjectsTable']
+    ]) {
       const page = source(pagePath)
 
       assert.match(page, /page: page\.value/)
@@ -35,7 +38,9 @@ describe('directory management list pagination', () => {
       assert.match(page, /function resetFilters\(\)/)
       assert.match(page, /@keyup\.enter="flushSearch"/)
       assert.match(page, /usePageActions\(\)/)
-      assert.match(page, /<CommonEmptyState/)
+      assert.ok(page.includes(`<${tableName}`), 'Console must use the shared directory table')
+      const table = source(`../foundation/app/components/${tableName}.vue`)
+      assert.match(table, /<CommonEmptyState/)
     }
   })
 })

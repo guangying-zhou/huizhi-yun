@@ -1,8 +1,11 @@
 {
-  "schemaRevision": "sha256:a0e1d91cf8c43e5336df8363055a156117c4589232ce4b8aaf59bcf2cccd23c6",
+  "schemaRevision": "sha256:fdbb6e38338e1cf5cdeafe33e36407947b6ee2e54c2abbf98579613c9fa8dd3f",
   "source": "console/docs/hzy_console_schema.sql",
   "excludedTables": [
-    "console_runtime_cache"
+    "console_runtime_cache",
+    "console_service_assertion_replay",
+    "gateway_service_assertion_replay",
+    "verified_policy_snapshots"
   ],
   "tables": {
     "auth_authorization_codes": {

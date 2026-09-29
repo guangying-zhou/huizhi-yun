@@ -69,6 +69,10 @@ func (a *Adapter) projectWeeklyReportSummary(ctx context.Context, query url.Valu
 	weekStartDate, weekEndDate := isoWeekRange(reportYear, reportWeek)
 	previousYear, previousWeek := weekStartDate.AddDate(0, 0, -7).ISOWeek()
 
+	page, paged, err := timeEntryPagination(query)
+	if err != nil {
+		return nil, err
+	}
 	where := []string{"1 = 1"}
 	args := []any{
 		reportYear,
@@ -81,7 +85,7 @@ func (a *Adapter) projectWeeklyReportSummary(ctx context.Context, query url.Valu
 	if strings.TrimSpace(query.Get("includeArchived")) != "1" && strings.TrimSpace(query.Get("include_archived")) != "1" {
 		where = append(where, "p.lifecycle_status <> 'archived'")
 	}
-	if keyword := firstQueryText(query, "search", "keyword", "q"); keyword != "" {
+	if keyword := firstQueryText(query, "search", "keyword", "q"); keyword != "" && !paged {
 		where = append(where, "(p.project_code LIKE ? OR p.internal_code LIKE ? OR p.name LIKE ? OR p.leader_uid LIKE ?)")
 		like := "%" + keyword + "%"
 		args = append(args, like, like, like, like)
@@ -98,7 +102,7 @@ func (a *Adapter) projectWeeklyReportSummary(ctx context.Context, query url.Valu
 	where = append(where, visibilityWhere)
 	args = append(args, visibilityArgs...)
 
-	rows, err := a.DB().QueryContext(ctx, `
+	statement := `
 		SELECT
 			p.id,
 			p.project_code,
@@ -166,9 +170,14 @@ func (a *Adapter) projectWeeklyReportSummary(ctx context.Context, query url.Valu
 			WHERE COALESCE(status, 'active') = 'active'
 			GROUP BY project_id
 		) mc ON mc.project_id = p.id
-		WHERE `+strings.Join(where, " AND ")+`
+		WHERE ` + strings.Join(where, " AND ") + `
 		ORDER BY department_name ASC, project_type_name ASC, p.name ASC, p.id ASC
-	`, append([]any{reportYear, reportWeek, weekStartDate.Format("2006-01-02"), weekEndDate.Format("2006-01-02")}, args...)...)
+	`
+	queryArgs := append([]any{reportYear, reportWeek, weekStartDate.Format("2006-01-02"), weekEndDate.Format("2006-01-02")}, args...)
+	if paged {
+		return a.projectWeeklyReportSummaryPage(ctx, query, page, statement, queryArgs, reportYear, reportWeek, weekStartDate, weekEndDate, previousYear, previousWeek)
+	}
+	rows, err := a.DB().QueryContext(ctx, statement, queryArgs...)
 	if err != nil {
 		return nil, err
 	}

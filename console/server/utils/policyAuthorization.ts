@@ -1,6 +1,7 @@
+import { evaluateEnterpriseEntitlement } from './enterpriseEntitlement'
 import { appCode as defaultAppCode, manifestResources } from '~~/app/config/permissions'
 import type { H3Event } from 'h3'
-import { actionSatisfies, resolveAuthorizationMode, selectEffectiveRoleCodes, type AuthorizationGrant, type AuthorizationMode, type ResourceActionPolicy } from '@hzy/authz-core'
+import { actionSatisfies, isRecordActiveAt, resolveAuthorizationMode, selectEffectiveRoleCodes, type AuthorizationGrant, type AuthorizationMode, type ResourceActionPolicy } from '@hzy/authz-core'
 import {
   baselineGrantAppliesToSubject,
   buildPolicyBundleActionPolicy
@@ -198,8 +199,7 @@ function policyRevisionFromPayload(payload: Record<string, unknown>) {
 }
 
 function isActive(record: BundleRecord) {
-  const status = stringValue(record.status)
-  return !status || status === 'active'
+  return isRecordActiveAt(record)
 }
 
 function appMatches(appCode: unknown, targetAppCode: string) {
@@ -613,8 +613,8 @@ export async function loadPolicyAuthorizationSnapshot(
 
   const cacheScope = resolvePlatformRuntimeCacheScope(config, event)
   let [activationStatus, bundle] = await Promise.all([
-    readActivationStatus(config.bundleCacheDir, cacheScope),
-    readCachedBundle(config.bundleCacheDir, cacheScope)
+    readActivationStatus(config.bundleCacheDir, cacheScope, event),
+    readCachedBundle(config.bundleCacheDir, cacheScope, event)
   ]).catch((error) => {
     if (persistentPolicyStoreEnabled()) throw new PolicyAuthorizationError('bundle_unavailable', 'persistent policy bundle unavailable', 503)
     throw error
@@ -640,18 +640,11 @@ export async function loadPolicyAuthorizationSnapshot(
   }
 
   if (invalidReason) {
-    throw new PolicyAuthorizationError('bundle_unavailable', invalidReason, persistentPolicyStoreEnabled() ? 503 : 403)
+    throw new PolicyAuthorizationError('bundle_unavailable', invalidReason,
+      invalidReason === 'enterprise_entitlement_invalid' || invalidReason.startsWith('policy bundle is not active:') ? 403 : 503)
   }
   if (!bundle) {
-    throw new PolicyAuthorizationError('bundle_unavailable', 'policy bundle is missing', 403)
-  }
-
-  if (!activationStatus.activated || !activationStatus.bundleReady) {
-    throw new PolicyAuthorizationError(
-      'activation_incomplete',
-      activationStatus.lastError || 'console activation is not complete',
-      403
-    )
+    throw new PolicyAuthorizationError('bundle_unavailable', 'policy bundle is missing', 503)
   }
 
   if (bundle.tenantCode !== config.tenantCode) {
@@ -671,6 +664,17 @@ export async function loadPolicyAuthorizationSnapshot(
       'bundle_deployment_mismatch',
       `policy bundle deployment mismatch: ${bundle.deploymentCode} !== ${config.deploymentCode}`,
       403
+    )
+  }
+
+  const enterprise = evaluateEnterpriseEntitlement(bundle.payload, config.tenantCode)
+  if (!enterprise.allowed) throw new PolicyAuthorizationError(enterprise.reason || 'enterprise_entitlement_inactive', 'Enterprise access is not active', 403)
+
+  if (!activationStatus.activated || !activationStatus.bundleReady) {
+    throw new PolicyAuthorizationError(
+      'activation_incomplete',
+      activationStatus.lastError || 'console activation is not complete',
+      503
     )
   }
 

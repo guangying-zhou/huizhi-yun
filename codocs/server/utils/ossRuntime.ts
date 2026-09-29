@@ -40,6 +40,7 @@ export async function loadCodocsOssRuntimeConfigFromConsole(integrationCode = 'o
   const bucketDomain = stringValue(runtime.bucketDomain || runtimeConfig.bucketDomain)
   const projectsEndpoint = endpointForRuntime(stringValue(runtimeConfig.projectsEndpoint) || runtime.endpoint)
   const imagesEndpoint = endpointForRuntime(stringValue(runtimeConfig.imagesEndpoint) || runtime.endpoint)
+  const forcePathStyle = runtimeConfig.forcePathStyle ?? config.oss?.forcePathStyle
 
   const resolved = {
     provider: stringValue(runtimeConfig.provider) || stringValue(config.oss?.provider),
@@ -55,10 +56,12 @@ export async function loadCodocsOssRuntimeConfigFromConsole(integrationCode = 'o
     imagesBucketName: stringValue(runtimeConfig.imagesBucketName) || runtime.bucket,
     imagesEndpoint,
     imagesBucketDomain: stringValue(runtimeConfig.imagesBucketDomain),
-    forcePathStyle: runtimeConfig.forcePathStyle ?? config.oss?.forcePathStyle,
+    forcePathStyle: typeof forcePathStyle === 'boolean' || typeof forcePathStyle === 'string' ? forcePathStyle : undefined,
     recycleDays: Number(runtimeConfig.recycleDays || config.oss?.recycleDays || 30)
   }
 
-  setCodocsOssRuntimeConfig(resolved)
+  // Request-bound configuration must not leak into another tenant's request
+  // through a process global. Legacy startup callers retain their old cache.
+  if (!event) setCodocsOssRuntimeConfig(resolved)
   return resolved
 }

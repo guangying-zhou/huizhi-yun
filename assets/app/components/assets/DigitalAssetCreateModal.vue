@@ -1,7 +1,10 @@
 <script setup lang="ts">
-import type { ApiResponse } from '~/types'
+import AssetFormSurface from './AssetFormSurface.vue'
+import type { ApiResponse } from '../../types'
+import { useAssetDictionaries } from '../../composables/useAssetDictionaries'
+import { useAssetsModule } from '../../../layer/useAssetsModule'
 
-const props = defineProps<{ open: boolean }>()
+const props = defineProps<{ open: boolean, page?: boolean }>()
 const emit = defineEmits<{
   'update:open': [value: boolean]
   'created': [id: number]
@@ -15,8 +18,11 @@ const isOpen = computed({
 const { loadDictionaries, getOptions } = useAssetDictionaries()
 await loadDictionaries()
 
+const surface = ref<InstanceType<typeof AssetFormSurface> | null>(null)
 const toast = useToast()
 const submitting = ref(false)
+const submissionKey = ref('')
+const { moduleUrl } = useAssetsModule()
 const typeOptions = computed(() => getOptions('digital_asset_type'))
 const statusOptions = computed(() => getOptions('digital_asset_status'))
 const accessScopeOptions = computed(() => getOptions('digital_access_scope'))
@@ -47,7 +53,7 @@ watch(() => props.open, (open) => {
     state.status = 'active'
     state.notes = ''
   }
-})
+}, { immediate: true })
 
 async function handleSubmit() {
   if (!state.digital_name.trim()) {
@@ -58,8 +64,9 @@ async function handleSubmit() {
   submitting.value = true
 
   try {
-    const response = await $fetch<ApiResponse<{ id: number }>>('/api/v1/digital-assets', {
+    const response = await $fetch<ApiResponse<{ id: number }>>(moduleUrl('/api/v1/digital-assets'), {
       method: 'POST',
+      headers: { 'Idempotency-Key': submissionKey.value ||= crypto.randomUUID() },
       body: {
         digital_code: state.digital_code.trim() || null,
         digital_name: state.digital_name.trim(),
@@ -75,6 +82,7 @@ async function handleSubmit() {
     })
 
     toast.add({ title: '数字资产已创建', description: '可以进入详情页继续关联产品。', color: 'success', icon: 'i-lucide-check' })
+    surface.value?.markSaved()
     emit('created', response.data.id)
     isOpen.value = false
   } catch (error) {
@@ -87,8 +95,12 @@ async function handleSubmit() {
 </script>
 
 <template>
-  <UModal
+  <AssetFormSurface
+    ref="surface"
     v-model:open="isOpen"
+    :page="props.page"
+    :draft="JSON.stringify(state)"
+    :busy="submitting"
     title="新增数字资产"
     description="登记代码、文档、数据、模型和交付物资产。"
     :ui="{ content: 'sm:max-w-3xl' }"
@@ -177,5 +189,5 @@ async function handleSubmit() {
         </UButton>
       </div>
     </template>
-  </UModal>
+  </AssetFormSurface>
 </template>

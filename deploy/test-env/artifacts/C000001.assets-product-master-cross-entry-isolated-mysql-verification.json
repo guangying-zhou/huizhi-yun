@@ -1,0 +1,16 @@
+{
+  "schemaVersion": "isolated-mysql-verification.v1",
+  "verifiedAt": "2026-09-15T03:33:52Z",
+  "baseCommit": "bbd5045e13f24dc0181f1ce3f691489bff3fd347",
+  "command": "node data-runtime/scripts/test-enterprise-assets-products-mysql.mjs",
+  "exitCode": 0,
+  "goPackageSeconds": 2.645,
+  "mysqlTestSourceSha256": "0588e4b6a397429d87158f8fe9280a20da1a214f3070f5e915934f69ce8d334b",
+  "legacyIdentitySourceSha256": "f4e707a3f4f8ded47872078222133645ba760c6618718bc949a4b3dea5f5bf53",
+  "scope": "Fresh random /tmp MySQL 8.0.34; Enterprise and legacy Assets create/edit share owning receipt command, both replay directions, changed-payload conflict, authorization/credential rejection, transaction rollback and physical-table isolation",
+  "serviceSubjects": ["client:enterprise.runtime", "client:assets.runtime"],
+  "temporaryInstanceStopped": true,
+  "temporaryDirectoryRemoved": true,
+  "businessDatabaseAccessed": false,
+  "deployed": false
+}

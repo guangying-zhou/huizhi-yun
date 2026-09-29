@@ -1,0 +1,35 @@
+# Dedicated INTERNAL nginx server on the Anolis host, separate from Tenant Gateway.
+# The public gitlab.wiztek.cn nginx terminates TLS for platform.wiztek.cn and
+# reaches this listener through Tailscale. Install only after approval.
+# The outer gitlab nginx MUST overwrite X-Real-IP with its $remote_addr.
+# These maps are in nginx http context: never trust an arbitrary peer's header.
+map $http_x_real_ip $platform_gitlab_audit_ip {
+    default $http_x_real_ip;
+    "" $remote_addr;
+}
+map $remote_addr $platform_audit_ip {
+    default $remote_addr;
+    100.98.120.65 $platform_gitlab_audit_ip;
+}
+server {
+    listen 100.64.72.59:8782 default_server;
+    server_name platform.wiztek.cn;
+    allow 100.98.120.65;
+    deny all;
+    if ($host != 'platform.wiztek.cn') { return 421; }
+
+    client_max_body_size 100m;
+    location / {
+        proxy_pass http://127.0.0.1:31006;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Host $host;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Forwarded-For $platform_audit_ip;
+        proxy_set_header X-Real-IP $platform_audit_ip;
+        proxy_set_header Forwarded "";
+        proxy_set_header Authorization $http_authorization;
+        proxy_read_timeout 60s;
+        proxy_send_timeout 60s;
+    }
+}

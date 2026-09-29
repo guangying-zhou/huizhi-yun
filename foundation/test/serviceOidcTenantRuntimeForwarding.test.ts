@@ -1,5 +1,6 @@
 import { afterEach, describe, test } from 'node:test'
 import assert from 'node:assert/strict'
+import { SignJWT } from 'jose'
 import {
   fetchConsoleServiceJson,
   requestServiceAccessToken,
@@ -151,7 +152,8 @@ describe('Console service-token tenant-runtime forwarding', () => {
       'x-hzy-data-runtime-url': 'https://runtime.example.test',
       'x-hzy-data-runtime-code': 'runtime-prod',
       'x-hzy-data-runtime-token': 'runtime-bootstrap-token',
-      'x-hzy-data-runtime-audience': 'data-runtime'
+      'x-hzy-data-runtime-audience': 'data-runtime',
+      'x-hzy-service-routes': JSON.stringify({ assets: { origin: 'https://assets-worker.example.test', deploymentCode: 'C000001-assets', basePath: '/assets/' } })
     })
   })
 
@@ -268,4 +270,225 @@ describe('Console service-token tenant-runtime forwarding', () => {
     assert.equal(body.app_code, 'workflow')
     assert.equal(body.client_secret, undefined)
   })
+
+  test('coalesces concurrent cold requests for the same service token', async () => {
+    let requests = 0
+    let release: (() => void) | undefined
+    const pending = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    ;(globalThis as { useRuntimeConfig?: () => unknown }).useRuntimeConfig = () => ({
+      hzy: { appCode: 'aims', consoleUrl: 'https://console.example.test', serviceClient: { clientId: 'aims.runtime', clientSecret: 'test-secret' } }
+    })
+    const event = {
+      context: { cloudflare: { env: { HZY_CONSOLE_SERVICE: {
+        async fetch() {
+          requests += 1
+          await pending
+          return Response.json({ access_token: 'coalesced-token', token_type: 'Bearer', expires_in: 900 })
+        }
+      } } } },
+      node: { req: { headers: { 'host': 'aims.example.test', 'x-forwarded-proto': 'https' }, url: '/api/test', originalUrl: '/api/test' } }
+    } as never
+
+    const concurrent = Array.from({ length: 100 }, () => requestServiceAccessToken({
+      audience: 'data-runtime', scope: 'aims:coalesced:test', event
+    }))
+    await new Promise(resolve => setTimeout(resolve, 0))
+    assert.equal(requests, 1)
+    release?.()
+    assert.deepEqual(await Promise.all(concurrent), Array(100).fill('coalesced-token'))
+  })
+
+  test('normalizes scope while isolating tenant, deployment, environment, audience and source binding', async () => {
+    let requests = 0
+    ;(globalThis as { useRuntimeConfig?: () => unknown }).useRuntimeConfig = () => ({
+      hzy: {
+        appCode: 'aims', consoleUrl: 'https://console.example.test',
+        cloudflareInternalToken: 'fixture-gateway-token',
+        serviceClient: { clientId: 'aims.runtime', clientSecret: 'fixture-secret' }
+      }
+    })
+    const eventFor = (tenant: string, deployment: string, environment = 'test') => ({
+      context: { cloudflare: { env: { HZY_CONSOLE_SERVICE: {
+        async fetch(input: string | URL | Request) {
+          const url = input instanceof Request ? input.url : String(input)
+          if (!url.endsWith('/oauth/token')) return Response.json({})
+          requests++
+          return Response.json({ access_token: `token-${requests}`, token_type: 'Bearer', expires_in: 900 })
+        }
+      } } } },
+      node: { req: { headers: {
+        'x-hzy-gateway': 'tenant-gateway',
+        'x-hzy-gateway-token': 'fixture-gateway-token',
+        'x-hzy-tenant': tenant,
+        'x-hzy-deployment': deployment,
+        'x-hzy-environment': environment,
+        'x-hzy-app-code': 'aims',
+        'x-forwarded-host': 'fixture.example.test',
+        'x-forwarded-proto': 'https'
+      }, url: '/api/test' } }
+    }) as never
+    const event = eventFor('C000001', 'C000001-aims')
+    const base = { audience: 'data-runtime', scope: 'aims:one:read aims:two:read', event }
+    const first = await requestServiceAccessToken(base)
+    assert.equal(await requestServiceAccessToken({ ...base, scope: 'aims:two:read aims:one:read aims:one:read' }), first)
+    assert.equal(requests, 1)
+    for (const input of [
+      { ...base, event: eventFor('C000002', 'C000001-aims') },
+      { ...base, event: eventFor('C000001', 'C000002-aims') },
+      { ...base, event: eventFor('C000001', 'C000001-aims', 'prod') },
+      { ...base, audience: 'tenant-runtime' },
+      { ...base, sourceBinding: 'service-client-policy' as const }
+    ]) {
+      assert.notEqual(await requestServiceAccessToken(input), first)
+    }
+    assert.equal(requests, 6)
+  })
+
+  test('forced refresh bypasses an older flight and keeps the newer token', async () => {
+    let requests = 0
+    let releaseOld!: () => void
+    const oldPending = new Promise<void>((resolve) => {
+      releaseOld = resolve
+    })
+    ;(globalThis as { useRuntimeConfig?: () => unknown }).useRuntimeConfig = () => ({
+      hzy: { appCode: 'aims', consoleUrl: 'https://console.example.test', serviceClient: { clientId: 'aims.runtime', clientSecret: 'fixture-secret' } }
+    })
+    const event = {
+      context: { cloudflare: { env: { HZY_CONSOLE_SERVICE: { async fetch(input: string | URL | Request) {
+        const url = input instanceof Request ? input.url : String(input)
+        if (!url.endsWith('/oauth/token')) return Response.json({})
+        requests++
+        const current = requests
+        if (current === 1) await oldPending
+        return Response.json({ access_token: `token-${current}`, token_type: 'Bearer', expires_in: 900 })
+      } } } } },
+      node: { req: { headers: { host: 'aims.example.test' }, url: '/api/test', originalUrl: '/api/test' } }
+    } as never
+    const input = { audience: 'data-runtime', scope: 'aims:refresh:test', event }
+    const old = requestServiceAccessToken(input)
+    await new Promise(resolve => setTimeout(resolve, 0))
+    assert.equal(await requestServiceAccessToken({ ...input, forceRefresh: true }), 'token-2')
+    releaseOld()
+    assert.equal(await old, 'token-1')
+    assert.equal(await requestServiceAccessToken(input), 'token-2')
+    assert.equal(requests, 2)
+  })
+
+  test('local issuer shares the bounded cache and flight without retaining opaque tokens', async () => {
+    ;(globalThis as { useRuntimeConfig?: () => unknown }).useRuntimeConfig = () => ({ hzy: { appCode: 'console' } })
+    let calls = 0
+    const jwt = await new SignJWT({ token_use: 'service' })
+      .setProtectedHeader({ alg: 'HS256' })
+      .setExpirationTime('5m')
+      .sign(new TextEncoder().encode('fixture-secret-fixture-secret-fixture-secret'))
+    setLocalServiceTokenIssuer(async () => {
+      calls++
+      return jwt
+    })
+    const input = { audience: 'data-runtime', scope: 'console:read', event: { node: { req: { headers: {}, url: '/api/test' } } } as never }
+    assert.deepEqual(await Promise.all(Array.from({ length: 100 }, () => requestServiceAccessToken(input))), Array(100).fill(jwt))
+    assert.equal(calls, 1)
+    assert.equal(await requestServiceAccessToken(input), jwt)
+    assert.equal(calls, 1)
+    await requestServiceAccessToken({ ...input, forceRefresh: true })
+    assert.equal(calls, 2)
+    await requestServiceAccessToken({ ...input, deploymentCodeOverride: 'other' })
+    assert.equal(calls, 3)
+  })
+
+  test('evicts the oldest service token when an isolate reaches its cache limit', async () => {
+    ;(globalThis as { useRuntimeConfig?: () => unknown }).useRuntimeConfig = () => ({ hzy: { appCode: 'console' } })
+    let calls = 0
+    const jwt = await new SignJWT({ token_use: 'service' })
+      .setProtectedHeader({ alg: 'HS256' })
+      .setExpirationTime('5m')
+      .sign(new TextEncoder().encode('fixture-secret-fixture-secret-fixture-secret'))
+    setLocalServiceTokenIssuer(async () => {
+      calls++
+      return jwt
+    })
+    const event = { node: { req: { headers: {}, url: '/api/test' } } } as never
+    for (let index = 0; index < 257; index++) {
+      await requestServiceAccessToken({ audience: 'data-runtime', scope: `console:fixture:${index}`, event })
+    }
+    assert.equal(calls, 257)
+    await requestServiceAccessToken({ audience: 'data-runtime', scope: 'console:fixture:256', event })
+    assert.equal(calls, 257, 'the newest entry remains cached')
+    await requestServiceAccessToken({ audience: 'data-runtime', scope: 'console:fixture:0', event })
+    assert.equal(calls, 258, 'the oldest entry was evicted')
+  })
+})
+
+test('trusted route helper preserves only the guarded hzy0 dial for synchronous Workflow callbacks', async () => {
+  const keys = ['NODE_ENV', 'HZY0_LOCAL_ENTERPRISE', 'HZY0_LOCAL_CONSOLE_FACADE', 'HZY0_WORKFLOW_LOCAL_ONLY'] as const
+  const saved = Object.fromEntries(keys.map(key => [key, process.env[key]]))
+  try {
+    process.env.NODE_ENV = 'development'
+    process.env.HZY0_LOCAL_ENTERPRISE = 'true'
+    process.env.HZY0_WORKFLOW_LOCAL_ONLY = 'true'
+    ;(globalThis as { useRuntimeConfig?: () => unknown }).useRuntimeConfig = () => ({ hzy: { cloudflareInternalToken: 'fixture-gateway' } })
+    const headers = {
+      'x-hzy-gateway': 'tenant-gateway', 'x-hzy-gateway-token': 'fixture-gateway',
+      'x-hzy-tenant': 'C000001', 'x-hzy-environment': 'test',
+      'x-hzy-app-code': 'enterprise', 'x-hzy-deployment': 'C000001-test-enterprise',
+      'x-forwarded-host': 'hzy0.isme.dev', 'x-forwarded-prefix': '/enterprise',
+      'x-hzy-data-runtime-url': 'https://hzy-test-runtime.isme.dev',
+      'x-hzy-data-runtime-code': 'c000001-test-tenant-runtime',
+      'x-hzy-local-runtime-dial-url': 'http://127.0.0.1:18084',
+      'x-hzy-service-routes': ' ' + JSON.stringify({
+        workflow: { origin: 'http://127.0.0.1:23140', deploymentCode: 'C000001-test-workflow-local', basePath: '/workflow' },
+        aims: { origin: 'http://127.0.0.1:23141', deploymentCode: 'C000001-test-aims', basePath: '/aims' }
+      }) + ' '
+    }
+    const event = (value: Record<string, string>) => ({ context: {}, node: { req: { headers: value, url: '/api/task' } } }) as never
+    const forwarded = trustedServiceRequestHeaders(event(headers), 'workflow')
+    assert.equal(forwarded['x-hzy-local-runtime-dial-url'], headers['x-hzy-local-runtime-dial-url'])
+    assert.equal(forwarded['x-hzy-app-code'], 'workflow')
+    assert.equal(forwarded['x-hzy-deployment'], 'C000001-test-workflow-local')
+    assert.equal(forwarded['x-forwarded-prefix'], '/workflow')
+    const { verifiedLocalWorkflowCallbackHeaders } = await import('../../workflow/server/utils/localCallbackContext.ts')
+    assert.equal(forwarded['x-hzy-service-routes'], headers['x-hzy-service-routes'])
+    // Real second hop consumes only the first hop's output, with no injection.
+    const callbackHeaders = trustedServiceRequestHeaders(event(forwarded), 'aims')
+    const callbackInput = {
+      appCode: 'aims', context: { tenant: 'C000001', appCode: 'workflow', deployment: 'C000001-test-workflow-local', environment: 'test', forwardedHost: 'hzy0.isme.dev' },
+      canonicalRuntimeUrl: forwarded['x-hzy-data-runtime-url']!, dialUrl: forwarded['x-hzy-local-runtime-dial-url']!
+    }
+    assert.equal(verifiedLocalWorkflowCallbackHeaders({ ...callbackInput, forwardedHeaders: callbackHeaders })['x-hzy-local-runtime-dial-url'], 'http://127.0.0.1:18084')
+    assert.equal(callbackHeaders['x-hzy-service-routes'], headers['x-hzy-service-routes'])
+    for (const routes of [
+      { workflow: { origin: 'http://127.0.0.1:23140', deploymentCode: 'C000001-test-workflow-local', basePath: '/workflow' } },
+      { aims: { origin: 'http://127.0.0.1:23141', deploymentCode: 'other', basePath: '/aims' } }
+    ]) {
+      const mismatch = trustedServiceRequestHeaders(event({ ...forwarded, 'x-hzy-service-routes': JSON.stringify(routes) }), 'aims')
+      assert.throws(() => verifiedLocalWorkflowCallbackHeaders({ ...callbackInput, forwardedHeaders: mismatch }), /local_callback_target_binding_invalid/)
+    }
+    for (const raw of ['{', '[]', 'null', ' '.repeat(16_385)]) {
+      assert.throws(() => trustedServiceRequestHeaders(event({ ...headers, 'x-hzy-service-routes': raw }), 'workflow'), /Trusted service route catalog is invalid/)
+    }
+    // Even a syntactically valid, hostile catalog cannot authenticate its sender.
+    const spoofed = { ...headers, 'x-hzy-gateway-token': 'spoofed', 'x-hzy-service-routes': JSON.stringify({ aims: { origin: 'http://evil.test', deploymentCode: 'other', basePath: '/aims' } }) }
+    assert.deepEqual(trustedServiceRequestHeaders(event(spoofed), 'aims'), {})
+    for (const change of [
+      { 'x-hzy-tenant': 'other' },
+      { 'x-hzy-environment': 'prod' }, { 'x-hzy-deployment': 'other' },
+      { 'x-hzy-local-runtime-dial-url': 'http://evil.test' },
+      { 'x-hzy-data-runtime-code': 'other' }, { 'x-forwarded-host': 'other.test' }
+    ]) assert.throws(() => trustedServiceRequestHeaders(event({ ...headers, ...change }), 'workflow'), /Local Runtime transport binding is invalid/)
+    assert.deepEqual(trustedServiceRequestHeaders(event({ ...headers, 'x-hzy-gateway-token': 'spoofed' }), 'workflow'), {})
+    assert.deepEqual(trustedServiceRequestHeaders(event({ ...headers, 'x-hzy-gateway': '' }), 'workflow'), {})
+    process.env.NODE_ENV = 'production'
+    assert.throws(() => trustedServiceRequestHeaders(event(headers), 'workflow'), /Local Runtime transport binding is invalid/)
+    delete process.env.HZY0_LOCAL_ENTERPRISE
+    delete process.env.HZY0_LOCAL_CONSOLE_FACADE
+    process.env.NODE_ENV = 'development'
+    assert.throws(() => trustedServiceRequestHeaders(event(headers), 'workflow'), /Local Runtime transport binding is invalid/)
+  } finally {
+    for (const key of keys) {
+      if (saved[key] === undefined) Reflect.deleteProperty(process.env, key)
+      else process.env[key] = saved[key]
+    }
+  }
 })

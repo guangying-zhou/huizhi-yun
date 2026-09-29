@@ -1,9 +1,13 @@
 <script setup lang="ts">
-import type { ProjectDocsTreeItem } from '~/types'
+import type { ProjectDocsTreeItem } from '../../types'
+import { useDocumentDownload } from '../../composables/useDocumentDownload'
+import { useDocumentPreviewBootstrap } from '../../composables/useDocumentPreviewBootstrap'
+import { useLayoutHeaderActions } from '../../composables/useLayoutHeaderActions'
+import { useResizablePanel } from '../../composables/useResizablePanel'
+import { useCodocsModule } from '../../../layer/useCodocsModule'
+import { createCreationAttempt, fingerprintUploadFiles } from '../../../layer/creationAttempt.mjs'
 
-definePageMeta({
-  layout: 'default'
-})
+definePageMeta({ hostContentInset: false })
 
 usePageTitle('我的文档')
 
@@ -65,6 +69,11 @@ interface CreateDocResponse {
 
 const toast = useToast()
 const apiFetch = useRequestFetch()
+const { moduleUrl, documentUrl, cacheKey, hosted } = useCodocsModule()
+const documentCreationAttempt = createCreationAttempt()
+const folderCreationAttempt = createCreationAttempt()
+const documentRecycleAttempt = createCreationAttempt()
+const uploadAttempt = createCreationAttempt()
 const { user, userRealname } = useAuth()
 const { setPayload: setDocumentPreviewBootstrap } = useDocumentPreviewBootstrap()
 const { setHeaderActions, clearHeaderActions } = useLayoutHeaderActions()
@@ -101,115 +110,155 @@ const { panelWidth, panelCollapsed, onResizeStart } = useResizablePanel(240)
 const editingId = ref<string | null>(null) // 'folder-{id}' or 'doc-{uuid}'
 const editingName = ref('')
 
-// Fetch all folders
-const fetchAllFolders = async () => {
-  if (!user.value) return []
-  const response = await apiFetch<{ data: { items: FolderRecord[] } }>('/api/folders', {
-    query: {
-      folder_type: 'private',
-      owner_uid: uid.value
-    }
-  })
-  return response?.data?.items || []
-}
+const PAGE_SIZE = 20
+interface FolderPage { items: FolderRecord[], total: number, page: number, pageSize: number, parentChain: { id: number, name: string, parent_id: number | null }[] }
+interface DocumentPage { items: DocRecord[], total: number, page: number, pageSize: number }
+const rootFolderPage = ref(1)
+const rootDocumentPage = ref(1)
+const childPages = ref<Record<number, { folders?: FolderPage, documents?: DocumentPage, folderPage: number, documentPage: number, loading: boolean, error: string }>>({})
+const childRequestIds = new Map<number, number>()
+let childRequestSequence = 0
+const folderPaths = ref<Record<number, { id: number, name: string }[]>>({})
 
-// Fetch all documents
-const fetchAllDocuments = async () => {
-  if (!user.value) return []
-  const response = await apiFetch<{ data: { items: DocRecord[] } }>('/api/documents', {
-    query: {
-      type: 'private',
-      owner: uid.value,
-      exclude_worklogs: 1
-    }
-  })
-  return response?.data?.items || []
-}
-
-const { data: allFolders, pending: foldersPending, refresh: refreshFolders } = await useAsyncData(
-  'my-private-folders',
-  fetchAllFolders,
-  {
-    watch: [user],
-    immediate: true,
-    getCachedData: () => undefined
+function validatePage<T>(response: { data?: { items?: T[], total?: number, page?: number, pageSize?: number } } | undefined, page: number): { items: T[], total: number, page: number, pageSize: number } {
+  const value = response?.data
+  if (!Array.isArray(value?.items) || !Number.isSafeInteger(value?.total) || (value?.total || 0) < 0 || value?.page !== page || value?.pageSize !== PAGE_SIZE || value.items.length > PAGE_SIZE) {
+    throw new Error('目录分页响应无效')
   }
-)
-
-const { data: allDocuments, pending: docsPending, refresh: refreshDocs } = await useAsyncData(
-  'my-all-private-docs',
-  fetchAllDocuments,
-  {
-    watch: [user],
-    immediate: true,
-    getCachedData: () => undefined
+  return value as { items: T[], total: number, page: number, pageSize: number }
+}
+async function fetchFolderPage(parentId: number | null, page: number): Promise<FolderPage> {
+  if (!user.value) return { items: [], total: 0, page, pageSize: PAGE_SIZE, parentChain: [] }
+  const actor = uid.value
+  const response = await apiFetch<{ data: FolderPage }>(moduleUrl('/api/folders'), {
+    query: { folder_type: 'private', owner_uid: actor, parent_id: parentId === null ? 'null' : String(parentId), page, pageSize: PAGE_SIZE }
+  })
+  if (actor !== uid.value) throw new Error('目录会话已变化')
+  const value = validatePage<FolderRecord>(response, page)
+  if (!Array.isArray(response?.data?.parentChain) || response.data.parentChain.length > 64
+    || value.items.some(folder => !Number.isSafeInteger(folder.id) || folder.id < 1 || folder.parent_id !== parentId || typeof folder.name !== 'string')) {
+    throw new Error('目录层级响应无效')
   }
+  return { ...value, parentChain: response.data.parentChain }
+}
+function rememberFolderPaths(page: FolderPage) {
+  const paths = { ...folderPaths.value }
+  for (const folder of page.items) paths[folder.id] = [...page.parentChain.map(part => ({ id: part.id, name: part.name })), { id: folder.id, name: folder.name }]
+  folderPaths.value = paths
+}
+async function fetchDocumentPage(parentId: number | null, page: number): Promise<DocumentPage> {
+  if (!user.value) return { items: [], total: 0, page, pageSize: PAGE_SIZE }
+  const actor = uid.value
+  const response = await apiFetch<{ data: DocumentPage }>(moduleUrl('/api/documents'), {
+    // The Enterprise Host derives the owner from the verified session.
+    query: { type: 'private', ...(hosted ? {} : { owner: actor }), folder_id: parentId === null ? 'null' : String(parentId), exclude_worklogs: 1, page, pageSize: PAGE_SIZE }
+  })
+  if (actor !== uid.value) throw new Error('文档会话已变化')
+  const value = validatePage<DocRecord>(response, page)
+  if (value.items.some(doc => typeof doc.uuid !== 'string' || doc.folder_id !== parentId)) throw new Error('文档目录响应无效')
+  return value
+}
+const { data: rootFolders, pending: foldersPending, error: rootFolderError, refresh: refreshRootFolders } = await useAsyncData(
+  cacheKey('my-private-root-folders'), () => fetchFolderPage(null, rootFolderPage.value),
+  { watch: [user, rootFolderPage], immediate: true, getCachedData: () => undefined }
 )
-
+const { data: rootDocuments, pending: docsPending, error: rootDocumentError, refresh: refreshRootDocs } = await useAsyncData(
+  cacheKey('my-private-root-docs'), () => fetchDocumentPage(null, rootDocumentPage.value),
+  { watch: [user, rootDocumentPage], immediate: true, getCachedData: () => undefined }
+)
 const loading = computed(() => docsPending.value || foldersPending.value)
-
-// Watch for user authentication
-watch(user, (newUser) => {
-  if (newUser) {
-    refreshFolders()
-    refreshDocs()
-  }
-}, { immediate: true })
-
-// Build combined tree (folders + documents)
-const buildTreeItems = (parentId: number | null): ProjectDocsTreeItem[] => {
-  const folders = allFolders.value || []
-  const documents = allDocuments.value || []
-  const items: ProjectDocsTreeItem[] = []
-
-  // 1. 添加子文件夹
-  const subFolders = folders.filter((f: FolderRecord) => f.parent_id === parentId)
-  subFolders.forEach((folder: FolderRecord) => {
-    items.push({
-      type: 'folder',
-      id: folder.id,
-      nodeId: `folder-${folder.id}`,
-      name: folder.name,
-      data: folder,
-      children: buildTreeItems(folder.id) // 递归构建子节点
-    })
-  })
-
-  // 2. 添加该文件夹下的文档
-  const docs = documents.filter((d: DocRecord) => {
-    // 注意：folder_id 可能是 null 或 undefined
-    if (parentId === null) {
-      return d.folder_id === null || d.folder_id === undefined
+async function loadChild(parentId: number, kind?: 'folder' | 'document', page?: number) {
+  const old = childPages.value[parentId]
+  const folderPage = kind === 'folder' ? page || 1 : old?.folderPage || 1
+  const documentPage = kind === 'document' ? page || 1 : old?.documentPage || 1
+  const request = ++childRequestSequence
+  childRequestIds.set(parentId, request)
+  childPages.value = { ...childPages.value, [parentId]: { ...old, folderPage, documentPage, loading: true, error: '' } }
+  try {
+    const [folders, documents] = await Promise.all([fetchFolderPage(parentId, folderPage), fetchDocumentPage(parentId, documentPage)])
+    if (childRequestIds.get(parentId) !== request || !expandedFolders.value.has(parentId)) return
+    const folderLast = Math.max(1, Math.ceil(folders.total / PAGE_SIZE))
+    const documentLast = Math.max(1, Math.ceil(documents.total / PAGE_SIZE))
+    if (folderPage > folderLast) {
+      void loadChild(parentId, 'folder', folderLast)
+      return
     }
-    return d.folder_id === parentId
-  })
-  docs.forEach((doc: DocRecord) => {
-    items.push({
-      type: 'document',
-      id: doc.uuid,
-      nodeId: `doc-${doc.uuid}`,
-      name: doc.title,
-      data: doc
-    })
-  })
-
+    if (documentPage > documentLast) {
+      void loadChild(parentId, 'document', documentLast)
+      return
+    }
+    rememberFolderPaths(folders)
+    childPages.value = { ...childPages.value, [parentId]: { folders, documents, folderPage, documentPage, loading: false, error: '' } }
+  } catch (cause) {
+    if (childRequestIds.get(parentId) !== request || !expandedFolders.value.has(parentId)) return
+    childPages.value = { ...childPages.value, [parentId]: { ...old, folderPage, documentPage, loading: false, error: (cause as Error)?.message || '目录加载失败' } }
+  }
+}
+async function refreshFolders() {
+  await refreshRootFolders()
+  await Promise.all([...expandedFolders.value].map(id => loadChild(id)))
+}
+async function refreshDocs() {
+  await refreshRootDocs()
+  await Promise.all([...expandedFolders.value].map(id => loadChild(id)))
+}
+watch(user, () => {
+  rootFolderPage.value = 1
+  rootDocumentPage.value = 1
+  expandedFolders.value = new Set()
+  childPages.value = {}
+  childRequestIds.clear()
+  folderPaths.value = {}
+  selectedNodeId.value = 'root'
+  selectedNodeType.value = 'root'
+  previewDoc.value = null
+  previewContent.value = ''
+  previewAbstract.value = ''
+})
+function buildTreeItems(parentId: number | null, seen = new Set<number>()): ProjectDocsTreeItem[] {
+  const page = parentId === null ? { folders: rootFolders.value, documents: rootDocuments.value } : childPages.value[parentId]
+  const folders = page?.folders?.items || []
+  const documents = page?.documents?.items || []
+  const items: ProjectDocsTreeItem[] = []
+  for (const folder of folders) {
+    if (seen.has(folder.id) || seen.size >= 64) continue
+    const next = new Set(seen)
+    next.add(folder.id)
+    const child = childPages.value[folder.id]
+    items.push({ type: 'folder', id: folder.id, nodeId: `folder-${folder.id}`, name: folder.name, data: folder,
+      children: child ? buildTreeItems(folder.id, next) : [], folderTotal: child?.folders?.total ?? Number(folder.folderCount || 0), documentTotal: child?.documents?.total ?? Number(folder.documentCount || 0),
+      folderPage: child?.folderPage || 1, documentPage: child?.documentPage || 1, childrenLoading: child?.loading, childrenError: child?.error })
+  }
+  for (const doc of documents) items.push({ type: 'document', id: doc.uuid, nodeId: `doc-${doc.uuid}`, name: doc.title, data: doc })
   return items
 }
-
-const treeItems = computed<ProjectDocsTreeItem[]>(() => {
-  return buildTreeItems(null) // 根目录的子节点
+const treeItems = computed<ProjectDocsTreeItem[]>(() => buildTreeItems(null))
+watch(rootFolders, (page) => {
+  if (!page) return
+  const lastPage = Math.max(1, Math.ceil(page.total / PAGE_SIZE))
+  if (rootFolderPage.value > lastPage) rootFolderPage.value = lastPage
+  else rememberFolderPaths(page)
+}, { immediate: true })
+watch(rootDocuments, (page) => {
+  if (!page) return
+  const lastPage = Math.max(1, Math.ceil(page.total / PAGE_SIZE))
+  if (rootDocumentPage.value > lastPage) rootDocumentPage.value = lastPage
 })
-
-// Toggle folder expansion
-const toggleFolder = (folderId: number) => {
-  if (expandedFolders.value.has(folderId)) {
-    expandedFolders.value.delete(folderId)
+function toggleFolder(folderId: number) {
+  const next = new Set(expandedFolders.value)
+  if (next.has(folderId)) {
+    next.delete(folderId)
+    childRequestIds.delete(folderId)
   } else {
-    expandedFolders.value.add(folderId)
+    next.add(folderId)
+    if (!childPages.value[folderId]) void loadChild(folderId)
   }
-  expandedFolders.value = new Set(expandedFolders.value)
+  expandedFolders.value = next
 }
-
+function changeChildPage(folderId: number, kind: 'folder' | 'document', page: number) {
+  if (!Number.isSafeInteger(page) || page < 1 || !expandedFolders.value.has(folderId)) return
+  void loadChild(folderId, kind, page)
+}
 // Select node (root, folder, or document)
 const selectNode = async (nodeId: string, nodeType: 'root' | 'folder' | 'document', data?: DocRecord | FolderRecord) => {
   // 如果已选中同一个文档，不重复加载
@@ -241,7 +290,7 @@ const loadDocumentPreview = async (doc: DocRecord) => {
   previewContent.value = ''
 
   try {
-    const response = await $fetch<DocDetailResponse>(`/api/documents/${doc.uuid}`)
+    const response = await $fetch<DocDetailResponse>(moduleUrl(`/api/documents/${doc.uuid}`))
     if (response.success && response.data) {
       previewContent.value = response.data.content || ''
       previewAbstract.value = response.data.ai_abstract || ''
@@ -273,7 +322,7 @@ const saveEdit = async () => {
   try {
     if (editingId.value.startsWith('folder-')) {
       const folderId = parseInt(editingId.value.replace('folder-', ''))
-      await $fetch(`/api/folders/${folderId}`, {
+      await $fetch(moduleUrl(`/api/folders/${folderId}`), {
         method: 'PATCH',
         body: { name: editingName.value.trim() }
       })
@@ -281,7 +330,7 @@ const saveEdit = async () => {
       await refreshFolders()
     } else if (editingId.value.startsWith('doc-')) {
       const docUuid = editingId.value.replace('doc-', '')
-      await $fetch(`/api/documents/${docUuid}`, {
+      await $fetch(moduleUrl(`/api/documents/${docUuid}`), {
         method: 'PATCH',
         body: { title: editingName.value.trim() }
       })
@@ -314,45 +363,27 @@ const currentFolderId = computed<number | null>(() => {
   return null
 })
 
-// Build breadcrumb path from root to current folder
+// Only a verified folder page contributes ancestors; current-page omissions cannot
+// erase the selected path or silently make a move destination selectable.
 const breadcrumbPath = computed<{ id: number | null, name: string }[]>(() => {
-  const path: { id: number | null, name: string }[] = [{ id: null, name: '我的文档' }]
-  if (selectedNodeType.value === 'root') return path
-
+  const root = [{ id: null, name: '我的文档' }]
   const folderId = currentFolderId.value
-  if (folderId === null) return path
-
-  // Walk up the parent chain
-  const folders = allFolders.value || []
-  const chain: { id: number, name: string }[] = []
-  let currentId: number | null = folderId
-  while (currentId !== null) {
-    const folder = folders.find((f: FolderRecord) => f.id === currentId)
-    if (!folder) break
-    chain.unshift({ id: folder.id, name: folder.name })
-    currentId = folder.parent_id
-  }
-  return [...path, ...chain]
+  return folderId === null ? root : [...root, ...(folderPaths.value[folderId] || [])]
 })
-
-// Navigate breadcrumb
-const navigateBreadcrumb = (folderId: number | null) => {
+function navigateBreadcrumb(folderId: number | null) {
   if (folderId === null) {
-    selectNode('root', 'root')
-  } else {
-    const folder = (allFolders.value || []).find((f: FolderRecord) => f.id === folderId)
-    if (folder) {
-      selectNode(`folder-${folderId}`, 'folder', folder)
-      // Ensure all ancestor folders are expanded
-      let parentId = folder.parent_id
-      while (parentId !== null) {
-        expandedFolders.value.add(parentId)
-        const parent = (allFolders.value || []).find((f: FolderRecord) => f.id === parentId)
-        parentId = parent ? parent.parent_id : null
-      }
-      expandedFolders.value = new Set(expandedFolders.value)
+    void selectNode('root', 'root')
+    return
+  }
+  const chain = folderPaths.value[folderId]
+  if (!chain) return
+  for (const ancestor of chain.slice(0, -1)) {
+    if (!expandedFolders.value.has(ancestor.id)) {
+      expandedFolders.value = new Set([...expandedFolders.value, ancestor.id])
+      void loadChild(ancestor.id)
     }
   }
+  void selectNode(`folder-${folderId}`, 'folder')
 }
 
 // Create document
@@ -364,26 +395,26 @@ const createDocument = async () => {
 
   isCreating.value = true
   try {
-    const { data, error } = await useFetch('/api/documents', {
-      method: 'POST',
-      body: {
-        title: newDocName.value.trim(),
-        doc_type: 'private',
-        owner_uid: uid.value,
-        folder_id: currentFolderId.value
-      }
-    })
-
-    if (error.value) {
-      throw new Error(error.value.message || '创建文档失败')
+    const body = {
+      title: newDocName.value.trim(),
+      doc_type: 'private',
+      owner_uid: uid.value,
+      folder_id: currentFolderId.value
     }
+    const key = documentCreationAttempt.keyFor(cacheKey('document-create'), body)
+    const data = await apiFetch<CreateDocResponse>(moduleUrl('/api/documents'), {
+      method: 'POST',
+      headers: { 'Idempotency-Key': key },
+      body
+    })
+    documentCreationAttempt.complete(key)
 
     toast.add({ title: '文档创建成功', color: 'success' })
     showNewDocModal.value = false
     newDocName.value = ''
     await refreshDocs()
 
-    const docUUId = (data.value as CreateDocResponse)?.data?.uuid
+    const docUUId = data?.data?.uuid
     if (docUUId) {
       await navigateToEdit(docUUId)
     }
@@ -404,19 +435,18 @@ const createFolder = async () => {
 
   isCreating.value = true
   try {
-    const { error } = await useFetch('/api/folders', {
+    const body = { name: newFolderName.value.trim(), folder_type: 'private', owner_uid: uid.value, parent_id: currentFolderId.value }
+    const key = folderCreationAttempt.keyFor(cacheKey('folder-create'), body)
+    const { error } = await useFetch(moduleUrl('/api/folders'), {
       method: 'POST',
-      body: {
-        name: newFolderName.value.trim(),
-        folder_type: 'private',
-        owner_uid: uid.value,
-        parent_id: currentFolderId.value
-      }
+      headers: { 'Idempotency-Key': key },
+      body
     })
 
     if (error.value) {
       throw new Error(error.value.message || '创建文件夹失败')
     }
+    folderCreationAttempt.complete(key)
 
     toast.add({ title: '文件夹创建成功', color: 'success' })
     showNewFolderModal.value = false
@@ -455,6 +485,13 @@ const handleFileUpload = async (event: Event) => {
     return
   }
 
+  if (validFiles.length > 30 || validFiles.some(file => file.size > 10 * 1024 * 1024)
+    || validFiles.reduce((total, file) => total + file.size, 0) > 30 * 1024 * 1024) {
+    toast.add({ title: '每批最多 30 个文件，单个 10 MiB、总计 30 MiB', color: 'warning' })
+    input.value = ''
+    return
+  }
+
   isUploading.value = true
   const formData = new FormData()
   formData.append('doc_type', 'private')
@@ -468,10 +505,17 @@ const handleFileUpload = async (event: Event) => {
   })
 
   try {
-    const result = await $fetch<UploadResult>('/api/documents/upload', {
+    const key = uploadAttempt.keyFor(cacheKey('document-upload'), {
+      folder_id: currentFolderId.value,
+      owner_uid: uid.value,
+      files: await fingerprintUploadFiles(validFiles)
+    })
+    const result = await $fetch<UploadResult>(moduleUrl('/api/documents/upload'), {
       method: 'POST',
+      headers: { 'Idempotency-Key': key },
       body: formData
     })
+    if (result.failed === 0) uploadAttempt.complete(key)
 
     if (result.success > 0) {
       toast.add({ title: `成功上传 ${result.success} 个文档`, color: 'success' })
@@ -479,7 +523,7 @@ const handleFileUpload = async (event: Event) => {
     }
 
     if (result.failed > 0) {
-      toast.add({ title: `${result.failed} 个文档上传失败`, color: 'error' })
+      toast.add({ title: `${result.failed} 个文档上传失败，请重新选择同一批文件重试`, color: 'error' })
     }
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : '上传失败'
@@ -491,13 +535,17 @@ const handleFileUpload = async (event: Event) => {
 }
 
 // Delete confirmation
-const showDeleteConfirm = ref(false)
+const { confirm } = useConfirm()
 const deleteTarget = ref<{ type: 'folder' | 'document', id: number | string, name: string } | null>(null)
 const isDeleting = ref(false)
 
-const confirmDelete = (type: 'folder' | 'document', id: number | string, name: string) => {
+const confirmDelete = async (type: 'folder' | 'document', id: number | string, name: string) => {
+  if (isDeleting.value) return
+  const owner = uid.value
+  if (!await confirm({ title: type === 'folder' ? '删除文件夹' : '移至回收站', message: `确认删除${type === 'folder' ? '文件夹' : '文档'}「${name}」？${type === 'folder' ? '只能删除空文件夹，删除后不可恢复。' : '文档将移至回收站，可在回收站恢复。'}`, tone: type === 'folder' ? 'danger' : 'warning', confirmLabel: '删除' })) return
+  if (uid.value !== owner || isDeleting.value) return
   deleteTarget.value = { type, id, name }
-  showDeleteConfirm.value = true
+  await executeDelete()
 }
 
 const executeDelete = async () => {
@@ -515,11 +563,15 @@ const executeDelete = async () => {
   isDeleting.value = true
   try {
     if (target.type === 'folder') {
-      await $fetch(`/api/folders/${target.id}`, { method: 'DELETE' })
+      // The tree is re-read only after the server confirms; a rejected delete
+      // leaves the folder in place and reports why below.
+      await $fetch(moduleUrl(`/api/folders/${target.id}`), { method: 'DELETE' })
       toast.add({ title: '文件夹已删除', color: 'success' })
       await refreshFolders()
     } else {
-      await $fetch(`/api/documents/${target.id}`, { method: 'DELETE' })
+      const key = documentRecycleAttempt.keyFor(cacheKey('document-recycle'), { uuid: targetId })
+      await $fetch(moduleUrl(`/api/documents/${target.id}`), { method: 'DELETE', headers: { 'Idempotency-Key': key } })
+      documentRecycleAttempt.complete(key)
       toast.add({ title: '文档已删除', color: 'success' })
       await refreshDocs()
     }
@@ -530,19 +582,20 @@ const executeDelete = async () => {
       await selectNode('root', 'root')
     }
 
-    showDeleteConfirm.value = false
     deleteTarget.value = null
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : '删除失败'
-    toast.add({ title: message, color: 'error' })
+    toast.add({ title: target.type === 'folder' ? '删除文件夹失败' : '删除文档失败', description: deleteFailureMessage(err), color: 'error' })
   } finally {
     isDeleting.value = false
   }
 }
 
-const cancelDelete = () => {
-  showDeleteConfirm.value = false
-  deleteTarget.value = null
+function deleteFailureMessage(error: unknown) {
+  const failure = error as { statusCode?: number, status?: number, data?: { message?: string, statusMessage?: string } }
+  const status = Number(failure?.statusCode || failure?.status || 0)
+  if (status === 401) return '登录状态已失效，请刷新页面或重新登录后重试。'
+  if (status === 403) return failure.data?.message || '没有删除该对象的权限。'
+  return failure?.data?.message || failure?.data?.statusMessage || '服务暂时无法完成删除，请稍后重试。'
 }
 
 // Toggle star flag (收藏)
@@ -551,7 +604,7 @@ const toggleHome = async (doc: DocRecord) => {
   // Optimistic update
   doc.star_flag = newStatus ? 1 : 0
   try {
-    await $fetch(`/api/documents/${doc.uuid}`, {
+    await $fetch(moduleUrl(`/api/documents/${doc.uuid}`), {
       method: 'PATCH',
       body: { star_flag: newStatus }
     })
@@ -570,7 +623,7 @@ const toggleReadonly = async (doc: DocRecord) => {
   // Optimistic update
   doc.readonly_flag = newStatus ? 1 : 0
   try {
-    await $fetch(`/api/documents/${doc.uuid}`, {
+    await $fetch(moduleUrl(`/api/documents/${doc.uuid}`), {
       method: 'PATCH',
       body: { readonly_flag: newStatus }
     })
@@ -628,7 +681,7 @@ const openMoveModal = (doc: DocRecord) => {
 const moveDocument = async (targetFolderId: number | null) => {
   if (!moveDoc.value) return
   try {
-    await $fetch(`/api/documents/${moveDoc.value.uuid}`, {
+    await $fetch(moduleUrl(`/api/documents/${moveDoc.value.uuid}`), {
       method: 'PATCH',
       body: { folder_id: targetFolderId }
     })
@@ -659,7 +712,7 @@ const navigateToEdit = async (uuid: string) => {
 
   // 等待下一帧再导航，确保编辑器清理
   await nextTick()
-  navigateTo(`/documents/${uuid}`)
+  navigateTo(documentUrl(uuid))
 }
 
 // 快速日志：创建/打开今天的工作日志
@@ -669,7 +722,7 @@ const quickLog = async () => {
   try {
     const today = new Date()
     const dateKey = `${today.getFullYear()}${String(today.getMonth() + 1).padStart(2, '0')}${String(today.getDate()).padStart(2, '0')}`
-    const res = await $fetch<WorklogResponse>('/api/worklogs/create', {
+    const res = await $fetch<WorklogResponse>(moduleUrl('/api/worklogs/create'), {
       method: 'POST',
       body: {
         owner_uid: uid.value,
@@ -679,7 +732,7 @@ const quickLog = async () => {
     })
     if (res.success && res.data) {
       const query = res.data.existed ? {} : { new: '1' }
-      navigateTo({ path: `/documents/${res.data.uuid}`, query })
+      navigateTo({ path: documentUrl(res.data.uuid), query })
     }
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : '创建日志失败'
@@ -719,6 +772,14 @@ onBeforeUnmount(() => {
 
 <template>
   <UDashboardPanel grow>
+    <div class="px-4 pt-4 sm:px-6 sm:pt-6">
+      <ContentPageHeader
+        :hosted="hosted"
+        title="我的文档"
+        description="管理个人文档、文件夹与常用资料。"
+        breadcrumb="文档 / 文档空间"
+      />
+    </div>
     <!-- Two-column layout -->
     <div class="flex flex-1 overflow-hidden relative">
       <!-- Mobile Sidebar Overlay -->
@@ -756,12 +817,34 @@ onBeforeUnmount(() => {
                 :editing-name="editingName"
                 @select="(id: string, type: 'folder' | 'document', data?: unknown) => selectNode(id, type, data as DocRecord | FolderRecord | undefined)"
                 @toggle="toggleFolder"
+                @page="changeChildPage"
+                @retry-children="(id: number) => loadChild(id)"
                 @start-edit="startEdit"
                 @save-edit="saveEdit"
                 @cancel-edit="cancelEdit"
                 @delete="confirmDelete"
                 @update:editing-name="(val) => editingName = val"
               />
+              <UAlert v-if="rootFolderError || rootDocumentError" color="error" title="目录加载失败" />
+              <div v-if="rootFolders || rootDocuments" class="space-y-1 px-2 py-2 text-xs text-muted" @click.stop>
+                <span>根目录：{{ rootFolders?.total || 0 }} 个文件夹，{{ rootDocuments?.total || 0 }} 篇文档</span>
+                <UPagination
+                  v-if="(rootFolders?.total || 0) > PAGE_SIZE"
+                  v-model:page="rootFolderPage"
+                  :total="rootFolders?.total || 0"
+                  :items-per-page="PAGE_SIZE"
+                  :sibling-count="0"
+                  show-edges
+                />
+                <UPagination
+                  v-if="(rootDocuments?.total || 0) > PAGE_SIZE"
+                  v-model:page="rootDocumentPage"
+                  :total="rootDocuments?.total || 0"
+                  :items-per-page="PAGE_SIZE"
+                  :sibling-count="0"
+                  show-edges
+                />
+              </div>
             </div>
           </ClientOnly>
         </div>
@@ -774,7 +857,7 @@ onBeforeUnmount(() => {
       />
 
       <!-- Right: Preview Panel -->
-      <main class="flex-1 flex flex-col overflow-hidden bg-gray-50 dark:bg-gray-950">
+      <main class="flex-1 flex flex-col overflow-hidden bg-default">
         <!-- Toolbar (只在选中文档时显示) -->
         <div
           v-if="selectedNodeType === 'document' && previewDoc"
@@ -804,7 +887,7 @@ onBeforeUnmount(() => {
             </template>
             <UIcon name="i-lucide-chevron-right" class="w-3.5 h-3.5 text-muted shrink-0" />
             <div class="flex items-center gap-1.5 px-1 py-0.5 min-w-0">
-              <UIcon name="i-lucide-file-text" class="w-4 h-4 text-gray-500 shrink-0" />
+              <UIcon name="i-lucide-file-text" class="w-4 h-4 text-muted shrink-0" />
               <span class="text-default truncate" :title="previewDoc?.title">{{ previewDoc?.title
               }}</span>
             </div>
@@ -927,54 +1010,54 @@ onBeforeUnmount(() => {
               >
                 <!-- 快速日志按钮 -->
                 <button
-                  class="group flex flex-col items-center justify-center aspect-square md:w-40 md:h-40 rounded-2xl border-2 border-dashed border-gray-300 dark:border-gray-700 hover:border-primary hover:bg-primary/5 transition-all"
+                  class="group flex flex-col items-center justify-center aspect-square md:w-40 md:h-40 rounded-2xl border-2 border-dashed border-default hover:border-primary hover:bg-primary/5 transition-all"
                   @click="quickLog"
                 >
                   <UIcon
                     name="i-lucide-pen-line"
-                    class="w-8 h-8 md:w-12 md:h-12 text-gray-400 group-hover:text-primary mb-2 md:mb-3 transition-colors"
+                    class="w-8 h-8 md:w-12 md:h-12 text-dimmed group-hover:text-primary mb-2 md:mb-3 transition-colors"
                   />
                   <span
-                    class="text-xs md:text-sm font-medium text-gray-600 dark:text-gray-400 group-hover:text-primary transition-colors"
+                    class="text-xs md:text-sm font-medium text-muted group-hover:text-primary transition-colors"
                   >快速日志</span>
                 </button>
                 <!-- 新建文档按钮 -->
                 <button
-                  class="group flex flex-col items-center justify-center aspect-square md:w-40 md:h-40 rounded-2xl border-2 border-dashed border-gray-300 dark:border-gray-700 hover:border-primary hover:bg-primary/5 transition-all"
+                  class="group flex flex-col items-center justify-center aspect-square md:w-40 md:h-40 rounded-2xl border-2 border-dashed border-default hover:border-primary hover:bg-primary/5 transition-all"
                   @click="showNewDocModal = true"
                 >
                   <UIcon
                     name="i-lucide-file-plus"
-                    class="w-8 h-8 md:w-12 md:h-12 text-gray-400 group-hover:text-primary mb-2 md:mb-3 transition-colors"
+                    class="w-8 h-8 md:w-12 md:h-12 text-dimmed group-hover:text-primary mb-2 md:mb-3 transition-colors"
                   />
                   <span
-                    class="text-xs md:text-sm font-medium text-gray-600 dark:text-gray-400 group-hover:text-primary transition-colors"
+                    class="text-xs md:text-sm font-medium text-muted group-hover:text-primary transition-colors"
                   >新建文档</span>
                 </button>
                 <!-- 上传文档按钮 -->
                 <button
-                  class="group flex flex-col items-center justify-center aspect-square md:w-40 md:h-40 rounded-2xl border-2 border-dashed border-gray-300 dark:border-gray-700 hover:border-primary hover:bg-primary/5 transition-all"
+                  class="group flex flex-col items-center justify-center aspect-square md:w-40 md:h-40 rounded-2xl border-2 border-dashed border-default hover:border-primary hover:bg-primary/5 transition-all"
                   @click="triggerUpload"
                 >
                   <UIcon
                     name="i-lucide-upload"
-                    class="w-8 h-8 md:w-12 md:h-12 text-gray-400 group-hover:text-primary mb-2 md:mb-3 transition-colors"
+                    class="w-8 h-8 md:w-12 md:h-12 text-dimmed group-hover:text-primary mb-2 md:mb-3 transition-colors"
                   />
                   <span
-                    class="text-xs md:text-sm font-medium text-gray-600 dark:text-gray-400 group-hover:text-primary transition-colors"
+                    class="text-xs md:text-sm font-medium text-muted group-hover:text-primary transition-colors"
                   >上传文档</span>
                 </button>
                 <!-- 新建子目录按钮 -->
                 <button
-                  class="group flex flex-col items-center justify-center aspect-square md:w-40 md:h-40 rounded-2xl border-2 border-dashed border-gray-300 dark:border-gray-700 hover:border-primary hover:bg-primary/5 transition-all"
+                  class="group flex flex-col items-center justify-center aspect-square md:w-40 md:h-40 rounded-2xl border-2 border-dashed border-default hover:border-primary hover:bg-primary/5 transition-all"
                   @click="showNewFolderModal = true"
                 >
                   <UIcon
                     name="i-lucide-folder-plus"
-                    class="w-8 h-8 md:w-12 md:h-12 text-gray-400 group-hover:text-primary mb-2 md:mb-3 transition-colors"
+                    class="w-8 h-8 md:w-12 md:h-12 text-dimmed group-hover:text-primary mb-2 md:mb-3 transition-colors"
                   />
                   <span
-                    class="text-xs md:text-sm font-medium text-gray-600 dark:text-gray-400 group-hover:text-primary transition-colors"
+                    class="text-xs md:text-sm font-medium text-muted group-hover:text-primary transition-colors"
                   >新建子目录</span>
                 </button>
               </div>
@@ -984,12 +1067,12 @@ onBeforeUnmount(() => {
           <!-- 文档预览 -->
           <div
             v-else-if="selectedNodeType === 'document'"
-            class="max-w-4xl mx-auto bg-white dark:bg-gray-900 shadow-sm rounded-lg min-h-full p-0 relative"
+            class="max-w-4xl mx-auto bg-default shadow-sm rounded-lg min-h-full p-0 relative"
           >
             <!-- Loading -->
             <div
               v-if="previewLoading"
-              class="absolute inset-0 flex items-center justify-center bg-white/80 dark:bg-gray-900/80 z-10"
+              class="absolute inset-0 flex items-center justify-center bg-default/80 z-10"
             >
               <UIcon name="i-lucide-loader-2" class="w-8 h-8 animate-spin text-primary" />
             </div>
@@ -1003,7 +1086,7 @@ onBeforeUnmount(() => {
                 <UIcon name="i-lucide-sparkles" class="w-4 h-4 text-primary mt-0.5 shrink-0" />
                 <div>
                   <span class="text-xs font-medium text-primary">AI 摘要</span>
-                  <p class="text-sm text-gray-700 dark:text-gray-300 leading-relaxed mt-0.5">
+                  <p class="text-sm text-default leading-relaxed mt-0.5">
                     {{ previewAbstract }}
                   </p>
                 </div>
@@ -1107,44 +1190,6 @@ onBeforeUnmount(() => {
       </template>
     </UModal>
 
-    <!-- Delete Confirmation Modal -->
-    <UModal v-model:open="showDeleteConfirm">
-      <template #content>
-        <UCard>
-          <template #header>
-            <div class="flex items-center gap-2">
-              <UIcon name="i-lucide-alert-triangle" class="w-5 h-5 text-red-500" />
-              <h3 class="text-lg font-semibold">
-                确认删除
-              </h3>
-            </div>
-          </template>
-
-          <p class="text-muted">
-            确定要删除{{ deleteTarget?.type === 'folder' ? '文件夹' : '文档' }}
-            <strong class="text-default">"{{ deleteTarget?.name }}"</strong> 吗？
-          </p>
-          <p v-if="deleteTarget?.type === 'folder'" class="text-sm text-muted mt-2">
-            注意：如果文件夹不为空，将无法删除。
-          </p>
-          <p v-if="deleteTarget?.type === 'document'" class="text-sm text-warning mt-2">
-            文档将移至回收站，30天后自动清理，届时将不可恢复。
-          </p>
-
-          <template #footer>
-            <div class="flex justify-end gap-2">
-              <UButton color="neutral" variant="outline" @click="cancelDelete">
-                取消
-              </UButton>
-              <UButton color="error" :loading="isDeleting" @click="executeDelete">
-                删除
-              </UButton>
-            </div>
-          </template>
-        </UCard>
-      </template>
-    </UModal>
-
     <!-- Share Modal -->
     <DocumentShareDocumentModal
       :open="isShareModalOpen"
@@ -1164,7 +1209,8 @@ onBeforeUnmount(() => {
     <!-- Move Modal -->
     <MoveFolderModal
       :open="showMoveModal"
-      :folders="allFolders || []"
+      :folders="[]"
+      :load-page="fetchFolderPage"
       :current-folder-id="moveDoc?.folder_id ?? null"
       :doc-title="moveDoc?.title || ''"
       @update:open="showMoveModal = $event"

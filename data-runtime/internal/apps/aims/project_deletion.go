@@ -179,6 +179,21 @@ func (a *Adapter) hardDeleteProject(ctx context.Context, projectID int64) (map[s
 		return nil, err
 	}
 	defer tx.Rollback()
+	if identity, scoped := ctx.Value(enterpriseProjectCommandScopeKey{}).(EnterpriseProjectUpdateIdentity); scoped {
+		if identity.CommandScope == nil {
+			return nil, httperror.New(http.StatusForbidden, "enterprise_project_command_scope_invalid", "Project deletion scope is invalid")
+		}
+		if err := requireEnterpriseProjectCommandScopeTx(ctx, tx, identity, strconv.FormatInt(projectID, 10), "", "project-delete"); err != nil {
+			return nil, err
+		}
+		var status string
+		if err := tx.QueryRowContext(ctx, "SELECT lifecycle_status FROM aims_projects WHERE id=? FOR UPDATE", projectID).Scan(&status); err != nil {
+			return nil, err
+		}
+		if status != "draft" {
+			return nil, httperror.New(http.StatusConflict, "project_not_draft", "仅草稿项目可删除")
+		}
+	}
 
 	deleted := map[string]any{}
 	for _, step := range projectDeletionSteps {

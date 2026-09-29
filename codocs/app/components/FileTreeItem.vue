@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { ProjectDocsTreeItem } from '~/types'
+import type { ProjectDocsTreeItem } from '../types'
 
 /**
  * 文件树项组件 - 递归显示文件夹和文档
@@ -35,6 +35,8 @@ const emit = defineEmits<{
   'delete': [type: 'folder' | 'document', id: number | string, name: string]
   'toggleOpen': [folderId: number, isOpen: boolean, name: string]
   'update:editingName': [value: string]
+  'page': [folderId: number, kind: 'folder' | 'document', page: number]
+  'retryChildren': [folderId: number]
 }>()
 
 const localEditingName = ref(props.editingName)
@@ -55,7 +57,7 @@ const isExpanded = computed(() => {
 })
 const isSelected = computed(() => props.selectedId === props.item.nodeId)
 const isEditing = computed(() => props.editingId === props.item.nodeId)
-const hasChildren = computed(() => props.item.children && props.item.children.length > 0)
+const hasChildren = computed(() => Boolean(props.item.children?.length || props.item.folderTotal || props.item.documentTotal))
 const isOpenFolder = computed(() => {
   const value = props.item.data?.is_open
   return value === true || value === 1 || value === '1' || value === 'true'
@@ -66,7 +68,7 @@ const itemIcon = computed(() => {
 })
 const itemIconClass = computed(() => {
   if (!isFolder.value) return 'w-4 h-4 text-muted'
-  return props.showOpenIndicator && isOpenFolder.value ? 'w-4 h-4 text-primary' : 'w-4 h-4 text-amber-500'
+  return props.showOpenIndicator && isOpenFolder.value ? 'w-4 h-4 text-primary' : 'w-4 h-4 text-warning'
 })
 const toggleOpenIcon = computed(() => isOpenFolder.value ? 'i-lucide-lock' : 'i-lucide-globe')
 
@@ -149,14 +151,14 @@ const handleToggleOpen = () => {
           @click.stop
         >
         <button
-          class="p-0.5 rounded hover:bg-green-100 text-green-600 shrink-0"
+          class="p-0.5 rounded hover:bg-success/10 text-success shrink-0"
           title="保存"
           @click.stop="emit('saveEdit')"
         >
           <UIcon name="i-lucide-check" class="w-4 h-4" />
         </button>
         <button
-          class="p-0.5 rounded hover:bg-red-100 text-red-600 shrink-0"
+          class="p-0.5 rounded hover:bg-error/10 text-error shrink-0"
           title="取消"
           @click.stop="emit('cancelEdit')"
         >
@@ -188,7 +190,7 @@ const handleToggleOpen = () => {
         </button>
         <button
           v-if="canDelete"
-          class="p-0.5 rounded hover:bg-red-100 text-red-600"
+          class="p-0.5 rounded hover:bg-error/10 text-error"
           title="删除"
           @click.stop="handleDelete"
         >
@@ -199,6 +201,20 @@ const handleToggleOpen = () => {
 
     <!-- Children (recursive) -->
     <div v-if="isFolder && isExpanded && hasChildren">
+      <p v-if="item.childrenLoading" class="pl-8 py-2 text-xs text-muted">
+        正在加载目录…
+      </p>
+      <div v-else-if="item.childrenError" class="pl-8 py-2 text-xs text-error">
+        {{ item.childrenError }}
+        <UButton
+          size="xs"
+          color="neutral"
+          variant="outline"
+          @click.stop="emit('retryChildren', item.data.id as number)"
+        >
+          重试
+        </UButton>
+      </div>
       <FileTreeItem
         v-for="child in item.children"
         :key="child.id"
@@ -220,7 +236,31 @@ const handleToggleOpen = () => {
         @delete="(type: 'folder' | 'document', id: number | string, name: string) => emit('delete', type, id, name)"
         @toggle-open="(folderId: number, isOpen: boolean, name: string) => emit('toggleOpen', folderId, isOpen, name)"
         @update:editing-name="(val: string) => emit('update:editingName', val)"
+        @page="(folderId, kind, page) => emit('page', folderId, kind, page)"
+        @retry-children="(folderId) => emit('retryChildren', folderId)"
       />
+      <div v-if="(item.folderTotal || 0) > 20" class="pl-8 py-1 text-xs text-muted" @click.stop>
+        <span>子目录共 {{ item.folderTotal }} 个</span>
+        <UPagination
+          :page="item.folderPage || 1"
+          :total="item.folderTotal || 0"
+          :items-per-page="20"
+          :sibling-count="0"
+          show-edges
+          @update:page="emit('page', item.data.id as number, 'folder', $event)"
+        />
+      </div>
+      <div v-if="(item.documentTotal || 0) > 20" class="pl-8 py-1 text-xs text-muted" @click.stop>
+        <span>文档共 {{ item.documentTotal }} 篇</span>
+        <UPagination
+          :page="item.documentPage || 1"
+          :total="item.documentTotal || 0"
+          :items-per-page="20"
+          :sibling-count="0"
+          show-edges
+          @update:page="emit('page', item.data.id as number, 'document', $event)"
+        />
+      </div>
     </div>
   </div>
 </template>

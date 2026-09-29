@@ -17,8 +17,9 @@ import { downloadDocument } from '~~/server/utils/oss'
 import { hasMeaningfulMarkdownContent, recoverMarkdownFromYjsSnapshot } from '~~/server/utils/yjsMarkdownRecovery'
 import {
   AIMS_PROJECT_DOCUMENT_CONTENT_SERVICE_AUTH,
+  ENTERPRISE_PROJECT_DOCUMENT_CONTENT_SERVICE_AUTH,
   requireCodocsServiceAuth,
-  requireCodocsServiceTenantDeploymentBinding
+  requireCodocsCrossAppServiceTenantDeploymentBinding
 } from '~~/server/utils/serviceAuthGuard'
 
 type ServiceCommand = {
@@ -97,8 +98,19 @@ export default defineEventHandler(async (event) => {
   // touching tenant-runtime/OSS. This keeps a malformed body from probing a
   // tenant boundary and avoids the old wide-read confused-deputy path.
   const auth = await requireConsoleAuthContext(event)
-  requireCodocsServiceAuth(auth, AIMS_PROJECT_DOCUMENT_CONTENT_SERVICE_AUTH)
-  requireCodocsServiceTenantDeploymentBinding(
+  // ADR-018：统一企业宿主是与 Aims 并列的来源，不是放宽 Aims 那条。
+  // 两条要求的 scope 与 operationCode 相同，只有 allowedApps / allowedClientCodes 不同，
+  // 因此 aims 的令牌打不进 enterprise 的条目，反之亦然。
+  const sourceApp = auth?.appCode === 'enterprise' ? 'enterprise' : 'aims'
+  requireCodocsServiceAuth(auth, sourceApp === 'enterprise'
+    ? ENTERPRISE_PROJECT_DOCUMENT_CONTENT_SERVICE_AUTH
+    : AIMS_PROJECT_DOCUMENT_CONTENT_SERVICE_AUTH)
+  // 与 product-documents / department-documents / company-weekly-summaries 等
+  // 兄弟服务路由一致：跨应用调用经受信网关或 Foundation route helper 到达，
+  // `x-hzy-deployment` 携带的是**目标**（codocs）部署，来源部署只能取自已验签的
+  // 令牌。此前这里用同部署绑定（要求两者相等），只有直连 codocs 独立子域名、
+  // 网关不改写上下文时才成立，经网关的宿主调用一律 403。
+  const binding = requireCodocsCrossAppServiceTenantDeploymentBinding(
     auth,
     getHeader(event, 'x-hzy-tenant'),
     getHeader(event, 'x-hzy-deployment')
@@ -116,11 +128,11 @@ export default defineEventHandler(async (event) => {
     method: 'POST',
     requestTarget: getRequestURL(event).pathname,
     requestId,
-    tenantCode: text(auth.tenant),
-    sourceDeploymentCode: text(auth.deployment),
-    targetDeploymentCode: text(auth.deployment),
-    sourceApp: 'aims',
-    sourceClientId: 'aims.runtime',
+    tenantCode: binding.tenant,
+    sourceDeploymentCode: binding.sourceDeployment,
+    targetDeploymentCode: binding.targetDeployment,
+    sourceApp,
+    sourceClientId: `${sourceApp}.runtime`,
     targetApp: 'codocs',
     envelope: {
       operationId: text(serviceCommand.operationId),
@@ -166,9 +178,9 @@ export default defineEventHandler(async (event) => {
 
   let content = ''
   try {
-    content = (await downloadDocument(grant.ossPath, grant.docType)) || ''
+    content = (await downloadDocument(grant.ossPath, grant.docType, { event })) || ''
     if (!hasMeaningfulMarkdownContent(content)) {
-      content = await recoverMarkdownFromYjsSnapshot(grant.ossPath, grant.docType)
+      content = await recoverMarkdownFromYjsSnapshot(grant.ossPath, grant.docType, { event })
     }
   } catch (error: unknown) {
     console.error('[project-document-content] failed to read OSS:', (error as Error).message)

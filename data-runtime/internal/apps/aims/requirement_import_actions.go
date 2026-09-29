@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -33,95 +34,136 @@ func (a *Adapter) createRequirementChangeTarget(ctx context.Context, rawProjectI
 		return nil, err
 	}
 
-	milestoneID, _ := bodyInt64(body, "milestoneId", "milestone_id")
-	if milestoneID <= 0 {
-		return nil, httperror.New(http.StatusBadRequest, "milestone_required", "请指定里程碑")
+	if identity, hosted := ctx.Value(enterpriseProjectCommandScopeKey{}).(EnterpriseProjectUpdateIdentity); hosted && identity.Tenant != "" && !validDeliverableReceiptIdentity(ctx) {
+		return nil, httperror.New(400, "idempotency_key_required", "Idempotency-Key is required")
 	}
-
-	var milestoneName string
-	var pivrStage sql.NullString
-	err = a.DB().QueryRowContext(ctx,
-		"SELECT name, pivr_stage FROM milestones WHERE id = ? AND project_id = ?", milestoneID, projectID).
-		Scan(&milestoneName, &pivrStage)
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil, httperror.New(http.StatusNotFound, "milestone_not_found", "里程碑不存在")
-	}
-	if err != nil {
-		return nil, err
-	}
-	if !containsString([]string{"I", "V", "R"}, pivrStage.String) {
-		return nil, httperror.New(http.StatusBadRequest, "invalid_pivr_stage", "需求变更工作项只能挂在实施/验收/交付阶段里程碑下")
-	}
-
-	var projectCode string
-	var leaderUID, createdBy sql.NullString
-	err = a.DB().QueryRowContext(ctx,
-		"SELECT project_code, leader_uid, created_by FROM aims_projects WHERE id = ?", projectID).
-		Scan(&projectCode, &leaderUID, &createdBy)
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil, httperror.New(http.StatusNotFound, "project_not_found", "项目不存在")
-	}
-	if err != nil {
-		return nil, err
-	}
-
-	title := "需求变更-" + time.Now().Format("20060102")
-	if value := optionalBodyString(body, "title"); value != nil && strings.TrimSpace(*value) != "" {
-		title = strings.TrimSpace(*value)
-	}
-	description := optionalBodyString(body, "description")
-
-	reporterUID := uid
-	if leaderUID.Valid && strings.TrimSpace(leaderUID.String) != "" {
-		reporterUID = leaderUID.String
-	} else if createdBy.Valid && strings.TrimSpace(createdBy.String) != "" {
-		reporterUID = createdBy.String
-	}
-
-	tx, err := a.DB().BeginTx(ctx, nil)
+	tx, repo, err := a.beginDeliverableWrite(ctx)
 	if err != nil {
 		return nil, err
 	}
 	defer tx.Rollback()
-	if err := requireMilestoneCompletionUnlockedTx(ctx, tx, milestoneID); err != nil {
+
+	if err := requireEnterpriseDeliverableProjectScopeTx(ctx, tx, uid, projectID, true); err != nil {
 		return nil, err
 	}
 
-	itemNumber, err := nextDecomposeItemNumber(ctx, tx, projectID)
-	if err != nil {
-		return nil, err
-	}
-	itemKey := fmt.Sprintf("%s-%d", projectCode, itemNumber)
+	write := func(ctx context.Context) (map[string]any, error) {
+		milestoneID, _ := bodyInt64(body, "milestoneId", "milestone_id")
+		if milestoneID <= 0 {
+			return nil, httperror.New(http.StatusBadRequest, "milestone_required", "请指定里程碑")
+		}
 
-	result, err := tx.ExecContext(ctx, `
+		var milestoneName string
+		var pivrStage sql.NullString
+		err = tx.QueryRowContext(ctx,
+			"SELECT name, pivr_stage FROM milestones WHERE id = ? AND project_id = ? FOR UPDATE", milestoneID, projectID).
+			Scan(&milestoneName, &pivrStage)
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, httperror.New(http.StatusNotFound, "milestone_not_found", "里程碑不存在")
+		}
+		if err != nil {
+			return nil, err
+		}
+		if !containsString([]string{"I", "V", "R"}, pivrStage.String) {
+			return nil, httperror.New(http.StatusBadRequest, "invalid_pivr_stage", "需求变更工作项只能挂在实施/验收/交付阶段里程碑下")
+		}
+
+		var projectCode string
+		var leaderUID, createdBy sql.NullString
+		err = tx.QueryRowContext(ctx,
+			"SELECT project_code, leader_uid, created_by FROM aims_projects WHERE id = ?", projectID).
+			Scan(&projectCode, &leaderUID, &createdBy)
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, httperror.New(http.StatusNotFound, "project_not_found", "项目不存在")
+		}
+		if err != nil {
+			return nil, err
+		}
+
+		title := "需求变更-" + time.Now().Format("20060102")
+		if value := optionalBodyString(body, "title"); value != nil && strings.TrimSpace(*value) != "" {
+			title = strings.TrimSpace(*value)
+		}
+		description := optionalBodyString(body, "description")
+
+		reporterUID := uid
+		if leaderUID.Valid && strings.TrimSpace(leaderUID.String) != "" {
+			reporterUID = leaderUID.String
+		} else if createdBy.Valid && strings.TrimSpace(createdBy.String) != "" {
+			reporterUID = createdBy.String
+		}
+
+		if err := requireMilestoneCompletionUnlockedTx(ctx, tx, milestoneID); err != nil {
+			return nil, err
+		}
+
+		itemNumber, err := nextDecomposeItemNumber(ctx, tx, projectID)
+		if err != nil {
+			return nil, err
+		}
+		itemKey := fmt.Sprintf("%s-%d", projectCode, itemNumber)
+
+		result, err := tx.ExecContext(ctx, `
 		INSERT INTO work_items
 		  (project_id, milestone_id, item_number, item_key, tier, type, title, description,
 		   status, priority, reporter_uid, review_level, required, template_key, sort_order)
 		VALUES (?, ?, ?, ?, 'target', 'requirement', ?, ?, 'planning', 'P1', ?, 1, 0,
 		        CONCAT('requirement_change_', ?), -1)`,
-		projectID, milestoneID, itemNumber, itemKey, title,
-		nullableStringValue(description), reporterUID, itemNumber)
-	if err != nil {
-		return nil, err
-	}
-	insertID, err := result.LastInsertId()
-	if err != nil {
-		return nil, err
-	}
+			projectID, milestoneID, itemNumber, itemKey, title,
+			nullableStringValue(description), reporterUID, itemNumber)
+		if err != nil {
+			return nil, err
+		}
+		insertID, err := result.LastInsertId()
+		if err != nil {
+			return nil, err
+		}
 
+		return map[string]any{
+			"id":                 insertID,
+			"itemKey":            itemKey,
+			"title":              title,
+			"milestoneId":        milestoneID,
+			"milestoneName":      milestoneName,
+			"milestonePivrStage": pivrStage.String,
+			"isBaseline":         false,
+		}, nil
+	}
+	var out map[string]any
+	if repo == nil {
+		out, err = write(ctx)
+	} else {
+		config := enterprisePlanReceiptConfig{Action: "requirement-target-create", Capability: "aims:requirement-targets:edit", BizType: "work-item", Command: map[string]any{"projectId": rawProjectID, "payload": body}, BizCode: func(value map[string]any) string {
+			return fmt.Sprint(projectID) + ":" + fmt.Sprint(value["id"])
+		}, Replay: func(ctx context.Context, code string) (map[string]any, error) {
+			targetID, err := milestoneReceiptID(code, projectID)
+			if err != nil {
+				return nil, err
+			}
+			var owner int64
+			var itemKey, title string
+			var milestoneID int64
+			err = tx.QueryRowContext(ctx, "SELECT project_id,item_key,title,milestone_id FROM work_items WHERE id=?", targetID).Scan(&owner, &itemKey, &title, &milestoneID)
+			if err == sql.ErrNoRows {
+				return map[string]any{"id": targetID, "deleted": true}, nil
+			}
+			if err != nil {
+				return nil, err
+			}
+			if owner != projectID {
+				return nil, httperror.New(409, "receipt_result_unavailable", "Plan command result is unavailable")
+			}
+			return map[string]any{"id": targetID, "itemKey": itemKey, "title": title, "milestoneId": milestoneID}, nil
+		}}
+		out, err = executeEnterprisePlanReceipt(ctx, tx, repo, config, write)
+	}
+	if err != nil {
+		return nil, err
+	}
 	if err := tx.Commit(); err != nil {
 		return nil, err
 	}
-
-	return map[string]any{
-		"id":                 insertID,
-		"itemKey":            itemKey,
-		"title":              title,
-		"milestoneId":        milestoneID,
-		"milestoneName":      milestoneName,
-		"milestonePivrStage": pivrStage.String,
-		"isBaseline":         false,
-	}, nil
+	return out, nil
 }
 
 // cloneWorkItemFromTemplate 从"需求变更"容器工作项克隆一条新的变更实例。
@@ -163,16 +205,74 @@ func (a *Adapter) cloneWorkItemFromTemplate(ctx context.Context, rawSourceID str
 	if err := a.requireProjectManagerOrScopedAdmin(ctx, source.projectID, uid, query); err != nil {
 		return nil, err
 	}
-	if source.templateKey.String != "requirement_change" {
+	if !validDeliverableReceiptIdentity(ctx) && source.templateKey.String != "requirement_change" {
 		return nil, httperror.New(http.StatusBadRequest, "not_template", "仅需求变更容器工作项支持克隆新实例")
 	}
-
-	tx, err := a.DB().BeginTx(ctx, nil)
+	tx, repo, err := a.beginDeliverableWrite(ctx)
 	if err != nil {
 		return nil, err
 	}
 	defer tx.Rollback()
+	identity, _ := ctx.Value(enterpriseProjectCommandScopeKey{}).(EnterpriseProjectUpdateIdentity)
+	if err := requireEnterpriseProjectCommandScopeTx(ctx, tx, identity, strconv.FormatInt(source.projectID, 10), rawSourceID, "clone-from-template"); err != nil {
+		return nil, err
+	}
+	if identity.CommandScope != nil {
+		var leader string
+		if err := tx.QueryRowContext(ctx, "SELECT COALESCE(leader_uid,'') FROM aims_projects WHERE id=? FOR UPDATE", source.projectID).Scan(&leader); err != nil {
+			return nil, err
+		}
+		if err := requireEnterpriseProjectManagerTx(ctx, tx, identity, strconv.FormatInt(source.projectID, 10), leader); err != nil {
+			return nil, err
+		}
+	}
+	requestedProjectID := source.projectID
+	if err := tx.QueryRowContext(ctx, `
+		SELECT wi.project_id, p.project_code, wi.milestone_id, wi.template_key,
+		       wi.title, wi.description, wi.priority, wi.review_level, wi.required
+		FROM work_items wi JOIN aims_projects p ON p.id=wi.project_id
+		WHERE wi.id=? FOR UPDATE`, sourceID).
+		Scan(&source.projectID, &source.projectCode, &source.milestoneID, &source.templateKey,
+			&source.title, &source.description, &source.priority, &source.reviewLevel, &source.required); err != nil {
+		return nil, err
+	}
+	if requestedProjectID != source.projectID {
+		return nil, httperror.New(http.StatusConflict, "work_item_project_changed", "工作项归属已变化")
+	}
+	write := func(writeCtx context.Context) (map[string]any, error) {
+		if source.templateKey.String != "requirement_change" {
+			return nil, httperror.New(http.StatusConflict, "template_source_changed", "模板已变化，请刷新后重试")
+		}
+		return a.finishCloneWorkItemFromTemplate(writeCtx, tx, source, uid)
+	}
+	var result map[string]any
+	if repo == nil {
+		result, err = write(ctx)
+	} else {
+		result, err = executeLegacyWorkItemReceipt(ctx, tx, repo, legacyWorkItemReceiptConfig[map[string]any]{Action: "clone-from-template", Capability: "aims:work-item-decomposition:edit", BizType: "work-item", Command: map[string]any{"workItemId": rawSourceID}, BizCode: func(value map[string]any) string { return fmt.Sprint(value["id"]) + ":" + fmt.Sprint(value["round"]) }, Replay: func(ctx context.Context, code string) (map[string]any, error) {
+			return replayClonedWorkItem(ctx, tx, code, source.projectID)
+		}, Decorate: decorateLegacyWorkItemMap}, write)
+	}
+	if err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+	return result, nil
+}
 
+func (a *Adapter) finishCloneWorkItemFromTemplate(ctx context.Context, tx *sql.Tx, source struct {
+	projectID   int64
+	projectCode string
+	milestoneID int64
+	templateKey sql.NullString
+	title       string
+	description sql.NullString
+	priority    string
+	reviewLevel int64
+	required    int64
+}, uid string) (map[string]any, error) {
 	itemNumber, err := nextDecomposeItemNumber(ctx, tx, source.projectID)
 	if err != nil {
 		return nil, err
@@ -211,16 +311,36 @@ func (a *Adapter) cloneWorkItemFromTemplate(ctx context.Context, rawSourceID str
 		return nil, err
 	}
 
-	if err := tx.Commit(); err != nil {
-		return nil, err
-	}
-
 	return map[string]any{
 		"id":      insertID,
 		"itemKey": newItemKey,
 		"title":   clonedTitle,
 		"round":   round,
 	}, nil
+}
+
+func replayClonedWorkItem(ctx context.Context, tx *sql.Tx, code string, projectID int64) (map[string]any, error) {
+	parts := strings.SplitN(code, ":", 2)
+	if len(parts) != 2 {
+		return nil, httperror.New(503, "work_item_receipt_corrupt", "Work item receipt is invalid")
+	}
+	id, err := strconv.ParseInt(parts[0], 10, 64)
+	if err != nil || id <= 0 {
+		return nil, httperror.New(503, "work_item_receipt_corrupt", "Work item receipt is invalid")
+	}
+	round, err := strconv.ParseInt(parts[1], 10, 64)
+	if err != nil || round <= 0 {
+		return nil, httperror.New(503, "work_item_receipt_corrupt", "Work item receipt is invalid")
+	}
+	var itemKey, title string
+	err = tx.QueryRowContext(ctx, "SELECT item_key,title FROM work_items WHERE id=? AND project_id=?", id, projectID).Scan(&itemKey, &title)
+	if err == sql.ErrNoRows {
+		return map[string]any{"id": id, "round": round, "deleted": true}, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return map[string]any{"id": id, "itemKey": itemKey, "title": title, "round": round}, nil
 }
 
 // ---------- 需求规格书导入 ----------

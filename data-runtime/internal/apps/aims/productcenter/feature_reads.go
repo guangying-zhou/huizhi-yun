@@ -82,15 +82,25 @@ func ValidateFeaturePageQuery(q FeaturePageQuery) error {
 	return nil
 }
 func ListProductFeatures(ctx context.Context, db *sql.DB, code, uid string, permit AuthorizationPermit, q FeaturePageQuery) (FeaturePage, error) {
+	tx, err := db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
+	if err != nil {
+		return FeaturePage{}, err
+	}
+	defer tx.Rollback()
+	out, err := ListProductFeaturesInTransaction(ctx, tx, code, uid, permit, q)
+	if err != nil {
+		return out, err
+	}
+	return out, tx.Commit()
+}
+func ListProductFeaturesInTransaction(ctx context.Context, tx *sql.Tx, code, uid string, permit AuthorizationPermit, q FeaturePageQuery) (FeaturePage, error) {
 	var out FeaturePage
 	if err := ValidateFeaturePageQuery(q); err != nil {
 		return out, err
 	}
-	tx, err := db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
-	if err != nil {
-		return out, err
+	if tx == nil {
+		return out, invalid("product_transaction_required", "事务不可用")
 	}
-	defer tx.Rollback()
 	// Every feature mutation uses this same root lock: authorization, total and
 	// rows remain consistent without creating receipts or writing on a read.
 	if err := AuthorizeWorkspaceTransaction(ctx, tx, code, uid, "product_features", "view", permit); err != nil {
@@ -131,19 +141,29 @@ func ListProductFeatures(ctx context.Context, db *sql.DB, code, uid string, perm
 		return out, err
 	}
 	out.Page, out.PageSize, out.WorkspaceRevision = q.Page, q.PageSize, permit.Facts.Revision
-	return out, tx.Commit()
+	return out, nil
 }
 func ReadProductFeature(ctx context.Context, db *sql.DB, code, uid, bizID string, permit AuthorizationPermit) (FeatureRecord, error) {
+	tx, err := db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
+	if err != nil {
+		return FeatureRecord{}, err
+	}
+	defer tx.Rollback()
+	out, err := ReadProductFeatureInTransaction(ctx, tx, code, uid, bizID, permit)
+	if err != nil {
+		return out, err
+	}
+	return out, tx.Commit()
+}
+func ReadProductFeatureInTransaction(ctx context.Context, tx *sql.Tx, code, uid, bizID string, permit AuthorizationPermit) (FeatureRecord, error) {
 	var out FeatureRecord
 	parsed, err := uuid.Parse(bizID)
 	if err != nil || parsed.String() != bizID {
 		return out, invalid("product_feature_id_invalid", "功能标识无效")
 	}
-	tx, err := db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
-	if err != nil {
-		return out, err
+	if tx == nil {
+		return out, invalid("product_transaction_required", "事务不可用")
 	}
-	defer tx.Rollback()
 	if err := AuthorizeWorkspaceTransaction(ctx, tx, code, uid, "product_features", "view", permit); err != nil {
 		return out, err
 	}
@@ -152,5 +172,5 @@ func ReadProductFeature(ctx context.Context, db *sql.DB, code, uid, bizID string
 		return out, err
 	}
 
-	return out, tx.Commit()
+	return out, nil
 }

@@ -1,4 +1,5 @@
 import { createError, getHeader, type H3Event } from 'h3'
+import { isPositiveUint64Decimal } from '../../shared/utils/unsignedDecimal'
 
 type RuntimeConfigRecord = Record<string, unknown>
 type CloudflareEnv = Record<string, unknown>
@@ -111,6 +112,8 @@ function schedulerCanonical(input: {
   forwardedHost: string
   consoleTargetDeployment: string
   issuedAt: string
+  schedulerStorage: string
+  schedulerGeneration: string
 }) {
   const values = [
     'POST',
@@ -124,6 +127,7 @@ function schedulerCanonical(input: {
     input.forwardedHost
   ]
   if (input.appCode === 'people') values.push(input.consoleTargetDeployment)
+  if (input.schedulerStorage) values.push('enterprise-scheduler-v1', input.schedulerStorage, input.schedulerGeneration)
   values.push(input.issuedAt)
   return values.join('\n')
 }
@@ -144,6 +148,12 @@ export async function requireTenantGatewaySchedulerRequest(event: H3Event, expec
   const consoleTargetDeployment = text(getHeader(event, 'x-hzy-console-target-deployment'))
   const issuedAt = text(getHeader(event, 'x-hzy-scheduler-issued-at'))
   const signature = text(getHeader(event, 'x-hzy-scheduler-signature'))
+  const schedulerStorage = text(getHeader(event, 'x-hzy-scheduler-storage'))
+  const schedulerGeneration = text(getHeader(event, 'x-hzy-scheduler-generation'))
+  if ((schedulerStorage || schedulerGeneration)
+    && (!['aims', 'assets'].includes(expectedAppCode) || !['unified', 'recovered', 'disabled'].includes(schedulerStorage) || !isPositiveUint64Decimal(schedulerGeneration))) {
+    throw createError({ statusCode: 403, statusMessage: 'Forbidden', message: 'scheduler storage binding invalid' })
+  }
   if (
     !context
     || schedulerKind !== 'tenant-gateway'
@@ -173,10 +183,12 @@ export async function requireTenantGatewaySchedulerRequest(event: H3Event, expec
     runtimeEndpoint,
     forwardedHost: context.forwardedHost,
     consoleTargetDeployment,
+    schedulerStorage,
+    schedulerGeneration,
     issuedAt
   }))
   if (!constantTimeEquals(signature, expectedSignature)) {
     throw createError({ statusCode: 403, statusMessage: 'Forbidden', message: 'scheduler wake signature invalid' })
   }
-  return { ...context, requestId, runtimeEndpoint, consoleTargetDeployment }
+  return { ...context, requestId, runtimeEndpoint, consoleTargetDeployment, schedulerStorage, schedulerGeneration }
 }

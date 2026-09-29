@@ -1,4 +1,8 @@
 <script setup lang="ts">
+import { useAimsModule } from '../../../layer/useAimsModule'
+
+// 同一份代码供独立应用与企业宿主使用：非宿主模式下 moduleUrl 原样返回路径。
+const { moduleUrl } = useAimsModule()
 const props = withDefaults(defineProps<{
   projectId: number
   canManage?: boolean
@@ -111,7 +115,7 @@ async function fetchProjectEnvironments() {
   loadingProjectEnvironments.value = true
   try {
     const res = await $fetch<{ code?: number, data?: { items?: ProjectEnvironmentRow[] }, items?: ProjectEnvironmentRow[] }>(
-      `/api/v1/projects/${props.projectId}/environments`
+      moduleUrl(`/api/v1/projects/${props.projectId}/environments`)
     )
     const data = res.data || res
     projectEnvironments.value = Array.isArray(data.items) ? data.items : []
@@ -129,7 +133,7 @@ async function saveProjectEnvironment() {
   }
   savingEnvironment.value = true
   try {
-    const res = await $fetch<{ code?: number, data?: { assetsSyncStatus?: string, assetsSyncError?: string } }>(`/api/v1/projects/${props.projectId}/environments/upsert`, {
+    const res = await $fetch<{ code?: number, data?: { assetsSyncStatus?: string, assetsSyncError?: string } }>(moduleUrl(`/api/v1/projects/${props.projectId}/environments/upsert`), {
       method: 'POST',
       body: {
         environmentCode: environmentForm.environmentCode.trim() || undefined,
@@ -163,7 +167,7 @@ async function retryProjectEnvironmentSync(env: ProjectEnvironmentRow) {
   if (!env.environment_code) return
   syncingEnvironmentId.value = env.id
   try {
-    const res = await $fetch<{ code?: number, data?: { assetsSyncStatus?: string, assetsSyncError?: string } }>(`/api/v1/projects/${props.projectId}/environments/upsert`, {
+    const res = await $fetch<{ code?: number, data?: { assetsSyncStatus?: string, assetsSyncError?: string } }>(moduleUrl(`/api/v1/projects/${props.projectId}/environments/upsert`), {
       method: 'POST',
       body: {
         environmentCode: env.environment_code,
@@ -212,7 +216,7 @@ async function advanceProjectEnvironmentStatus(env: ProjectEnvironmentRow) {
   syncingEnvironmentId.value = env.id
   try {
     const res = await $fetch<{ code?: number, data?: { assetsSyncStatus?: string, assetsSyncError?: string } }>(
-      `/api/v1/projects/${props.projectId}/environments/${encodeURIComponent(env.environment_code)}:status`,
+      moduleUrl(`/api/v1/projects/${props.projectId}/environments/${encodeURIComponent(env.environment_code)}:status`),
       {
         method: 'POST',
         body: {

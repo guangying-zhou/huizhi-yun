@@ -6,6 +6,8 @@ import type {
   NotificationStatusFilter
 } from '../composables/useNotifications'
 
+withDefaults(defineProps<{ viewAllPath?: string }>(), { viewAllPath: '' })
+
 const { isNotificationsSlideoverOpen } = useDashboard()
 const { apps, loadApps } = useUserApplications()
 const {
@@ -82,7 +84,7 @@ const detailErrorPresentation = computed(() => {
 
 const actionUrl = computed(() => {
   if (!import.meta.client || !selectedDetail.value?.actionUrl) return ''
-  return resolveNotificationActionUrl(selectedDetail.value, apps.value, window.location.origin)
+  return resolveNotificationActionUrl(selectedDetail.value, apps.value, window.location.origin, hostNotificationTarget())
 })
 
 watch(isNotificationsSlideoverOpen, (open) => {
@@ -208,7 +210,7 @@ function formatDate(value: string | null | undefined) {
             color="neutral"
             variant="ghost"
             :disabled="summary.unreadCount === 0"
-            @click="markAllRead"
+            @click="markAllRead()"
           />
         </div>
 
@@ -309,12 +311,22 @@ function formatDate(value: string | null | undefined) {
         </div>
       </div>
     </template>
+    <template v-if="viewAllPath" #footer>
+      <UButton
+        :to="viewAllPath"
+        label="查看全部通知"
+        color="neutral"
+        variant="outline"
+        block
+        @click="isNotificationsSlideoverOpen = false"
+      />
+    </template>
   </USlideover>
 
   <UModal
     v-model:open="detailOpen"
     title="消息详情"
-    :description="selectedDetail ? `${selectedDetail.sourceAppCode} · 实时授权内容` : '正在读取实时授权内容'"
+    :description="selectedDetail?.detailMode === 'notification_snapshot' ? '原通知记录 · 关联对象状态未核验' : selectedDetail ? `${selectedDetail.sourceAppCode} · 实时授权内容` : '正在读取消息详情'"
     :ui="{ content: 'sm:max-w-3xl' }"
   >
     <template #body>
@@ -368,6 +380,15 @@ function formatDate(value: string | null | undefined) {
         </div>
 
         <USeparator />
+
+        <UAlert
+          v-if="selectedDetail.detailMode === 'notification_snapshot'"
+          color="warning"
+          variant="soft"
+          icon="i-lucide-file-question"
+          title="关联对象不可用或访问权已变化"
+          description="这里只显示收到时保存的通知内容；请从业务页面确认对象的当前状态。"
+        />
 
         <section aria-labelledby="notification-modal-message-heading">
           <h3 id="notification-modal-message-heading" class="text-sm font-semibold text-highlighted">

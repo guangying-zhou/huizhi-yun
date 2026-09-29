@@ -101,10 +101,24 @@ func productRuntimeError(err error) error {
 			status = http.StatusConflict
 		case "planning_comment_author_required", "product_authorization_invalid":
 			status = http.StatusForbidden
-		case "assessment_model_version_conflict", "assessment_model_unchanged", "planning_cross_dependency_conflict", "product_roadmap_commitment_conflict", "product_roadmap_commitment_unchanged", "product_component_referenced", "product_component_revision_conflict", "product_objective_cycle_mapping_conflict", "product_objective_revision_conflict", "product_objective_state_conflict", "product_objective_correction_conflict", "product_authorization_expired", "product_authorization_changed", "product_revision_conflict", "product_state_conflict", "product_archived", "idempotency_payload_mismatch", "product_command_incomplete_receipt":
+		case "assessment_model_version_conflict", "assessment_model_unchanged", "planning_cross_dependency_conflict", "product_roadmap_commitment_conflict", "product_roadmap_commitment_unchanged", "product_document_already_linked", "product_component_referenced", "product_component_revision_conflict", "product_objective_cycle_mapping_conflict", "product_objective_revision_conflict", "product_objective_state_conflict", "product_objective_correction_conflict", "product_authorization_expired", "product_authorization_changed", "product_revision_conflict", "product_state_conflict", "product_archived", "idempotency_payload_mismatch", "product_command_incomplete_receipt":
 			status = http.StatusConflict
 		}
 		return httperror.New(status, rule.Code, rule.Message)
 	}
 	return err
+}
+
+// EnterpriseProductCommandError preserves the existing owning-domain HTTP
+// contract for unified Runtime callers without exposing unclassified SQL errors.
+func EnterpriseProductCommandError(err error) error {
+	mapped := productRuntimeError(err)
+	if mapped == nil {
+		return nil
+	}
+	var public httperror.Error
+	if errors.As(mapped, &public) {
+		return public
+	}
+	return httperror.New(503, "enterprise_product_command_unavailable", "产品需求服务暂不可用")
 }

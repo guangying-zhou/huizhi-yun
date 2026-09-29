@@ -1,14 +1,25 @@
 <script setup lang="ts">
-import type { AimsProject, ProjectRole } from '~/types/aims'
+import ContentPageHeader from '../../../foundation/app/components/ContentPageHeader.vue'
+import { reviewStatusLabel, reviewStatusColor, type TimeEntryReviewStatus } from '../utils/timeEntryPresentation'
+import { useAimsModule } from '../../layer/useAimsModule'
+import type { AimsProject, ProjectRole } from '../types/aims'
+import { isProjectProjection, type ProjectGroupPage } from '../utils/projectOverviewPagination'
+import { useTimeEntryReadPage, useTimeEntryPage } from '../composables/useTimeEntryPage'
+import { editedDayHours, refreshTimeEntryDraftBaselines, reportingToday } from '../utils/timeEntryPagination'
+import { createCommandIntents } from '../utils/commandIntent'
+import { timesheetWeekSubmitErrorMessage } from '../utils/timesheetWeekSubmitError'
+import { useProjectStore } from '../stores/project'
 
+// 同一份代码供独立应用与企业宿主使用：非宿主模式下 moduleUrl 原样返回路径。
+const { moduleUrl, hosted } = useAimsModule()
 definePageMeta({
+  hostContentInset: false,
   layoutHeader: true,
   layoutHeaderTitle: '项目日历',
   layoutHeaderProjectSwitcher: false
 })
 
 type SubmitMode = 'hours' | 'percent'
-type TimeEntryReviewStatus = 'draft' | 'submitted' | 'approved' | 'returned'
 
 interface RawTimeEntry {
   id: number
@@ -88,27 +99,65 @@ interface TimeEntryEditRow {
   editable: boolean
 }
 
-interface ListPayload<T> {
-  items?: T[]
-}
-
 const toast = useToast()
 const { user: authUser } = useAuth()
+const { loaded: permissionsLoaded, loadPermissions, hasPermission, error: permissionsError } = usePermissions()
+// 填报、新增、保存修改与整周提交都要求 timesheet:submit（与 Host/Runtime 同一动作）。
+// 权限未加载前按无权处理，避免入口先可点、再被服务端 403。
+const canSubmitTimesheet = computed(() => permissionsLoaded.value && hasPermission('timesheet', 'submit'))
+// 权限快照加载失败时入口仍禁用，但不能把“未知”说成“无权”（宿主另有加载失败提示）。
+const submitPermissionDenied = computed(() => permissionsLoaded.value && !permissionsError.value && !canSubmitTimesheet.value)
+const SUBMIT_PERMISSION_DENIED_REASON = '当前账号没有工时填报权限，仅可查看已填工时；如需填报请联系管理员开通。'
 const { users: accountUsers } = useAccountUsers()
 const projectStore = useProjectStore()
 
-const currentMonth = ref(startOfMonth(new Date()))
+const currentMonth = ref(startOfMonth(dateFromKey(reportingToday(new Date()))))
 const selectedProjectId = ref<number | 'all'>('all')
-const entries = ref<TimeEntry[]>([])
-const entriesLoading = ref(false)
+const calendarRead = useTimeEntryPage<RawTimeEntry>()
+const timeEntryIntents = createCommandIntents()
+const dayRead = useTimeEntryPage<RawTimeEntry>()
+const entriesLoading = calendarRead.loading
+const dayLoading = dayRead.loading
+const entries = computed(() => (dayRead.data.value?.items || []).map(normalizeEntry))
+const summary = computed(() => calendarRead.data.value?.summary)
+// 403 是确定的无权限结果，重试不会改变；只对其他失败提供重新加载。
+const calendarForbidden = computed(() => calendarRead.error.value && calendarRead.errorStatus.value === 403)
+const dayForbidden = computed(() => dayRead.error.value && dayRead.errorStatus.value === 403)
+const dayTotal = computed(() => dayRead.data.value?.total || 0)
+const { page: detailPage, pageSize: detailPageSize } = useListPage({ pageSize: 20, syncUrl: false })
+const { confirm } = useConfirm()
 const modalOpen = ref(false)
 const detailModalOpen = ref(false)
-const selectedDate = ref(formatLocalDate(new Date()))
+const selectedDate = ref(reportingToday(new Date()))
 const submitting = ref(false)
 const detailSubmitting = ref(false)
 const weekSubmitting = ref(false)
 const weekSubmitModalOpen = ref(false)
 const projectsLoading = ref(false)
+const candidateRead = useTimeEntryReadPage<ProjectGroupPage>(isProjectProjection)
+const candidatePage = ref(1)
+const { search: candidateSearch, debounced: candidateSearchDebounced } = useDebouncedSearch()
+const candidateProjects = computed(() => (candidateRead.data.value?.items || []).map(projectStore.normalizeProject))
+const pinnedProject = ref<AimsProject | null>(null)
+const candidateTotal = computed(() => candidateRead.data.value?.total || 0)
+async function readCandidates(page = 1) {
+  candidatePage.value = page
+  await candidateRead.read(moduleUrl('/api/v1/projects'), { projection: 'candidates', page, pageSize: 20, search: candidateSearchDebounced.value || undefined })
+  if ([401, 403].includes(candidateRead.errorStatus.value || 0)) {
+    pinnedProject.value = null
+    selectedProjectId.value = 'all'
+    projectTimeRows.value = []
+    modalOpen.value = false
+  }
+}
+watch(candidateSearchDebounced, () => {
+  if (hosted) void readCandidates()
+})
+watch(candidateRead.fingerprint, () => {
+  pinnedProject.value = null
+  candidatePage.value = 1
+  candidateSearch.value = ''
+}, { flush: 'sync' })
 const projectMemberRoles = ref<Map<number, ProjectRole>>(new Map())
 const projectTimeRows = ref<ProjectTimeRow[]>([])
 const detailRows = ref<TimeEntryEditRow[]>([])
@@ -122,7 +171,8 @@ const form = reactive<{
 })
 
 const weekdayLabels = ['一', '二', '三', '四', '五', '六', '日']
-const todayKey = computed(() => formatLocalDate(new Date()))
+const reportingTimezone = ref('Asia/Shanghai')
+const todayKey = computed(() => reportingToday(new Date(), reportingTimezone.value))
 const monthStartKey = computed(() => formatLocalDate(startOfMonth(currentMonth.value)))
 const monthEndKey = computed(() => formatLocalDate(endOfMonth(currentMonth.value)))
 const monthTitle = computed(() => {
@@ -132,9 +182,17 @@ const monthTitle = computed(() => {
 })
 const selectedPeriodKey = computed(() => isoPeriodKey(selectedDate.value))
 const selectedWeekRange = computed(() => isoWeekRange(selectedDate.value))
-const selectedWeekEntries = computed(() => entries.value.filter(entry => isoPeriodKey(entry.entryDate) === selectedPeriodKey.value))
-const selectedWeekEditableCount = computed(() => selectedWeekEntries.value.filter(entry => entry.reviewStatus === 'draft' || entry.reviewStatus === 'returned').length)
-const selectedWeekSubmittedCount = computed(() => selectedWeekEntries.value.filter(entry => entry.reviewStatus === 'submitted').length)
+const selectedWeekEditableCount = computed(() => (summary.value?.weekStatusCounts.draft || 0) + (summary.value?.weekStatusCounts.returned || 0))
+const selectedWeekSubmittedCount = computed(() => summary.value?.weekStatusCounts.submitted || 0)
+const weekSubmitDisabledReason = computed(() => {
+  if (!permissionsLoaded.value) return '正在核对工时填报权限'
+  if (permissionsError.value) return '工时填报权限暂不可用，请稍后重试'
+  if (submitPermissionDenied.value) return SUBMIT_PERMISSION_DENIED_REASON
+  if (selectedWeekRange.value.start > todayKey.value) return '不能提交未来周'
+  if (entriesLoading.value || !summary.value) return '正在加载所选周工时'
+  if (selectedWeekEditableCount.value === 0) return '所选周尚无可提交的草稿工时'
+  return ''
+})
 const queryStartKey = computed(() => selectedWeekRange.value.start < monthStartKey.value ? selectedWeekRange.value.start : monthStartKey.value)
 const queryEndKey = computed(() => selectedWeekRange.value.end > monthEndKey.value ? selectedWeekRange.value.end : monthEndKey.value)
 
@@ -148,6 +206,7 @@ const userNameMap = computed(() => {
 
 const availableProjects = computed(() => {
   const uid = authUser.value
+  if (hosted) return candidateProjects.value
   return projectStore.projects.filter((project) => {
     if (project.lifecycleStatus === 'archived' || project.canAccess === false) return false
     if (!uid) return false
@@ -160,48 +219,13 @@ const availableProjects = computed(() => {
 
 const selectedProject = computed(() => {
   if (selectedProjectId.value === 'all') return null
-  return availableProjects.value.find(project => project.id === selectedProjectId.value) || null
+  return availableProjects.value.find(project => project.id === selectedProjectId.value) || pinnedProject.value || null
 })
 
-const filteredEntries = computed(() => {
-  if (selectedProjectId.value === 'all') return entries.value
-  return entries.value.filter(entry => entry.projectId === selectedProjectId.value)
-})
-
-const entriesByDate = computed(() => {
-  const map = new Map<string, TimeEntry[]>()
-  for (const entry of filteredEntries.value) {
-    const key = normalizeDateOnly(entry.entryDate)
-    if (!key) continue
-    const list = map.get(key) || []
-    list.push(entry)
-    map.set(key, list)
-  }
-  return map
-})
-
-const projectHours = computed(() => {
-  const map = new Map<number, { hours: number, days: Set<string> }>()
-  for (const entry of entries.value) {
-    const bucket = map.get(entry.projectId) || { hours: 0, days: new Set<string>() }
-    bucket.hours += entry.hours
-    bucket.days.add(entry.entryDate)
-    map.set(entry.projectId, bucket)
-  }
-  return map
-})
-
-const totalMonthHours = computed(() => {
-  return filteredEntries.value.reduce((sum, entry) => sum + entry.hours, 0)
-})
-
-const submittedDays = computed(() => {
-  return Array.from(entriesByDate.value.values()).filter(list => sumHours(list) > 0).length
-})
-
-const missingDays = computed(() => {
-  return calendarDays.value.filter(day => day.inMonth && day.isPastOrToday && day.totalHours <= 0).length
-})
+const projectHours = computed(() => new Map((summary.value?.projectHours || []).map(row => [row.projectId, row])))
+const totalMonthHours = computed(() => summary.value?.monthHours || 0)
+const submittedDays = computed(() => summary.value?.monthPositiveDays || 0)
+const missingDays = computed(() => summary.value?.monthMissingDays || 0)
 
 const reportableRows = computed(() => {
   return projectTimeRows.value
@@ -218,14 +242,14 @@ const reportTotalPercent = computed(() => {
 })
 
 const reportSubmitDisabled = computed(() => {
-  if (submitting.value || reportableRows.value.length === 0) return true
+  if (!summary.value || entriesLoading.value || submitting.value || reportableRows.value.length === 0) return true
   if (reportTotalHours.value > 24) return true
   if (form.mode === 'percent' && reportTotalPercent.value > 100) return true
   return false
 })
 
 const detailTotalHours = computed(() => {
-  return roundHours(detailRows.value.reduce((sum, row) => sum + Math.max(0, Number(row.hours || 0)), 0))
+  return editedDayHours(dayRead.data.value?.summary.totalHours || 0, detailRows.value)
 })
 
 const changedDetailRows = computed(() => {
@@ -233,7 +257,8 @@ const changedDetailRows = computed(() => {
 })
 
 const detailSubmitDisabled = computed(() => {
-  if (detailSubmitting.value || changedDetailRows.value.length === 0) return true
+  if (!canSubmitTimesheet.value) return true
+  if (!dayRead.data.value || dayRead.error.value || dayLoading.value || detailSubmitting.value || changedDetailRows.value.length === 0) return true
   if (changedDetailRows.value.some(row => !validDetailRowHours(row))) return true
   if (detailTotalHours.value > 24) return true
   return false
@@ -248,8 +273,8 @@ const calendarDays = computed(() => {
   return Array.from({ length: 42 }, (_, index) => {
     const date = addDays(gridStart, index)
     const dateKey = formatLocalDate(date)
-    const dayEntries = entriesByDate.value.get(dateKey) || []
-    const totalHours = sumHours(dayEntries)
+    const totalHours = summary.value?.dailyHours.find(day => day.date === dateKey)?.hours || 0
+    const projectGroups = (summary.value?.dailyProjectHours || []).filter(group => group.date === dateKey)
     return {
       date,
       dateKey,
@@ -257,9 +282,8 @@ const calendarDays = computed(() => {
       inMonth: date.getMonth() === month,
       isToday: dateKey === todayKey.value,
       isPastOrToday: dateKey <= todayKey.value,
-      entries: dayEntries,
       totalHours,
-      projectGroups: groupEntriesByProject(dayEntries)
+      projectGroups
     }
   })
 })
@@ -325,16 +349,6 @@ function roundHours(value: number) {
   return Math.round(value * 100) / 100
 }
 
-function sumHours(list: TimeEntry[]) {
-  return roundHours(list.reduce((sum, entry) => sum + entry.hours, 0))
-}
-
-function listPayload<T>(data: T[] | ListPayload<T> | null | undefined) {
-  if (Array.isArray(data)) return data
-  if (Array.isArray(data?.items)) return data.items
-  return []
-}
-
 function normalizeEntry(raw: RawTimeEntry): TimeEntry {
   return {
     id: Number(raw.id),
@@ -357,49 +371,6 @@ function normalizeEntry(raw: RawTimeEntry): TimeEntry {
   }
 }
 
-function reviewStatusLabel(status: TimeEntryReviewStatus) {
-  return {
-    draft: '草稿',
-    submitted: '待审核',
-    approved: '已确认',
-    returned: '已退回'
-  }[status]
-}
-
-function reviewStatusColor(status: TimeEntryReviewStatus): 'neutral' | 'warning' | 'success' | 'error' {
-  if (status === 'submitted') return 'warning'
-  if (status === 'approved') return 'success'
-  if (status === 'returned') return 'error'
-  return 'neutral'
-}
-
-function groupEntriesByProject(dayEntries: TimeEntry[]) {
-  const map = new Map<number, {
-    projectId: number
-    projectCode: string
-    projectName: string
-    hours: number
-    entries: TimeEntry[]
-  }>()
-
-  for (const entry of dayEntries) {
-    const bucket = map.get(entry.projectId) || {
-      projectId: entry.projectId,
-      projectCode: entry.projectCode,
-      projectName: entry.projectShortName || entry.projectName || `项目 ${entry.projectId}`,
-      hours: 0,
-      entries: []
-    }
-    bucket.hours += entry.hours
-    bucket.entries.push(entry)
-    map.set(entry.projectId, bucket)
-  }
-
-  return Array.from(map.values())
-    .map(item => ({ ...item, hours: roundHours(item.hours) }))
-    .sort((a, b) => b.hours - a.hours)
-}
-
 function projectDisplayName(project: AimsProject) {
   return project.shortName || project.name
 }
@@ -417,6 +388,7 @@ function getLeaderName(project: AimsProject) {
 }
 
 function selectProject(projectId: number | 'all') {
+  pinnedProject.value = projectId === 'all' ? null : availableProjects.value.find(project => project.id === projectId) || null
   selectedProjectId.value = projectId
 }
 
@@ -453,14 +425,20 @@ function goCurrentMonth() {
 
 async function loadProjects() {
   if (!authUser.value) return
+  const identity = calendarRead.fingerprint.value
+  if (hosted) {
+    await readCandidates()
+    return
+  }
   projectsLoading.value = true
   try {
     if (projectStore.projects.length === 0) {
       await projectStore.fetchProjects({ pageSize: 500 })
     }
+    if (identity !== calendarRead.fingerprint.value) return
     await loadProjectMemberRoles()
   } finally {
-    projectsLoading.value = false
+    if (identity === calendarRead.fingerprint.value) projectsLoading.value = false
   }
 }
 
@@ -468,6 +446,7 @@ async function loadProjectMemberRoles() {
   const uid = authUser.value
   if (!uid) return
 
+  const identity = calendarRead.fingerprint.value
   const roles = new Map<number, ProjectRole>()
   const targets = projectStore.projects.filter(project => project.leaderUid !== uid)
   const batchSize = 8
@@ -487,35 +466,60 @@ async function loadProjectMemberRoles() {
     }))
   }
 
-  projectMemberRoles.value = roles
+  if (identity === calendarRead.fingerprint.value && uid === authUser.value) projectMemberRoles.value = roles
 }
 
 async function loadEntries() {
-  if (!authUser.value) return
-  entriesLoading.value = true
-  try {
-    const params = new URLSearchParams()
-    params.set('startDate', queryStartKey.value)
-    params.set('endDate', queryEndKey.value)
-    params.set('pageSize', '500')
-    const res = await $fetch<{ code: number, data: RawTimeEntry[] | ListPayload<RawTimeEntry> }>(
-      `/api/v1/users/${encodeURIComponent(authUser.value)}/time-entries?${params.toString()}`
-    )
-    entries.value = res.code === 0
-      ? listPayload(res.data).map(normalizeEntry).filter(entry => entry.projectId > 0)
-      : []
-  } catch (err: unknown) {
-    console.error('[ProjectCalendar] load entries failed:', err)
-    entries.value = []
-    toast.add({ title: '工时数据加载失败', color: 'error' })
-  } finally {
-    entriesLoading.value = false
+  if (!authUser.value) {
+    calendarRead.clear()
+    return
+  }
+  const data = await calendarRead.read(moduleUrl(`/api/v1/users/${encodeURIComponent(authUser.value)}/time-entries`), {
+    startDate: queryStartKey.value, endDate: queryEndKey.value, page: 1, pageSize: 1,
+    calendarProjectId: selectedProjectId.value === 'all' ? undefined : String(selectedProjectId.value),
+    monthStart: monthStartKey.value, monthEnd: monthEndKey.value, todayDate: todayKey.value,
+    weekStart: selectedWeekRange.value.start, weekEnd: selectedWeekRange.value.end
+  })
+  if (data?.calendarTimezone && data.calendarTimezone !== reportingTimezone.value) {
+    const previousToday = todayKey.value
+    reportingTimezone.value = data.calendarTimezone
+    if (selectedDate.value === previousToday) selectedDate.value = todayKey.value
+    if (formatLocalDate(currentMonth.value).slice(0, 7) === previousToday.slice(0, 7)) currentMonth.value = startOfMonth(dateFromKey(todayKey.value))
+    await loadEntries()
   }
 }
 
+async function loadDayEntries() {
+  if (!authUser.value) {
+    dayRead.clear()
+    detailRows.value = []
+    return
+  }
+  const data = await dayRead.read(moduleUrl(`/api/v1/users/${encodeURIComponent(authUser.value)}/time-entries`), {
+    startDate: selectedDate.value, endDate: selectedDate.value, page: detailPage.value, pageSize: detailPageSize
+  })
+  if (!data) {
+    if (dayRead.error.value) detailRows.value = []
+    return
+  }
+  detailRows.value = entries.value.map(detailRowFromEntry)
+  if (!data.items.length && detailPage.value > 1) {
+    detailPage.value = Math.max(1, Math.ceil(data.total / detailPageSize))
+    await loadDayEntries()
+  }
+}
+
+async function changeDetailPage(page: number) {
+  if (page === detailPage.value || detailSubmitting.value) return
+  if (changedDetailRows.value.length && !await confirm({ title: '放弃未保存修改', message: '翻页将放弃当前页工时的未保存修改，是否继续？', confirmLabel: '放弃并翻页', tone: 'warning' })) return
+  detailPage.value = page
+  detailRows.value = []
+  await loadDayEntries()
+}
+
 function projectRowsForDate(dateKey: string) {
-  const dateEntries = entries.value.filter(entry => entry.entryDate === dateKey)
   const projects = [...availableProjects.value]
+  if (hosted && pinnedProject.value && !projects.some(project => project.id === pinnedProject.value!.id)) projects.unshift(pinnedProject.value)
   if (selectedProjectId.value !== 'all') {
     const selectedIndex = projects.findIndex(project => project.id === selectedProjectId.value)
     if (selectedIndex > 0) {
@@ -528,12 +532,12 @@ function projectRowsForDate(dateKey: string) {
     projectId: project.id,
     hours: 0,
     percent: 0,
-    existingHours: sumHours(dateEntries.filter(entry => entry.projectId === project.id))
+    existingHours: (summary.value?.baseDailyProjectHours || []).find(row => row.date === dateKey && row.projectId === project.id)?.hours || 0
   }))
 }
 
 function rowProject(projectId: number) {
-  return availableProjects.value.find(project => project.id === projectId) || null
+  return availableProjects.value.find(project => project.id === projectId) || (pinnedProject.value?.id === projectId ? pinnedProject.value : null)
 }
 
 function rowProjectName(projectId: number) {
@@ -593,59 +597,23 @@ function detailRowFromEntry(entry: TimeEntry): TimeEntryEditRow {
   }
 }
 
-function blankDetailRow(project: AimsProject): TimeEntryEditRow {
-  return {
-    id: null,
-    key: `project-${project.id}`,
-    projectId: project.id,
-    projectName: projectDisplayName(project),
-    projectCode: project.projectCode || `#${project.id}`,
-    itemKey: '',
-    itemTitle: '',
-    hours: 0,
-    originalHours: 0,
-    description: '',
-    originalDescription: '',
-    reviewStatus: 'draft',
-    returnReason: '',
-    editable: true
-  }
-}
-
-function detailRowsForDate(dateKey: string) {
-  const dateEntries = entries.value.filter(entry => entry.entryDate === dateKey)
-  const rows: TimeEntryEditRow[] = []
-  const consumedEntryIds = new Set<number>()
-
-  for (const project of availableProjects.value) {
-    const projectEntries = dateEntries.filter(entry => entry.projectId === project.id)
-    if (projectEntries.length === 0) {
-      rows.push(blankDetailRow(project))
-      continue
-    }
-    for (const entry of projectEntries) {
-      rows.push(detailRowFromEntry(entry))
-      consumedEntryIds.add(entry.id)
-    }
-  }
-
-  for (const entry of dateEntries) {
-    if (!consumedEntryIds.has(entry.id)) {
-      rows.push(detailRowFromEntry(entry))
-    }
-  }
-
-  return rows
-}
-
-function openDayDetailModal(day: { inMonth: boolean, dateKey: string, totalHours: number }) {
-  if (!day.inMonth || day.totalHours <= 0) return
+async function openDayDetailModal(day: { inMonth: boolean, dateKey: string, totalHours: number }) {
+  if (!day.inMonth || day.totalHours <= 0 || detailSubmitting.value) return
   selectedDate.value = day.dateKey
-  detailRows.value = detailRowsForDate(day.dateKey)
+  detailPage.value = 1
+  detailRows.value = []
+  dayRead.clear()
   detailModalOpen.value = true
+  await loadDayEntries()
+}
+
+function openReportFromDetail() {
+  detailModalOpen.value = false
+  openReportModal(selectedDate.value)
 }
 
 function openReportModal(dateKey: string) {
+  if (!canSubmitTimesheet.value) return
   selectedDate.value = dateKey
   form.mode = 'hours'
   form.description = ''
@@ -671,6 +639,7 @@ async function submitTimeEntry() {
   submitting.value = true
   try {
     await Promise.all(rows.map(row => postProjectTimeEntry(row)))
+    for (const row of rows) timeEntryIntents.complete(`report-create:${selectedDate.value}:${row.projectId}`)
     toast.add({ title: `已填报 ${rows.length} 个项目，共 ${reportTotalHours.value.toFixed(1)}h`, color: 'success' })
     modalOpen.value = false
     await loadEntries()
@@ -684,23 +653,26 @@ async function submitTimeEntry() {
 }
 
 function postProjectTimeEntry(row: ProjectTimeRow & { submitHours: number }) {
-  return createProjectTimeEntry(row.projectId, row.submitHours, form.description || null)
+  return createProjectTimeEntry(row.projectId, row.submitHours, form.description || null, `report-create:${selectedDate.value}:${row.projectId}`)
 }
 
-function createProjectTimeEntry(projectId: number, hours: number, description: string | null) {
-  const url = `/api/v1/projects/${projectId}/time-entries` as string
+function createProjectTimeEntry(projectId: number, hours: number, description: string | null, intent: string) {
+  const url = moduleUrl(`/api/v1/projects/${projectId}/time-entries`) as string
+  const body = { entryDate: selectedDate.value, hours, description }
   return $fetch(url, {
     method: 'POST',
-    body: {
-      entryDate: selectedDate.value,
-      hours,
-      description
-    }
+    body, headers: timeEntryIntents.headers(intent, body), retry: 0
   })
 }
 
 function postDetailTimeEntry(row: TimeEntryEditRow) {
-  return createProjectTimeEntry(row.projectId, roundHours(Number(row.hours || 0)), row.description.trim() || null)
+  return createProjectTimeEntry(row.projectId, roundHours(Number(row.hours || 0)), row.description.trim() || null, detailTimeEntryIntent(row))
+}
+
+function detailTimeEntryIntent(row: TimeEntryEditRow) {
+  return row.id === null
+    ? `detail-create:${selectedDate.value}:${row.projectId}`
+    : roundHours(Number(row.hours || 0)) <= 0 ? `detail-delete:${row.id}` : `detail-update:${row.id}`
 }
 
 function rowChanged(row: TimeEntryEditRow) {
@@ -713,13 +685,13 @@ function rowChanged(row: TimeEntryEditRow) {
 }
 
 async function submitSelectedWeek() {
-  if (selectedWeekEditableCount.value === 0) return
+  if (weekSubmitDisabledReason.value) return
   weekSubmitting.value = true
   try {
     const response = await $fetch<{
       code: number
       data: { submittedCount: number, managerRouteCount: number, summaryRouteCount: number }
-    }>(`/api/v1/timesheet/weeks/${selectedPeriodKey.value}:submit`, {
+    }>(moduleUrl(`/api/v1/timesheet/weeks/${selectedPeriodKey.value}:submit`), {
       method: 'POST'
     })
     weekSubmitModalOpen.value = false
@@ -733,8 +705,7 @@ async function submitSelectedWeek() {
     await loadEntries()
   } catch (err: unknown) {
     console.error('[ProjectCalendar] submit timesheet week failed:', err)
-    const message = (err as { data?: { message?: string } })?.data?.message || '周工时提交失败'
-    toast.add({ title: message, color: 'error' })
+    toast.add({ title: timesheetWeekSubmitErrorMessage(err), color: 'error' })
   } finally {
     weekSubmitting.value = false
   }
@@ -749,7 +720,7 @@ function validDetailRowHours(row: TimeEntryEditRow) {
 
 async function submitDetailChanges() {
   const rows = changedDetailRows.value
-  if (rows.length === 0) return
+  if (rows.length === 0 || !dayRead.data.value || dayRead.error.value || dayLoading.value) return
   if (detailTotalHours.value > 24) {
     toast.add({ title: '单日工时不能超过 24 小时', color: 'warning' })
     return
@@ -763,6 +734,7 @@ async function submitDetailChanges() {
   detailSubmitting.value = true
   try {
     await Promise.all(rows.map(saveDetailTimeEntry))
+    for (const row of rows) timeEntryIntents.complete(detailTimeEntryIntent(row))
     toast.add({ title: `已保存 ${rows.length} 条工时记录`, color: 'success' })
     detailModalOpen.value = false
     await loadEntries()
@@ -783,48 +755,100 @@ function saveDetailTimeEntry(row: TimeEntryEditRow) {
 
 function patchProjectTimeEntry(row: TimeEntryEditRow) {
   if (row.id === null) return postDetailTimeEntry(row)
-  const url = `/api/v1/projects/${row.projectId}/time-entries/${row.id}` as string
+  const url = moduleUrl(`/api/v1/projects/${row.projectId}/time-entries/${row.id}`) as string
+  const body = { hours: roundHours(Number(row.hours || 0)), description: row.description.trim() || null }
   return $fetch(url, {
     method: 'PATCH',
-    body: {
-      hours: roundHours(Number(row.hours || 0)),
-      description: row.description.trim() || null
-    }
+    body, headers: timeEntryIntents.headers(detailTimeEntryIntent(row), body), retry: 0
   })
 }
 
 function deleteProjectTimeEntry(row: TimeEntryEditRow) {
   if (row.id === null) return Promise.resolve()
-  const url = `/api/v1/projects/${row.projectId}/time-entries/${row.id}` as string
-  return $fetch(url, { method: 'DELETE' })
+  const url = moduleUrl(`/api/v1/projects/${row.projectId}/time-entries/${row.id}`) as string
+  return $fetch(url, { method: 'DELETE', headers: timeEntryIntents.headers(detailTimeEntryIntent(row)), retry: 0 })
 }
 
-watch(currentMonth, () => {
-  loadEntries()
+watch([modalOpen, detailModalOpen], ([reportOpen, detailOpen]) => {
+  if (!reportOpen && !detailOpen) timeEntryIntents.clear()
 })
 
-watch(selectedDate, () => {
-  loadEntries()
+// The date change may cancel the previous summary while the draft stays open.
+// Refresh only the persisted baseline, preserving the user's current inputs.
+watch(summary, (value) => {
+  if (!modalOpen.value || !value) return
+  projectTimeRows.value = refreshTimeEntryDraftBaselines(projectTimeRows.value, value.baseDailyProjectHours, selectedDate.value)
 })
+
+watch([currentMonth, selectedDate, selectedProjectId], () => {
+  void loadEntries()
+}, {
+  flush: 'sync'
+})
+watch(calendarRead.fingerprint, () => {
+  detailRows.value = []
+  detailModalOpen.value = false
+  modalOpen.value = false
+  weekSubmitModalOpen.value = false
+  projectTimeRows.value = []
+  projectMemberRoles.value = new Map()
+  projectsLoading.value = false
+  if (calendarRead.fingerprint.value) {
+    void loadProjects()
+    void loadEntries()
+  }
+}, { flush: 'sync' })
 
 onMounted(async () => {
-  await loadProjects()
-  await loadEntries()
+  await Promise.all([
+    permissionsLoaded.value ? undefined : loadPermissions(),
+    loadProjects().then(() => loadEntries())
+  ])
 })
 </script>
 
 <template>
-  <UDashboardPanel id="project-calendar" :ui="{ root: 'relative flex min-w-0 shrink-0 flex-col h-full', body: 'flex min-h-0 flex-1 flex-col p-0 overflow-hidden' }">
+  <UDashboardPanel id="project-calendar" style="container-type: inline-size" :ui="{ root: 'relative flex min-w-0 shrink-0 flex-col h-full', body: 'flex min-h-0 flex-1 flex-col p-0 overflow-hidden' }">
     <template #body>
-      <div class="grid h-full min-h-0 grid-cols-1 xl:grid-cols-[minmax(15rem,20%)_minmax(0,1fr)]">
-        <aside class="flex min-h-0 flex-col border-b border-default bg-default/80 xl:border-r xl:border-b-0">
+      <div
+        class="grid h-full min-h-0 grid-cols-1 grid-rows-[minmax(12rem,30%)_minmax(0,1fr)] xl:grid-cols-[minmax(15rem,20%)_minmax(0,1fr)] xl:grid-rows-1 host-timesheet-grid"
+        :class="hosted ? 'is-hosted' : ''"
+      >
+        <div v-if="hosted" class="col-span-full host-timesheet-header px-4 pt-4 sm:px-6 sm:pt-6">
+          <ContentPageHeader
+            :hosted="hosted"
+            title="工时日历"
+            description="按项目和日期查看、填写与提交工时记录。"
+            breadcrumb="交付与服务 / 执行协同"
+          >
+            <template #actions>
+              <div class="flex flex-col items-start gap-1">
+                <UButton
+                  :label="`提交 ${selectedPeriodKey} 审核`"
+                  icon="i-lucide-send"
+                  color="primary"
+                  size="sm"
+                  :disabled="!!weekSubmitDisabledReason || weekSubmitting"
+                  :title="weekSubmitDisabledReason || undefined"
+                  @click="weekSubmitModalOpen = true"
+                />
+                <p v-if="weekSubmitDisabledReason" class="max-w-64 text-xs text-muted" role="status">
+                  {{ weekSubmitDisabledReason }}
+                </p>
+              </div>
+            </template>
+          </ContentPageHeader>
+        </div>
+        <aside
+          class="flex min-h-0 flex-col border-b border-default bg-default/80 xl:border-r xl:border-b-0"
+        >
           <div class="flex items-center justify-between gap-3 px-4 py-3">
             <div class="min-w-0">
               <p class="text-sm font-medium text-highlighted">
                 我的项目
               </p>
               <p class="text-xs text-muted">
-                {{ availableProjects.length }} 个管理或参与项目
+                {{ hosted ? candidateTotal : availableProjects.length }} 个管理或参与项目
               </p>
             </div>
             <UButton
@@ -836,8 +860,23 @@ onMounted(async () => {
             />
           </div>
 
+          <div v-if="hosted" class="space-y-2 px-3 pb-3">
+            <UInput v-model="candidateSearch" placeholder="搜索项目名或编码" class="w-full" />
+            <div class="text-xs text-muted">
+              共 {{ candidateTotal }} 条
+            </div>
+            <UPagination
+              :sibling-count="0"
+              size="xs"
+              :page="candidatePage"
+              :items-per-page="20"
+              :total="candidateTotal"
+              @update:page="readCandidates"
+            />
+            <UButton v-if="candidateRead.error.value" label="读取失败，重试" @click="readCandidates(candidatePage)" />
+          </div>
           <div class="min-h-0 flex-1 overflow-y-auto p-3">
-            <div v-if="projectsLoading || projectStore.loading" class="space-y-2">
+            <div v-if="projectsLoading || (hosted ? candidateRead.loading.value : projectStore.loading)" class="space-y-2">
               <USkeleton v-for="index in 4" :key="index" class="h-24 rounded-lg" />
             </div>
 
@@ -851,36 +890,29 @@ onMounted(async () => {
                 v-for="project in availableProjects"
                 :key="project.id"
                 type="button"
-                class="w-full rounded-lg border p-3 text-left transition hover:bg-elevated"
+                class="w-full rounded-lg border p-2 text-left transition hover:bg-elevated"
                 :class="selectedProjectId === project.id ? 'border-primary bg-primary/10' : 'border-default bg-default'"
                 @click="selectProject(project.id)"
               >
-                <div class="flex items-start justify-between gap-2">
-                  <div class="min-w-0">
-                    <div class="truncate text-sm font-medium text-highlighted">
-                      {{ projectDisplayName(project) }}
-                    </div>
-                    <div class="mt-0.5 font-mono text-xs text-muted">
-                      {{ project.projectCode }} {{ getLeaderName(project) }}
-                    </div>
-                  </div>
-                  <UBadge
-                    :color="projectRoleLabel(project) === '管理' ? 'primary' : 'neutral'"
-                    variant="subtle"
-                    size="xs"
-                  >
+                <div class="flex min-w-0 items-center gap-2">
+                  <span class="min-w-0 flex-1 truncate text-sm font-medium text-highlighted">
+                    {{ projectDisplayName(project) }}
+                  </span>
+                  <UBadge :color="projectRoleLabel(project) === '管理' ? 'primary' : 'neutral'" variant="subtle" size="xs">
                     {{ projectRoleLabel(project) }}
                   </UBadge>
                 </div>
-
-                <div class="mt-3 grid grid-cols-2 gap-2 text-xs">
-                  <div class="text-muted">
-                    填报天数： {{ projectHours.get(project.id)?.days.size || 0 }}
+                <div class="mt-0.5 truncate font-mono text-xs text-muted" :title="`${project.projectCode} · ${getLeaderName(project)}`">
+                  {{ project.projectCode }} · {{ getLeaderName(project) }}
+                </div>
+                <div class="mt-2 grid grid-cols-2 gap-2 text-xs">
+                  <div class="flex items-center justify-between gap-2 text-muted">
+                    <span>填报天数</span>
+                    <span class="tabular-nums text-toned">{{ projectHours.get(project.id)?.distinctEntryDays || 0 }}</span>
                   </div>
-                  <div>
-                    <div class="text-muted">
-                      工时：{{ (projectHours.get(project.id)?.hours || 0).toFixed(1) }}h
-                    </div>
+                  <div class="flex items-center justify-between gap-2 text-muted">
+                    <span>工时</span>
+                    <span class="tabular-nums text-toned">{{ (projectHours.get(project.id)?.hours || 0).toFixed(1) }}h</span>
                   </div>
                 </div>
               </button>
@@ -925,106 +957,153 @@ onMounted(async () => {
                 aria-label="选择待提交工时所在周"
                 class="w-36"
               />
-              <UButton
-                :label="`提交 ${selectedPeriodKey} 审核`"
-                icon="i-lucide-send"
-                color="primary"
-                size="sm"
-                :disabled="selectedWeekEditableCount === 0"
-                @click="weekSubmitModalOpen = true"
-              />
+              <div v-if="!hosted" class="flex flex-col items-start gap-1">
+                <UButton
+                  :label="`提交 ${selectedPeriodKey} 审核`"
+                  icon="i-lucide-send"
+                  color="primary"
+                  size="sm"
+                  :disabled="!!weekSubmitDisabledReason || weekSubmitting"
+                  :title="weekSubmitDisabledReason || undefined"
+                  @click="weekSubmitModalOpen = true"
+                />
+                <p v-if="weekSubmitDisabledReason" class="max-w-64 text-xs text-muted" role="status">
+                  {{ weekSubmitDisabledReason }}
+                </p>
+              </div>
               <UBadge color="neutral" variant="subtle">
                 {{ selectedProject ? projectDisplayName(selectedProject) : '全部项目' }}
               </UBadge>
-              <UBadge color="primary" variant="subtle">
+              <UBadge v-if="summary" color="primary" variant="subtle">
                 {{ totalMonthHours.toFixed(1) }}h
               </UBadge>
-              <UBadge color="success" variant="subtle">
+              <UBadge v-if="summary" color="success" variant="subtle">
                 已填 {{ submittedDays }} 天
               </UBadge>
-              <UBadge color="warning" variant="subtle">
+              <UBadge v-if="summary" color="warning" variant="subtle">
                 待填 {{ missingDays }} 天
               </UBadge>
             </div>
           </div>
 
-          <div class="min-h-0 flex-1 overflow-auto p-4">
-            <div class="min-w-[72rem] space-y-2">
-              <div class="grid grid-cols-7 gap-2">
-                <div
-                  v-for="label in weekdayLabels"
-                  :key="label"
-                  class="rounded-md border border-default bg-default px-3 py-2 text-center text-xs font-medium text-muted"
-                >
-                  周{{ label }}
+          <!-- Only the calendar block scrolls sideways; the container query keeps
+               the swipe hint in step with the block's own width in Host and standalone. -->
+          <div class="@container min-h-0 flex-1 overflow-x-hidden overflow-y-auto p-4">
+            <UAlert
+              v-if="calendarForbidden"
+              color="warning"
+              icon="i-lucide-shield-alert"
+              title="无权查看工时"
+              description="当前账号没有本人工时的查看或填报权限，请联系管理员开通。"
+              class="mb-4"
+            />
+            <UAlert
+              v-else-if="submitPermissionDenied"
+              color="info"
+              icon="i-lucide-lock"
+              title="无工时填报权限"
+              :description="SUBMIT_PERMISSION_DENIED_REASON"
+              class="mb-4"
+              data-testid="timesheet-submit-permission-denied"
+            />
+            <UAlert
+              v-if="calendarRead.error.value && !calendarForbidden"
+              color="error"
+              title="工时汇总加载失败"
+              description="请重试；当前未显示填报统计。"
+              class="mb-4"
+            />
+            <UButton
+              v-if="calendarRead.error.value && !calendarForbidden"
+              label="重新加载"
+              color="neutral"
+              variant="outline"
+              class="mb-4"
+              @click="loadEntries()"
+            />
+            <p class="mb-2 text-xs text-muted @min-[38rem]:hidden" data-testid="timesheet-calendar-scroll-hint">
+              左右滑动查看完整周历，点击日期查看工时。
+            </p>
+            <div class="overflow-x-auto overscroll-x-contain pb-1" data-testid="timesheet-calendar-scroll">
+              <div class="min-w-[38rem] space-y-2">
+                <div class="grid grid-cols-7 gap-2">
+                  <div
+                    v-for="label in weekdayLabels"
+                    :key="label"
+                    class="rounded-md border border-default bg-default px-3 py-2 text-center text-xs font-medium text-muted"
+                  >
+                    周{{ label }}
+                  </div>
                 </div>
-              </div>
 
-              <div v-if="entriesLoading" class="grid grid-cols-7 gap-2">
-                <USkeleton v-for="index in 42" :key="index" class="h-36 rounded-lg" />
-              </div>
+                <div v-if="entriesLoading" class="grid grid-cols-7 gap-2">
+                  <USkeleton v-for="index in 42" :key="index" class="h-36 rounded-lg" />
+                </div>
 
-              <div v-else class="grid grid-cols-7 gap-2">
-                <div
-                  v-for="day in calendarDays"
-                  :key="day.dateKey"
-                  class="flex min-h-36 flex-col rounded-lg border p-2"
-                  :class="[dayClass(day), day.totalHours > 0 ? 'cursor-pointer transition hover:bg-elevated' : '']"
-                  @click="openDayDetailModal(day)"
-                >
-                  <div class="flex items-start justify-between gap-2">
-                    <div class="flex items-center gap-1">
-                      <span class="text-sm font-semibold" :class="day.inMonth ? 'text-highlighted' : 'text-muted'">
-                        {{ day.dayNumber }}
+                <div v-else class="grid grid-cols-7 gap-2">
+                  <div
+                    v-for="day in calendarDays"
+                    :key="day.dateKey"
+                    class="flex min-h-36 flex-col rounded-lg border p-2"
+                    :class="[dayClass(day), day.totalHours > 0 ? 'cursor-pointer transition hover:bg-elevated' : '']"
+                    @click="openDayDetailModal(day)"
+                  >
+                    <div class="flex items-start justify-between gap-2">
+                      <div class="flex items-center gap-1">
+                        <span class="text-sm font-semibold" :class="day.inMonth ? 'text-highlighted' : 'text-muted'">
+                          {{ day.dayNumber }}
+                        </span>
+                        <UBadge
+                          v-if="day.isToday"
+                          color="primary"
+                          variant="subtle"
+                          size="xs"
+                        >
+                          今天
+                        </UBadge>
+                      </div>
+                      <span v-if="day.totalHours > 0" class="text-xs font-semibold text-highlighted">
+                        {{ day.totalHours.toFixed(1) }}h
                       </span>
-                      <UBadge
-                        v-if="day.isToday"
-                        color="primary"
-                        variant="subtle"
-                        size="xs"
+                    </div>
+
+                    <div class="mt-2 min-h-0 flex-1 space-y-1 overflow-hidden">
+                      <div
+                        v-for="group in day.projectGroups.slice(0, 3)"
+                        :key="group.projectId"
+                        class="rounded-md border border-default bg-default/80 px-2 py-1"
                       >
-                        今天
-                      </UBadge>
-                    </div>
-                    <span v-if="day.totalHours > 0" class="text-xs font-semibold text-highlighted">
-                      {{ day.totalHours.toFixed(1) }}h
-                    </span>
-                  </div>
-
-                  <div class="mt-2 min-h-0 flex-1 space-y-1 overflow-hidden">
-                    <div
-                      v-for="group in day.projectGroups.slice(0, 3)"
-                      :key="group.projectId"
-                      class="rounded-md border border-default bg-default/80 px-2 py-1"
-                    >
-                      <div class="flex items-center justify-between gap-2">
-                        <span class="truncate text-xs font-medium text-highlighted">
-                          {{ group.projectName }}
-                        </span>
-                        <span class="shrink-0 text-xs font-semibold text-primary">
-                          {{ group.hours.toFixed(1) }}h
-                        </span>
+                        <div class="flex items-center justify-between gap-2">
+                          <span class="truncate text-xs font-medium text-highlighted">
+                            {{ group.projectName }}
+                          </span>
+                          <span class="shrink-0 text-xs font-semibold text-primary">
+                            {{ group.hours.toFixed(1) }}h
+                          </span>
+                        </div>
+                        <div v-if="group.entryCount > 0" class="mt-0.5 truncate font-mono text-[11px] text-muted">
+                          {{ `${group.entryCount} 条工时` }}
+                        </div>
                       </div>
-                      <div v-if="group.entries.some(entry => entry.itemKey)" class="mt-0.5 truncate font-mono text-[11px] text-muted">
-                        {{ group.entries.map(entry => entry.itemKey).filter(Boolean).slice(0, 2).join(' / ') }}
+
+                      <div v-if="day.projectGroups.length > 3" class="px-1 text-[11px] text-muted">
+                        另有 {{ day.projectGroups.length - 3 }} 个项目
                       </div>
                     </div>
 
-                    <div v-if="day.projectGroups.length > 3" class="px-1 text-[11px] text-muted">
-                      另有 {{ day.projectGroups.length - 3 }} 个项目
-                    </div>
+                    <UButton
+                      v-if="day.inMonth && day.isPastOrToday && day.totalHours <= 0"
+                      label="填报"
+                      icon="i-lucide-plus"
+                      color="primary"
+                      variant="soft"
+                      size="xs"
+                      class="mt-2 justify-center"
+                      :disabled="!canSubmitTimesheet"
+                      :title="submitPermissionDenied ? SUBMIT_PERMISSION_DENIED_REASON : undefined"
+                      @click.stop="openReportModal(day.dateKey)"
+                    />
                   </div>
-
-                  <UButton
-                    v-if="day.inMonth && day.isPastOrToday && day.totalHours <= 0"
-                    label="填报"
-                    icon="i-lucide-plus"
-                    color="primary"
-                    variant="soft"
-                    size="xs"
-                    class="mt-2 justify-center"
-                    @click.stop="openReportModal(day.dateKey)"
-                  />
                 </div>
               </div>
             </div>
@@ -1167,17 +1246,38 @@ onMounted(async () => {
           <div class="space-y-4 p-4">
             <div class="flex flex-wrap items-center gap-2 text-sm">
               <UBadge color="primary" variant="subtle">
-                {{ detailTotalHours.toFixed(1) }}h
+                {{ dayRead.data.value ? `${detailTotalHours.toFixed(1)}h` : '—' }}
               </UBadge>
               <UBadge color="neutral" variant="subtle">
-                {{ detailRows.length }} 个项目行
+                共 {{ dayTotal }} 条
               </UBadge>
               <UBadge v-if="changedDetailRows.length > 0" color="warning" variant="subtle">
                 已修改 {{ changedDetailRows.length }} 条
               </UBadge>
             </div>
 
-            <div v-if="detailRows.length === 0" class="rounded-lg border border-dashed border-default px-4 py-8 text-center text-sm text-muted">
+            <UAlert
+              v-if="dayForbidden"
+              color="warning"
+              icon="i-lucide-shield-alert"
+              title="无权查看当日工时"
+              description="当前账号没有本人工时的查看或填报权限。"
+            />
+            <UAlert
+              v-else-if="dayRead.error.value"
+              color="error"
+              title="当日工时加载失败"
+              description="全天统计和编辑基线暂不可用，请重新加载。"
+            />
+            <UButton
+              v-if="dayRead.error.value && !dayForbidden"
+              label="重新加载"
+              color="neutral"
+              variant="outline"
+              @click="loadDayEntries()"
+            />
+            <USkeleton v-if="dayLoading" class="h-32 w-full" />
+            <div v-else-if="!dayRead.error.value && detailRows.length === 0" class="rounded-lg border border-dashed border-default px-4 py-8 text-center text-sm text-muted">
               暂无工时记录
             </div>
 
@@ -1229,6 +1329,26 @@ onMounted(async () => {
               </div>
             </div>
 
+            <UPagination
+              :sibling-count="0"
+              size="xs"
+              :page="detailPage"
+              :total="dayTotal"
+              :items-per-page="detailPageSize"
+              :disabled="dayLoading || detailSubmitting"
+              @update:page="changeDetailPage"
+            />
+            <UButton
+              label="新增工时"
+              color="neutral"
+              variant="outline"
+              :disabled="!canSubmitTimesheet || detailSubmitting || changedDetailRows.length > 0"
+              :title="submitPermissionDenied ? SUBMIT_PERMISSION_DENIED_REASON : selectedWeekSubmittedCount > 0 ? '已提交工时保持待审核；新增记录作为草稿，需另行提交。' : undefined"
+              @click="openReportFromDetail"
+            />
+            <p v-if="selectedWeekSubmittedCount > 0" class="text-xs text-muted">
+              本周已提交记录不受影响；新增工时会保存为草稿，需另行提交。
+            </p>
             <p v-if="detailTotalHours > 24" class="text-xs text-warning">
               单日工时合计不能超过 24 小时。
             </p>
@@ -1280,7 +1400,7 @@ onMounted(async () => {
             icon="i-lucide-send"
             color="primary"
             :loading="weekSubmitting"
-            :disabled="selectedWeekEditableCount === 0"
+            :disabled="!!weekSubmitDisabledReason || weekSubmitting"
             @click="submitSelectedWeek"
           />
         </template>
@@ -1288,3 +1408,25 @@ onMounted(async () => {
     </template>
   </UDashboardPanel>
 </template>
+
+<style scoped>
+.host-timesheet-grid.is-hosted {
+  grid-template-rows: auto minmax(12rem, 30%) minmax(0, 1fr);
+}
+
+.host-timesheet-grid.is-hosted > .host-timesheet-header {
+  grid-column: 1 / -1;
+}
+
+@container (min-width: 56rem) {
+  .host-timesheet-grid.is-hosted {
+    grid-template-columns: minmax(18rem, 19rem) minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+
+  .host-timesheet-grid.is-hosted > aside {
+    border-right: 1px solid var(--ui-border);
+    border-bottom-width: 0;
+  }
+}
+</style>

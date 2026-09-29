@@ -4,7 +4,7 @@ import { getRequestUid } from '~~/server/utils/authIdentity'
 import { checkPermission } from '~~/server/utils/checkPermission'
 import { getCodocsProjectDocumentReviewContent } from '~~/server/utils/codocsApi'
 import { callAimsRuntime } from '~~/server/utils/projectDocumentAccess'
-import { resolveProjectGovernanceRoleHolder } from '~~/server/utils/projectGovernanceRoleHolder'
+import { resolveProjectGovernanceRoleHolder } from '@hzy/foundation/server/utils/projectGovernanceRoleHolder'
 
 interface QueueItem {
   submissionId: number

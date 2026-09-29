@@ -1,9 +1,19 @@
 <script setup lang="ts">
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
-import type { WorkItem } from '~/types/aims'
-import { typeConfig, priorityConfig, severityConfig, getStatusLabel } from '~/config/work-item'
+import { useAimsModule } from '../../../../layer/useAimsModule'
+import type { WorkItem } from '../../../types/aims'
+import { typeConfig, priorityConfig, severityConfig, getStatusLabel } from '../../../config/work-item'
+import { useProjectStore } from '../../../stores/project'
+import { useWorkItemStore } from '../../../stores/workItem'
+import { workItemAncestorPath } from '../../../utils/workItemAncestors'
+import MarkdownContent from '../../../components/MarkdownContent.vue'
+import ProjectNavbar from '../../../components/project/ProjectNavbar.vue'
+import RoutineQuarterReview from '../../../components/routine/RoutineQuarterReview.vue'
+import RoutineTaskCreateModal from '../../../components/routine/RoutineTaskCreateModal.vue'
 
+// 同一份代码供独立应用与企业宿主使用：非宿主模式下 moduleUrl 原样返回路径。
+const { moduleUrl, hosted } = useAimsModule()
 definePageMeta({
   layoutHeader: true,
   layoutHeaderTitle: '看板',
@@ -21,6 +31,11 @@ const toast = useToast()
 const { users: accountUsers } = useAccountUsers()
 const isRoutineProject = computed(() => projectStore.currentProject?.category === 'routine')
 const showRoutineCreateModal = ref(false)
+function openRoutineCreate() {
+  if (hosted) {
+    void navigateTo({ path: moduleUrl(`/projects/${projectId.value}/work-items`), query: { create: '1', returnTo: moduleUrl(`/projects/${projectId.value}/board`) } })
+  } else showRoutineCreateModal.value = true
+}
 
 const userNameMap = computed(() => {
   const map = new Map<string, string>()
@@ -51,7 +66,10 @@ const quickFilterOptions = [
 const showDetail = ref(false)
 const selectedItem = ref<WorkItem | null>(null)
 const availableTransitions = ref<{ toStatus: string, transitionKey: string }[]>([])
+const hostedDetail = ref<{ editVersion: string, stateActions: string[] } | null>(null)
+const canStartSelectedItem = computed(() => !hosted || hostedDetail.value?.stateActions.includes('start') === true)
 const transitioning = ref(false)
+const startKey = ref('')
 
 // 重新指派
 const showReassign = ref(false)
@@ -139,6 +157,20 @@ const columns = [
 ]
 
 const columnData = ref<Record<string, WorkItem[]>>({})
+const boardPages = ref<Record<string, number>>({})
+function boardColumnTotal(key: string) {
+  return workItemStore.boardTotals[key] || 0
+}
+function boardWipTotal(key: string) {
+  return workItemStore.boardSummary.wipStatus[key] || 0
+}
+function boardAncestorPath(item: WorkItem) {
+  return workItemAncestorPath(item.parentId, workItemStore.boardAncestors)
+}
+function changeBoardPage(key: string, page: number) {
+  boardPages.value = { ...boardPages.value, [key]: page }
+  loadBoard()
+}
 // 每列单独的 ref
 const columnValueRefs: Record<string, Ref<WorkItem[]>> = {}
 for (const col of columns) {
@@ -158,7 +190,7 @@ const columnColorClass: Record<string, string> = {
 const swimlanes = computed(() => {
   if (swimlaneMode.value === 'none') return null
 
-  const allItems = Object.values(columnData.value).flat().filter(i => applyQuickFilter([i]).length > 0)
+  const allItems = Object.values(columnData.value).flat()
   const groups = new Map<string, string>()
 
   if (swimlaneMode.value === 'assignee') {
@@ -178,21 +210,12 @@ const swimlanes = computed(() => {
   return Array.from(groups.entries()).map(([key, label]) => ({ key, label }))
 })
 
-function applyQuickFilter(items: WorkItem[]): WorkItem[] {
-  if (quickFilter.value === 'all') return items
-  const uid = currentUserUid.value
-  if (quickFilter.value === 'my_assigned') return items.filter(i => i.assigneeUid === uid)
-  if (quickFilter.value === 'my_reported') return items.filter(i => i.reporterUid === uid)
-  if (quickFilter.value === 'unassigned') return items.filter(i => !i.assigneeUid)
-  return items
-}
-
 function getColumnItems(colKey: string): WorkItem[] {
-  return applyQuickFilter(columnData.value[colKey] || [])
+  return columnData.value[colKey] || []
 }
 
 function getSwimlanColumnItems(colKey: string, swimlaneKey: string): WorkItem[] {
-  const items = applyQuickFilter(columnData.value[colKey] || [])
+  const items = columnData.value[colKey] || []
   if (swimlaneMode.value === 'assignee') {
     if (swimlaneKey === '__unassigned__') return items.filter(i => !i.assigneeUid)
     return items.filter(i => i.assigneeUid === swimlaneKey)
@@ -206,14 +229,16 @@ function getSwimlanColumnItems(colKey: string, swimlaneKey: string): WorkItem[] 
 function isWipExceeded(colKey: string): boolean {
   const limit = wipLimits.value[colKey]
   if (!limit) return false
-  return (columnValueRefs[colKey]?.value?.length || 0) > limit
+  return boardWipTotal(colKey) > limit
 }
 
 // 加载看板数据
 async function loadBoard() {
-  await workItemStore.fetchBoardItems(projectId.value, {
+  await workItemStore.fetchBoardPages(projectId.value, {
     tier: 'matter',
-    type: isRoutineProject.value ? 'task' : undefined
+    type: isRoutineProject.value ? 'task' : undefined,
+    quickFilter: quickFilter.value,
+    pages: boardPages.value
   })
 
   // 将 store 中的数据分配到各列
@@ -260,7 +285,7 @@ function buildDragBlockedReasons(item: WorkItem, fromColKey: string, allowedTarg
     }
 
     const limit = wipLimits.value[col.key]
-    const count = columnValueRefs[col.key]?.value.length || 0
+    const count = boardWipTotal(col.key)
     if (limit && count >= limit) {
       nextReasons[col.key] = 'WIP 已满'
       continue
@@ -294,7 +319,7 @@ async function prefetchDropValidation(item: WorkItem, fromColKey: string) {
 
   try {
     const res = await $fetch<{ code: number, data: { toStatus: string, transitionKey: string }[] }>(
-      `/api/v1/work-items/${item.id}/transitions`
+      moduleUrl(`/api/v1/work-items/${item.id}/transitions`)
     )
     if (token !== dragValidationToken || !dragState.value || dragState.value.item.id !== item.id) return
 
@@ -472,6 +497,11 @@ watch(swimlaneMode, (mode) => {
   clearDragState()
 })
 
+watch(quickFilter, () => {
+  boardPages.value = {}
+  loadBoard()
+})
+
 watch(childRouteActive, async (active, wasActive) => {
   if (wasActive && !active && boardMounted.value) {
     await loadBoard()
@@ -481,21 +511,25 @@ watch(childRouteActive, async (active, wasActive) => {
 async function openDetail(item: WorkItem) {
   // 执行中的任务、确认中任务、已完成任务统一跳转到执行页面
   if (item.status === 'in_progress' || item.status === 'in_review' || item.status === 'completed') {
-    navigateTo(`/projects/${projectId.value}/board/${item.id}/execution`)
+    navigateTo(moduleUrl(`/projects/${projectId.value}/board/${item.id}/execution`))
     return
   }
   selectedItem.value = item
+  hostedDetail.value = null
+  availableTransitions.value = []
+  startKey.value = ''
   showDetail.value = true
   showTimeEntry.value = false
   showLinkDoc.value = false
   timeEntries.value = []
   linkedDocs.value = []
   try {
-    const res = await $fetch<{ code: number, data: { toStatus: string, transitionKey: string }[] }>(
-      `/api/v1/work-items/${item.id}/transitions`
-    )
-    if (res.code === 0) {
-      availableTransitions.value = res.data
+    if (hosted) {
+      const res = await $fetch<{ code: number, data: { id: number, editVersion: string, stateActions: string[] } }>(moduleUrl(`/api/v1/work-items/${item.id}`))
+      if (selectedItem.value?.id === item.id && res.code === 0 && res.data?.id === item.id && res.data.editVersion && Array.isArray(res.data.stateActions)) hostedDetail.value = res.data
+    } else {
+      const res = await $fetch<{ code: number, data: { toStatus: string, transitionKey: string }[] }>(moduleUrl(`/api/v1/work-items/${item.id}/transitions`))
+      if (res.code === 0) availableTransitions.value = res.data
     }
   } catch {
     availableTransitions.value = []
@@ -505,15 +539,21 @@ async function openDetail(item: WorkItem) {
 }
 
 async function handleStartExecution() {
-  if (!selectedItem.value) return
+  if (!selectedItem.value || !canStartSelectedItem.value) return
   transitioning.value = true
   try {
     const itemId = selectedItem.value.id
-    await workItemStore.updateItem(itemId, { status: 'in_progress' })
+    if (hosted) {
+      startKey.value ||= crypto.randomUUID()
+      await $fetch(moduleUrl(`/api/v1/work-items/${itemId}/start`), { method: 'POST', headers: { 'Idempotency-Key': startKey.value }, body: { projectId: projectId.value, expectedVersion: hostedDetail.value!.editVersion } })
+      startKey.value = ''
+    } else {
+      await workItemStore.updateItem(itemId, { status: 'in_progress' })
+    }
     toast.add({ title: '已开始执行', color: 'success' })
     showDetail.value = false
     selectedItem.value = null
-    await navigateTo(`/projects/${projectId.value}/board/${itemId}/execution`)
+    await navigateTo(moduleUrl(`/projects/${projectId.value}/board/${itemId}/execution`))
   } catch (err: unknown) {
     const msg = (err as { data?: { message?: string } })?.data?.message || '操作失败'
     toast.add({ title: '开始执行失败', description: msg, color: 'error' })
@@ -524,6 +564,10 @@ async function handleStartExecution() {
 
 function openReassign() {
   if (!selectedItem.value) return
+  if (hosted) {
+    void navigateTo(moduleUrl(`/work-items/${selectedItem.value.id}/edit`))
+    return
+  }
   reassignUid.value = selectedItem.value.assigneeUid || ''
   showReassign.value = true
 }
@@ -552,7 +596,7 @@ const timeEntries = ref<{ id: number, entryDate: string, uid: string, hours: num
 
 async function loadTimeEntries(itemId: number) {
   try {
-    const res = await $fetch<{ code: number, data: any[] }>(`/api/v1/work-items/${itemId}/time-entries`)
+    const res = await $fetch<{ code: number, data: any[] }>(moduleUrl(`/api/v1/work-items/${itemId}/time-entries`))
     if (res.code === 0) {
       timeEntries.value = res.data
     }
@@ -567,7 +611,7 @@ const linkedDocs = ref<{ id: number, documentId: string }[]>([])
 
 async function loadLinkedDocs(itemId: number) {
   try {
-    const res = await $fetch<{ code: number, data: any[] }>(`/api/v1/work-items/${itemId}/documents`)
+    const res = await $fetch<{ code: number, data: any[] }>(moduleUrl(`/api/v1/work-items/${itemId}/documents`))
     if (res.code === 0) {
       linkedDocs.value = res.data
     }
@@ -597,7 +641,7 @@ const swimlaneOptions = [
               icon="i-lucide-plus"
               color="primary"
               size="sm"
-              @click="showRoutineCreateModal = true"
+              @click="openRoutineCreate"
             />
           </template>
         </ProjectNavbar>
@@ -632,6 +676,16 @@ const swimlaneOptions = [
           <div v-if="workItemStore.loading" class="flex justify-center py-12">
             <UIcon name="i-lucide-loader-2" class="w-8 h-8 animate-spin text-muted" />
           </div>
+          <div v-else-if="workItemStore.boardError" class="rounded-lg border border-error/30 p-4 text-sm text-error">
+            {{ workItemStore.boardError }}
+            <UButton
+              label="重试"
+              variant="soft"
+              size="xs"
+              class="ml-2"
+              @click="loadBoard"
+            />
+          </div>
 
           <!-- 无泳道模式 -->
           <div v-else-if="!swimlanes" class="flex gap-4 overflow-x-auto pb-4">
@@ -665,8 +719,8 @@ const swimlaneOptions = [
                     variant="subtle"
                     size="xs"
                   >
-                    {{ getColumnItems(col.key).length }}
-                    <span v-if="wipLimits[col.key]"> / {{ wipLimits[col.key] }}</span>
+                    {{ boardColumnTotal(col.key) }} 可见
+                    <span v-if="wipLimits[col.key]"> · WIP {{ boardWipTotal(col.key) }} / {{ wipLimits[col.key] }}</span>
                   </UBadge>
                 </div>
               </div>
@@ -709,6 +763,9 @@ const swimlaneOptions = [
                   <p class="text-sm font-medium line-clamp-2 mb-2">
                     {{ item.title }}
                   </p>
+                  <p v-if="boardAncestorPath(item)" class="mb-2 truncate text-xs text-muted" :title="boardAncestorPath(item)">
+                    {{ boardAncestorPath(item) }}
+                  </p>
                   <div class="flex items-center justify-between">
                     <UBadge :color="(priorityConfig[item.priority as keyof typeof priorityConfig]?.color as any)" variant="subtle" size="xs">
                       {{ item.priority }}
@@ -722,6 +779,14 @@ const swimlaneOptions = [
                 <div v-if="columnValueRefs[col.key]!.value.length === 0" class="text-center py-8 text-xs text-muted">
                   暂无
                 </div>
+                <UPagination
+                  v-if="boardColumnTotal(col.key) > 20"
+                  :page="boardPages[col.key] || 1"
+                  :total="boardColumnTotal(col.key)"
+                  :items-per-page="20"
+                  size="xs"
+                  @update:page="changeBoardPage(col.key, $event)"
+                />
               </div>
             </div>
           </div>
@@ -739,7 +804,7 @@ const swimlaneOptions = [
                 <UIcon v-else name="i-lucide-signal" class="w-4 h-4" />
                 {{ lane.label }}
                 <UBadge color="neutral" variant="subtle" size="xs">
-                  {{ columns.reduce((sum, col) => sum + getSwimlanColumnItems(col.key, lane.key).length, 0) }}
+                  本页 {{ columns.reduce((sum, col) => sum + getSwimlanColumnItems(col.key, lane.key).length, 0) }}
                 </UBadge>
               </div>
 
@@ -777,6 +842,19 @@ const swimlaneOptions = [
                   </div>
                 </div>
               </div>
+            </div>
+          </div>
+          <div v-if="swimlanes" class="flex flex-wrap gap-3">
+            <div v-for="col in columns" :key="col.key" class="min-w-40 text-xs text-muted">
+              {{ col.label }} · 共 {{ boardColumnTotal(col.key) }} 条
+              <UPagination
+                v-if="boardColumnTotal(col.key) > 20"
+                :page="boardPages[col.key] || 1"
+                :total="boardColumnTotal(col.key)"
+                :items-per-page="20"
+                size="xs"
+                @update:page="changeBoardPage(col.key, $event)"
+              />
             </div>
           </div>
 
@@ -915,7 +993,7 @@ const swimlaneOptions = [
                   </div>
                   <div v-else class="flex flex-wrap justify-end gap-2">
                     <UButton
-                      v-if="isAssignee"
+                      v-if="isAssignee && canStartSelectedItem"
                       label="开始执行"
                       icon="i-lucide-play"
                       color="primary"
@@ -925,7 +1003,7 @@ const swimlaneOptions = [
                     />
                     <UButton
                       v-if="isManager"
-                      label="重新指派"
+                      :label="hosted ? '编辑负责人' : '重新指派'"
                       icon="i-lucide-user-round-pen"
                       color="primary"
                       variant="soft"
@@ -939,7 +1017,7 @@ const swimlaneOptions = [
           </UModal>
 
           <RoutineTaskCreateModal
-            v-if="isRoutineProject"
+            v-if="isRoutineProject && !hosted"
             v-model:open="showRoutineCreateModal"
             :project-id="projectId"
             @created="handleRoutineTaskCreated"

@@ -4,7 +4,7 @@ import { queryRow, queryRows, withTransaction } from '~~/server/utils/db'
 import { buildLicensePayload, buildSignedLicenseToken, hashLicensePayload, normalizeLicenseCapabilities } from '~~/server/utils/licenseArtifacts'
 import { getSubscriptionByAppCode } from '~~/server/utils/subscriptions'
 import { CONSOLE_APP_CODE } from '~~/server/utils/consoleApp'
-import { ensureConsoleVaultMasterKey, fingerprintConsoleVaultMasterKey } from '~~/server/utils/deploymentBootstrapSecrets'
+import { consoleVaultLicenseMetadata, resolveConsoleVaultMasterKeyForIssuance } from '~~/server/utils/deploymentBootstrapSecrets'
 import { buildDeploymentRouteDefaults, findActiveDeploymentSite } from '~~/server/utils/deploymentSites'
 import { DEFAULT_DEPLOYMENT_ENVIRONMENT, normalizeDeploymentEnvironment } from '~~/server/utils/tenantDeploymentSettings'
 import { requireTenantOwnerForTenantAdmin } from '~~/server/utils/tenantAdminAccess'
@@ -402,8 +402,8 @@ export default defineEventHandler(async (event) => {
       return
     }
 
-    const consoleVaultMasterKey = appCode === CONSOLE_APP_CODE
-      ? await ensureConsoleVaultMasterKey({
+    const consoleVaultCustody = appCode === CONSOLE_APP_CODE
+      ? await resolveConsoleVaultMasterKeyForIssuance({
           deploymentId,
           tenantCode,
           appCode,
@@ -422,13 +422,7 @@ export default defineEventHandler(async (event) => {
       expiresAt,
       graceUntil,
       capabilities: capabilityPayload,
-      vault: consoleVaultMasterKey
-        ? {
-            masterKeyRequired: true,
-            masterKeyFingerprint: fingerprintConsoleVaultMasterKey(consoleVaultMasterKey),
-            algorithm: 'aes-256-gcm'
-          }
-        : null
+      vault: consoleVaultCustody ? consoleVaultLicenseMetadata(consoleVaultCustody) : null
     })
     const payloadHash = hashLicensePayload(licensePayload)
     const signed = await buildSignedLicenseToken(licensePayload)

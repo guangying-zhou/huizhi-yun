@@ -38,6 +38,7 @@ interface Props {
   documentId?: string
   versions?: VersionItem[]
   versionsLoading?: boolean
+  versionsError?: string
   showVersionHistory?: boolean
   showSharePanel?: boolean
   isProjectDoc?: boolean
@@ -49,7 +50,10 @@ interface Props {
   allowShare?: boolean
   canManageShares?: boolean
   activeVersionNum?: number | null
+  /** Read-only history (department documents): view stays available to readers, no diff. */
+  versionHistoryReadOnly?: boolean
   aiAbstract?: string
+  aiEnabled?: boolean
   readonly?: boolean
 }
 
@@ -58,6 +62,7 @@ const props = withDefaults(defineProps<Props>(), {
   documentId: '',
   versions: () => [],
   versionsLoading: false,
+  versionsError: '',
   showVersionHistory: false,
   showSharePanel: false,
   isProjectDoc: false,
@@ -69,7 +74,9 @@ const props = withDefaults(defineProps<Props>(), {
   allowShare: true,
   canManageShares: true,
   activeVersionNum: null,
+  versionHistoryReadOnly: false,
   aiAbstract: '',
+  aiEnabled: true,
   readonly: false
 })
 
@@ -158,7 +165,7 @@ const getGitLabCommitsUrl = () => {
     return '#'
   }
   // 使用环境变量中的 GitLab base URL
-  const gitlabBaseUrl = (config.public.gitlabBaseUrl || 'https://gitlab.wiztek.cn').replace(/\/$/, '')
+  const gitlabBaseUrl = String(config.public.gitlabBaseUrl || 'https://gitlab.wiztek.cn').replace(/\/$/, '')
   // 从 repoUrl 提取项目路径 (例如: huizhi-yun/account)
   const repoPath = props.projectRepoUrl
     .replace(gitlabBaseUrl, '')
@@ -170,18 +177,18 @@ const getGitLabCommitsUrl = () => {
 
 <template>
   <div
-    class="flex h-full min-h-0 max-h-full flex-col overflow-hidden border-l border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-900"
+    class="flex h-full min-h-0 max-h-full flex-col overflow-hidden border-l border-default bg-default"
     style="width: 240px; min-width: 240px; max-width: 360px; height: 100%;"
   >
     <!-- 标签页头部 -->
-    <div class="shrink-0 border-b border-gray-200 dark:border-gray-700">
+    <div class="shrink-0 border-b border-default">
       <div class="px-3 pt-2 pb-0">
         <div class="flex items-center w-full">
           <button
             class="flex-1 flex items-center justify-center py-1 text-sm font-medium border-b-2 transition-colors"
             :class="activeTab === 'outline'
               ? 'bg-primary-50 dark:bg-primary-900/20 text-primary-600 dark:text-primary-400 border-primary'
-              : 'text-gray-600 dark:text-gray-400 border-transparent hover:bg-gray-100 dark:hover:bg-gray-800'"
+              : 'text-muted border-transparent hover:bg-muted'"
             title="大纲"
             @click="activeTab = 'outline'"
           >
@@ -192,7 +199,7 @@ const getGitLabCommitsUrl = () => {
             class="flex-1 flex items-center justify-center py-1 text-sm font-medium border-b-2 transition-colors"
             :class="activeTab === 'share'
               ? 'bg-primary-50 dark:bg-primary-900/20 text-primary-600 dark:text-primary-400 border-primary'
-              : 'text-gray-600 dark:text-gray-400 border-transparent hover:bg-gray-100 dark:hover:bg-gray-800'"
+              : 'text-muted border-transparent hover:bg-muted'"
             title="共享"
             @click="activeTab = 'share'"
           >
@@ -202,7 +209,7 @@ const getGitLabCommitsUrl = () => {
             class="flex-1 flex items-center justify-center py-1 text-sm font-medium border-b-2 transition-colors"
             :class="activeTab === 'history'
               ? 'bg-primary-50 dark:bg-primary-900/20 text-primary-600 dark:text-primary-400 border-primary'
-              : 'text-gray-600 dark:text-gray-400 border-transparent hover:bg-gray-100 dark:hover:bg-gray-800'"
+              : 'text-muted border-transparent hover:bg-muted'"
             title="版本"
             @click="switchToHistory"
           >
@@ -213,18 +220,18 @@ const getGitLabCommitsUrl = () => {
             class="flex-1 flex items-center justify-center py-1 text-sm font-medium border-b-2 transition-colors"
             :class="activeTab === 'annotations'
               ? 'bg-primary-50 dark:bg-primary-900/20 text-primary-600 dark:text-primary-400 border-primary'
-              : 'text-gray-600 dark:text-gray-400 border-transparent hover:bg-gray-100 dark:hover:bg-gray-800'"
+              : 'text-muted border-transparent hover:bg-muted'"
             title="标注"
             @click="activeTab = 'annotations'"
           >
             <UIcon name="i-lucide-message-square-text" class="w-5 h-5" />
           </button>
           <button
-            v-if="viewMode === 'edit'"
+            v-if="viewMode === 'edit' && aiEnabled"
             class="flex-1 flex items-center justify-center py-1 text-sm font-medium border-b-2 transition-colors"
             :class="activeTab === 'ai'
               ? 'bg-primary-50 dark:bg-primary-900/20 text-primary-600 dark:text-primary-400 border-primary'
-              : 'text-gray-600 dark:text-gray-400 border-transparent hover:bg-gray-100 dark:hover:bg-gray-800'"
+              : 'text-muted border-transparent hover:bg-muted'"
             title="AI"
             @click="activeTab = 'ai'"
           >
@@ -254,20 +261,20 @@ const getGitLabCommitsUrl = () => {
       >
         <!-- 项目文档提示 -->
         <div v-if="isProjectDoc && getGitLabCommitsUrl() !== '#'" class="p-4">
-          <div class="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+          <div class="bg-info/10 border border-info/25 rounded-lg p-4">
             <div class="flex items-start gap-3">
-              <UIcon name="i-lucide-info" class="w-5 h-5 text-blue-600 dark:text-blue-400 mt-0.5" />
+              <UIcon name="i-lucide-info" class="w-5 h-5 text-info mt-0.5" />
               <div>
-                <h4 class="font-medium text-blue-900 dark:text-blue-100 mb-1">
+                <h4 class="font-medium text-info mb-1">
                   查看版本历史
                 </h4>
-                <p class="text-sm text-blue-700 dark:text-blue-300 mb-3">
+                <p class="text-sm text-info mb-3">
                   项目文档的版本历史可通过 GitLab 查看
                 </p>
                 <a
                   :href="getGitLabCommitsUrl()"
                   target="_blank"
-                  class="inline-flex items-center gap-1 text-sm text-blue-600 dark:text-blue-400 hover:underline"
+                  class="inline-flex items-center gap-1 text-sm text-info hover:underline"
                 >
                   <UIcon name="i-lucide-external-link" class="w-4 h-4" />
                   在 GitLab 中查看
@@ -282,6 +289,21 @@ const getGitLabCommitsUrl = () => {
           <UIcon name="i-lucide-loader-2" class="w-8 h-8 animate-spin text-primary" />
         </div>
 
+        <div v-else-if="versionsError" class="flex-1 flex flex-col items-center justify-center gap-3 px-4 py-20 text-center">
+          <UIcon name="i-lucide-triangle-alert" class="size-8 text-warning" />
+          <p class="text-sm text-muted">
+            {{ versionsError }}
+          </p>
+          <UButton
+            color="neutral"
+            variant="soft"
+            size="sm"
+            @click="emit('load-versions')"
+          >
+            重新加载
+          </UButton>
+        </div>
+
         <!-- 版本列表 -->
         <div v-else-if="versions.length > 0" class="flex-1 min-h-0 overflow-y-auto p-3">
           <UAlert
@@ -292,9 +314,13 @@ const getGitLabCommitsUrl = () => {
             description="只读状态下不可查看历史版本内容差异，也不可恢复历史版本。"
             class="mb-3"
           />
+          <p class="mb-3 flex items-start gap-1.5 text-xs text-muted">
+            <UIcon name="i-lucide-info" class="mt-0.5 size-3.5 shrink-0" />
+            <span>历史版本被新版本替换 30 天后按存储保留策略清理，届时无法查看或恢复。</span>
+          </p>
           <div class="relative">
             <!-- 时间线 -->
-            <div class="absolute left-1.25 top-2 bottom-2 w-px bg-gray-200 dark:bg-gray-700" />
+            <div class="absolute left-1.25 top-2 bottom-2 w-px bg-muted" />
 
             <!-- 版本项 -->
             <div v-for="version in versions" :key="version.id" class="relative pl-6 pb-5">
@@ -303,11 +329,11 @@ const getGitLabCommitsUrl = () => {
                 class="absolute left-0 top-1 w-2.75 h-2.75 rounded-full ring-2"
                 :class="activeVersionNum === version.versionNum
                   ? 'bg-primary ring-primary/30 scale-125'
-                  : 'bg-gray-300 dark:bg-gray-600 ring-white dark:ring-gray-900'"
+                  : 'bg-muted ring-white'"
               />
 
               <!-- 时间戳（节点右侧） -->
-              <div class="text-xs text-gray-500 dark:text-gray-400 mb-1.5 leading-none">
+              <div class="text-xs text-muted mb-1.5 leading-none">
                 {{ formatVersionDateTime(version.createdAt) }}
               </div>
 
@@ -316,7 +342,7 @@ const getGitLabCommitsUrl = () => {
                 class="rounded-lg border p-2.5 transition-all cursor-pointer"
                 :class="activeVersionNum === version.versionNum
                   ? 'border-primary bg-primary-50 dark:bg-primary-900/20 shadow-sm'
-                  : 'border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 hover:border-primary/40'"
+                  : 'border-default bg-default hover:border-primary/40'"
                 @click="!readonly && emit('view-version', version.id)"
               >
                 <div class="flex items-center justify-between">
@@ -325,16 +351,16 @@ const getGitLabCommitsUrl = () => {
                       class="text-xs font-semibold px-1.5 py-0.5 rounded"
                       :class="activeVersionNum === version.versionNum
                         ? 'bg-primary/10 text-primary'
-                        : 'bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300'"
+                        : 'bg-muted text-muted'"
                     >v{{ version.versionNum }}</span>
                     <div
                       class="w-5 h-5 rounded-full bg-primary-100 dark:bg-primary-900 flex items-center justify-center text-[10px] font-medium text-primary"
                     >
                       {{ getInitial(version.editorName) }}
                     </div>
-                    <span class="text-xs text-gray-600 dark:text-gray-300 truncate max-w-25">{{ version.editorName }}</span>
+                    <span class="text-xs text-muted truncate max-w-25">{{ version.editorName }}</span>
                   </div>
-                  <span class="text-[10px] text-gray-400">{{ formatFileSize(version.contentSize) }}</span>
+                  <span class="text-[10px] text-dimmed">{{ formatFileSize(version.contentSize) }}</span>
                 </div>
 
                 <!-- 操作按钮 -->
@@ -344,10 +370,11 @@ const getGitLabCommitsUrl = () => {
                     variant="soft"
                     :label="activeVersionNum === version.versionNum ? '查看中' : '查看'"
                     icon="i-lucide-eye"
-                    :disabled="readonly || activeVersionNum === version.versionNum"
+                    :disabled="(readonly && !versionHistoryReadOnly) || activeVersionNum === version.versionNum"
                     @click.stop="emit('view-version', version.id)"
                   />
                   <UButton
+                    v-if="!versionHistoryReadOnly"
                     size="xs"
                     variant="ghost"
                     label="差异"
@@ -363,8 +390,8 @@ const getGitLabCommitsUrl = () => {
 
         <!-- 空状态 -->
         <div v-else class="flex-1 flex flex-col items-center justify-center py-20 px-4 text-center">
-          <UIcon name="i-lucide-history" class="w-12 h-12 text-gray-400 mb-3" />
-          <p class="text-sm text-gray-500 dark:text-gray-400">
+          <UIcon name="i-lucide-history" class="w-12 h-12 text-dimmed mb-3" />
+          <p class="text-sm text-muted">
             暂无版本历史
           </p>
         </div>
@@ -402,7 +429,7 @@ const getGitLabCommitsUrl = () => {
 
       <!-- AI 标签页 -->
       <div
-        v-show="activeTab === 'ai'"
+        v-if="aiEnabled && activeTab === 'ai'"
         class="min-h-0 flex flex-col overflow-hidden"
         style="height: calc(100vh - 120px);"
       >

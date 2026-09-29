@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useAimsModule } from '../../../../layer/useAimsModule'
 import type {
   CreateMilestoneRequest,
   UpdateMilestoneRequest,
@@ -8,15 +9,24 @@ import type {
   PivrStage,
   ProjectTemplateVersionDetail,
   ProjectTemplateWorkItemDefinition
-} from '~/types/aims'
-import { milestoneStatusConfig } from '~/config/milestone'
-import { typeConfig, getStatusLabel, getStatusColor } from '~/config/work-item'
+} from '../../../types/aims'
+import { milestoneStatusConfig } from '../../../config/milestone'
+import { typeConfig, getStatusLabel, getStatusColor } from '../../../config/work-item'
 import {
   normalizeProjectTemplateVersion,
   type RawProjectTemplateVersion
-} from '~/utils/projectTemplateVersions'
-import { projectModuleEnabled } from '~/utils/projectModuleConfig'
+} from '../../../utils/projectTemplateVersions'
+import { projectModuleEnabled } from '../../../utils/projectModuleConfig'
+import { createCommandIntents } from '../../../utils/commandIntent'
+import { useMilestoneStore } from '../../../stores/milestone'
+import { useProjectStore } from '../../../stores/project'
+import { useWorkItemStore } from '../../../stores/workItem'
+import ProjectModuleDisabledState from '../../../components/project/ProjectModuleDisabledState.vue'
+import ProjectNavbar from '../../../components/project/ProjectNavbar.vue'
 
+// 同一份代码供独立应用与企业宿主使用：非宿主模式下 moduleUrl 原样返回路径。
+const { moduleUrl, hosted } = useAimsModule()
+const deliverableIntents = createCommandIntents()
 // ========================
 // 里程碑表单校验
 // ========================
@@ -92,7 +102,7 @@ async function loadProjectTemplateVersion() {
   if (!templateVersionId) return
 
   try {
-    const res = await $fetch<{ code: number, data: RawProjectTemplateVersion | null }>(`/api/v1/project-template-versions/${templateVersionId}`, {
+    const res = await $fetch<{ code: number, data: RawProjectTemplateVersion | null }>(moduleUrl(`/api/v1/project-template-versions/${templateVersionId}`), {
       query: { optional: 1 }
     })
     if (res.code !== 0 || !res.data) return
@@ -253,7 +263,7 @@ async function loadMilestoneWorkItems(milestoneId: number) {
   milestoneWorkItemsLoading.value.add(milestoneId)
   try {
     const res = await $fetch<{ code: number, data: { items: WorkItem[] } }>(
-      `/api/v1/projects/${projectId.value}/work-items`,
+      moduleUrl(`/api/v1/projects/${projectId.value}/work-items`),
       { params: { milestone_id: milestoneId } }
     )
     if (res.code === 0) {
@@ -404,7 +414,7 @@ async function loadProjectDeliverables() {
   if (deliverablesLoaded.value) return
   try {
     const res = await $fetch<{ code: number, data: ListPayload<RawDeliverableItem> }>(
-      '/api/v1/deliverables',
+      moduleUrl('/api/v1/deliverables'),
       { params: { project_id: projectId.value } }
     )
     if (res.code === 0) {
@@ -462,6 +472,9 @@ const deliverableStatusConfig: Record<string, { label: string, color: string }> 
 // 提交交付物弹���
 const showSubmitDeliverableModal = ref(false)
 const currentDeliverable = ref<DeliverableItem | null>(null)
+watch(showSubmitDeliverableModal, (open) => {
+  if (!open && currentDeliverable.value) deliverableIntents.abandon(`submit:${currentDeliverable.value.id}`)
+})
 const submitDocUuid = ref('')
 const submitEvidenceUrl = ref('')
 const submitEvidenceNote = ref('')
@@ -471,15 +484,20 @@ async function handleSubmitDeliverable() {
   if (!currentDeliverable.value) return
   submittingDeliverable.value = true
   try {
-    await $fetch(`/api/v1/deliverables/${currentDeliverable.value.id}`, {
+    const body = {
+      status: 'submitted',
+      documentUuid: submitDocUuid.value || null,
+      evidenceUrl: submitEvidenceUrl.value || null,
+      evidenceNote: submitEvidenceNote.value || null
+    }
+    const intent = `submit:${currentDeliverable.value.id}`
+    await $fetch(moduleUrl(`/api/v1/deliverables/${currentDeliverable.value.id}`), {
       method: 'PUT',
-      body: {
-        status: 'submitted',
-        documentUuid: submitDocUuid.value || null,
-        evidenceUrl: submitEvidenceUrl.value || null,
-        evidenceNote: submitEvidenceNote.value || null
-      }
+      body,
+      headers: deliverableIntents.headers(intent, body),
+      retry: 0
     })
+    deliverableIntents.complete(intent)
     showSubmitDeliverableModal.value = false
     // 刷新该里程碑的交付物
     const milestoneId = [...milestoneDeliverables.value.entries()]
@@ -498,6 +516,9 @@ async function handleSubmitDeliverable() {
 // 新建里程碑
 // ========================
 const showCreateMilestoneModal = ref(false)
+watch(showCreateMilestoneModal, (open) => {
+  if (!open) milestoneStore.abandonMilestoneIntent('create', projectId.value)
+})
 const inactiveMilestoneWarning = ref(false)
 const creatingMilestone = ref(false)
 const modeOptions = [
@@ -505,9 +526,11 @@ const modeOptions = [
   { label: '强约束', value: 'strong_constraint' },
   { label: '周期性', value: 'periodic' }
 ]
+const createModeOptions = modeOptions.filter(option => option.value !== 'periodic')
 
 const pivrStageOptions = [
-  { label: '不适用', value: '' },
+  // Nuxt UI v4 SelectItem rejects '' as a value; 'none' maps to a null stage.
+  { label: '不适用', value: 'none' },
   { label: 'P - 准备', value: 'P' },
   { label: 'I - 实施', value: 'I' },
   { label: 'V - 验证交付', value: 'V' },
@@ -528,12 +551,17 @@ const createMilestoneErrors = computed(() => {
   return validateMilestoneForm(createMilestoneForm.value)
 })
 const canCreateMilestone = computed(() =>
-  Object.keys(validateMilestoneForm(createMilestoneForm.value)).length === 0
+  createMilestoneForm.value.mode !== 'periodic'
+  && Object.keys(validateMilestoneForm(createMilestoneForm.value)).length === 0
 )
 
 async function handleCreateMilestone() {
   if (!isProjectLeader.value) {
     toast.add({ title: '仅项目负责人可创建里程碑', color: 'warning' })
+    return
+  }
+  if (createMilestoneForm.value.mode === 'periodic') {
+    toast.add({ title: '周期里程碑只能通过模板创建', color: 'warning' })
     return
   }
   createMilestoneTouched.value = true
@@ -567,6 +595,7 @@ function canRolloverMilestone(milestone: Milestone) {
   return canManageProjectPlan.value
     && !isApprovalMode.value
     && milestone.mode === 'periodic'
+    && Boolean(milestone.templateKey)
     && milestone.status !== 'completed'
 }
 
@@ -581,7 +610,7 @@ async function handleRolloverMilestone() {
   rollingOverMilestone.value = true
   try {
     const milestoneId = rolloverMilestone.value.id
-    await $fetch(`/api/v1/projects/${projectId.value}/milestones/${milestoneId}/rollover`, {
+    await $fetch(moduleUrl(`/api/v1/projects/${projectId.value}/milestones/${milestoneId}/rollover`), {
       method: 'POST',
       body: {
         carryover: rolloverCarryover.value
@@ -610,6 +639,9 @@ async function handleRolloverMilestone() {
 // ========================
 const showEditMilestoneModal = ref(false)
 const editingMilestoneId = ref<number | null>(null)
+watch(showEditMilestoneModal, (open) => {
+  if (!open && editingMilestoneId.value) milestoneStore.abandonMilestoneIntent('update', editingMilestoneId.value)
+})
 const savingMilestone = ref(false)
 const editMilestoneTouched = ref(false)
 const editMilestoneForm = ref<UpdateMilestoneRequest>({
@@ -645,6 +677,7 @@ interface EditDeliverableItem {
 }
 
 const editMilestoneDeliverableItems = ref<EditDeliverableItem[]>([])
+const pendingTemplateDeliverableBatches = new Map<string, { workItemId: number, body: Record<string, unknown> }>()
 
 const deliverableTypeLabel: Record<string, string> = {
   document: '文档',
@@ -693,17 +726,21 @@ async function loadEditMilestoneDeliverables(milestoneId: number, pivrStage: Piv
 }
 
 async function _handleCreateRequirementChange(milestone: typeof milestoneStore.milestones[0]) {
+  const action = `requirement-target:${projectId.value}:${milestone.id}`
+  const body = { milestoneId: milestone.id }
   try {
     const res = await $fetch<{ code: number, data: { id: number, itemKey: string, title: string } }>(
-      `/api/v1/projects/${projectId.value}/requirement-targets`,
+      moduleUrl(`/api/v1/projects/${projectId.value}/requirement-targets`),
       {
         method: 'POST',
-        body: { milestoneId: milestone.id }
+        body,
+        headers: deliverableIntents.headers(action, body)
       }
     )
     if (res.code === 0) {
+      deliverableIntents.complete(action)
       useToast().add({ title: `已创建 ${res.data.itemKey} ${res.data.title}`, color: 'success' })
-      navigateTo(`/projects/${projectId.value}/requirements?workItemId=${res.data.id}`)
+      navigateTo(moduleUrl(`/projects/${projectId.value}/requirements?workItemId=${res.data.id}`))
     }
   } catch (err: unknown) {
     const msg = (err as { data?: { message?: string } })?.data?.message
@@ -735,6 +772,7 @@ async function handleEditMilestone() {
   savingMilestone.value = true
   try {
     const data = { ...editMilestoneForm.value }
+    if (hosted) delete data.status // Host 的状态只展示；完成只能走 Workflow。
     if (!data.pivrStage) data.pivrStage = null
     await milestoneStore.updateMilestone(editingMilestoneId.value, data, projectId.value)
 
@@ -742,56 +780,62 @@ async function handleEditMilestone() {
     const milestoneId = editingMilestoneId.value
     const projectCode = projectStore.currentProject?.projectCode || ''
 
+    let deliverableBatchFailed = false
     for (const template of editMilestoneDeliverableItems.value) {
+      const pendingKey = `${milestoneId}:${template.key}`
       if (!template.selected && template.existingWorkItemId) {
         // 取消勾选且有已存在的工作项 → 删除
         try {
-          await $fetch(`/api/v1/work-items/${template.existingWorkItemId}`, { method: 'DELETE' })
+          await $fetch(moduleUrl(`/api/v1/work-items/${template.existingWorkItemId}`), { method: 'DELETE' })
         } catch {
           // 静默处理，可能已被删除
         }
-      } else if (template.selected && !template.existingWorkItemId) {
+      } else if (template.selected && (!template.existingWorkItemId || pendingTemplateDeliverableBatches.has(pendingKey))) {
         // 新勾选且无已存在的工作项 → 创建
         try {
-          const wiRes = await $fetch<{ code: number, data: { id: number } }>(
-            `/api/v1/projects/${projectId.value}/work-items`,
-            {
-              method: 'POST',
-              body: {
-                type: template.type,
-                tier: 'target',
-                title: template.title,
-                description: template.description || '',
-                milestoneId,
-                priority: template.priority,
-                reviewLevel: template.reviewLevel ?? 1,
-                required: template.required,
-                templateKey: template.key
+          let pending = pendingTemplateDeliverableBatches.get(pendingKey)
+          if (!pending) {
+            const wiRes = await $fetch<{ code: number, data: { id: number } }>(
+              moduleUrl(`/api/v1/projects/${projectId.value}/work-items`),
+              {
+                method: 'POST',
+                body: {
+                  type: template.type,
+                  tier: 'target',
+                  title: template.title,
+                  description: template.description || '',
+                  milestoneId,
+                  priority: template.priority,
+                  reviewLevel: template.reviewLevel ?? 1,
+                  required: template.required,
+                  templateKey: template.key
+                }
               }
-            }
-          )
-          if (wiRes.code === 0 && wiRes.data?.id) {
-            await $fetch('/api/v1/deliverables/batch', {
-              method: 'POST',
-              body: {
-                items: template.deliverables.map((deliverable, index) => ({
-                  entityType: 'work_item',
-                  entityId: wiRes.data.id,
-                  name: deliverable.name,
-                  description: deliverable.description || null,
-                  acceptanceCriteria: deliverable.acceptanceCriteria,
-                  deliverableType: deliverable.deliverableType,
-                  required: deliverable.required,
-                  sortOrder: deliverable.sortOrder ?? index,
-                  projectId: projectId.value,
-                  projectCode,
-                  templateKey: deliverable.key
-                }))
-              }
-            })
+            )
+            if (wiRes.code !== 0 || !wiRes.data?.id) throw new Error('工作项创建结果无效')
+            const workItemId = wiRes.data.id
+            const body = { items: template.deliverables.map((deliverable, index) => ({
+              entityType: 'work_item', entityId: workItemId,
+              name: deliverable.name, description: deliverable.description || null,
+              acceptanceCriteria: deliverable.acceptanceCriteria,
+              deliverableType: deliverable.deliverableType, required: deliverable.required,
+              sortOrder: deliverable.sortOrder ?? index, projectId: projectId.value,
+              projectCode, templateKey: deliverable.key
+            })) }
+            pending = { workItemId, body }
+            pendingTemplateDeliverableBatches.set(pendingKey, pending)
           }
+          const intent = `template-batch:${pending.workItemId}`
+          await $fetch(moduleUrl('/api/v1/deliverables/batch'), {
+            method: 'POST', body: pending.body,
+            headers: deliverableIntents.headers(intent, pending.body), retry: 0
+          })
+          deliverableIntents.complete(intent)
+          template.existingWorkItemId = pending.workItemId
+          pendingTemplateDeliverableBatches.delete(pendingKey)
         } catch {
-          // 静默处理
+          deliverableBatchFailed = true
+          toast.add({ title: '成果写入未确认，请在当前弹窗重试', color: 'error' })
         }
       }
     }
@@ -801,7 +845,7 @@ async function handleEditMilestone() {
     await loadMilestoneWorkItems(milestoneId)
     deliverablesLoaded.value = false
 
-    showEditMilestoneModal.value = false
+    if (!deliverableBatchFailed) showEditMilestoneModal.value = false
   } finally {
     savingMilestone.value = false
   }
@@ -904,6 +948,22 @@ onMounted(async () => {
           </div>
 
           <template v-else>
+            <!-- Host 本期不开放里程碑完成审批；独立 Aims 保持原入口。 -->
+            <UAlert
+              v-if="hosted"
+              color="info"
+              variant="subtle"
+              icon="i-lucide-info"
+              title="里程碑完成审批将于下一版本开放"
+            />
+            <div v-if="isProjectLeader" class="flex justify-end">
+              <UButton
+                icon="i-lucide-plus"
+                label="新建里程碑"
+                color="primary"
+                @click="showCreateMilestoneModal = true"
+              />
+            </div>
             <!-- 里程碑列表 -->
             <UCard
               v-for="milestone in milestoneStore.milestones"
@@ -916,10 +976,11 @@ onMounted(async () => {
               }"
             >
               <div class="space-y-3">
-                <!-- 里程碑头部：chevron 折叠，其余（包括标题）进详情 -->
+                <!-- 独立 Aims 仍可进详情；Host 尚无对应页面。 -->
                 <div
-                  class="flex items-center justify-between cursor-pointer"
-                  @click="navigateTo(`/projects/${projectId}/milestones/${milestone.id}`)"
+                  class="flex items-center justify-between"
+                  :class="hosted ? '' : 'cursor-pointer'"
+                  @click="!hosted && navigateTo(`/projects/${projectId}/milestones/${milestone.id}`)"
                 >
                   <div class="flex items-center gap-3">
                     <UButton
@@ -931,12 +992,15 @@ onMounted(async () => {
                       @click.stop="toggleMilestone(milestone.id)"
                     />
                     <UIcon name="i-lucide-flag" class="w-4 h-4 text-primary" />
-                    <h3 class="font-semibold hover:text-primary transition-colors">
+                    <h3 class="font-semibold" :class="hosted ? '' : 'hover:text-primary transition-colors'">
                       {{ milestone.name }}
                     </h3>
                     <UBadge :color="(modeColor[milestone.mode] as any)" variant="outline" size="xs">
                       {{ modeLabel[milestone.mode] || milestone.mode }}
                     </UBadge>
+                    <span v-if="milestone.mode === 'periodic' && !milestone.templateKey" class="text-xs text-warning">
+                      无法关期，请迁至模板
+                    </span>
                     <UBadge :color="(milestoneStatusConfig[milestone.status]?.color as any)" variant="subtle" size="xs">
                       {{ milestoneStatusConfig[milestone.status]?.label || milestone.status }}
                     </UBadge>
@@ -1189,23 +1253,23 @@ onMounted(async () => {
                 </UFormField>
                 <div class="grid grid-cols-2 gap-4">
                   <UFormField label="模式" required>
-                    <USelect v-model="(createMilestoneForm.mode as string)" :items="modeOptions" class="w-full" />
+                    <USelect v-model="(createMilestoneForm.mode as string)" :items="createModeOptions" class="w-full" />
                     <p v-if="createMilestoneForm.mode === 'strong_constraint'" class="text-xs text-warning mt-1">
                       强约束模式需要指定结束日期
-                    </p>
-                    <p v-else-if="createMilestoneForm.mode === 'periodic'" class="text-xs text-warning mt-1">
-                      周期性模式需要指定结束日期
                     </p>
                     <p v-else class="text-xs text-muted mt-1">
                       滚动计划模式下结束日期为可选
                     </p>
+                    <p class="text-xs text-muted mt-1">
+                      周期里程碑请通过项目模板创建
+                    </p>
                   </UFormField>
                   <UFormField label="PIVR 阶段">
                     <USelect
-                      :model-value="(createMilestoneForm.pivrStage as string) || ''"
+                      :model-value="(createMilestoneForm.pivrStage as string) || 'none'"
                       :items="pivrStageOptions"
                       class="w-full"
-                      @update:model-value="createMilestoneForm.pivrStage = ($event || null) as any"
+                      @update:model-value="createMilestoneForm.pivrStage = ($event === 'none' ? null : $event || null) as any"
                     />
                   </UFormField>
                 </div>
@@ -1245,7 +1309,7 @@ onMounted(async () => {
           </UModal>
 
           <!-- 编辑里程碑弹窗 -->
-          <UModal v-model:open="showEditMilestoneModal">
+          <USlideover v-model:open="showEditMilestoneModal" :ui="{ content: 'w-full sm:max-w-2xl' }">
             <template #header>
               <h3 class="text-lg font-semibold">
                 编辑里程碑
@@ -1281,7 +1345,7 @@ onMounted(async () => {
                   </UFormField>
                   <UFormField label="PIVR 阶段">
                     <USelect
-                      :model-value="(editMilestoneForm.pivrStage as string) || ''"
+                      :model-value="(editMilestoneForm.pivrStage as string) || 'none'"
                       :items="pivrStageOptions"
                       class="w-full"
                       disabled
@@ -1379,10 +1443,10 @@ onMounted(async () => {
                 />
               </div>
             </template>
-          </UModal>
+          </USlideover>
 
           <!-- 新建工作项弹窗 -->
-          <UModal v-model:open="showCreateWorkItemModal">
+          <USlideover v-model:open="showCreateWorkItemModal" :ui="{ content: 'w-full sm:max-w-2xl' }">
             <template #header>
               <h3 class="text-lg font-semibold">
                 新建工作项
@@ -1480,7 +1544,7 @@ onMounted(async () => {
                 />
               </div>
             </template>
-          </UModal>
+          </USlideover>
         </div>
       </div>
     </template>

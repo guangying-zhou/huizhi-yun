@@ -17,13 +17,28 @@ type ProductComponentDelete struct {
 }
 
 func DeleteProductComponent(ctx context.Context, db *sql.DB, identity CommandIdentity, permit AuthorizationPermit, input ProductComponentDelete) (CommandResult, error) {
+	return deleteProductComponent(ctx, identity, permit, input, func(authorize AuthorizeCommand, apply ApplyCommand) (CommandResult, error) {
+		return ExecuteCommand(ctx, db, identity, input, authorize, apply)
+	})
+}
+func DeleteProductComponentInTransaction(ctx context.Context, tx *sql.Tx, identity CommandIdentity, permit AuthorizationPermit, input ProductComponentDelete) (CommandResult, error) {
+	result, err := deleteProductComponent(ctx, identity, permit, input, func(authorize AuthorizeCommand, apply ApplyCommand) (CommandResult, error) {
+		return ExecuteCommandInTransaction(ctx, tx, identity, input, authorize, apply)
+	})
+	if err != nil && tx != nil {
+		_ = tx.Rollback()
+	}
+	return result, err
+}
+func deleteProductComponent(ctx context.Context, identity CommandIdentity, permit AuthorizationPermit, input ProductComponentDelete, execute func(AuthorizeCommand, ApplyCommand) (CommandResult, error)) (CommandResult, error) {
+
 	if identity.Action != "product_components:delete" {
 		return CommandResult{}, invalid("product_command_identity_invalid", "模块删除命令不匹配")
 	}
 	if input.ComponentID < 1 || input.ExpectedRevision < 1 || input.ExpectedComponentRevision < 1 || strings.TrimSpace(input.Reason) == "" || !utf8.ValidString(input.Reason) || utf8.RuneCountInString(input.Reason) > 2000 || strings.ContainsRune(input.Reason, '\x00') {
 		return CommandResult{}, invalid("product_component_delete_invalid", "模块删除参数或原因无效")
 	}
-	return ExecuteCommand(ctx, db, identity, input, func(ctx context.Context, tx *sql.Tx) error {
+	return execute(func(ctx context.Context, tx *sql.Tx) error {
 		return AuthorizeWorkspaceTransaction(ctx, tx, identity.ProductCode, identity.ActorUID, "product_components", "delete", permit)
 	}, func(ctx context.Context, tx *sql.Tx) (any, error) {
 		root, err := loadWorkspace(ctx, tx, identity.ProductCode)
@@ -51,11 +66,11 @@ func DeleteProductComponent(ctx context.Context, db *sql.DB, identity CommandIde
 			return nil, invalid("product_component_source_bound", "此模块关联产品线下的来源产品，不能直接删除")
 		}
 		var references int
-		if err = tx.QueryRowContext(ctx, `SELECT (SELECT COUNT(*) FROM product_components WHERE parent_id=?)+(SELECT COUNT(*) FROM product_features WHERE component_id=?)`, input.ComponentID, input.ComponentID).Scan(&references); err != nil {
+		if err = tx.QueryRowContext(ctx, `SELECT (SELECT COUNT(*) FROM product_components WHERE parent_id=?)+(SELECT COUNT(*) FROM product_features WHERE component_id=?)+(SELECT COUNT(*) FROM product_requests WHERE component_id=?)`, input.ComponentID, input.ComponentID, input.ComponentID).Scan(&references); err != nil {
 			return nil, err
 		}
 		if references > 0 {
-			return nil, invalid("product_component_referenced", "模块仍有子模块或功能引用，请先调整归属")
+			return nil, invalid("product_component_referenced", "模块仍有子模块、功能或需求引用，请先调整归属")
 		}
 		if _, err = tx.ExecContext(ctx, `DELETE FROM product_components WHERE id=?`, input.ComponentID); err != nil {
 			return nil, err

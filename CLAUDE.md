@@ -48,6 +48,7 @@ When task routing is unclear, consult [`docs/START_HERE.md`](./docs/START_HERE.m
 - 当前未迁移的独立应用间禁止直连数据库，必须通过 API、Foundation proxy/adapter 或 tenant-runtime/data-runtime 集成。契约见 `docs/MODULE_CONTRACTS.md`。
 - 跨模块稳定标识：`uid`（用户）、`dept_code`（部门）、`project_code`（项目）、`uuid`（文档）、`biz_id`（业务对象）。
 - 已确认的整合方向见 [ADR-018](./docs/ADR-018-Unified-Enterprise-Application-and-Data.md) 与 [实施 TODO](./docs/Unified-Enterprise-Implementation-Plan.md)：统一企业应用、每租户业务库、全量功能交付；已按专项合同迁移的 Runtime 业务域允许受控跨域查询、内部领域服务和共享事务。Nuxt/BFF 不获得数据库凭据，人员权限与租户隔离保留。方案文档不代表现有路径已切换，未迁移路径继续遵守当前合同。
+- Codocs 长期保留文档领域职责，不以保留完整独立企业前端为目标：普通页面和自有编辑工作区逐步原生组合到 Enterprise；Collab、文件处理与明确需要隔离的预览可保留专用服务。旧页面/iframe 仅作有退出条件的兼容，不能因页面接入就提前停旧消费者或宣称协作/写入验收通过。
 
 ### 角色授权模型
 
@@ -76,6 +77,7 @@ When task routing is unclear, consult [`docs/START_HERE.md`](./docs/START_HERE.m
 - 跨应用 capability 统一使用 `<target-app>:<resource>:<action>` 格式，全部使用小写和 kebab-case，例如 `finance:invoice-request:create`。不得新增 `assets.read`、`finance.contracts.read` 等点号格式，也不得将 `tenant-runtime`、`data-runtime` 等传输层名称编码进业务 capability。
 - `app:read`、`app:write` 等应用级宽 scope 仅作为存量兼容能力；新增跨应用写操作必须定义具体业务 capability，修改存量链路时应优先收敛到细粒度 capability。
 - 目标应用的 manifest/API 契约负责定义“有哪些 capability”，Console service grant 负责定义“哪个调用方拥有哪些 capability”，目标接口只声明“本接口要求哪个 capability”。SQL Seed 只能用于初始化授权记录，不得成为第二套授权事实源。
+- **Enterprise Host 用户委托例外**：仅 `enterprise.runtime` 调用已登记的 `/v1/enterprise/<domain>/**` 业务路由时，服务 Token 使用由受信 `route.LogicalTarget` 推导的 `<domain>:enterprise-host:execute`（`domain` 仅 `aims/assets/codocs/altoc/console`），操作表仍限定精确路径。该服务能力在 Runtime API 合同定义并由 Console 精确 grant 授权；这条 Host 通道的模块 manifest 负责人员资源、动作与推荐角色，不为每条 Host 路由或这五个服务能力增设资源。其它独立服务或调度通道仍可按自身合同保留既有服务资源。Runtime 仍独立校验签名用户委托、短期 permit 的具体 resource/action、对象范围与当前关系。此例外不适用于 scheduler/worker、cutover/control、独立 `/api/v1/service/**`、其它服务客户端或任何人员权限；这些通道继续使用自身精确 capability 与 grant。
 - Service Token 请求中的每一个 scope 都必须有独立、精确且 active 的 Console grant；`<app>.write` 不蕴含 `<app>:integration_operation:execute`。运行任务的单数 `integration_operation:execute` 与管理界面的复数 `integration_operations:view/replay` 是不同能力，不得互相替代或用宽 scope 绕过。
 - 新增 scheduled worker、outbox drain 或可靠集成任务的代码交付必须包含 worker 调用代码、Data Runtime 精确 scope 校验、`data-runtime` 与 `tenant-runtime` 双 audience 的 Console grant seed/verify 和契约测试；在目标环境启用前，还必须完成该环境的授权核验。缺少环境访问时可以交付代码并明确待核验项，不得宣称已启用或生产可用。生产出现 `insufficient_scope` / `console_service_token_grant_inactive` 时必须修复 grant 漂移，不得删除精确 scope、吞掉 403 或退回静态 Token。
 - 托管云业务 Worker 访问 Console token/runtime/service API 必须通过 `HZY_CONSOLE_SERVICE -> hzy-console-prod` Service Binding；所有业务模块的 Cloudflare renderer 都必须由根级 `validate:business-cloudflare` 统一校验。Service Binding 请求必须移除租户网关的 `/console` 前缀，不得经租户公网地址形成跨 Worker 自等待。
@@ -179,7 +181,7 @@ pnpm test:active
 - 服务端列表必须真实分页：`page`/`pageSize` 进请求参数，`UPagination`（`v-model:page` + `:items-per-page` + `:total`）配「共 N 条」；任何筛选变化都要重置页码到第 1 页。
 - 列表 `UTable` 必传 `:loading`；空表通过 `#empty` slot 使用 Foundation `CommonEmptyState`（图标 + 说明，首屏场景加下一步 CTA）。
 - 优先复用 Foundation 现有组件与 composable（`ConfirmDialog`、`CommonEmptyState`、`AppLauncher`、`UserMenu`、`DeptTreeSelector` 等）。缺失能力属于共享职责或统一安全边界时，先补 Foundation；单模块业务专用逻辑留在模块内，不为单次使用强建通用框架。尚未接入 Foundation 的模块遵循其明确的迁移边界。
-- 跨应用前端切换由 Console `/shell/{appCode}` 企业 Shell 与 Foundation `useApplicationShell()` 统一处理；业务模块不得自建 iframe 总入口、复制 AppRail/AppLauncher 或信任未校验的 postMessage。当前用户应用目录中同源、非 Console 原生入口的业务应用统一进入 Shell；跨源部署保持直接 URL。
+- 跨应用前端切换由 Console `/shell/{appCode}` 企业 Shell 与 Foundation `useApplicationShell()` 统一处理；业务模块不得自建 iframe 总入口、复制 AppRail/AppLauncher 或信任未校验的 postMessage。当前用户应用目录中同源、非原生入口的业务应用统一进入 Shell；跨源部署保持直接 URL。ADR-019 的物理 Enterprise Host 自带唯一布局，属于原生入口，不再次包入 Console Shell；逻辑业务模块不因此全面豁免，试点网关仅对已注册迁移页面受控转换旧 Shell 链接。
 - 创建/编辑入口按复杂度选择：不超过 6 个独立字段的轻量对象使用 `UModal` 或 `USlideover`，7–8 个仍为单步录入的对象优先使用宽 Slideover；存在步骤依赖、子表明细、实时汇总或审批预检的复杂对象使用独立页面。列表结果区内不得展开长期占位的创建表单。
 
 禁止做：
@@ -217,3 +219,5 @@ pnpm test:active
 ## Git
 
 提交信息必须遵照 `docs/Git提交规范指南.md`。
+
+GitHub 是经过脱敏处理的公开快照镜像，不与 GitLab 原始分支共享提交历史。需要同时提交两端时，先将本地提交推送到 GitLab `origin`，确认本地分支与对应 `origin/<branch>` 一致，再执行 `pnpm sync:github-public-branch --dry-run <branch>` 和 `pnpm sync:github-public-branch <branch>` 发布功能分支；发布 `main` 则使用 `pnpm sync:github-public --dry-run` 和 `pnpm sync:github-public`。脚本会检查 GitLab 同步状态、清除敏感文件并以租约保护 GitHub 分支。不要直接 `git push` 原始提交到 GitHub，也不要手工强推或合并公开快照分支；发布后以脚本输出的远端校验结果为准。

@@ -2,6 +2,32 @@
 
 策略包存储 Runtime API：`GET/PUT /v1/console/policy-bundle`，精确 capability 为 `console:policy-bundle:read|write`。协议、幂等和安全边界见 [持久包说明](../deploy/cloudflare/POLICY_BUNDLE_STORAGE.md)。不增加浏览器可调用的存储管理入口。
 
+完整信封候选：`GET/PUT /v1/console/verified-policy` 复用上述精确 capability，
+仅接受绑定 Console deployment 的正式 JWT，并实时核验 credential/grant。
+通过 `apps.console.policyEnvelope` 显式启用，默认关闭；新表与旧封包隔离。
+PUT 为 `{envelope,expectedEtag}`，首次 ETag 为空，成功返回 Runtime Snapshot；
+相同内容重放不续鲜，CAS 失配 409。GET 返回含过期/撤销记录的当前状态以支持 CAS
+恢复；只有缺行返回 `404 policy_snapshot_missing`，缺表或存储失败仍 503。显式
+`verified-runtime` 后端已接同步/消费代码，默认及运行环境未切换。GET
+不是授权判定；消费方必须验签并检查当前有效期/状态。未注册 Enterprise
+跨安全域读取，也不提供浏览器管理入口。详见
+[完整合同与验证](../../docs/Console-Enterprise-Policy-Verification-Contract.md#7-runtime-持久化与接口批次代码验证完成环境未启用)。
+
+2026-09-22 续签状态（阶段 B，需先执行 `Console-SQL-Migration-verified-policy-renewal-state.sql`）：
+`PUT /v1/console/verified-policy/renewal` 请求体为 `{state,expectedEtag}`，`state` 取
+`ok|platform_unavailable|refused|invalid`（`refused/invalid` 对同一 ETag 粘性，只有接纳新信封才重置），要求精确 capability `console:policy-bundle:write` 和 Console 来源；
+`expectedEtag` 必须等于当前快照，否则返回 409；没有快照返回 `404 policy_snapshot_missing`；
+表未迁移返回 `503 policy_renewal_not_migrated`。尝试时间由 Runtime 取，只会向后推进，
+不接受调用方传入。成功写入信封会自动把状态置为 `ok`。
+`GET /v1/console/verified-policy` 和 `GET /v1/enterprise/console-policy` 的 `data` 新增
+`renewal: {state, attemptedAt} | null`；未迁移或没有状态时为 null。续签状态不属于签名回执，
+也不单独构成授权结论。判定规则见 docs/Console-Enterprise-Policy-Verification-Contract.md 第 14 节。
+
+后续候选：独立 `GET /v1/enterprise/console-policy` 以真实 Enterprise 服务身份读取
+同租户已登记 Console 行；要求精确 read grant、双部署签名覆盖和额外本地开关。
+只返回当前 active/未过期回执，不支持写。准备的 Enterprise read seed/verify 未执行；
+这不把旧 Console 路由开放给其他来源，详见上述合同 §8。
+
 状态：历史/目标设计参考（当前 service-token 主路径以 `docs/MODULE_CONTRACTS.md`、Console `CLAUDE.md` 与 OAuth/service-client 实现为准）
 最后事实核对：2026-07-11
 定位：目标设计，作为 `Console-Functional-Design-v1.md` 与 `console/docs/sql/Console-SQL-DDL-Draft-v1.sql` 的配套接口文档
@@ -984,6 +1010,10 @@ Query `roleCodes` 可省略，省略时返回两类角色；显式值只能是�
 
 ## 8. Auth Runtime / OIDC
 
+Runtime 签发 issuer（ADR-017 F3-1）：`POST /v1/console/auth/oidc/sign` 的 `claims.iss` 与 `/v1/console/auth/service-tokens/issue|exchange` 的 `issuer` 必须精确等于 Runtime 认证器的当前受信 issuer（配置或已批准 bootstrap trust）。三条路径及密钥/Gateway exchange lane 共用同一校验，claims 写入受信值；错值为 HTTP403 `oidc_signing_issuer_mismatch`，未配置/无效受信值为 HTTP503 `oidc_signing_issuer_unavailable`。拒绝不引导密钥、不消费 replay、不写成功签发审计。Console 门面不能指定另一签发权威。
+
+服务签发身份（ADR-017 F3-2）：通用 `oidc/sign` 以 `credentialId + client_id` 精确解析当前 active、未过期凭据所属的 `service_clients` 行，并复核每项 active grant。`sub=client:<client_code>`、`hzy.subjectCode/clientCode/clientName/clientType/appCode` 与 `source_app` 只来自该行；调用方已提供的任意身份字段必须是精确一致的字符串，否则403 `oidc_signing_service_identity_mismatch`，不签名、不引导密钥。未提供的可选字段由Runtime补齐。工具类客户端 `app_code IS NULL` 时应用身份只可为空或缺省，签出空值，不从请求发明来源应用；数据库身份不完整503 `oidc_signing_service_identity_unavailable`。消费状态接口仍只返回既有active/reason，不向调用方扩展身份字段。issue与两种exchange已有数据库身份推导，本批不修改grant/audience/deployment规则。
+
 本节定义 `console` 作为企业侧应用用户 auth-runtime / OIDC IdP 的第一版接口边界。Platform 只治理控制面账户、授权、license、bundle 与 runtime token；业务应用用户的登录会话、上游身份源适配、refresh token 与 OIDC client secret 均由 `console` 本地持有。
 
 ### 8.1 协议定位
@@ -1384,3 +1414,25 @@ Aims 调用该投影前必须已完成产品对象及 admin 动作授权；结�
 ## 退出后重新认证
 
 退出页“重新登录”将 `prompt=login` 保留到 Console 登录入口并立即启动已配置的登录方式。显式重新认证时不因现有 Console 会话而直接返回应用；上游 OIDC 请求携带 `prompt=login&max_age=0`。服务端也对“有退出标记且 force=1”的显式登录执行同样处理。普通跨应用 SSO 不附加这两个参数，仍保留现有 state、nonce、PKCE 和回调校验。
+
+## B2 部门宿主写入（2026-09-26）
+
+Host 仅登记 `POST /api/v1/console/directory/departments`、`PATCH /api/v1/console/directory/departments/:deptCode`、`DELETE /api/v1/console/directory/departments/:deptCode`，使用验证过的人员凭证，Console handler 保持 `directory_departments:edit` 判定；浏览器必须携带 Idempotency-Key，BFF 不生成。共享表单 PATCH 仅提交变化字段，省略保持、null 清空，删除使用 useConfirm danger，含部门名与不可恢复后果。
+
+**MVP 已知限制：没有 revision/expectedRevision/If-Match CAS；事务锁与幂等回执不检测陈旧表单。并发同字段后写覆盖，沿用 Console 既有语义。** Runtime 本轮不变。相同用户意图、请求路径及 payload 重试复用 key；不确认结果前不切换为新 mutation。成功 mutation 与列表刷新分别处理，刷新失败提示“已保存，刷新失败”，仅重试 GET，不重复写入。
+
+## B2 项目宿主写入（2026-09-26）
+
+Host 精确登记项目 POST 列表、PATCH/DELETE 单条及 POST `/api/v1/console/directory/projects/members`，四个 handler 仍检查 `directory_projects:edit`，要求浏览器 Idempotency-Key。Console 与 Host 共用 DirectoryProjectEditor；PATCH 仅发变化字段（省略保持，null 清空），不把 status=deleted 暴露为绕过删除确认的表单选项。
+
+项目成员 POST 是**全量替换**，空列表意味着移除全部成员。编辑器先独立读完整 active 列表（pageSize=100），加载失败、总数超限或返回不完整禁止保存；不从搜索/分页结果构造替换。提交前 useConfirm warning 明示项目名称与“将以当前列表替换全部成员”；删除 useConfirm danger 含项目名及不可恢复后果。Host body 不接收 actor/tenant/版本、嵌入式 members 或 Runtime 更宽别名。
+
+**MVP 无 CAS：项目字段及全量成员并发仍为最后成功写入覆盖，不新增 revision/If-Match。** 差量字段降低无关覆盖，不能检测陈旧草稿。未知结果锁定新意图，同请求同键重试；成功写入与后续 GET 刷新分开，刷新失败提示“已保存，刷新失败”，不会重交 mutation。Runtime handlers、事务审计与 console_mutation_receipts 未变。
+
+## B2 委员会宿主写入（2026-09-26）
+
+Host 六条委员会/成员写 METHOD 沿用 `directory_departments:edit` 与浏览器 Idempotency-Key，Console handlers/Runtime 不变。Console 与 Host 共用 DirectoryCommitteeEditor：组织 PATCH 仅提交变化字段（省略保持、null清空）；status=deleted不在表单内，删除必须 danger 确认名称、先移除成员及不可恢复后果。
+
+成员 POST 是增量 upsert，不是项目式整套替换；单次1..100、UID不重复、最多一主任一秘书。单成员PATCH同样为upsert（现有handler没有必须已存在前置断言）；角色以服务端事实控制，失败不改原行并复位选择器。移除warning确认成员与委员会名称；成功刷新成员、列表计数与主任/秘书指针，空末页回退；失败保留原成员/添加候选，不发反向回滚 mutation。
+
+**MVP 无 revision/If-Match CAS**，同字段、成员角色及主任/秘书指针可被后写覆盖。稳定同意图key防重复执行，不检测陈旧表单。未知结果锁定并同请求同键重试；写成功后的GET刷新失败只提示“已保存，刷新失败”，不重复写入。

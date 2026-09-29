@@ -1,15 +1,178 @@
 # 模块交互契约
 
+## 2026-09-21 hzy0 本地 Console 门面（策略链已切换，完整业务未验收）
+
+本日第 1 步真实探针已确认旧策略封包完整、Platform 签名/哈希通过，但本地
+HMAC 密钥不匹配；不是缺版本或缺授权。后续采用 Enterprise 内 Console 模块
+验证版本化完整签名信封，Runtime 提供受控最新修订/同步状态；不新增 Gateway
+策略验证通道。旧 `/v1/console/policy-bundle` GET 仍只是 opaque 存储读取，不能
+将其冒充新接口；新合同的代码候选与环境状态分列如下。
+字段覆盖、身份及兼容边界见 [策略验证合同核查](./Console-Enterprise-Policy-Verification-Contract.md)。
+
+后续代码候选已有 `hzy-policy-envelope.v1` 完整 Ed25519 信封、Go 接纳规则及
+Host 验证 helper；后续已增加默认关闭的 `/v1/console/verified-policy` 与隔离新表，
+通过临时 HTTP/MySQL 验证，后续仅在本机 C000001 测试 Runtime 启用并接入在线消费者。新接口仍仅接受
+Console source、精确 policy-bundle read/write、显式 deployment binding 和实时
+grant/credential 校验；未授予 Enterprise 借用 Console 身份的权限。GET 可返回
+过期/撤销水位以支持 CAS 恢复，不是授权判定，Host 必须继续检查当前有效期和状态。
+信封签名不等于最新状态证明，旧 opaque GET 不可替代受认证的当前状态读取。
+同修订续签不得改变正文、状态或部署范围；重放不得刷新 acceptedAt。
+
+新候选补充：Platform 原正式 bundle 端点用 `format=hzy-policy-envelope.v1`
+协商完整信封，不允许历史版续签/304/回退更早 active 行。Runtime 另有显式开启的
+`GET /v1/enterprise/console-policy`，只读、真实 enterprise 身份、精确 read grant、
+登记 Console 存储部署及签名双部署覆盖；输出绑定读者的回执，不授予 Console 写权。
+Host 导航已有默认关闭的当前策略/会话版本检查，角色与业务授权路径不变。
+同步器/Console 消费者已增加显式 `verified-runtime` 后端：协商新格式、精确身份
+CAS 写入、验证当前回执；不回退旧 HMAC/内存。仅明确缺行 404 可初始化，其他错误
+失败关闭。hzy0 已安装精确 read 业务 grant 和双 audience semanticScope 映射；
+Console 自有策略部署取受信服务目录，不改变 Enterprise 入站身份。完整状态见上述合同第 12 节。
+
+2026-09-21 后续获准发布：仅开发 Platform `hzy.wiztek.cn` 已交付完整信封及
+issuer，公网既定公钥验签和 Console/Enterprise 双部署绑定通过；旧格式兼容，
+策略包数据不变。生产 Platform/其他云端应用未发布。后续本机 Runtime、表、grant、
+同步已切换，登录/导航/文档列表现场通过；固定制品与证据见上述合同第 11～12 节。
+
+显式 `local-canonical-facade` 将浏览器认证入口放在 hzy0 `/console`，canonical
+issuer 仍为 `https://hzy-test.huizhi.yun`；后端保留 canonical 名称，由受控
+Gateway egress 拨号本地 Console。公开 token 仅接受 Enterprise 授权码/刷新，
+不能继承服务身份。Gateway 独占远端凭据；Console 仅接收独立本地入口密钥、
+公开验签材料和正式短期 Runtime bootstrap，关闭后台同步/心跳。
+
+前置故障曾在 SSO/授权码交换完成后产生 `policyVersion=null`，Host 正确拒绝进入；
+当前完整信封链已解除该阻塞。持久化策略完整性与本地入口密钥仍是不同信任边界；
+不复制远端密钥、不绕过校验、不重签覆盖共享记录。候选模式缺策略时签发前
+返回 503。不能把登录/读取通过登记为 G1 或全部业务验收通过。
+
+## 2026-09-20 hzy0 本机获准副本
+
+当前状态：产品编辑审计修复已部署测试 Runtime `0.3.219-test.product-edit-audit.1`（用户确认 `7d42abd1` 加定向补丁）。真实 hzy0 保存后丢响应，同键重试复用一份成功回执及同一条 updated 事件，actor 一致；恢复原备注新增一条独立事件。无 schema/grant/身份边界变更。下述“尚未部署”保留为修复前过程记录；G1 其他矩阵仍待验。
+
+产品编辑审计补齐：Assets owning `UpdateProductInTransaction` 与修改同事务写入 `product_asset/updated`，operator 使用验证 actor；位于 receipt business callback 内，幂等重放不重复写事件，事件失败回滚修改和回执。没有 schema/API 或权限变更。真实 hzy0 丢响应后同键重试已验证唯一成功回执，审计修复仅通过隔离 MySQL 测试，尚未部署共享 Runtime；不据此放行 G1。网关错误映射仅增加正式产品冲突/幂等冲突 409 和依赖不可用 503 的固定白名单。
+
+最新写链准备：用户允许测试环境业务数据修改，egress 仅增加 `assets:product:edit` + `audience=data-runtime` 精确例外，仍固定 Enterprise 身份及测试部署。既有正式 grant 签发/验签/状态核验通过，未新增云端 grant。该 capability 包含产品创建/编辑/关联，非字段级权限；人员/对象 permit、幂等与审计不变。其他写 scope、Node/loopback 仍失败关闭。测试产品备注已通过正常页面保存、回读并恢复；丢响应重试与审计尚待验收，下述只读限制描述保留为前一阶段记录。
+
+符合性整改（当前只读 Dev 阶段）：Host `/enterprise` 是 SPA 注册首页，品牌同址；本机 `/` 与尾斜杠仅 GET/HEAD 临时 302，其他方法 405。gatewayInternal 明确固定 23121，profile 预检拒绝其他端口。本地两段错误通道仅对已登记 code/status、64 KiB JSON 做固定文案/有限字段映射，未知诊断继续脱敏；入口可保留已知 host-only 空值 Max-Age=0 Cookie 清理，出口不透传远端 Cookie。Retry-After 仅保留有界秒数。写 scope、Node/loopback guards 不变，不据此放行 G1。
+
+2026-09-20 用户批准补齐测试 Enterprise 的两个 Console 只读 grant：`console:directory-project-access:read`、`console:business-domain:view`，固定 C000001 / C000001-test-enterprise / audience console。受保护修复脚本仅新增缺失项、拒绝撤销/冲突，其他 grants 保持不变。正式目标 API 两项 200，交叉 capability 与错误 audience 拒绝；此授权同时适用于该身份的云端测试 Enterprise，不涉及生产。此前“未新增 grants”为接通凭据阶段的历史边界。
+
+目录读链修正：Aims/Enterprise 项目范围计算通过 Foundation `fetchConsoleDirectoryApi('/departments'|'/user-departments')` 读取既有 `console:directory-users:read` 服务投影；保留部门负责人/领导、下级部门与个人归属语义，归属查询拒绝或故障不再推断主部门。目录项目列表 GET 使用既有 `console:directory-project-access:read` 与固定 `projection=projects`。这些为调用契约修正，不新增服务 grants；拒绝不能退回旧管理端接口。
+
+用户批准 hzy0 使用现有 C000001 测试 Enterprise 身份及现有测试 Gateway 凭据。Enterprise → `127.0.0.1:23121` 本地 egress → `https://hzy-test.huizhi.yun`；两段凭据分离，远端凭据仅 Gateway 进程从既有受保护文件读取，不注入 Nuxt 或浏览器。egress 启动回读远端 Registry 摘要确认测试 Enterprise deployment，固定 origin/tenant/environment/app/deployment、拒绝重定向与未登记路径、拒绝非读取 service scopes；用户令牌/会话仍由 Console 校验。未新增 grants、未切换 Runtime、未变更云端配置；本轮仅验证读取链。关闭本机适配器可将 profile 凭据引用恢复为本地入口引用并定向重启两个 hzy0 进程。
+
+## 2026-09-19 ADR-019 导航访问补充
+
+Enterprise `GET /enterprise/api/navigation` 通过 `requireEnterpriseUser` 验证当前用户与受信 Host 租户/部署，再复用 Foundation `loadAuthorizationSnapshotFromConsoleRuntime`，分别以 Aims、Assets、Codocs 为逻辑目标读取人员权限；不把物理 Enterprise 权限快照混作三个领域的授权。返回本发布已注册且具备当前人员权限的稳定节点 ID 与导航展示用 `maxAgeMs=300000`（5 分钟，客户端每 2 分钟刷新），`private, no-store`；授权服务不可用保留 503。客户端后台刷新只在同一验证 scope、未到期时保留展示，失败/过期/撤权清理；该展示租约不是业务授权。菜单与对象操作引用 manifest 的人员资源/动作，不引用服务 capability 来推导用户权限。对象详情、写入、数据范围及字段授权仍由原 handler 执行，不新增 grant 或绕过 Service Binding。
+
+Console Shell 迁移使用 Gateway 的 `x-hzy-enterprise-shell-pages` 受控投影：仅 pilot、Host binding、tenant/environment、enterprise deployment 和 Console deployment 全部匹配时注入；Gateway 先剥离浏览器同名头。Foundation `/api/application-shell-migration` 再以 gateway token 验证上下文、按生成的 registered page pattern 精确匹配目标，保留 query/hash，拒绝 API/OIDC/OAuth 和跨源目标。该元数据不是授权；错租户、错环境、错 deployment、非 pilot、未迁移页均回退原 Shell iframe。Console 页面必须在创建 iframe 前调用判定，AppRail prewarm 不得触发导航；Gateway 与 Console 需同版本发布。
+
+测试 pilot 的旧 `/shell/{appCode}` 仅对 GET、受控 tenant/environment/Host deployment 绑定与生成的正式页面登记做兼容跳转；保留合法 query/hash，移除旧 iframe 标记，未迁移页面及写请求仍走原兼容链路。此为本地修正合同，不表示环境部署或线上角色验收完成。
+
+## 2026-09-19 项目文档宿主链补充
+
+浏览器复验修正：Aims manifest 不存在 `documents` 用户资源，不能以该虚构权限阻断全部用户。Host 与 Aims 服务的用户入口资格统一为既有 `projects:view`；写入仍重施项目成员/负责人/scoped-admin 关系，删除仍限上传人或项目经理，策略写入仍限项目经理，正文与附件仍受 Codocs ACL。服务 capability 的 read/write/download/manage 分离不变，不为用户新增角色或授权。
+
+Enterprise 复用 Aims 原项目文档页；新增 `POST /aims/api/v1/projects/{id}/other-documents`，通过既有 `aims:project-documents:write` 签名命令的 `upload-file` 动作调用 Aims。宿主单附件限 10 MiB，稳定 `documentUuid` 参与幂等；Aims 重新验证 actor 的文档编辑权限、项目关系与对象归属，再调用 Codocs 文件柜精确能力。multipart 在 Foundation Service Binding 中保持原始字节，不得 JSON 化。
+
+PA-01 项目文档写入收紧：Enterprise 的项目 Markdown/附件新建与访问策略修改先要求 `projects:edit`；Aims 受信 Service 命令验签后以同一 actor 的 Console `projects:edit` scoped grants 和 Runtime 当前项目/活动成员事实再次判定项目范围，部门树只取 Console 当前目录索引。company L0/L1 的公开读取例外不用于写入。原项目成员/经理门槛与 Codocs 创建能力保留；访问策略修改还须在改 Codocs 策略及 Aims 摘要前通过 Codocs 当前 `edit` ACL。项目文档 `access-check` 仍是只读业务判定，但 Codocs 会写既有访问审计行，不修改文档或策略。
+
+Aims 项目文档搜索、摘要、创建、策略、检查、审计改走 Codocs `POST /api/v1/service/project-document-access/execute`，不再使用 Aims 身份直连 Codocs Runtime。来源固定 `aims.runtime`，能力为目标 manifest 的 `codocs:project-document-access:{read,manage,create}`；命令 schema=`aims-project-document-access.v1`，operation=`aims.codocs.project-document-access.{action}.v1`，包含 actor、对象、完整 payload hash 及源/目标 deployment 的 HMAC。Codocs 验证后使用自己的 Runtime 身份，项目范围 marker 只有已签名 `service-command` actor 可消费。该接口允许 Aims 委托项目范围与策略写入，属于固定来源的高风险接口，不给其他调用方或浏览器通用权限。
+
+Foundation 的 request-local 已验签 actor 证明只由 `verifyServiceCommandRuntimeHeaders({ event, ... })` 建立，并与当前 service principal、tenant、来源 deployment、目标 app、capability 再绑定；不修改用户会话或信任客户端 actor header。Console 注册项目文档各用途和 `enterprise_project_admin`，按固定资源/动作读取当前主体授权；动作蕴含仍使用 Foundation helper。
+
+创建重放：Aims 索引、Codocs metadata 和 cabinet file 对相同 UUID 校验不可变输入；相同输入返回原对象，不同内容/归属返回 409。正文和附件初次对象路径绑定 UUID 与内容摘要，已存在对象不覆盖，初次 PUT 使用 provider 防覆盖条件（OSS 限未启用 bucket 版本控制）；上传失败不删除并发请求可能拥有的对象。正文创建错误向上游传播，不再返回虚假成功。策略 GET 返回缺省值但不创建策略记录。
+
+环境初始化见 Console v2.11 seed/verify，以及既有 v1.50 cabinet grants。Codocs 对 `oss.default` 的配置读取与 Vault resolve 使用 data-runtime / tenant-runtime 两个 audience 的精确 grant，限制 integrationCodes。C000001/test 已补配置与 grants；部署与验收证据见 `deploy/test-env/CLOUDFLARE_TEST_STATUS.md`，未部署生产。
+
 > 本文档定义汇智云各模块间的 API 调用关系、共享标识和集成规则。
-> 更新日期：2026-07-25
+> 更新日期：2026-09-13（补充 ADR-018 分阶段整合指引）
 
 > 说明：本文档描述**当前有效契约与目标主路径**。新能力默认走 `platform` 策略治理、`console` 企业基础运行服务、Console Directory API、Console OIDC、Console service token 与 Foundation adapter；`account` 仅作为 legacy 目录/身份/项目注册表迁移源与兼容 facade。存量未迁移调用关系继续有效，但不得为新能力新增 `account` 权限治理、目录扩展或静态跨模块密钥依赖。详见 `Directory-Runtime-Contract.md`、`Account-Directory-Runtime-Refactor-Plan.md`、`console/docs/Console-Directory-Runtime-Integration-Plan.md`、`console/docs/Console-Functional-Design-v1.md`、`console/docs/sql/Console-SQL-DDL-Draft-v1.sql` 与 `console/docs/Console-API-Contract-v1.md`。
+
+## 已确认的整合方向与当前契约
+
+[ADR-018](./ADR-018-Unified-Enterprise-Application-and-Data.md) 已确认统一企业应用、每租户统一业务库及全量功能交付的目标，[实施 TODO](./Unified-Enterprise-Implementation-Plan.md) 维护迁移进度。C000001 测试环境已激活 Aims/Assets 统一库 generation=1 并启用 Enterprise Host 路由；生产及其他未迁移路径继续遵守原接口和身份规则，具体验收见[测试部署记录](./Unified-Enterprise-Test-Deployment.md)。
+
+**Enterprise Host 用户委托能力收敛（代码合同；环境切换另批）**：Foundation 的固定 operation 表仍只允许登记的 METHOD/path；针对 `/v1/enterprise/<domain>/**`，从 Runtime 路由受信 `LogicalTarget` 派生服务 scope `<domain>:enterprise-host:execute`，域仅 `aims`、`assets`、`codocs`、`altoc`、`console`。五个能力分别为 `aims:enterprise-host:execute`、`assets:enterprise-host:execute`、`codocs:enterprise-host:execute`、`altoc:enterprise-host:execute`、`console:enterprise-host:execute`。只允许 `enterprise.runtime` 对实际配置的 Runtime audience 请求，Console 当前 ACTIVE grant、来源、租户/部署仍精确核对；其它域 token 不能进入本域路由。它们是服务入口能力，不是人员 resource/action：Host 的 Console 权限快照和 Runtime 的签名 actor、≤15 秒 permit、具体 resource/action/mode、关系/范围复核、双 permit、事务/幂等保持原样。这条 Host 通道的人员权限由模块 manifest 定义，五个域服务能力只在本合同和 Runtime API 合同定义；其它独立服务的 manifest 资源依其合同保留。scheduler/worker、cutover/control、独立 `/api/v1/service/**`、Workflow proxy、policy reader、通知发布及其它服务客户端均不适用，继续用各自精确 scope。下文历史专项段落出现的 Host 逐操作 service capability 是切换前合同；C000001 v2.27 写入、Runtime/Host 切换和 v2.28 撤旧 grant 均须单独批准，不能仅凭源码合入视为环境生效。
+
+后续完成专项合同与验收的 Runtime 业务域允许受控跨模块查询、内部领域服务及共享事务；同进程协作可移除多余 HTTP，真实服务边界仍校验身份、租户、actor 和权限。每次迁移在本文更新具体路径、数据写入责任、授权、事务/幂等、旧消费者与兼容版本；不得因为整合方案已确认就直接放开所有应用或表的访问。全量功能资格也不替代人员操作权限和数据范围。
+
+首条内部目录链：Enterprise Host `GET /assets/api/v1/product-directory` → Runtime `POST /v1/enterprise/assets/product-directory` → 注册统一库 Assets 领域服务。物理身份固定 `enterprise.runtime`，精确 `assets:product:read`，保留当前 credential/grant、签名 actor、BFF 范围编译与事务内对象过滤；不经过旧 Assets Worker，不写历史快照。测试部署已切换，完整业务验收状态以测试部署记录为准；见 [Enterprise API](../enterprise/docs/API_SPEC.md)。
+
+### 2026-09-15 新登记链路（尚未部署此批）
+
+- 工作项：Enterprise `POST /aims/api/v1/projects/:id/work-items`、`PUT /aims/api/v1/work-items/:id` → Foundation → Runtime `POST /v1/enterprise/aims/work-items:create|edit` → Aims 领域写入。人员权限为 `work_items:create|edit`，服务 capability 为 `aims:work-item-create:execute`、`aims:work-item-edit:execute`，物理身份固定 `enterprise.runtime`。创建复用项目工作项校验；基本编辑绑定 project/workItem、检查活跃受派人员和内容 expectedVersion。业务事实、changelog/activity audit 与 succeeded receipt 同事务，同键返回冻结结果，旧内容版本返回 409。状态、结构、版本关联和服务工单结果 outbox 尚未由此编辑入口替代，不能放开字段绕过原 workflow/可靠投递合同。
+- 数字资产：Enterprise `GET /assets/api/v1/digital-assets[/:id]` → Foundation → Runtime `POST /v1/enterprise/assets/digital-assets:list|view` → Assets 自有查询。人员权限 `digital_assets:view` 与服务 capability `assets:digital-asset:read` 分别核验。owner/project 对象范围在实际查询执行；无法执行的部门或关系约束不降为全量。`POST /assets/api/v1/digital-assets` 与 `PATCH /assets/api/v1/digital-assets/:id` 通过同一链路映射到 `:create|edit`，分别要求 `assets:digital-asset:create|edit` 与 `Idempotency-Key`；Assets owning receipt、业务变更、范围复核和审计事件处在 Registry generation fence 的同一事务。Host 只在 `digital_assets:edit` 快照有效时显示写入口。
+- 知识产权资产（整合分支候选，未启用）：Enterprise `GET /assets/api/v1/ip-assets[/:id]` → Foundation → Runtime `POST /v1/enterprise/assets/ip-assets:list|view`，分别核验 `ip_assets:view` 与 `assets:ip-asset:read`。total/summary/page 使用同一 Registry snapshot，owner relation 与关联产品项目范围按 grant-unit 合取；不返回未授权产品计数。`POST /assets/api/v1/ip-assets`、`PATCH /assets/api/v1/ip-assets/:id` 对应 `:create|edit`，要求人员 `ip_assets:edit`、具体 `assets:ip-asset:create|edit` capability 和幂等键。命令、Assets owning receipt、写入前后范围检查与审计处于同一 Registry 写事务；编辑不允许修改 ip_code，省略 nullable 字段保留旧值，显式 null 清空，必填字段拒绝 null。新增 20260916 receipt migration 必须追加到既有 CHECK，不能替换丢失产品/关联/数字资产能力；旧 schema 503。产品/文档关联未迁入，Host 入口继续隐藏。
+- 跨域批量名称与聚合：Enterprise `POST /assets/api/v1/products/resolve-codes` → Foundation `assets.product-directory-resolve` → Runtime `POST /v1/enterprise/assets/product-directory:resolve` → 统一库 Assets 领域服务 `ProductDirectoryService.Resolve`。人员权限为 `products:view` 派生的对象范围，服务 capability 仍是精确 `assets:product:read`。单次最多 200 个唯一编码；名称、按状态与按产品线聚合复用目录列表的同一 grant 谓词、目录 readiness 与只读事务，不因被请求编码放宽谓词。**不可读编码与不存在编码统一归入 `unresolved`，调用方无法区分**；返回字段限于编码、名称、产品线、产品线标签与来源状态，聚合不含未授权产品。
+- 产品采用查询：Enterprise `GET /aims/api/v1/products/:productCode/adoption` → Foundation `assets.product-adoption-read` → Runtime `POST /v1/enterprise/assets/product-adoption:read` → 统一库 Assets 交付资产与环境。人员权限为 `deliveries:view` 与 `environments:view` 两个对象族各自编译的数据范围，分别作为绑定 permit 传入，任一族被拒即返回 `assets_object_scope_denied`；服务 capability 为精确 `assets:product-adoption:read`。统一读取在单一 snapshot 事务内取总数与明细，取代原先经签名跨应用命令访问独立 Assets Worker 的路径。所需兼容视图 `customer_delivery_assets`、`asset_environments`、`customer_delivery_asset_environment_rel` 使用独立清单，未安装时只有该入口返回 503。
+- 工作项状态与删除：Enterprise `POST /aims/api/v1/work-items/:id/{plan-ready|start|reset|reopen}` 与 `DELETE /aims/api/v1/work-items/:id` → Runtime `POST /v1/enterprise/aims/work-items:{plan-ready|start|reset|reopen|delete}`。`plan-ready` 对应 V2 `decompose` 规则，只允许非需求目标 planning→todo，要求控制工时、有效起止日期及至少一条目标成果，并在事务内要求项目负责人、活跃经理或 scoped 管理员；独立 capability `aims:work-item-plan-ready:execute` 避免与需求分解提交混淆。其余状态流转为 todo→in_progress、in_progress→todo、completed→in_progress，均按项目 `workflow_transitions` 校验；人员权限沿用 `work_items:edit`。删除为敏感动作，要求独立的人员权限 `work_items:delete` 与服务 capability `aims:work-item-delete:execute`，编辑权限不构成删除授权，Runtime 在同一事务冻结工作项与子项删除证据。状态动作只接受 `expectedVersion` 且不接受人员 permit，均按项目数据范围执行。
+- Matter 成果添加：Host `POST /aims/api/v1/work-items/:id/deliverables` 从路径固定单条 matter owner，经已登记的 `aims.project-deliverable-batch-create` / `aims:project-deliverables:edit` 进入 Runtime；人员 `projects:edit` 门槛与 Runtime active manager/scoped admin 对象校验共同生效。Runtime 的成果新增、工作项证据修改、项目交付物直改/删除均按项目→matter 行锁序列化，只有 `in_progress` 可写，其余状态 409；target 和非 matter 不改。无新 Foundation 操作、manifest 或 grant；浏览器必需成果验收仍须单独记录。
+- 两条链均校验 Console JWT/JWKS、tenant/deployment、签名 actor、当前 credential/grant 和绑定对象的最多 15 秒 permit。Nuxt/BFF 无数据库凭据，不转发旧应用 runtime Token，也不借宽 scope 替代精确 capability。源码和隔离测试不表示环境 grants、固定制品及浏览器验收已完成。
 
 ## 核心原则
 
 策略包持久存储：Console → Foundation `consolePolicyStore` → Data Runtime `GET/PUT /v1/console/policy-bundle` → `hzy_console.policy_bundle_snapshots`。精确 capability 为 `console:policy-bundle:read|write`，来源固定 Console，audience 为 Runtime；完整 JWT、credential/grant 撤销及租户/部署校验先于读写。这两个 scope 的 Token 签发不读包摘要。PUT 内容 ETag + expectedEtag CAS 幂等，禁止旧同步覆盖新同步；GET 缺包为 null。协议及上线核验见 [持久包说明](../console/deploy/cloudflare/POLICY_BUNDLE_STORAGE.md)。
 
-1. **禁止跨模块数据库直连** — 所有集成通过 HTTP API + 回调完成
+Console 的可选服务令牌 exchange 仅处理携带 `client_secret` 的 `client_credentials`：Foundation 以 `console.runtime` 已签发的 Runtime 令牌和独立 `console:service-token:exchange` grant 调用 `POST /v1/console/auth/service-tokens/exchange`。Runtime 亲自校验客户端密钥和 ACTIVE grant；来源 app 来自客户端库，租户来自认证上下文，来源部署来自所选 grant。Console 传入的已验证策略 version/hash 仅与 Runtime 持久摘要比较，摘要不参与授权；签名和成功审计同一事务，审计失败不返回令牌。缺密钥 Gateway 身份、授权码及刷新令牌继续原路径；功能开关默认关闭。新 scope 不能通过 Platform bootstrap 或 Console key assertion 直接调用，只能使用真实 `console.runtime` 身份。两种 Runtime audience 共享一条精确 grant，启用前均需真实签发探测。
+
+
+签发 issuer（ADR-017 F3-1）：Runtime 的 `/v1/console/auth/oidc/sign`、`/v1/console/auth/service-tokens/issue` 及服务令牌 exchange（密钥客户端与 Gateway 两种 lane）统一取本机认证器正在使用的受信 JWT issuer；已批准的 trust 引导更新由同一认证器实时提供。调用方 `iss`/`issuer` 仅作一致性断言，错值返回 403 `oidc_signing_issuer_mismatch`，签出的 `iss` 一律为受信值；未配置/无效 Runtime issuer 返回 503 `oidc_signing_issuer_unavailable`，不使用请求值回退。issuer 拒绝先于凭据、密钥引导、replay 与审计写入，不授予额外 capability/grant。
+
+服务签发身份（ADR-017 F3-2）：通用 `oidc/sign` 以 `credentialId + client_id` 精确解析当前 active、未过期凭据所属的 `service_clients` 行，并复核每项 active grant。`sub=client:<client_code>`、`hzy.subjectCode/clientCode/clientName/clientType/appCode` 与 `source_app` 只来自该行；调用方已提供的任意身份字段必须是精确一致的字符串，否则403 `oidc_signing_service_identity_mismatch`，不签名、不引导密钥。未提供的可选字段由Runtime补齐。工具类客户端 `app_code IS NULL` 时应用身份只可为空或缺省，签出空值，不从请求发明来源应用；数据库身份不完整503 `oidc_signing_service_identity_unavailable`。消费状态接口仍只返回既有active/reason，不向调用方扩展身份字段。issue与两种exchange已有数据库身份推导，本批不修改grant/audience/deployment规则。
+
+### 签发部署绑定（ADR-017 F3-4）
+
+Runtime 在 server 构造时向 Console signer 注入配置的 Runtime deployment 与已登记 deploymentBindings（含已审核的本机 Workflow 覆盖），复制 map 并用 mutex 隔离并发；调用方的请求不能登记或修改这些事实。
+
+- 通用服务签名只检查 F3-3 实际选中的 active grant。完整 `tenantCode/deploymentCode` 是权威绑定，tenant 必须等于本 Runtime 租户；部分字段、非字符串、混合 scope 的不同部署均 403。旧 grant 两字段缺失/NULL时，由凭据行的 canonical app_code 查询受信配置里的来源应用部署；有显式 map 时缺项503，不按租户名拼部署。沿用 `Config.DeploymentForApp` 的 Connector→Console 支撑服务绑定；无显式 map 的 legacy 配置只使用已登记 Runtime deployment。工具 client 的NULL app若无明确 grant 绑定则503，具有完整绑定仍可签发。
+- `deployment` 必须严格等于上述来源部署，不能使用目标 audience 的部署、他租户部署或请求构造的名称；错值403 `oidc_signing_service_deployment_mismatch`。未选中的 grant 不参与决定部署。
+- access/id 用户 token 继续先复核 live session/subject，再要求 deployment 属于受信配置的显式登记值集合或 enrolled Runtime deployment；未知值403 `oidc_signing_user_deployment_mismatch`，登记事实未接线503。此批不增加 auth_clients/azp 检查（F3-5另批）。
+- Console自身 issue 已按认证Console部署构造 claim，经通用Sign再核验；secret/Gateway exchange 保留每条所选 grant 完整绑定、tenant一致与 Gateway签名来源部署等值校验，不新增入参覆盖。失败先于签名密钥引导。
+
+本批仅代码与隔离测试，不写grant/配置。F3-3/4/5和F4-1合入后才按已批准方案一起升版本机Runtime，部署时核验实际签发与SSO正例。
+
+### OIDC trust 共享初始化（ADR-017 F4-1）
+
+Console OIDC bootstrap 继续先验证 Platform 签名、有效期、tenant/Console deployment/runtimeCode、用途与 trust URL；随后先检查本地 overlay 冲突，并在既有 `console_mutation_receipts` 中固定共享 trust，再消费 JTI、引导密钥、写入 overlay、更新内存。共享事实的 operation 为 `console.auth.oidc.trust.initialize`，idempotency key 为规范化 `(tenant, console deployment, runtimeCode)` 数组的 SHA256；request_sha256 约束规范化绑定与 issuer/audience/jwksUrl，result_json 保存同一事实与摘要。仅含公开 trust，不含私钥或令牌，不新增表/权限/迁移。
+
+唯一回执+事务使不同进程/空 overlay 的第二实例也不能用新 JTI 替换 trust；不同事实409 `console_oidc_bootstrap_jwt_trust_immutable`，在 JTI/密钥副作用前拒绝。合法首次请求先持久固定 trust，后续 custody/磁盘失败只能按相同事实恢复；不因后续失败释放 trust 根。相同事实重试不重复初始化审计，同一 JTI 的原有 durable receipt 继续复核内容并支持安全续行。
+
+启动时按 enrolled runtimeCode 读取共享事实：本地 overlay 冲突则拒绝启动；overlay 缺失时从共享事实恢复认证配置、清除旧 inline JWKS，只允许相同 envelope 重建磁盘。首次升级若共享事实不存在而已有受保护 overlay，则先固定该已接受的 trust 后再对外服务；普通 env/legacy JWT 默认配置不用于建立共享事实。未 enrolled（无 runtimeCode）的 legacy 实例不查此初始化 tuple。共享记录损坏/依赖查询失败均失败关闭，不当作未初始化。该初始化写入发生在批准的 Runtime 升版启动或正式 bootstrap，不在代码测试阶段写环境。
+
+### 用户签发客户端（ADR-017 F3-5）
+
+access/id token 在 live session、subject 与部署登记检查通过后，要求 `aud` 是本 Runtime 数据中 `auth_clients.status=active` 的精确 `client_id`。即使数据库排序规则忽略大小写，返回 client_id 也必须与 aud 字节相等；未知/停用客户端403 `oidc_signing_user_client_not_active`。`azp` 缺省允许，出现则必须为与 aud 精确相等的字符串（空/null/其他类型或错值403 `oidc_signing_user_azp_mismatch`）。检查在密钥读取/引导之前，查询故障不签名。
+
+SSO 会话不绑定单一 auth client；同一个有效会话可为不同已登记 active 客户端签发。不新增 client/session 字段，不改服务 token audience/grant 路径，不将 app_code 或 deployment 代替 auth_clients 客户端事实。本批仅代码与隔离测试，统一部署后再做登录正例。
+
+### 服务签发 audience 映射（ADR-017 F3-3）
+
+通用 `oidc/sign`、Console 自身 `service-tokens/issue`、密钥 exchange 与 Gateway exchange 统一使用 Runtime `mapServiceAudienceScopes`。每个请求 scope 必须匹配凭据所属 client 的一条当前 active grant；`target_app` 缺省时补为 `aud`，已提供时须精确等于 `aud`，否则 403。用户 token 与公开服务状态接口的响应合同不变。
+
+- 有 `scope_json.audience` 的行只对该 audience 有效，不能被物理 resource 前缀或兼容表覆盖。映射保留既有两种形式：物理 scope 精确相同且以该 audience 加冒号开头，或 JSON audience 与 semanticScope 分别精确匹配。歧义映射、无效 JSON/字段失败关闭。
+- `audience` 缺失或 NULL 的存量行视为未登记，一律 403。阶段1临时兼容表已收紧为空；错 client、错 audience、scope 扩张、撤销 grant 均 403，不以 source app、前缀相似或动态配置扩大兼容。
+- Console 管理更新既有 `data-runtime:runtime:update` → `runtime.update` 别名仍只在 `console.runtime`、`aud=data-runtime` 且单 scope 时派生并校验原精确 grant；它不是通用点号 scope 兼容。
+
+以下为已迁移的历史组合（不是运行时白名单）：
+
+| client | audience | 已登记 scope（除标注前缀外均为精确值） |
+| --- | --- | --- |
+| console.runtime | data-runtime | 前缀 `console:`；`data-runtime:runtime:update` |
+| enterprise.runtime | console | `console:policy-bundle:read` |
+| console.runtime | workflow | `workflow:proxy`、`workflow:notification-details:authorize` |
+| console.runtime | aims / altoc / assets / finance / people | 各自 `<app>:notification-details:authorize`，仅这五个精确 app/scope 配对 |
+| console.runtime | connector-runtime | `connector-runtime:diagnostics:view`、`connector-runtime:identity:exchange`、`connector-runtime:identity:dingtalk:exchange`、`connector-runtime:jobs:cancel`、`connector-runtime:jobs:view`、`connector-runtime:people:sync`、`connector-runtime:notifications:send` |
+| console.runtime | notification-runtime | `notification-runtime:send` |
+| console.runtime | tenant-runtime | `tenant-runtime:runtime:update` |
+| console.runtime | webdev | `webdev:issue:read`、`webdev:issue:write` |
+| codocs.runtime | data-runtime | `credential_vault:resolve`、`integration_config:view` |
+
+2026-09-26，经批准在本机 C000001 合并补齐93行的 audience/semanticScope，保留其它 JSON 键、授权状态及其它字段（updated_at 反映迁移）。逐行核验93/93，以上22个精确三元组及1个前缀代表请求真实签发23/23为200，Codocs跨audience反例403。运行时兼容表现为空；Go历史夹具同时证明登记后通过、缺失/NULL audience失败关闭。
+
+明确排除的3行 `connector-runtime:directory:sync`、`console.schema:read`、`workflow:action_defs:sync` 保持原状、无audience、失败关闭，不删除或撤销；Codocs tenant-runtime 两项同样不在已登记组合内。其它环境的grant事实迁移仍待独立盘点与批准，部署此版本前必须补齐其合法签发组合。Enterprise 的同名 policy scope 向 data-runtime/tenant-runtime 使用分别登记的前缀物理行，不能把旧Console行扩展到其它audience。此次不启用外部通知或OSS，不新增权限。
+
+1. **未迁移路径保持既有边界** — 独立应用不跨模块直连数据库；内部整合按上节及 ADR-018 的专项合同逐项替换 HTTP/同步，Nuxt/BFF 始终不持有业务库凭据
 2. **单一事实源** — 每类数据只有一个权威模块（见下表）
 3. **稳定标识** — 跨模块引用使用业务键，不使用内部自增 ID
 4. **统一服务认证** — 跨模块服务端 API 调用、回调、同步和写操作统一使用 Console 签发的 `token_use=service` JWT；业务应用通过 Console runtime/app identity 获取运行时配置与短期 token，本地 env 不新增跨模块 client secret，也不再依赖 app 级 `license.lic` bootstrap。目标模块验证 Console JWKS、`aud`、`scope`、`token_use=service` 和来源应用，不新增共享 webhook secret 或静态 API key。
@@ -74,7 +237,8 @@ ADR-017 新增的客户数据面契约：
 | Console（PM2 / 私有单租户） | Platform | `GET /api/platform/runtime/applications?tenantCode={tenantCode}&deploymentCode={deploymentCode}` + `Authorization: Bearer HZY_PLATFORM_RUNTIME_TOKEN` | `/api/user/applications` 可按需获取当前 deployment 环境的租户订阅应用入口；用户可见性由本地已验签 policy bundle 的角色授权过滤 |
 | Console（PM2 / 私有单租户） | Platform | `POST /api/v1/runtime/subjects/sync` + `Authorization: Bearer HZY_PLATFORM_RUNTIME_TOKEN` | 启动时重建 `directory_subject_exports`，并把最小 subject 投影同步到 `tenant_subjects`；同时同步 `directory_user_departments` 的多归属 membership 到 `tenant_subject_memberships`；不包含姓名、邮箱、手机等目录 PII |
 | Console（PM2 / 私有单租户） | Platform | `POST /api/v1/runtime/heartbeat` + `Authorization: Bearer HZY_PLATFORM_RUNTIME_TOKEN` | 上报 Console deployment 心跳、bundle 版本、auth-runtime 健康状态与签名 key 指纹 |
-| Console（Cloudflare 共享） | Platform | `GET /api/platform/internal/console/tenants/{tenantCode}/bundle?environment={environment}&deploymentCode={deploymentCode}` + `Authorization: Bearer HZY_CLOUDFLARE_INTERNAL_TOKEN` | runtime 模式由独立同步拉取并验签保存；普通鉴权 cache-miss 不再拉取。旧 memory 模式、显式管理刷新和既有高风险 fresh-policy 路径保留原语义。旧 `HZY_CONSOLE_PLATFORM_SERVICE_TOKEN` 仅作兼容；不使用租户 Runtime Token 或 deployment license token |
+| Console（Cloudflare 共享） | Platform | `GET /api/platform/internal/console/tenants/{tenantCode}/bundle?environment={environment}&deploymentCode={deploymentCode}` + `Authorization: Bearer HZY_CLOUDFLARE_INTERNAL_TOKEN` | runtime 模式由独立同步拉取并验签保存；普通鉴权 cache-miss 不再拉取。旧 memory 模式、显式管理刷新和通知详情等原有高风险 fresh-policy 路径保留原语义；角色持有人与 subject-eligibility 服务读取使用下述逐请求修订探测门槛。旧 `HZY_CONSOLE_PLATFORM_SERVICE_TOKEN` 仅作兼容；不使用租户 Runtime Token 或 deployment license token |
+| Console | Platform | `POST /api/platform/internal/console/tenants/{tenantCode}/service-keys` + Platform 内部凭据（hzy0 经 Gateway 固定私有出口） | R1 稳态服务身份：策略同步时自动登记本部署 Ed25519 公钥，Platform 签入该部署策略信封；body 仅 `environment/deploymentCode/publicKey`，只接受 active Console 部署，不改变授权。见策略验证合同 §15 |
 | Console（Cloudflare 共享） | Platform | `POST /api/platform/internal/console/tenants/{tenantCode}/subjects/sync?environment={environment}&deploymentCode={deploymentCode}` + `Authorization: Bearer HZY_CLOUDFLARE_INTERNAL_TOKEN` + `x-hzy-internal-principal: console-managed-cloud-worker` | LDAP/Account/企业微信/钉钉/GitLab 或手工 subject 同步完成后，把最小 subject 与 membership 投影写入 Platform；tenant/deployment/environment 只取可信 Tenant Gateway 上下文并由 Platform 绑定 active Console deployment，body 不能覆盖租户边界；不包含目录 PII |
 | Platform tenant-admin | tenant Console BFF → Tenant Runtime | 复制安装命令内的 `directory-connector-enrollment.v1` 单次签名 token → Console `POST /api/v1/console/directory-connectors/enroll` → Runtime `POST /v1/console/directory-connectors/enroll` | Platform 同时把固定 Ed25519 `kid/public key` 写入受保护 Runtime 安装配置；Runtime 验原始 payload 签名、有效期、tenant、Console deployment 和单次 `jti`，在同一事务登记 RSA-3072 Connector 公钥与审计，只返回 Connector identity，不签发 Console OAuth credential |
 | Directory Connector（独立 systemd/Linux 用户） | 本机 data-runtime Directory adapter | RSA-PSS 签名 loopback `POST /runtime/internal/directory-connector/{configuration,commands/lease,sync,commands/{id}/complete}` | Runtime 从客户侧 Vault resolve LDAP Secret 后只返回 Connector RSA-OAEP 密文；在客户服务器内 lease/fencing 执行创建用户、改密码、显式立即同步和连接认证测试。LDAP 全量同步只响应目录同步页提交的 `sync-now` 命令，启动和周期 tick 不自动扫描；data-runtime 通过 `directory_connectors.public_key_pem` 验签、校验 tenant/deployment、时间戳与 nonce 防重放；Connector 不持有数据库账号、Console OAuth credential 或 Vault 明文 |
@@ -102,7 +266,7 @@ ADR-017 新增的客户数据面契约：
 - Foundation 的业务应用 startup activation 默认关闭：Platform activation、bundle 刷新和 heartbeat 只由 Console 执行。Foundation `consoleRuntime.ts` 在业务应用启动时向 Console 拉取 app runtime config；legacy `/api/platform-activation/*` 仅保留为迁移期诊断入口。
 - Foundation 默认通过 Console OIDC 门面接入客户侧 Auth Runtime：前端 `useAuth` 消费 `hzy_*` token/session Cookie，服务端通过 Console JWKS 验证 access token 并注入 `event.context.consoleAuth`。OIDC private key、Session、Refresh family 和 token state 只由 Tenant Runtime 持有。`HZY_AUTH_MODE=legacy` 或 `HZY_LEGACY_AUTH_BRIDGE=true` 时才回退旧 CAS/Account bridge。
 - Foundation 默认启用轻量 RUM client，向当前租户域 `/api/rum` 上报页面加载、Web Vital、同源 API 耗时与 JS 错误；tenant gateway 会转发到 Observability Worker。RUM 明细不进入业务数据库，不采集 Cookie、Authorization、请求体、用户输入或 URL query/hash。
-- 企业应用之间的服务调用使用 Console service-token 门面：调用方通过 Foundation `requestServiceAccessToken()` 获取短期 `token_use=service` JWT，实际 client/credential/grant 校验、签名和 introspection 均由 Tenant Runtime Auth adapter 完成。业务应用和 Console env 不保存跨模块 client secret 或 signing private key。目标应用先验证 Console JWKS、`aud`、`token_use` 与 exact `scope`，再通过 Console `/oauth/introspect` 门面确认 token 仍绑定 current credential、active service client 和完整 active grants。托管云目标 Worker 的 introspection 必须使用 `HZY_CONSOLE_SERVICE` Cloudflare Service Binding 直达 Console；不得由后台 Worker 公网 fetch `console.huizhi.yun` 或租户 Console 域名，否则无浏览器国家上下文的子请求可能在到达 Console 前被 zone WAF 拒绝。托管云业务 Worker 对 Console 的 request-bound service API（包括运行参数读取和通知发布）同样必须通过 Foundation `fetchConsoleServiceJson(event, ...)` 使用 `HZY_CONSOLE_SERVICE`，并用 `trustedServiceRequestHeaders(event)` 仅转发已验证的 Tenant Gateway 与 Data Runtime bootstrap 上下文；不得只携带 `Authorization` 重新进入 Console 公网入口，否则 Console 无法建立 tenant-runtime 绑定。Console 自身仍使用 Nitro local fetch 避免 Worker 自调用环。明确 inactive 返回 401；Runtime/introspection 网络、超时或 5xx 失败关闭并返回可重试 503。可靠投递遇到目标 401 时淘汰缓存 token、强制刷新且只重试一次。Tenant Runtime 的 JWKS 缓存遇到未知 `kid` 必须在带冷却保护的前提下主动刷新一次，使 Console 密钥轮换立即生效且不开放无界刷新。签发时 `tenant/deployment/source_app/target_app` 必须来自已验证 Gateway/Runtime enrollment，多个兼容 claim 冲突必须拒绝；禁止 `credentialId=0`、通用管理员 scope 或 Console DB fallback。
+- 企业应用之间的服务调用使用 Console service-token 门面：调用方通过 Foundation `requestServiceAccessToken()` 获取短期 `token_use=service` JWT，实际 client/credential/grant 校验、签名和 introspection 均由 Tenant Runtime Auth adapter 完成。业务应用和 Console env 不保存跨模块 client secret 或 signing private key。目标应用先验证 Console JWKS、`aud`、`token_use` 与 exact `scope`，再通过 Console `/oauth/introspect` 门面确认 token 仍绑定 current credential、active service client 和完整 active grants。托管云目标 Worker 的 introspection 必须使用 `HZY_CONSOLE_SERVICE` Cloudflare Service Binding 直达 Console；不得由后台 Worker 公网 fetch `console.huizhi.yun` 或租户 Console 域名，否则无浏览器国家上下文的子请求可能在到达 Console 前被 zone WAF 拒绝。托管云业务 Worker 对 Console 的 request-bound service API（包括运行参数读取和通知发布）同样必须通过 Foundation `fetchConsoleServiceJson(event, ...)` 使用 `HZY_CONSOLE_SERVICE`，并用 `trustedServiceRequestHeaders(event)` 仅转发已验证的 Tenant Gateway 与 Data Runtime bootstrap 上下文；不得只携带 `Authorization` 重新进入 Console 公网入口，否则 Console 无法建立 tenant-runtime 绑定。Console 自身仍使用 Nitro local fetch 避免 Worker 自调用环。明确 inactive 返回 401；Runtime/introspection 网络、超时或 5xx 失败关闭并返回可重试 503。可靠投递遇到目标 401 时淘汰缓存 token、强制刷新且只重试一次。Tenant Runtime 的 JWKS 缓存遇到未知 `kid` 必须在带冷却保护的前提下主动刷新一次，使 Console 密钥轮换立即生效且不开放无界刷新。签发时 `tenant/deployment/source_app/target_app` 必须来自已验证 Gateway/Runtime enrollment，多个兼容 claim 冲突必须拒绝；禁止 `credentialId=0`、通用管理员 scope 或 Console DB fallback。Runtime 的通用签名入口不得只校验 claim 形状：`token_use=service` 在签发前必须确认 credential 为 current/active 且请求的每个 scope 都有 active grant，`token_use=access/id` 必须按 `sid` 解析出未撤销、未过期的会话，并要求 `sub` 与 `hzy.uid` 同时与该会话一致。持有签名 capability 只代表可以请求签发，不代表可以断言 Runtime 无法核实的 subject、session 或 scope；不满足时返回 403，不得延后到 introspection 才发现。
 - Codocs 文档共享用户选择器、批量协作者名称补全、部门名称补全与当前用户兼容视图统一通过 Codocs BFF 调 Console `GET /api/v1/console/service/directory/users`，使用 `aud=console`、精确 capability `console:directory-users:read`、`token_use=service`、`target_app=console` 与 tenant 绑定。批量读取用服务端生成的 `uids` 查询，部门投影只返回编码、名称和父子关系；Console 的用户投影只返回 `uid`、姓名、头像、部门和岗位等共享识别字段，不返回手机号、邮箱或目录管理字段；浏览器 Cookie、普通员工的 `directory_users:view` 和 Codocs 自身高权限身份均不能替代该服务授权。
 - People 员工页的共享部门树沿用同一个受限投影：People BFF 必须先建立已验证用户会话，再由 People runtime 使用 `aud=console`、精确 capability `console:directory-users:read` 调用 `GET /api/v1/console/service/directory/users?projection=departments`。该 service grant 只允许读取最小共享字段，不形成 Console 应用 entitlement，也不能用 `console:directory_operator` 等人类 UI 角色替代；初始化 grant 由 `console/docs/sql/Console-SQL-Seed-v1.79-people-directory-sharing-read-grant.sql` 提供。
 - Aims 项目协作页的用户列表也沿用该受限投影：Aims BFF 必须先建立已验证用户会话，再由 Aims runtime 使用 `aud=console`、精确 capability `console:directory-users:read` 调用 `GET /api/v1/console/service/directory/users`。Console 共享端点必须透传 `page` / `pageSize`（runtime 单页上限 100），Foundation BFF 对业务页面请求的较大姓名映射窗口自动分页合并；响应仅含 `uid`、姓名、头像、部门和岗位等共享识别字段，不返回手机号、邮箱或目录管理字段；`project_member` 等人类角色不获得任何 Console 应用权限，初始化 grant 由 `console/docs/sql/Console-SQL-Seed-v1.80-aims-directory-sharing-read-grant.sql` 提供。
@@ -130,7 +294,7 @@ ADR-017 新增的客户数据面契约：
 - Platform 企业角色 `project_director` 与 `qa` 均固定为 `max_active_assignments=1`、`subject_type_constraint=user`。约束同时物化到 `tenant_roles`；通用授权写入必须在锁定角色行后检查任期重叠，不能以直接授予绕过。
 - 系统管理员更换持有人使用 Platform `PUT /api/platform/tenant-admin/role-holders/{roleCode}`。该命令要求租户 owner、可选 `expectedRevision`，在一个事务内撤销旧有效授权、写入新用户授权并递增 `tenant_role_holder_revisions`；不授予系统管理员任何 Aims 审阅、QA、发布或审批业务动作。
 - Platform policy bundle 输出 `roleHolderRevisions[{roleCode,revision,updatedAt}]`，并继续用当前有效 `roleAssignments` 输出持有人事实。角色授权变化会改变 bundle hash 和全局 `policyRevision`。
-- Aims 与 Workflow 通过 Console `GET /api/v1/console/service/authorization/role-holders?roleCodes=project_director,qa` 读取当前持有人。调用令牌要求 `aud=console`、精确 capability `console:authorization-role-holders:read`、`token_use=service`、current credential/grant 及 tenant/deployment/target app 绑定；接口只允许这两个 role code，`Cache-Control=no-store`，忽略角色/用户模拟。
+- Aims 与 Workflow 通过 Console `GET /api/v1/console/service/authorization/role-holders?roleCodes=project_director,qa` 读取当前持有人。调用令牌要求 `aud=console`、精确 capability `console:authorization-role-holders:read`、`token_use=service`、current credential/grant 及 tenant/deployment/target app 绑定；接口只允许这两个 role code，`Cache-Control=no-store`，忽略角色/用户模拟。托管模式每次先用固定 `hzy-policy-revision.v1` 探测当前修订；只有未变、已验签 Console 信封仍有效且距接收不满 20 分钟时才直接读取，修订变化或超龄必须刷新完整信封并验签，探测/刷新失败返回 503。修订响应不单独构成授权依据。
 - 每个角色返回 `revision/policyRevision/status/errorCode/holders`；`holders[].uid` 必须是用户主体 `subjectCode`（即 Console 会话和业务应用使用的稳定 UID），不得使用仅标识上游目录同步记录的 `externalRef`。只有 `status=resolved` 且恰好一个 holder 时调用方可以执行敏感业务动作。0 人返回 `role_holder_missing`，多人脏数据返回 `role_holder_ambiguous`；调用方不得回退管理员、历史人员或数组第一项。初始化授权见 Console v1.87 seed/verify。
 
 ### Aims 项目责任与周报周期契约
@@ -141,6 +305,13 @@ ADR-017 新增的客户数据面契约：
 - `weekly_reporting_settings` 每公司一条，配置 timezone、截止时间、汇总目标、提醒、RAG 参数、rollout mode 和单调 `config_version`。只有 `weekly_reports:configure` 可修改；该权限不隐含审阅、代理任命或发布。
 - `weekly_reporting_periods` 保存自然周起止、截止和当时配置快照；`weekly_report_obligations` 对每周期/项目唯一，并保存正式/代理责任人、责任类型和项目状态快照。`pilot` 只纳入有效试点项目，`company` 纳入周期内曾 active 的项目；截止后义务进入 `deadline_frozen`，后续负责人或状态变化不得改写。
 - Aims BFF 必须删除客户端传入的 `current_user_is_project_director`、`current_user_can_configure_weekly_reports` 和 `current_user_can_submit_weekly_report`，再以 normal-merged 当前授权重建；data-runtime 在数据库访问前检查这些受信上下文，并继续叠加项目关系、代理任期和对象状态。
+- Enterprise Host 周报设置（代码候选，待发布）：`GET/PUT /aims/api/v1/admin/weekly-reporting-settings`（`enterprise/server/utils/enterpriseAimsWeeklyReportingSettings.ts`）只按已验证会话的 `weekly_reports:configure` 放行（不借 `admin:admin` 或 review），丢弃调用方自带治理标志与 actor，写入 `current_user_can_configure_weekly_reports=1`，经 Foundation `aims.weekly-reporting-settings-view|update` → Runtime `POST /v1/enterprise/aims/weekly-reporting-settings:view|update`（`aims:enterprise-host:execute`，人员许可 `weekly-reporting-settings/configure`，拒绝范围键与各类 ID）。PUT 只接受白名单整体替换字段，浏览器每个保存意图一个稳定 `Idempotency-Key`（结果未确认时原键重试），Host 派生 `aims.weekly-reporting-settings:<key>` 且 Runtime 要求该头；Runtime 单行 upsert 按内容收敛，但无 CAS 与回执表，同键重放会再次递增 `config_version`，并发保存以最后一次为准。页面 `/aims/admin/weekly-reporting-settings` 复用 Aims 原页面并贡献至“控制台 → 业务配置”（`weekly_reports:configure`）；独立 Aims API 仍叠加 `/admin/**` 的 `admin:admin`，两入口的差异仅在此。周报页把总监工作台 409 `weekly_reporting_period_required`（及旧 404）视为“应报清单未生成”，生成遇 `weekly_reporting_not_configured/disabled` 时提示并对有配置权限者给出设置入口。不新增 grant、manifest 资源或 Console seed。
+- Enterprise Host 全局周报治理桥（`enterprise/server/utils/enterpriseAimsWeeklyGovernance.ts`，12 个 `aims.company-weekly-summary-*`、`aims.weekly-reporting-period-*`、`aims.weekly-report-review/open-correction` 操作）与独立 BFF 同一口径：丢弃调用方自带的治理标志，按已验证会话的 `weekly_reports:review/configure` 设置 `current_user_is_project_director` / `current_user_can_configure_weekly_reports`；总监命令、公司汇总（含查看/版本/publish/retry）与“仅总监”的周期生成再经 Foundation `projectGovernanceRoleHolder` 读取 Console 当前唯一 `project_director`，非持有人 403、0/多人 409、依赖故障 503，并写入新鲜 `current_user_project_director_revision`；总监工作台只按 review 权限放行。Runtime 已为这 12 个 action 登记精确 `QueryKeys`；Host 服务客户端 `enterprise.runtime` 的 Console `console:authorization-role-holders:read` 精确 grant 以目标环境 grant verify 为准（v1.87 seed 只覆盖 aims/workflow）。
+- Enterprise Host 公司汇总发布编排（代码候选，待发布；不新增 capability、grant、manifest 资源或 schema）：
+  - Host `:publish` 以同一授权上下文先读 Runtime `company-weekly-summaries:view` 投影，只按其中的抄送选择经 Foundation `fetchConsoleDirectoryApi`（`enterprise.runtime` 既有 `console:directory-users:read`）展开为 active UID 快照，之后才写入 `company_summary_recipient_resolution_verified=1`（Runtime 只在 `publish` action 的 `QueryKeys` 放行该键，其它 action 带上即 400；Host 丢弃调用方同名键）。浏览器正文只取 `correctionReason`，`resolvedRecipients/coveredSelectionKeys` 仅由 Host 生成，Aims 仍按冻结选择逐项核对覆盖。`:retry`/`:cancel-publish` 不转发浏览器正文。目录失败 503、清单失效 409、未生成 409。
+  - Runtime `routeEnterpriseDelegated` 对 `publish/retry/cancel-publish` 注入受信上下文标记（`aimsapp.WithEnterpriseCompanyWeeklySummaryOutbox`），Aims 据此以已登记写入绑定的 tenant、正式 Aims worker deployment（`deploymentBindings.aims`）、`source_app=aims`、`aims.runtime` 与注册 outbox 物理表写入/定位 `aims.company-weekly-summary.codocs-publish.v1` operation，不读 payload 保留键；未配置 Enterprise writer 或 worker 时 503 失败关闭。独立 BFF 路径（服务端注入保留键）保持不变。发布事务本身按汇总状态机防重（非 draft/correction_draft 即 409），operation key 为 `aims:company-weekly-summary:{period}:r{revision}:publish:v1`。
+  - 投递沿用既有 outbox：统一调度上的正式 Aims worker（`aims:integration_operation:execute`、generation 绑定）claim 后经新增 `POST /v1/enterprise/aims/integration-operations:company-weekly-summary-publish-content` 读取不可变 Markdown（闭合 body `{operationKey, summaryVersionId, markdownSha256}`；必须是本 worker 未过期的 processing 租约且命令冻结的版本/hash 一致），再调用 Codocs `codocs:company-weekly-summary:publish`，最后 `integration-operations:succeed`。succeed 在同一事务发布汇总、写 fact snapshot，并把 `review_route=company_summary`、`review_status=submitted`、`locked_report_version_id` 属于本版本 `included` 项的项目经理职责工时置为 `approved`（`approved_summary_version_id` 为本版本，追加 review event）；其它路由、未纳入版本与草稿不受影响（`enterprisescheduler` 隔离 MySQL 测试）。宿主请求内不同步投递，返回 `delivery.pending=true`。
+  - 环境启用前仍需：统一调度 worker 定时 owner 已恢复、`aims.runtime` 的 `aims:integration_operation:execute` 与 Codocs `codocs:company-weekly-summary:publish` grant verify、Codocs 独立 Service API 可达；未核验前不得宣称发布链路在环境生效。
 
 ### Console 统一员工入口展示契约
 
@@ -221,6 +392,12 @@ Finance 入站 Service API 只接受各端点登记的精确 capability；`finan
 
 **Aims / Altoc / Assets / Finance / People integration-operation worker → tenant-runtime**：可靠集成 operation 的 claim、drain、ack、fail 和受控恢复使用调用方自己的运行身份，并要求精确 `<app>:integration_operation:execute`；该单数 worker capability 与管理界面的复数 `<app>:integration_operations:view/replay` 完全独立，`<app>.write` 也不蕴含 execute。所有 worker grant 必须同时安装 `data-runtime` 与 `tenant-runtime` audience 版本。Aims、Altoc、Assets 使用 `console/docs/sql/Console-SQL-Seed-v1.92-integration-operation-worker-grants.sql` / `console/docs/sql/Console-SQL-Verify-v1.92-integration-operation-worker-grants.sql`，Finance 使用 v1.61 runtime grants，People 使用 v1.86 worker grant；启用 cron 前必须在目标租户执行相应 verify 和真实多 scope token 签发探测。
 
+**Aims 周期里程碑滚动 → 统一 Runtime（ADR-018 INT-305 候选）**：当 Runtime 的 Aims scheduler 路径为 `unified` 时，唯一 owner 是 Gateway 签名 drain 唤醒。Aims Worker 在 `unified/recovered` 存储下完成 drain 后调用 `POST /v1/enterprise/aims/milestones:rollover-due`，使用 `aims.runtime` 运行身份、精确 `aims:milestone-rollover:execute`（与 `aims:integration_operation:execute` 互不替代）和 `X-HZY-Scheduler-Generation`；请求体只接受 `limit`（1–200）与 `carryover`（`auto/manual`），操作人、复盘豁免和 scheduled 标记由 Runtime 固定。扫描与每个里程碑各自在 registry SHARE 锁的 scheduler 事务内执行，generation 变化即停止剩余条目；缺少兼容视图时本入口 503。同一条件下 legacy `POST /v1/aims/service/milestones:rollover-due` 返回 `409 aims_milestone_rollover_unified_owner`，本地每日 cron 将其记为 skipped。Grant 见 `console/docs/sql/Console-SQL-Seed-v2.8-aims-milestone-rollover-grants.sql` / `Console-SQL-Verify-v2.8-aims-milestone-rollover-grants.sql`（`aims`、`data-runtime`、`tenant-runtime` 三个 audience）；启用前须在目标租户执行 verify 并实际签发该 scope 的 service token。候选代码不表示任何环境已启用。
+
+**Aims 到期通知 → 统一 Runtime（ADR-018 INT-305 候选）**：同一条件下（Runtime Aims scheduler 为 `unified`），到期通知的唯一 owner 也是 Gateway 签名 drain 唤醒。Aims Worker 在 `unified/recovered` 存储下以注入的调用方执行既有 drain（仍受 `HZY_AIMS_DUE_NOTIFICATIONS_ENABLED` 开关、subject eligibility 与 Console 发布合同约束），调用 `POST /v1/enterprise/aims/notifications:scan-due|acknowledge|acknowledge-closure`：`aims.runtime` 运行身份、精确 `aims:notifications-due:execute`（与 outbox、rollover capability 互不替代，替代旧点号 `aims.notifications_due.execute` 在统一路径上的使用）和 `X-HZY-Scheduler-Generation`；请求体沿用 legacy worker 的封闭字段集。扫描的对账、事实查询、每个检查点、闭环列表以及 ack 各自在 registry SHARE 锁 scheduler 事务内执行；缺少兼容视图时 503。统一 owner 期间 legacy `/v1/aims/service/notifications:*` 返回 `409 aims_due_notifications_unified_owner`，本地 15 分钟 cron 记 skipped；Assets、Altoc、People 的同名 worker 不受影响。Grant 见 `console/docs/sql/Console-SQL-Seed-v2.9-aims-notifications-due-grants.sql` / `Console-SQL-Verify-v2.9-aims-notifications-due-grants.sql`；启用前须在目标租户执行 verify 并实际签发该 scope 的 service token。
+
+**Assets 到期通知 → 统一 Runtime（ADR-018 INT-305 候选）**：Assets 没有 legacy 唤醒，因此以显式选择启用：仅当 Platform 租户记录持久化 `apps.assets.enterpriseScheduler.storage` 为 `unified/recovered` 时，Tenant Gateway 才签名唤醒 Assets Worker `POST /api/internal/integration-operations/drain`（其余情形不唤醒）；Foundation `requireTenantGatewaySchedulerRequest` 仅对 `aims`、`assets` 接受 storage 选择，签名覆盖 storage/generation。Worker 校验 tenant/deployment 与运行绑定一致后，以注入调用方执行既有 drain（页 50、每流 1 页、10 秒；仍受 `HZY_ASSETS_DUE_NOTIFICATIONS_ENABLED` 与 subject eligibility 约束），调用 `POST /v1/enterprise/assets/notifications:scan-due|acknowledge|acknowledge-closure`：`assets.runtime` 运行身份与 Runtime `enterprise.assetsDeliveryWorker`（部署须等于 Assets deployment binding）、精确 `assets:notifications-due:execute`（Aims 身份或 capability 均不通过）和 `X-HZY-Scheduler-Generation`；请求体沿用 legacy Assets worker 的封闭字段集。Runtime 以 Assets 域自身的 scheduler 绑定（无 outbox）开启 registry SHARE 锁事务，扫描、收件人补全、检查点、闭环与 ack 均在其内；缺少兼容视图 503。Runtime Assets scheduler 为 `unified` 时 legacy `/v1/assets/service/notifications:*` 返回 `409 assets_due_notifications_unified_owner`，本地 15 分钟 cron 记 skipped。Grant 见 `console/docs/sql/Console-SQL-Seed-v2.10-assets-notifications-due-grants.sql` / `Console-SQL-Verify-v2.10-assets-notifications-due-grants.sql`；启用前须在目标租户执行 verify、实际签发该 scope 的 service token，并在 Platform 写入 Assets scheduler 选择。
+
 **业务应用 → Console tenant-runtime fixed integration operations**：GitLab/WeCom 固定操作使用复数 `integration_operations:execute`，与上述业务 operation worker 的单数 capability 不同。Console service token 签发必须同时存在 `data-runtime:integration_operations:execute` 与 `tenant-runtime:integration_operations:execute` audience grant；Runtime 收到 token 后还会按未加 audience 的 `integration_operations:execute` semantic grant 精确重验 `integrationCodes + operations`。Aims/Codocs 的 semantic policy 必须合并 GitLab 与 WeCom allow-list，后续 seed 不得用单一 integration policy 覆盖已有集合；Altoc/Assets/Workflow 仅保留 WeCom allow-list。存量 v1.82/v1.83 租户用 `console/docs/sql/Console-SQL-Seed-v1.93-fixed-integration-runtime-token-grants.sql` 修复，并以对应 v1.93 verify 确认两条 audience grant 齐全、Aims/Codocs GitLab policy 未被覆盖。Aims 实时群组仓库目录另要求 semantic grant 精确包含 `gitlab.group-projects`，存量租户使用 `console/docs/sql/Console-SQL-Seed-v1.98-aims-gitlab-group-projects.sql` 只追加该 operation，不覆盖已有 allow-list。
 
 **Workflow → data-runtime**: Workflow 服务端访问 data-runtime 时使用 Console service token，`audience` 必须与 data-runtime 的 `HZY_DATA_RUNTIME_JWT_AUDIENCE` / `HZY_TENANT_RUNTIME_AUDIENCE` 一致。跨应用代理链路必须用 `source_binding=service-client-policy` 签发 `appCode=workflow`、`deployment=<tenant>-workflow` 的目标 token，不得复用来源业务应用的 gateway runtime token。若 audience 为 `data-runtime`，scope 使用 `data-runtime:workflow:read` / `data-runtime:workflow:write`；若 audience 为 `tenant-runtime`，scope 使用 `tenant-runtime:workflow:read` / `tenant-runtime:workflow:write`。data-runtime 将这些 audience-scoped scope 映射为内部 `workflow.read` / `workflow.write` 语义。
@@ -250,7 +427,7 @@ Workflow tenant-runtime 产生的待办、通过、驳回、撤回、委派和�
 
 `flow_instances.biz_url` 只接受 `http/https` 绝对 URL 或单斜杠开头的站内路径。tenant-runtime 的语法校验不是导航授权：Workflow BFF 在调用统一通知入口前，必须用 Console runtime 下发的已验签 policy bundle `applications[].appCode/homeUrl/basePath/status` 和 Foundation shared resolver 将 URL 绑定到 `actionTargetAppCode`，生成 exact origin + home path 内的 canonical absolute URL；协议相对、凭据 URL、危险协议、反斜杠/控制字符、编码路径逃逸、未注册/inactive 应用、错 origin 或错应用 base path 一律拒绝。业务目标不匹配时必须改用 `/workflow/tasks/{taskId}` 或 `/workflow/instances/{instanceId}`，保持 `targetAppCode/businessTargetAppCode=flow_instances.app_code`，仅设置 `urlFallback=true`、`actionTargetAppCode=workflow`；若可信 catalog 中连 Workflow 自身也不可解析，则发布失败并保留 lifecycle/outbox 待重试。Console 对 `sourceAppCode=workflow` 的 publish 在入库和计算 canonical idempotency hash 前使用本地已验签 bundle再次复核；catalog 不可用稳定返回 `503 action_target_catalog_unavailable`，目标不匹配返回 `400 invalid_action_target`。本地开发只允许显式 dev application catalog，不按 appCode 合成浏览器目标。外部企业微信与站内通知必须复用同一 canonical URL，不能发送未绑定的原始 `biz_url`。
 
-所有 Workflow 调用通过 Foundation 代理（`/api/workflow-proxy/`），自动注入 `request_app_code`。
+所有 Workflow 调用通过 Foundation 代理（`/api/workflow-proxy/`），自动注入 `request_app_code`。Enterprise Host pilot 构建经 `sharedApiPath` 使用 `/enterprise/api/foundation/workflow-proxy/**`（同七个精确操作，见“Enterprise Host 共享用户 API 基址”）。
 
 详细接入指南：`foundation/docs/Workflow-Integration-Guide.md`
 
@@ -307,7 +484,7 @@ Workflow tenant-runtime 产生的待办、通过、驳回、撤回、委派和�
 }
 ```
 
-Console 保存站内消息事实与阅读/归档状态；外部通道继续走 Notification Runtime。普通业务通知统一通过 Foundation `sendNotification()` 编排：必须先成功写入 Console `in_app` 耐久事实，再外发 WeCom；站内失败时不得外发，外部失败则返回保留站内成功结果的部分交付错误。列表与 summary.latest 只能返回不含来源业务文案的安全信封。详情读取由 Console 调来源应用 `POST /api/v1/service/notification-details/authorize` 实时重验：使用 `aud=<sourceAppCode>`、`scope=<sourceAppCode>:notification-details:authorize` 的 Console service token，请求体 `{notificationId,descriptor,subject:{uid},tenantId,deploymentId}` 全部来自收件事实、当前认证会话及可信 Gateway/服务端运行配置，客户端不能提交 subject、descriptor 或 challenge。Workflow descriptor 为 `workflow_task + instance:{instanceId}:tasks:{去重升序 taskIds}`（无 task 时为 `workflow_instance + instanceId`），Aims 为 `work_item + 规范化数字 ID`；Assets metadata descriptor 固定为 `authorizationDescriptor:{resource:'asset_item'|'ip_asset'|'customer_delivery_asset'|'offboarding_recovery_case',id:objectCode}`，People 固定为 `authorizationDescriptor:{resource:'offboarding_task',id:taskCode}`；两者都必须与 `bizType/bizId` 精确一致且不得带额外字段，并仅接受来源直接精确 tuple，不在 Console 执行 scoped challenge。来源直接放行必须 `code=0,data.authorized=true` 且精确回显 `resource/id`；拒绝/权限撤销/对象不存在返回 403，无 verifier、超时、429、5xx、畸形响应或来源授权运行时不可用返回 503。禁止最终授权缓存和陈旧详情回退。授权后也只返回 title/summary/body/actionUrl/actionTargetAppCode/bizType/bizId/时间等 UI 白名单，不返回 raw metadata、bizKey、createdBy 或 idempotencyKey。
+Console 保存站内消息事实与阅读/归档状态；外部通道继续走 Notification Runtime。普通业务通知统一通过 Foundation `sendNotification()` 编排：必须先成功写入 Console `in_app` 耐久事实，再外发 WeCom；站内失败时不得外发，外部失败则返回保留站内成功结果的部分交付错误。列表与 summary.latest 只能返回不含来源业务文案的安全信封。详情读取由 Console 调来源应用 `POST /api/v1/service/notification-details/authorize` 实时重验：使用 `aud=<sourceAppCode>`、`scope=<sourceAppCode>:notification-details:authorize` 的 Console service token，请求体 `{notificationId,descriptor,subject:{uid},tenantId,deploymentId}` 全部来自收件事实、当前认证会话及可信 Gateway/服务端运行配置，客户端不能提交 subject、descriptor 或 challenge。Workflow descriptor 为 `workflow_task + instance:{instanceId}:tasks:{去重升序 taskIds}`（无 task 时为 `workflow_instance + instanceId`），Aims 为 `work_item + 规范化数字 ID`；Assets metadata descriptor 固定为 `authorizationDescriptor:{resource:'asset_item'|'ip_asset'|'customer_delivery_asset'|'offboarding_recovery_case',id:objectCode}`，People 固定为 `authorizationDescriptor:{resource:'offboarding_task',id:taskCode}`；两者都必须与 `bizType/bizId` 精确一致且不得带额外字段，并仅接受来源直接精确 tuple，不在 Console 执行 scoped challenge。来源直接放行必须 `code=0,data.authorized=true` 且精确回显 `resource/id`；拒绝/权限撤销/对象不存在返回 403，无 verifier、超时、429、5xx、畸形响应或来源授权运行时不可用返回 503。禁止最终授权缓存和陈旧详情回退。授权后也只返回 title/summary/body/actionUrl/actionTargetAppCode/bizType/bizId/时间等 UI 白名单，不返回 raw metadata、bizKey、createdBy 或 idempotencyKey。唯一的无对象读取例外是已绑定收件人的 `sourceAppCode=enterprise`、`metadata.notificationKind=business_event`、`moduleAppCode=codocs` 且业务类型为 `document_share`、`department_share` 或 `document_review` 的历史通知：Console 仅返回创建时保存的 title/summary/body/时间，清空 actionUrl、bizType、bizId，不读取当前业务对象、不提供跳转，并在 UI 明示对象状态未核验；未知模块或类型仍失败关闭。
 
 在调用任意非 Console 来源 verifier 之前，Console 必须先执行 notification-detail fresh eligibility：Directory 中 subject 必须仍为 `active`，再用 fresh normal-merged policy（忽略 role/user simulation、禁止 privileged、绕过 snapshot cache；managed-cloud 先刷新并核验当前 tenant/deployment bundle）判定由 Console 静态 registry 固定的最低 `resource:view`。固定映射为 Workflow `workflow_task→workflow_tasks`、`workflow_instance→workflow_instances`；Aims `work_item→work_items`、`integration_operation→integration_operations`；Assets `asset_item→asset_items`、`ip_asset→ip_assets`、`customer_delivery_asset→deliveries`、`offboarding_recovery_case→offboarding_recoveries`、`integration_operation→integration_operations`；People `offboarding_task→offboarding_tasks`、`integration_operation→integration_operations`；Finance `invoice_request→invoices`、`finance_receipt→receipts`、`integration_operation→integration_operations`；Altoc `receivable_plan→receivable`、`integration_operation→integration_operations`。registry 不接受请求体或来源回调覆盖 resource/action；Directory inactive 或 permission deny 返回 restricted，Directory/policy/bundle 不可用返回 unavailable，二者都不得调用 source verifier。Console lifecycle `people_lifecycle_authorization` 继续使用其现有双权限实时边界，不能用这条通用最低 view 检查替代或弱化。
 
@@ -321,9 +498,11 @@ Assets 的 `asset_offboarding_recovery_cases` 只保存来源事件键、离职 
 
 Assets 用户目标读取对 `asset_item / ip_asset / offboarding_recovery_case` 使用 BFF 从 Console normal-merged grant 派生的 trusted `all / relation / none` 和有界 grant-unit 对象范围；grant 内跨维度 AND、grant 间 OR，unknown/不可解析范围失败关闭。资源资产 direct relation 为当前 owner/custodian/user，并支持自身 `dept_code/project_code`；知识产权 direct relation 为当前 IP owner 或关联产品 business/technical owner，并支持关联产品 `project_code`；离职回收只支持 active case 当前 recovery responsible，因无部门/项目字段不匹配相应 unit。责任变化后旧 UID 的 direct relation 分支立即失效，但独立对象 owner、部门/项目、tenant-global 或同 resource admin grant 仍可保留访问。浏览器不能提交 actor、all 或 scope units。view/通知关系绝不蕴含 edit/approve/admin；PATCH 必须重新满足 action-specific scoped grant 和 runtime 对象谓词。
 
+Enterprise IP 详情的产品关联读取使用精确 `GET /assets/api/v1/ip-assets/:id/products` → Runtime `POST /v1/enterprise/assets/ip-assets:products`（服务能力 `assets:ip-asset:read`）。Host 从同一当前用户会话分别取得 `ip_assets:view` 和 `products:view` scoped permit；Runtime 在一个 Registry 快照中先验证源 IP 对象范围，再按产品对象范围过滤关联，仅返回可见产品的 `id/code/name/status`。原 `:view` 仍只返回 IP 主档，不因关联读取而泄露产品计数或明细。
+
 Assets 普通资产使用人以 `assignments:request` 发起自助操作，不持有 `assignments:edit`。runtime 只接受 `claim / return / release`，强制 claim 目标为当前用户，并分别校验资产可领用、本人当前实物使用关系或本人当前资源使用关系；流程实例、操作编号、生效/结束时间、审批人、终态和他人 target 均不可由浏览器指定。`assets:employee` 的 dashboard、asset item、assignment、alert 默认 scope 为精确 `asset:user`，不得把 user 合并为 owner/custodian；`assets:requester` assignment scope 为 `subject:self`。工作台汇总、列表、详情和 alert action 必须消费 BFF 派生的 action-specific trusted scope；assignment 可见性是“本人发起/本人目标/资产关系”与同 grant 部门、项目范围的有界组合，管理侧分配、转移、续费、维修、密钥轮换、权限回收和报废仍要求 `assignments:edit`，审批终态仍要求 `assignments:approve`。
 
-Console 提供 `POST /api/v1/console/service/authorization/subject-eligibility` 与 Foundation `checkSubjectEligibility()`，用于按服务端固定 purpose 检查指定用户的精确权限。调用方使用目标应用 `aud=console` 与精确 `console:authorization:subject-eligibility` capability，只能以自身双 claim service identity 查询 registry 登记的 purpose；body 只有 `subjectUid/purpose`，resource/action/app/tenant/deployment/object/simulation 均不可由调用方声明。Console 要求 Directory 显式 active，并按 fresh normal-merged、无 simulation、无 snapshot cache 的 policy snapshot 判定 registry 固定的 `resource:action`；响应仅 active/allowed/reason/policyRevision 且 no-store，基础设施不可用失败关闭。Aims、Assets、People、Finance、Altoc drain 在旧 UID closure 后、publish/ack 前检查真实 stream purpose；negative/503 不发布、不确认 checkpoint。v1.42 seed/verify 用于初始 capability，v1.97 seed/verify 用于幂等恢复 `workflow.runtime` 的精确 grant 及审批动作 purpose；两者都不创建 credential，实际权限元组始终以 Console registry 代码为唯一事实，不得由应用自动执行 seed。
+Console 提供 `POST /api/v1/console/service/authorization/subject-eligibility` 与 Foundation `checkSubjectEligibility()`，用于按服务端固定 purpose 检查指定用户的精确权限。调用方使用目标应用 `aud=console` 与精确 `console:authorization:subject-eligibility` capability，只能以自身双 claim service identity 查询 registry 登记的 purpose；body 只有 `subjectUid/purpose`，resource/action/app/tenant/deployment/object/simulation 均不可由调用方声明。Console 要求 Directory 显式 active，托管模式先通过逐请求修订探测选择已验签且距接收不满 20 分钟的缓存信封或刷新完整信封，再按 normal-merged、无 simulation、无主体 snapshot cache 的 policy snapshot 判定 registry 固定的 `resource:action`；修订探测失败及刷新失败均关闭为 503。响应仅 active/allowed/reason/policyRevision 且 no-store，基础设施不可用失败关闭。Aims、Assets、People、Finance、Altoc drain 在旧 UID closure 后、publish/ack 前检查真实 stream purpose；negative/503 不发布、不确认 checkpoint。v1.42 seed/verify 用于初始 capability，v1.97 seed/verify 用于幂等恢复 `workflow.runtime` 的精确 grant 及审批动作 purpose；两者都不创建 credential，实际权限元组始终以 Console registry 代码为唯一事实，不得由应用自动执行 seed。
 Registry 与 Aims、Assets、People、Finance、Altoc 的真实 due/offboarding stream union 及各应用 manifest `resource:view` 由跨模块静态合同锁定。Workflow 通知 purpose 只由可信 event allowlist 与 task/instance 身份派生：单 task 使用 `task_actionable` 和 task URL，并行 task 使用 `instance_actionable` 和 instance URL，终态使用 `instance_status` 和 instance URL。Workflow 跨应用代理操作只能按服务端路由派生 `task_approve/task_reject/task_delegate/instance_cancel/instance_resubmit`，并分别固定到 `workflow_tasks:approve|reject|delegate` 或 `workflow_instances:cancel|resubmit`；通过 Console 用户权限后，tenant-runtime 仍必须校验当前 task assignee 或 instance initiator 关系。业务 target、biz type、URL 和调用方输入均不能选择 eligibility permission。
 
 Finance 将 Workflow 审批通过与正式开票拆成两个事实：审批回调只把 `invoice_request` 置为 `approved`，正式发票只能由显式 `invoices:issue` 动作创建，审批人和 `admin` 不因动作蕴含自动获得开票能力。已批未开票以 `issuance_responsible_uid / issuance_due_at` 为唯一责任与时限事实；到账未核销以 `reconciliation_responsible_uid / reconciliation_due_at` 为唯一责任与时限事实，`requested_by`、`handler_user_id`、经理、部门、管理员、配置和 `@all` 均不得作为通知收件回退。通知使用 `invoice_issuance_due / receipt_reconciliation_due` 两条流，descriptor 分别固定为 `invoice_request + request code` 与 `finance_receipt + receipt code`，并与 `bizType/bizId` 精确一致。来源详情每次只对仍处于可办理状态的当前直接责任人放行；正式开票、足额核销、取消、责任或时限变化必须通过可靠 checkpoint 关闭或推进旧 generation。
@@ -336,11 +515,19 @@ Aims 非成员的 scoped-admin 分支采用同一 Console → Aims capability �
 
 通知发布、actionable lifecycle 和 integration dead-letter 写入口在读取 body 前必须验证现代 service token 的 `hzy.appCode` 与 `source_app` 均非空且精确一致，并把 app/tenant/deployment 与当前可信 runtime binding 精确比较；发布 canonicalization 仍再次要求 body `sourceAppCode` 与服务身份一致。禁止回退 actorId、单个历史 JWT claim 或 body 自报 source。
 
+Enterprise Host 内的 Codocs 共享、部门移交和发文执行四处普通业务通知由 `enterprise.runtime` 发布，故 `sourceAppCode='enterprise'` 与服务身份一致；`metadata.moduleAppCode='codocs'` 保留模块归属，`notificationKind='business_event'`，原 Codocs 事件类型、幂等键与 `/codocs/…` URL 保持不变。这些通知没有 `actionableState='pending'`，不触发待办动作目标 catalog 绑定；`moduleAppCode` 不能授予来源身份或绕过对象权限。Console 当前未登记 Enterprise 来源的详情 verifier，详情读取继续失败关闭；发布与详情验收分开记录。
+
+Codocs Host 部门目录、部门文档、部门文件柜与部门移交的写入/回放使用双库锁协议：Runtime 先在 Console Directory 自有库的只读事务中对用户、目标部门、直属上级及成员关系行加共享锁并计算当前 R，保持该事务打开；再在 Codocs 自有库的写事务中核对受锁保护的 actor/部门/R，且这一检查早于 service-command 回执读取。Codocs 提交后才释放 Directory 锁，因此并发撤权必须等待本次写入结束，撤权后的同键回放重新取 R 并拒绝。Directory 不可用返回 503；不能把 Codocs 的 SQL 事务传给 Directory adapter，也不接受 Host 提供的角色事实。隔离 MySQL 测试必须使用两个不同 schema。
+
+Enterprise Host 的 Codocs 移交目标候选与提交前目标校验使用 Foundation 固定操作 `console.directory-self-departments` / `console.directory-self-projects`，映射 `POST /v1/enterprise/console/directory-self:departments|projects`、精确 `console:directory-self:read`。Runtime 按已验 Enterprise 服务身份、当前有效 grant 与签名 actor 查询当前用户的活跃部门/委员会和管理或参与的项目；请求体只能是 `{}`，查询参数或任意 `uid` 字段均拒绝。部门投影仅含移交选择字段及通知所需的部门负责人/领导 UID，项目投影仅含编码、名称；目录依赖失败为 503。原 `/v1/console/directory/*` 保持 Console 来源限制。Enterprise Host 的 Aims `GET /aims/api/account/accessible-departments`（新建事务/项目表单的部门选择）使用同类固定操作 `console.directory-self-accessible-departments` → `POST /v1/enterprise/console/directory-self:accessible-departments`，同样只接受 `{}`、以签名 actor 计算“所在部门 + 负责/分管部门 + 全部下级（仅 `org_type=department` 且有上级）”，输出仅 `{deptCode,name}`；Host 不持有 `console:directory-department:view`，Runtime 403/503 原样映射为 403/503，不静默返回空列表。独立 Aims 仍经 Console 目录 `/api/v1/departments/accessible`。Host 与独立 Aims 的已知差异：Host 投影不含部门 `managerId`，Host 新建/编辑项目表单不再自动把部门负责人补入候选人（仍可手动搜索选择），负责人 UID 不离开 Runtime。新 grant 分别绑定 `data-runtime` / `tenant-runtime` audience，Host 切换并验证后按精确 SQL 停用旧 `console:directory-user:view` 两行。
+
 Console publish 以 `sourceAppCode + idempotencyKey` 作为站内通知唯一身份，并保存 canonical SHA-256 request hash。hash 绑定排序去重后的 recipients/channels、递归按 key 规范化的 metadata，以及 eventType/category/severity/title/summary/body/actionUrl/bizType/bizId 等完整投递语义。同键同 hash 只返回既有 `notificationId`，不得再次 INSERT/UPSERT recipient，不得解除归档、重置已读或改变 delivery state；同键异 hash 返回 HTTP 409 `idempotency_payload_mismatch`。并发首次发布发生 duplicate-key race 时，失败事务必须用锁定读回当前行并按 hash 作同样判定，不能把冲突当成功。历史行因未保存 channel 请求而无法可靠重建 canonical hash，迁移使用确定性 legacy sentinel，旧 key 重放保守返回 409。
 
-`actionUrl` 在 publish 和授权后 detail 两个边界都必须 fail closed：只接受 `http/https` 绝对 URL 或单个 `/` 开头的应用内路径；拒绝 `javascript:`/`data:`、`//` protocol-relative、带 username/password 的 URL、CR/LF/控制字符和反斜杠。历史不安全值不得因详情已授权而返回。
+`actionUrl` 在 publish 和授权后 detail 两个边界都必须 fail closed：只接受 `http/https` 绝对 URL 或单个 `/` 开头的应用内路径；拒绝 `javascript:`/`data:`、`//` protocol-relative、带 username/password 的 URL、CR/LF/控制字符和反斜杠。历史不安全值不得因详情已授权而返回。存储的 actionUrl 保持 Console 按签名目录绑定的绝对 URL（外部通道与发布 hash 依赖其稳定）；浏览器消费端在 Enterprise Host 内对 `actionTargetAppCode=enterprise` 的目标只取 `/enterprise/` 下的 path/query/hash 于当前源导航，不要求 enterprise 出现在用户应用目录，也不信任请求头推导公网地址；其他目标与 Host 外查看继续按目录校验（见 FOUNDATION_CAPABILITIES `hostNotificationTarget()`）。
 
 Actionable 待办不复用 `portal_notification_recipients.delivery_state`。Console 以独立 `portal_actionable_projections` 保存 `(uid, source_app_code, actionable_key)` generation、当前 notification 引用、业务键、状态和 opaque object version。只有真正新建 notification 才能首次创建 projection；canonical replay 对 projection 零写。终态 generation 不得复活，重新打开必须使用新的 `actionableKey`。lifecycle API 只接受 `resolved/cancelled`，exact `(state,nextVersion)` 重放为幂等成功，版本不匹配或不同终态请求返回 409。所有显式 `metadata.actionableState='pending'` 的发布在 canonical hash 前必须由 Console 用已验签 application catalog 绑定 action URL 和受控 target app；Console 写入一致的 `actionTargetAppCode/targetAppCode` 与 `actionTargetCatalogBinding='catalog-v1'`，catalog 不可用失败关闭。Workflow 保持既有同一绑定规则，普通非 Workflow 通知与终态 lifecycle 不触发 catalog。历史 pending 无法从 source 或 URL 追溯为安全绑定，升级须按批准流程执行 Console fail-closed migration 关闭无 marker 的 projection，绝不猜测或自动执行。Workflow 是审批事实源；当前 pending 通知可创建 Console projection，但 Workflow 完成、转交、驳回和撤回后的关闭调用仍需后续在 Workflow 侧接线，接线前 Console 投影可能陈旧。
+
+Workflow 待办生命周期 outbox 首次立即投递。失败检查点保留 pending 并记录尝试次数与时间；后续按 10、20、40、最多 60 分钟退避，仅返回已到期记录，按 ID 扫描且每轮最多 100 条。Console `actionable_not_found` 不得当作成功确认，因为它也可能表示部分收件人投影缺失；退避只控制请求频率，数据修复仍需核对原始投影。
 
 Console Directory→Platform 的 employment/offboarding operation 同样是 source-owned reliable projection：只有两条固定 Platform operation 在 `dead_letter` 时才由 `console_platform_lifecycle_actionables` 冻结 `operation_id + generation`、opaque actionable key/object version 和首批显式 active 收件 UID；发布失败或 notification/closure checkpoint 丢失由同一 Console task 重试。待办目标固定为已验签的 Console catalog 路由，descriptor 必须精确镜像 `people_lifecycle_authorization + directory uid`；通知正文、metadata 和 URL 均不得包含 operation key、命令、hash、原始失败摘要、token 或内部地址。原 operation 离开 `dead_letter` 后，成功以 `resolved`、其他受控重试终态以 `cancelled` 使用冻结 expected/next version CAS 关闭；详情仍每次实时同时要求 `console:authorization_lifecycle:view` 与 `console:audit_logs:view`。
 
@@ -563,6 +750,76 @@ Notification Runtime 读取 Integration/Vault 时必须使用独立 service clie
 
 ## Codocs API 契约
 
+### 公司周报汇总存档投递环境前置条件
+
+正式 Aims event-less worker 领取周报 outbox 后，以 `aims.runtime` 的 `aud=codocs`、精确 `codocs:company-weekly-summary:publish` 调 Codocs Service API；Foundation 从受信服务器配置绑定目标部署并原子设置目标 app/deployment/prefix，不能使用浏览器传入的目标。hzy0 的 Codocs editor Worker 构建物包含该 Service API，但公开 Gateway 仅放行编辑器 GET/HEAD；内部投递走其回环监听。hzy0 需显式启用私有 profile 开关、配置 Codocs 目标部署和回环地址，Console egress 仅准 Aims runtime 这一条 scope/audience；自托管生产需在 Aims 环境配置同一目标部署及 Codocs 回环 Service Binding。两种环境启用前均须核验 Codocs 目标实际部署、`aims.runtime → codocs` 与 `codocs.runtime → data-runtime` 当前 grant 和实际 JWT 签发。Codocs OSS 凭据来自 Console `oss.default` integration-config/vault，不进入 Aims 或 Codocs env 模板。未完成目标环境验证不得宣称投递已启用。
+
+### Enterprise Host 组织资产 B2（本地候选）
+
+`/codocs/company/{rules,notice,legal,culture,tech-specs,knowledge,templates}` 与部门开放文档由 Host 组合展示；组织资产只枚举七个固定 OSS 子目录，列表请求级完整列举后提供真实 `items/total/page/pageSize`。预览正文或 PDF 字节前先提交 `company_asset_access_records`；记录写入失败返回 503，不交付内容。访问记录列表要求 Codocs `admin:admin` 与 `company:admin`，CSV 再要求 `company:export`；快速发布要求 `admin:admin` 与 `company:publish`。部门开放集合仅由 Runtime 的显式开放目录及同部门后代、未发布、非周报谓词定义，UUID 只能收窄。短链只是路径映射，解析和内容读取均重新判定当前对象权限；部门对象的 B1 关系接线前失败关闭。
+
+Host 使用既有 `codocs:enterprise-host:execute`，Runtime 按 `company-assets`、`open-department-documents`、`published-asset-links` 三种 resource 的固定动作与短期 permit 验证物理服务身份、签名 actor、租户和部署。记录、短链创建及快速发布的 SQL 业务写与跨应用 `service_command_receipt` 在同一事务；回执的 `source_app=enterprise` 是真实 Host 调用方，目标仍为 Codocs。目录创建/删除/移动/归档与快速发布的 OSS 操作无法加入 MySQL 事务：Host 保留用户意图 UUID，Runtime 分别提交 prepare/complete 回执，Host 在中间做条件写与对象状态核验；同键重放不得重复副作用，异载荷返回 409。存储成功而完成回执失败时，同键重试核验并收口；撤权后不得继续完成，残留 OSS 状态需运维核对。本合同不宣称跨系统原子性，也不新增 capability、grant、manifest 资源或 schema。
+
+保存协议的源码证据、候选对象发布、generation/协作 epoch、故障恢复及分批放行约束见[个人文档写入协调合同](./Codocs-Document-Write-Coordination.md)。第一批 private 文档内部事务及两表 schema 已补，并通过隔离真实 MySQL 并发/回滚测试；没有注册 HTTP 路由、安装环境 schema 或提供正式存储 verifier。现有 v1 保存/读取路径未切换，不能据此认为当前 API 已提供并发安全或原子正文/Yjs 发布。
+
+### Enterprise 个人文档接入候选（2026-09-19，未启用环境）
+
+2026-09-21 版本详情收敛：Enterprise 的 `codocs.personal-document-version-view` 保持精确 `codocs:personal-documents:read`、已验签 actor 与短期 read permit，固定转为 `GET /v1/codocs/documents/{uuid}/versions/{versionId}`。Codocs Runtime 先验证受信委托，再执行当前文档 ACL，随后以版本 ID 与文档 ID 同时约束单行；不存在返回 404。版本列表仍为独立读取操作，详情不再下载整份历史后在 Host 过滤。当前 hzy0 连接的 Runtime 尚未更新，代码通过不等于该环境版本链通过。
+
+2026-09-20 保存重放修正：`PUT /codocs/api/documents/{uuid}` 在任何 OSS 调用前，经 Foundation 固定 `codocs.personal-document-update-plan` → `POST /v1/enterprise/codocs/personal-documents:update-plan`（精确 `codocs:personal-documents:edit`、documents:edit、签名 actor 与短期 edit permit）核对当前 owner/write-share、只读/删除状态和原命令回执。计划为只读，复用 `codocs-document-update.v1` 摘要与命名空间；输入 title 及可选 content_sha256/content_size/save_mode，不接受浏览器 OSS path/version/owner。成功同 key 重放直接返回成功、不调用 OSS；异命令 409，异常回执/依赖故障失败关闭。未成功请求才沿原路径存储并在其后重新授权，原 update 同事务提交文档版本及 receipt。未新增 schema、capability 或 grant，只新增已有 edit 能力下的固定计划路由；发布须更新对应 Runtime，不能只更新 Host。
+
+此修正仅关闭“已有成功回执的旧请求覆盖后来正文”，不能把只读计划当成写锁。尚未完成请求并发、存储后提交失败/撤权的补偿、Collab 竞争写仍是发布前未关闭风险。当前集成为版本化 OSS；[官方 PutObject 文档](https://www.alibabacloud.com/help/en/oss/developer-reference/putobject)明确版本控制开启/暂停时 `x-oss-forbid-overwrite` 无效，也未声明此 PUT 的 `If-Match` 条件覆盖保证，因此不以模拟条件头测试宣称环境并发安全。此前创建/文件柜“条件写”记录是代码及隔离测试证据，真实 provider/桶模式下的保证必须另外核验，不据此扩大完成结论。
+
+个人柜转文档增量：Host `POST /codocs/api/cabinet/{uuid}/to-document` 只接 title/folder_id 和有效 Idempotency-Key，同时要求 documents:view/create。固定 Runtime `personal-cabinet:{conversion-plan|convert}` 使用精确 `codocs:personal-cabinet:create`、物理 enterprise.runtime、签名 actor 和短期 create permit；不开放浏览器指定 owner/路径/文档 UUID。只读计划重验源文件当前 owner、非部门项目、未删除以及目标个人目录/标题，稳定 UUID 绑定租户/Codocs deployment/actor/key，目标路径绑定源 UUID/标题/目录的意图摘要、源状态及转换正文摘要。
+
+Host 使用请求级 OSS 读取原 DOC/DOCX 字节，复用 Office→Markdown 转换；无效格式返回 422（未宣称旧二进制 DOC 已验证可转）。正文最多 10 MiB，条件 PUT 不覆盖，已有对象及并发赢家须匹配摘要和长度。存储成功后重新取得权限，Runtime Serializable 事务锁定源和目标、重验状态/目录/重名，将 documents、owner relation 和 cabinet 转存关联一起提交；任何失败回滚数据库，不删除原文件或失败阶段保留的存储对象。旧成功请求重放返回同一文档，不覆盖后续编辑、不重新关联后来发生另一转换的源文件、不复活已删除目标；当前归属改变仍拒绝。前端失败保留会话/源/标题/目录绑定 key，异步响应重验当前会话/选中文件；关联信息失败不伪造路径、不把已成功转换改报失败。隔离测试与本地构建不等于真实 DB/OSS/Worker 大文件验收；目录选择已接 page/pageSize/total 和失败重试；环境启用及整个页面组合仍未完成。此前增量段落中的“转换未完成”由本段更新代码状态。
+
+个人柜上传增量：Host `POST /codocs/api/cabinet/upload` multipart 保留原扩展名集合（不含 Markdown）及单文件 100 MiB，前端逐文件发送、失败保留批次/字节/顺序/会话绑定的请求键。固定 `personal-cabinet:upload-plan` 与 `personal-cabinet:upload` 都要求精确 `codocs:personal-cabinet:create`，物理 enterprise 身份；Host 分别在规划与 OSS 后提交前重新准备身份、检查 documents:create 并生成短期 permit。owner 只能来自当前主体，body 不接受 UUID/路径/部门/项目范围。计划只读，当前目录归属及已存在文件状态先检查；UUID 由租户/Codocs deployment/actor/key 派生，完整元数据（含内容 SHA-256）摘要写入新对象路径，旧数据和对象路径不变。
+
+OSS 使用 event 配置、条件 PUT 不覆盖；重试 HEAD 必须匹配内容摘要元数据与长度，条件冲突必须确认赢家对象，失败不能提交 DB。成功存储后 Runtime 事务锁定目录和 UUID，再次校验当前 owner/个人目录及 cabinet 非部门/项目范围，依赖 cabinet_files.uuid 唯一键重放返回原记录；元数据或内容变更、已删除记录 409，归属改变 403，不复活删除记录。数据库与 OSS 不是同一事务：提交失败保留对象以重试，不删除并发请求可能拥有的对象，也不宣称失败对象已清理。转换写链、环境授权和真实联调仍未完成。
+
+个人柜删除增量：`DELETE /codocs/api/cabinet/{uuid}` 只接受合法 UUID 和 `Idempotency-Key`，不接受 body/query。Host 在准备 Runtime 身份后重取 documents:delete，发送固定 `personal-cabinet:delete` / 精确 `codocs:personal-cabinet:delete`，物理 enterprise 身份不变。原 Codocs DB 事务锁定当前 actor 所有且 dept_code/project_code 为 NULL 的行（包含已删除行以支持重试），与 durable receipt 同事务更新 status/deleted_at；成功重放不再更新后来恢复的记录，换文件复用 key 返回 409，归属变更后旧回执不能绕过当前范围。无 OSS 删除/移动，不删除 converted_doc_uuid 对应文档。客户端按会话/UUID 保留失败请求键，成功后清除。环境 grants 尚未启用。
+
+个人文件柜读取增量：Host `GET /codocs/api/cabinet` 支持 page/pageSize/folder_id，默认 20、最多 200；兼容 owner_uid 仅允许当前用户。`/{uuid}/preview`、`preview-html`、`preview-pptx`、`converted-info` 使用 documents:view 与精确 `codocs:personal-cabinet:read`；`/{uuid}/download` 独立要求 documents:export 与 `codocs:personal-cabinet:export`。固定 Runtime `personal-cabinet:{list|view|download|converted-info}` 经 Enterprise 物理身份直达原 Codocs adapter，SQL 固定当前 owner、非部门/项目、未删除范围；不开放泛型路径代理。转存信息还须通过目标文档当前 ACL，仅目标不存在/已删除返回 null，撤权和依赖故障不伪装无关联。
+
+Host 按返回 UUID/owner/个人柜规范路径再次校验元数据，OSS client 只用当前 event 配置；文本复用限长编码预览，Office HTML 设 CSP sandbox，PPTX 返回原字节，直接预览和下载签名有效期 300 秒。存储 404 与依赖 503 区分且脱敏，响应 no-store；内部 Office/PPTX URL 使用 Host `/codocs` 前缀。源页面使用真实分页/total，失败显示重试，账号与文件切换丢弃旧预览响应；standalone 列表 BFF 同步保留 Runtime 分页字段。转文档写链及环境 grants 尚未迁入，本增量不代表完整文件柜交付。
+
+回收前置查询增量：`GET /codocs/api/documents/check-name` 对应固定 Runtime `personal-documents:check-name`，复用精确 read capability 和 documents:view。只接 title/doc_type/folder_id/exclude_uuid，owner 从签名 actor 注入；支持 private/slide/worklog/weekly-report，目录省略归一为根目录，拒绝部门/项目与伪造范围。trash 允许个人 type 筛选并强制 owner=actor。Host 下的 useRecycleBin 已适配请求前缀，名称/列表检查失败或响应无效会抛错而非伪装 false/空列表，恢复弹窗检查失败时禁止提交。
+
+删除/恢复候选已接线：Host `DELETE /codocs/api/documents/{uuid}` 使用 documents:delete 和精确 `codocs:personal-documents:delete`，仅更新回收状态，保留原 OSS key 与 Yjs；当前 ACL/只读状态和幂等回执在原 Codocs DB 同事务处理。历史删除请求重放不会再次删除后来恢复的文档。
+
+Host `POST /codocs/api/documents/{uuid}/restore` 仅接可选 new_title 和 Idempotency-Key，使用 documents:edit 与精确 `codocs:personal-documents:edit`，依次调用固定 `personal-documents:restore-plan` 和 `personal-documents:restore`。计划绑定 UUID、归属、类型、目录、标题、路径、状态和时间戳；原 codocs/ key 保持不变，历史 recycle.bin/ 对象条件复制到按 UUID/状态摘要隔离的 codocs/document-restores/ key，保留源对象并处理存活的 Yjs 快照。正文和快照均不存在时拒绝恢复，存储失败不提交元数据；复制完成后重新取得业务权限，事务中再锁定文档/分享 ACL、原目录并检查同命名空间标题冲突。Serializable 恢复事务连同回执提交；旧请求重放不再次恢复后来删除的文档，修改同 key 的用户意图返回 409。check-name 仅是用户提示，不替代提交校验。旧 standalone restore 不因此改变；真实数据库并发、OSS 联调及外部回收保留期/物理清理规则仍待核验。
+
+新增 Host 读取入口 `GET /codocs/api/documents`、`GET /codocs/api/documents/{uuid}`、`GET /codocs/api/documents/trash`、`GET /codocs/api/folders`。BFF 从 Host 会话取得 actor，并检查逻辑 Codocs `documents:view`，然后通过 Foundation Enterprise Runtime client 调用固定的 `POST /v1/enterprise/codocs/personal-documents:{list|view|trash|folders}`。物理身份始终是 `enterprise/enterprise.runtime`；逻辑来源与目标为 Codocs，精确传输 capability `codocs:personal-documents:read` 由 Codocs manifest 定义，不以 `codocs.read` 代替，也不授予普通用户角色。
+
+Runtime 复用 Enterprise 当前凭据/grant 校验、签名 actor 与最多 15 秒的 tenant/Host deployment/resource/action permit；按动作白名单重建 query，拒绝调用方 actor/owner/部门特权标记，私人列表与目录 owner 从签名 actor 派生，列表默认 20、单页最多 200。仅调用现有 `s.codocs` 用户域读取，保留其独立数据库与 owner/share/relation ACL，不改旧 Codocs service-only 或其他跨应用合同。该候选不是通用 Runtime 路径透传。
+
+上述四个文档读取是初始入口，创建、上传、软删除/恢复及文件柜读取的后续进展见本节增量合同。正文覆盖与协作协调、文件柜写入、共享副作用、日志/周报/演示、完整页面依赖、目录与回收站分页、manifest 组合及环境 grants 仍须继续完成。未注册新页面、未切换网关、未部署或宣称整合完成；按用户要求跳过浏览器页面验证，不跳过服务端与非页面测试。
+
+后续候选增量：Host `PATCH /codocs/api/documents/{uuid}` → `POST /v1/enterprise/codocs/personal-documents:edit-metadata`，精确 capability 为 `codocs:personal-documents:edit`，BFF 要求 Codocs `documents:edit`。只接受 title、folder_id、star_flag、home_flag、readonly_flag；Runtime 再验证字段形状及原有 owner/share 写 ACL、只读转换、目标目录范围。拒绝浏览器存储路径、owner、actor、doc_type、部门/项目归属和任意额外字段。此接口只改元数据，目录移动保留已有 OSS key，不搬移正文或复制写入实现；相同 actor/租户/部署/UUID/期望值派生稳定幂等键，仍重验当前权限。正文替换、删除、恢复及目录 CRUD 不以这个接口代替。
+
+演示目录补充：`slide` 与 `private` 同属个人目录 namespace，创建 owner 只取受信 actor；父目录须同类型、同 owner 且不能带其他部门/项目归属。它不是部门权限的另一种表现。目录详情与修改/删除旧合同仍缺失，必须补齐后才能视为完整 mydocs 可用。
+
+目录候选增量：`GET/PATCH/DELETE /v1/codocs/folders/{id}` 已新增受信 actor 范围合同，详情仅个人 owner 或精确部门 read marker，写入仅个人 owner 或精确部门 manage marker。PATCH 只改 name/parent_id；事务内锁定目录并检查同 namespace 父目录和祖先循环。DELETE 在事务内检查子目录及全部关联文档（包括回收站文档），非空返回 409，不递归删除业务数据。Host 对应 `/codocs/api/folders/{id}` 三方法直达 `/v1/enterprise/codocs/personal-folders:{view|update|delete}`，分别要求 manifest 精确 read/edit/delete；Host 本批只传个人 actor，不接受浏览器部门特权 marker。目录创建的 Host 接入、所有文档创建/移动写入与目录删除间的并发一致性仍待闭合，sqlmock 事务测试不代表真实并发验证。
+
+元数据底层校验补充：`updateDocument` 现在明确限制 readonly 标记只能由 owner 改动，share-write 不包含该权限；移动文档按原文档 namespace 检查目标目录，并在仅移动不改标题时检查目标同名冲突。同次修改 namespace 不能绕过目标校验。此前仅 ACL/传输测试不能证明这两个不变量，新增专项用例单独覆盖。
+
+创建目录候选：Host `POST /codocs/api/folders` → `POST /v1/enterprise/codocs/personal-folders:create`，要求 `documents:create`、精确 `codocs:personal-folders:create` 和调用方 `Idempotency-Key`。只允许 private/slide，忽略不了的伪造 owner 被 BFF 拒绝；Runtime 从已验证 identity 派生 owner，在原 Codocs DB 的 `service_command_receipt` 与 folder INSERT 同事务执行。租户/Codocs deployment/actor/key 构成回执 namespace，相同 key 不同业务内容返回 409；重放不再次创建，仍重验当前父目录及目标 owner。物理服务身份保持 enterprise.runtime，逻辑回执归 Codocs，不迁表、不新建另一套回执表。启用须核验 Codocs deployment binding 与既有 receipt schema。
+
+正文读取候选：Host 文档详情在 Runtime ACL 通过后，以返回的 UUID/type/OSS key 读取正文；支持 `skip_content=1`，空 Markdown 可从同一对象 Yjs 快照恢复，缺对象返回 404，存储故障返回脱敏 503。带 event 的 Codocs OSS client 使用该请求返回的配置，不写入或回读进程全局配置；无 event 的独立应用启动兼容路径不变。项目冲突元数据、附件下载/写入及完整发布链仍未验收，不以一般正文读取代替。
+
+正文下载与访问审计候选：`GET /codocs/api/documents/{uuid}/download` 通过 `documents:export` 和 `codocs:personal-documents:export` 取得 ACL 校验的元数据，再返回 Markdown 附件（安全编码文件名）。company 路径在正文读取/恢复成功后、返回内容之前，调用内部 `POST /v1/enterprise/codocs/document-access-records:record`，要求精确 `codocs:document-access-records:record` 与短期 record permit；Host 按原动作重新校验 view 或 export，不能要求只有 export 的用户同时具备 view。输入仅文档 UUID、服务器生成的 eventId 与元数据 OSS 路径的 SHA-256；Runtime 重验当前文档 ACL、company 路径格式及摘要一致性，路径变化返回 409，不信任浏览器指定 actor/path。事件 ID 用于幂等重试，记录使用原 Codocs 表与 Runtime 时间；skip_content、私人路径和存储失败不记录，审计失败不交付已加载正文并返回脱敏 503。此为访问审计，不是读取触发的业务状态变更；无浏览器直达审计接口，未改变独立 Codocs 的 source_app 边界。环境 capability 安装与完整非页面业务验收尚待完成。
+
+审计错误映射：上述 503 仅指依赖故障；当前授权失效保留 401/403，存储路径变更保留 409，均使用固定脱敏消息且不返回正文，不把撤权伪装为服务故障。
+
+个人文档创建候选：Host `POST /codocs/api/documents` → Runtime `POST /v1/enterprise/codocs/personal-documents:create`，要求 `documents:create`、精确 `codocs:personal-documents:create`、签名 actor 与 `Idempotency-Key`。仅 private/slide，Host 接受 title/doc_type/folder_id/content 和与会话相同的兼容 owner_uid；Runtime 仅接收 title/doc_type/folder_id/content_sha256/content_size，拒绝调用方 UUID、OSS path 和 owner。租户/Codocs deployment/actor/key 生成稳定 UUID，规范化请求摘要生成初始对象路径；复用既有 createDocument 事务（文档及 owner relation）及 documents.uuid 唯一键，不另造文档写入域。相同请求复用创建结果，改请求内容或重放对象元数据已不匹配时 409，不恢复已删除对象或覆盖后续编辑。个人目录在新建事务中锁定并验证类型/owner，重放也重新校验当前目录。
+
+Host 在 Runtime 成功后以请求级 OSS 配置写初始 Markdown，正文上限 10 MiB。先 HEAD，再条件创建（forbidOverwrite），并发条件冲突仅确认已有对象，不进行无条件覆盖。数据库与 OSS 非原子：存储失败保留元数据并返回脱敏 503；同一请求重试可修复缺失正文。前端普通文档/演示创建保留失败键，内容或会话范围变化重新生成，成功后释放。上传、覆盖正文、日志/周报创建为其他动作，仍需各自闭合，不能以此合同冒充完整写链。
+
+上传增量：`POST /codocs/api/documents/upload` 采用 multipart，但每项复用上述创建编排与精确 create capability，不增加跨应用代理。仅接 files、doc_type、folder_id、兼容自身 owner_uid；只接受 UTF-8 Markdown，单文件 10 MiB、批次 30 文件/30 MiB，拒绝重复标量、任意路径和其他归属。Host 在解析前检查 create 权限，每项调用前再次读取权限并签发短 permit。批次键+租户/部署/actor/序号派生单项幂等键；客户端以文件字节摘要、顺序、目录和会话识别同批失败重试，成功项不覆盖、失败项可补写。单项错误脱敏计入 results，401/403 保留请求错误而不伪装普通文件失败。
+
+成功上传通过 Foundation `reportOperationAudit(payload,{event,idempotencyKey})` 上报 Console 既有 audit audience/audit:write API。物理 sourceApp 为 enterprise，逻辑 action 为 codocs.document.upload；配置、令牌、Console Service Binding 均按请求上下文处理，审计键同样隔离主体与批次项。保持旧上传 best-effort 操作审计语义，失败不回滚已完成文件，不能将其与必须成功的 company 访问审计混同。环境仍需验证 Enterprise→Console audit grant 与存储条件写能力；源码接线不代表已启用。
+
 **Base URL**: `{CODOCS_API_URL}/api/v1` 或 `/api/documents`
 **认证**: Cookie 转发
 
@@ -721,7 +978,7 @@ Assets 环境主状态以 `asset_environments.status` 表达 `planning / active 
 | Altoc / Assets / Aims / Finance | Altoc | `GET /api/v1/service/service-agreement-coverages/by-environment/{environmentCode}` / `GET /api/v1/service/service-agreement-coverages/by-delivery-asset/{deliveryAssetCode}` | Console service token，`aud=altoc`，`scope=altoc:read` | 读接口不要求 | Goal 2 新增：按正式环境或正式交付资产反查服务协议覆盖 |
 | Finance | Assets | `GET /api/v1/service/projects/{projectCode}/cost-summary?period_month=` | Console service token，`aud=assets`，`scope=assets:read` | 读接口不要求 | Phase 2 已实现；Assets BFF 在转发 tenant-runtime 前校验入站 service token；输出资产采购、资源订阅、环境投入和月度归集成本分解，供 Finance 项目核算写入 `project_cost_allocation` |
 | Aims / Altoc / Finance / Assets | Workflow | `POST /api/v1/action-defs/sync` | Console service token，`aud=workflow`，`scope=workflow:proxy` 或 app service grant | `workflow:action-defs:{app_code}:{manifest_hash}` | 通用能力已有；Assets Phase 2 已新增采购、领用、分配、退回、报废 action manifest |
-| Workflow | Aims | `POST /api/v1/service/workflow/callback`（Aims BFF），内部写入 `POST /v1/aims/service/workflow/callback` | Console service token，`aud=aims`，`scope=workflow:callback`，来源仅 `workflow`；Aims BFF 用自身 tenant-runtime 身份写入 data-runtime | Workflow callback outbox 的 `instance_id + event + status` 稳定键 | 立项审批通过时，data-runtime 在串行化事务内锁定项目，将 `approval_pending → active`，把里程碑 `planning` 归一为 `todo` 并激活 `sort_order/start_date/id` 最前的里程碑；重放保留已激活里程碑，驳回将项目回退为 `draft`。里程碑完成回调继续复用同一受信入口。 |
+| Workflow | Aims | `POST /api/v1/service/workflow/callback`（Aims BFF），内部写入 `POST /v1/aims/service/workflow/callback` | Console service token，`aud=aims`，`scope=workflow:callback`，来源仅 `workflow`；Aims BFF 用自身 tenant-runtime 身份写入 data-runtime | Workflow callback outbox 的 `instance_id + event + status` 稳定键 | 立项审批通过时，data-runtime 在串行化事务内锁定项目，将 `approval_pending → active`，把里程碑 `planning` 归一为 `todo` 并激活 `sort_order/start_date/id` 最前的里程碑；重放保留已激活里程碑，驳回将项目回退为 `draft`。仅当服务器 `HZY_AIMS_ENTERPRISE_ENABLE_MILESTONE_RECEIVABLE=true`，且同一入口的规范化回调为 `milestones/milestone_completion` 时，Aims 才会以固定受控组合 `aims.write altoc:receivable:mark-billable` 调 Runtime；Foundation 只允许该 pair 和 `data-runtime` / `tenant-runtime` audience。随后 Runtime 仍要求 Aims 已认证身份、严格 service JWT（`token_use=service`、source/target/audience/tenant/deployment 绑定且 `sub/client=aims.runtime`）、精确 `altoc:receivable:mark-billable`、当前 credential/grant 与 legacy Aims source binding 后才进入 AA-04 Aims+Altoc 共享事务；项目立项和所有其他回调继续原路径。启用前必须执行 Console v2.5 的两 audience grant verify 和真实组合 token 签发探测；v2.5 seed 只插入缺失 grant，不覆盖既有 metadata 或重激活撤销项，缺失/非 active 必须走已授权管理修复路径。不得使用 Foundation 默认 scope 前缀或转发 legacy `aud=altoc` token。 |
 | Workflow | Assets | `POST /api/v1/purchase-orders/{id}/workflow:sync` / `POST /api/v1/assignments/{id}/workflow:sync` | Console service token，`aud=assets`，`scope=workflow:callback` 或 `assets:write` 代理 | `workflow:{instance_no}:assets:{resource}:{id}:{status}` | Phase 2 已实现 runtime 同步入口；资产操作默认 pending，审批通过后才联动资产主档 |
 
 ### 事件口径
@@ -1347,6 +1604,14 @@ GET `/api/v1/products/{productCode}/planning-cycles/{cycleId}/reviews` 仅接收
 
 `POST /api/v1/products/{productCode}/versions/{versionId}/features/{scopeId}/legacy-criteria` 接收 acceptanceCriteria、reason 和三个 expected revision，要求 Idempotency-Key。Foundation 要求 product_versions:edit；Runtime `versions:scope-legacy-criteria` 要求精确 capability `aims:product-versions:scope-legacy-criteria`。仅已有 planned、无 planning_item_id 的历史范围可补录标准，不能通过请求注入历史标记、规划决定或状态；命令不创建新范围。页面及目标授权部署仍待验收。
 
+Enterprise Host 版本范围读取：`GET /aims/api/v1/products/{productCode}/versions/{versionId}/features` 与 `GET /aims/api/v1/products/{productCode}/versions/{versionId}/features/{scopeId}/history` 分别经 Foundation 操作 `aims.version-scope-list|history` 到 Runtime `POST /v1/enterprise/aims/product-version:scope-list|scope-history`。Host 在签发 `aims:product-versions:read` 服务许可前，用受信会话、当前产品对象事实和 `product_versions:view` 完成人员门槛；分页参数严格白名单，版本与范围 ID 取路径。Runtime 再校验签名 actor、短期许可与产品/版本/范围归属，沿用既有产品中心领域读取及 no-store 响应。
+
+Enterprise Host 范围交付与撤回：`POST /aims/api/v1/products/{productCode}/versions/{versionId}/features/{scopeId}/{deliver|reopen}` 经原 Aims 严格入参及 `product_versions:accept` 人员校验后，以 Foundation `aims.version-scope-deliver|reopen` 和独立 `aims:product-versions:scope-deliver|scope-reopen` 服务能力到 Runtime 同名精确路由。Runtime 用签名 actor 再验产品/版本/范围与短期 permit，复用原领域命令的 revision、release lock、审计、回执、反馈 outbox，并置于统一 registry 的写事务。Host 仅在人员权限、版本状态及范围状态均允许时显示动作；409 后刷新，不自动换键重提。
+
+Enterprise Host 范围维护：`PATCH /aims/api/v1/products/{productCode}/versions/{versionId}/features/{scopeId}`、`POST .../{scopeId}/visibility`、`POST .../{scopeId}/legacy-criteria` 分别经 Foundation 操作 `aims.version-scope-edit|visibility|legacy-criteria` 与 Runtime 精确能力 `aims:product-versions:scope-edit|scope-visibility|scope-legacy-criteria`。三者先验证当前用户的 `product_versions:edit` 与产品对象范围；编辑还需独立的 `product_priorities:prioritize`，两个短期 permit 绑定同一签名 actor、租户与部署，其他动作拒绝非空 planning permit。Host 复用 Aims 的字段白名单与幂等键校验，规划事项详情和开放周期仍走已有只读 Host 路由。Runtime 在统一 registry 写事务里调用原领域命令，保留决定修订、release lock、审计、回执与 visibility 反馈 outbox；旧修订 409，服务 grant 缺失 403。版本范围创建仍未迁入 Host。
+
+2026-09-25 验收状态：隔离 MySQL 的 `test-enterprise-version-release-http-mysql.mjs` 已覆盖交付、同键回放、撤回、旧修订 409、缺人员 `accept` 403、错误范围 404 和撤销服务 grant 403；Host bridge 合同测试已通过。本地 C000001 的双 audience grant 签发和页面读取已通过。应用角色 `aims:product_manager` 通过企业角色 `product_manager` 间接映射；旧范围值 `product:manager` 被误解析为 `product:equals:manager`，修复 Foundation/Platform 解析器后仅 active 产品经理成员匹配。Host 正式页面以 `zhouguangying` 对版本 5／范围 1 完成交付并撤回，最终恢复计划中；同键回放与旧版本 409 仍以隔离 MySQL 验证。Platform Policy Bundle v2 直接保留原始范围字段，此次没有重新发布策略包、调整角色或部署开发 Platform。
+
 ### 产品模块 Runtime 接口（2026-09-08）
 
 Aims 自身 Runtime 新增 components:list/create/move，精确 capability 分别为 aims:product-components:read/create/move；产品范围权限为 product_components:view/edit。全部复用 Foundation 授权事实及既有 Runtime 服务认证/actor 委托边界。写入要求 idempotency_key；模块与根修订、审计、回执事务提交，三层树约束由领域命令执行。两个 runtime audience 的授权 seed/verify 已同步；目标安装及 BFF/UI 接入尚未完成。详见 [模块 API](../aims/docs/Aims-Product-Components-API.md)。
@@ -1509,3 +1774,388 @@ Aims 浏览器 BFF 经 Foundation 调用本应用 Runtime 的 `versions:plan/pla
 产品范围 permit 在 Runtime 事务内分别要求 `product_versions:view/edit`、来源 `product_requests:view`、明确采纳时的独立 `product_requests:decide`、创建规划事项的 `product_priorities:edit`、确认的 `product_priorities:prioritize`。转交继续叠加需求/规划 handoff 与目标项目 requirements edit；服务 capability 不替代用户权限。写入使用当前用户委托、幂等键和预期修订。simple 转交依据必须来自实际版本范围和当前有效确认；cycle 路径继续执行原评分/选入门禁。
 
 计划元数据、范围估算及不可变确认快照由 v5.38 扩展，范围身份仍使用既有 planning item/version feature/source request。2026-09-12 已迁移 C000001 本机测试 Aims 库并部署 CF 测试 Aims / Runtime，生产未部署；线上已验证读取和表单，完整真实租户写入链路未实跑。本地隔离 MySQL、BFF/adapter 合同和 mock UI 的证据分别记录于 [第一阶段方案](../aims/docs/Aims-Lightweight-Product-Planning-Phase1.md)。完整输入输出见 [轻量规划 API](../aims/docs/Aims-Lightweight-Product-Planning-API.md)。
+
+
+### ADR-018 统一产品需求事务入口（接线进行中）
+
+托管 Enterprise BFF 的业务 permit deployment 来自 Foundation 验证后的 Gateway Host 绑定，并核对 appCode=enterprise、tenant 与用户会话一致。用户 access token 中的 Console 签发部署保留用于会话验证，不能直接充当统一业务部署；未经验证的 Header 不得选择 Host 身份。具体实现与负例验证见 `enterpriseRuntimeClient`。
+
+`data-runtime/internal/enterpriseplanning.RequestService` 在初始化时验证 Aims 所需受管视图，按登记的 writer 与迁移代际调用 `Registry.BeginWriteTransaction`。后者要求参与域均处于 unified write 模式、使用同一连接池和同一 tenant/environment/runtime deployment/schema/generation；业务写入前对 `enterprise_schema_registry` 的身份行取共享锁并核验持久值，锁保留至最终 commit/rollback。
+
+需求创建继续调用原 `productcenter.CreateProductRequestInTransaction`：保持 workspace/member 事实重鉴权、原命令身份、修订检查、audit 与 receipt，成功后由用例服务提交；任一步失败整体回滚。该入口不新增角色算法，不在请求中创建视图，也不代表现有 HTTP 旧 URL 已切换。初始化、受信 Host 调用、其余规划命令及实际目标环境接线须继续完成。
+
+
+### ADR-018 Enterprise → Codocs 产品文档元数据
+
+`POST /api/v1/service/assets-product-documents/{uuid}/metadata` 额外接受物理 `enterprise` / `enterprise.runtime`，仅限原 `assets.codocs.product-document.read.v1`、精确 `codocs:product-document:read`、`metadata:read` 命令。Assets 原身份继续可用，两组 app/client 必须各自匹配，不允许交叉组合。JWT 的 Codocs audience、当前授权、源部署与目标部署分别验证；HMAC 绑定 method/path/request ID、actor、productCode、UUID 及完整命令 hash。产品上下文不授予文档 ACL，Codocs Runtime 仍按当前 owner/share/relation 判断，仅返回 uuid/title/doc_type/updated_at。本条只覆盖 Assets 产品文档元数据；项目文档正文读取另有下节的独立条目，两者的 capability、operationCode 和授权条目互不蕴含。
+
+此为代码合同，目标环境 Enterprise→Codocs grant/部署与真实跨服务验收尚未完成；该 Codocs audience 能力独立于 Enterprise→Runtime 的 data-runtime 能力集合。
+
+### ADR-018 Enterprise → Codocs 项目文档正文
+
+Host 原生组合增量：`GET /aims/api/v1/projects/{id}/documents/{documentId}/open` 不调用独立 Aims 的 `open`，而先沿原签名项目文档 `view` 桥复核 `projects:view`、项目范围与精确关联行，从受信响应取得 Codocs UUID。随后以同一用户 actor 调用既有 `codocs.personal-document-view`（`codocs:personal-documents:read`），保留 Codocs `documents:view` 与 Runtime owner/share/relation ACL，确认元数据后才由 `withEnterpriseCodocsDocumentContent` 读取正文。项目成员身份不覆盖 Codocs 拒绝；浏览器不能提供 UUID 或存储路径。读后再次复核项目关联和 Codocs ACL/元数据，关联、路径或更新时间变化返回 409，不释放已读取正文。输出保持 `{code:0,data:{document,content}}`，不含存储路径；无新增能力/grant/虚构 Codocs 部署。以下独立 Service API 路径及独立 Aims 调用保留不变，不能为原生 Host 编造目标部署。
+
+ADR-018 §2 范围表中 Codocs 首轮保留独立运行边界，因此这是真实的跨应用调用，不是把 Codocs 并入宿主。
+
+Enterprise Host `GET /aims/api/v1/codocs/documents/{uuid}/content?projectId=` → Aims 共享 helper `getCodocsProjectDocumentContent` → Codocs `POST /api/v1/service/project-documents/{uuid}/content` → Codocs 自身 tenant-runtime `POST /v1/codocs/service/project-documents/{uuid}/content`。
+
+- **本域先判定**：Host 先要求登录用户，再用 `assertCodocsProjectDocumentAccess` 在本域判定该项目文档的访问权限，拿到 `projectCode` 后才发起跨应用调用；项目成员关系不构成 Codocs 授权。
+- **并列身份，不放宽**：Codocs 新增 `ENTERPRISE_PROJECT_DOCUMENT_CONTENT_SERVICE_AUTH`，与既有 Aims 条目并列——scope（精确 `codocs:project-document:content:read`）、`operationCode`（`aims.codocs.project-document.content-read.v1`）与命令 schema 完全相同，只有 `allowedApps` / `allowedClientCodes` 不同。Aims 条目继续只认 `aims` / `aims.runtime`。
+- **来源与客户端同源**：`aims` + `enterprise.runtime`、`enterprise` + `aims.runtime` 等交叉组合在 Codocs BFF 与 Runtime 两层都被拒；发送端的 `sourceClientId` 由已验签的来源应用派生，不是可填写的字面量。未登记的第三方来源一律拒绝。
+- **Runtime 仍重验 ACL**：Codocs Runtime 只按文档当前 owner/share/relation 判断，命令里的 `projectCode` 只用于绑定，不授予读取；BFF 返回的 DTO 不含 `ossPath` 等内部字段。
+- **capability 单点声明**：`enterprise/server/utils/enterpriseCodocsProjectDocument.ts` 的 `requiredCapability` / `audience` 是 readiness 策略推导宿主 Codocs 能力的唯一事实源，不维护第二份清单。
+- **回归矩阵**：正确调用、缺 capability、宽 scope 替代、错 audience、错来源应用（双向交叉 + 第三方来源）、错客户端、用户令牌与 introspection 故障分别有用例；覆盖见 `codocs/test/projectDocumentContentSourceAppBoundary.test.ts`、`codocs/test/projectDocumentContentServiceContract.test.ts`、`data-runtime/internal/apps/codocs/project_document_service_test.go` 与 `enterprise/test/aims-project-documents-readiness.test.mjs`。GET 读取无副作用，不需要幂等键。
+
+C000001 测试环境已完成该 scope 的 Console grant 与令牌签发探测（`deploy/test-env/enterprise-oauth-codocs-evidence.json`，含 2 条负例）。Worker 部署与浏览器端到端验收尚未完成，证据中 `browserAcceptance` 仍为 false，不能视为已启用。
+
+### ADR-018 工作项完成审批（整合分支，尚未启用）
+
+Workflow 专用服务入口为 `POST /api/v1/service/aims-work-item-completion-approval`，要求 `workflow:work-item-complete:create`，自身 Runtime 路径为 `/v1/workflow/service/aims-work-item-completion-approval`。冻结命令限定完成申请、工作项、项目、操作者和快照 hash；调用方不得覆盖回调路径。操作码为 `aims.work-item.completion.workflow-submit.v1`，幂等键为 `aims:work-item-completion:<requestId>:workflow-submit:v1`。目标回执身份为 `work_item_completion_workflow` / `completion-request:<requestId>`；重试必须恢复唯一匹配冻结身份的实例，不重新创建实例或派发创建 effects。
+
+Matter 完成申请复用该操作码、能力、回执目标与专用回调，但冻结命令使用 `commandSchemaVersion=v2`、`kind=matter` 和 `aims:work-item-completion:matter:<requestId>:workflow-submit:v2`；`formData` 同时含精确 `kind=matter` 及成果、必需成果、提交、工时记录四项计数，成为 Workflow 任务快照和终态回调的一部分。审批页只显示该冻结摘要和 hash，不读取实时 Aims 对象。Workflow BFF 与 Runtime 均拒绝 v1/v2 与 kind 不匹配、未知 kind 或额外字段；重试恢复实例时核对冻结的 kind。原 target 命令仍为无 kind 的 v1 和原幂等键，保持字节与行为兼容。Aims 回调以申请行 kind 对照表单 kind，matter 批准前复核冻结的工时与成果证据，差异失败关闭；批准仍需至少一名非申请人的批准者。此 matter 分支尚待本机部署与浏览器端到端验收。
+
+请求驱动的 Aims→Workflow 投递直达受信服务路由，必须用 Foundation `trustedServiceRequestHeaders(event, 'workflow')` 转发已验证的 Gateway 上下文，并绑定目标 app-code、deployment 与 forwarded-prefix；不得透传浏览器自带的同名头或其它请求头。定时投递仍由 Gateway 自行建立目标信任上下文。该传输修复也适用于云端请求驱动路径，云端尚未部署验证。
+
+专用回调限定 Aims 的 `/api/v1/service/work-item-completion/workflow-callback`。审批终态事务从最后一次 resubmit 之后的 Workflow approve/reject actions 生成 `approval_actor_uids`、`non_self_approval_actor_uids` 和 `approval_operator_uid`；缺少终态操作者时回滚，自动自审批不产生非本人证据。回调 outbox 在序列化之前生成 `workflow:callback:<instanceId>:flow_completed:<status>` 并写入 payload 的 `idempotencyKey`，即时派发和持久重试共享该身份。
+
+通过回调仅采用 approve actions，驳回回调仅采用 reject actions，不能用退回人的记录充当非本人批准。创建结果必须是 running，否则专用命令回滚实例、effects 和 receipt，避免无人工审批路线直接批准后源对象无法解锁。取消延续现有 Workflow withdraw 约束；专用取消回调在同一事务核验当前 withdraw 动作属于该实例发起人，生成 `cancellation_actor_uid`，不生成虚假审批主体列表。源端取消应恢复冻结原状态、释放完成申请的活跃唯一约束，并原子写入审计和适用工单 outbox。
+
+缺动作定义、无匹配路线和无人工审批路线属于可人工修复的配置失败；当前 Foundation 不把这些 404/409 自动分类为 transient。修复配置后必须通过受权限控制的 operation replay 保留原冻结命令及幂等键，不能生成新申请来绕过失败记录。网络超时及响应丢失继续按投递不确定处理；目标已有成功 receipt 时恢复唯一原实例。Host 的失败展示和人工 replay 可达性仍需验收，不能把目标直接重试测试当作消费链路已恢复。
+
+统一 Runtime 的 completion replay 必须把受信 Registry 解析的 Aims outbox 四张物理表传给 Repository；只在 SELECT 中映射逻辑 `integration_operation` 而让 Repository UPDATE 裸表，会把可恢复的 `failed_permanent` 操作误报为 409。重放前后保持原 operation ID、冻结命令及幂等键，事务内更新状态与审计。
+
+统一 Aims 的 integration-operation 诊断、认领、通知、周报重试及通知详情授权均通过同一受信 Registry 解析的四张 outbox 物理表；只在未配置 Enterprise writer 的旧独立库路径使用原逻辑表名。replay 仅对版本变化或状态不适用返回 409，存储错误保持 5xx。
+
+Enterprise Host 的独立 `/enterprise/approvals` 待办入口只取 Workflow 当前用户的 `aims/tasks/complete` 任务；任务详情与决定以前端登录用户对应的 Workflow 任务归属、`workflow_tasks` 精确审批资格和发起人与审批人职责分离为门槛。页面仅展示 Workflow 提交时冻结的标题、动作及审批节点快照，不读取实时 Aims 对象或提供业务对象跳转；原按业务键查实例路径仍要求 Aims 对象查看权。审批 POST 复用 Workflow 的受信 actor 委托、approve/reject 资格和持久任务状态，已处理任务返回 409，不自动换幂等键。
+
+Host → Workflow 的拓扑只由部署配置决定（G-3，2026-09-29）：`HZY_ENTERPRISE_HOST_WORKFLOW_ENABLED` 未设置时保持托管云行为（审批面板隐藏，桥接沿用 Foundation 服务发现）；`false` 时面板隐藏且桥接直接 503，不查服务发现；`true` 时必须同时配置 `HZY_ENTERPRISE_WORKFLOW_ORIGIN`，其值只能是 `http://127.0.0.1:<port>` 或 `http://[::1]:<port>` 的精确回环源（无凭据、路径、查询、片段或隐式端口），Workflow 基础路径固定为 `/workflow`。其他取值、或未开启却配置了源，均在 Host 启动时拒绝，请求期再次校验只会失败关闭。配置不从请求 Header、租户共享设置或 public runtimeConfig 读取；`workflow:proxy` scope、actor 委托、受信上下文与幂等规则不变。hzy0 以 `features.workflowLocal` 映射到这两个变量，行为与原 `HZY0_LOCAL_ENTERPRISE` + `HZY_WORKFLOW_API_URL` 相同；自托管生产使用同一开关指向本机 Workflow。
+
+自托管单站点的服务间回环（G-10，2026-09-30）：自托管 Tenant Gateway 在公网入口剥除全部客户端 `x-hzy-*`，所以应用服务端之间不得经公网回落。各应用进程以 `HZY_SELF_HOSTED_SERVICE_ORIGINS_JSON`（appCode → 精确回环 HTTP 源，必须含 console）声明本机进程，Foundation 在无 Cloudflare Service Binding 时用同语义回环传输替代：访问 Console（含 `/oauth/token` 服务令牌交换、runtime 配置、授权快照、通知、目录）去掉 `/console` 前缀并携带调用方已组装的受信 Gateway 上下文（`x-hzy-gateway-token` 为本机共享网关 Token，`x-hzy-app-code` 仍表示来源应用）；应用间 `serviceAppFetch` 保留 `/{app}` 前缀并由 Foundation 受信 route helper 原子改写 `x-hzy-app-code`/`x-hzy-deployment`/`x-forwarded-prefix` 为目标。Runtime 以 `HZY_SELF_HOSTED_RUNTIME_ENDPOINT` + `HZY_SELF_HOSTED_RUNTIME_DIAL_ORIGIN` 只替换规范端点的拨号。Workflow 终态回调在自托管模式下经受信 route catalog 解析目标 basePath，以 `trustedServiceRequestHeaders(event, appCode)` 生成的受信上下文（校验 tenant 一致、目标 app/deployment/prefix 精确、不含 hzy0 拨号头）+ `aud=<业务appCode>`、`scope=workflow:callback` 服务令牌直连目标进程；缺少可信路由或目标源时按 `callback_app_url_unavailable` 记失败检查点，不回落公网。Aims→Workflow 工作项完成沿用 `serviceAppFetch(event, 'workflow')` + `trustedServiceRequestHeaders(event, 'workflow')`，自托管时自动走回环。source_app/target_app、精确 capability、幂等键与 401/403 语义不变；托管云（真实 Service Binding 优先）与 hzy0（`HZY0_*` 路径、23140/23141/18084 固定值，禁止与自托管变量同时设置）行为不变。配置只来自进程环境并在启动时校验，非法即拒绝启动。
+
+
+此链路存在两个独立的 `workflow:work-item-complete:create` 授权边界：Aims 调用 Workflow Service API 时由 `aims.runtime` 获取 `aud=workflow` token；Workflow BFF 调自身 Runtime 时由 `workflow.runtime` 获取目标 Runtime audience token。后者须分别初始化/核验 `data-runtime` 与 `tenant-runtime` 精确 grant；不能用 Aims 的外部 grant、Workflow manifest 声明或宽 write scope 代替。当前代码及隔离数据库测试不证明目标环境这两个边界的实际签发授权已生效。
+
+候选授权制品分开维护：[Aims seed](../console/docs/sql/Console-SQL-Seed-v2.6-aims-work-item-completion-grants.sql) / [verify](../console/docs/sql/Console-SQL-Verify-v2.6-aims-work-item-completion-grants.sql)，[Workflow seed](../console/docs/sql/Console-SQL-Seed-v2.7-workflow-work-item-completion-grants.sql) / [verify](../console/docs/sql/Console-SQL-Verify-v2.7-workflow-work-item-completion-grants.sql)。它们只初始化缺失行，不重新激活已有撤销授权；尚未向目标环境应用。
+
+工作项详情附带的完成申请状态、canRequest/canReplay 和 operation 版本属于统一业务读取，必须在 Registry 代际 fence 下读取同一快照；兼容视图检查不是读取 fence。即使这些字段仅用于显示按钮，旧代际绑定仍须拒绝，写命令须再次执行对象权限、状态和版本校验。初版状态 helper 的多次直接连接查询已改为同一 Registry snapshot transaction；组合隔离 MySQL 演练已验证状态读取及恢复状态在旧代际下拒绝。事项（matter）不可提交时状态另带固定 `reason` 码（`matter_completion_time_required`、`matter_completion_evidence_required`、`matter_completion_commit_required`、`matter_completion_assignee_required`、`work_item_completion_state_invalid`），Host 因缺 `work_items:edit` 降为不可提交时写 `work_items_edit_required`；`reason` 只作面板提示，不含证据细节，也不替代写命令的重新校验。
+
+当前仅有命令边界、回调路径、主体证据和持久幂等键的定向测试及 Go 包回归；源端完整接线、精确 grant 核验与真实隔离 MySQL 全链路测试仍未完成，不代表测试或生产环境已启用。
+### Enterprise Host → Codocs v2 协作会话（阶段 B 候选）
+
+Host 页面核验私人文档共享状态后，经 `POST /codocs/api/documents/{uuid}/collaboration` 让当前用户打开 Runtime 的 `personal-documents:collaboration-open`（精确 `codocs:personal-documents:edit`）。Host 先用 Foundation 读取 Console 权限快照并要求 `documents:edit`，再签发 Runtime 操作许可；Runtime 重验当前 owner/write-share 和 v2 代际，返回绑定用户/文档/会话的一次性票据。浏览器每条 WebSocket 经 `/codocs/ws` 将票据交 Collab；Collab 以独立 `collab.runtime` 身份兑换并按活动会话续租。hzy0 本机 Collab 的服务令牌经 Gateway 的本机 Host 限定 `/__hzy0/collab-token` 精确代理到本机 Console，该代理核对独立客户端密钥、目标 audience 与两项协作 scope 后才注入固定 Collab 部署上下文；公网 Console token 路由仍不接受服务客户端凭据。Host 共享正文禁用 HTTP PUT，避免与 Collab 发布并行覆盖。两个 Host 开关及 Collab v2 开关默认关闭，双人端到端尚未验收，不构成发布声明。细节见[写入协调合同](./Codocs-Document-Write-Coordination.md)。
+
+v2 快照字节由 Collab 通过同一 `collab.runtime` 身份调用 Runtime `POST /v1/codocs/collaboration-snapshots:upload|download`；上传沿用精确 `codocs:collaboration-snapshots:publish`，下载沿用 `codocs:collaboration-snapshots:read`，不新增 capability/grant。Runtime 先校验当前服务凭据、grant 与活动会话；上传再绑定已 prepare 的同一命令、声明长度与 SHA-256，只写该候选前缀下 32 位随机 attempt 的 `body.md` / `state.yjs`，每对象上限 16 MiB；下载只返回已发布 head 的精确对象版本，并重验长度与摘要。Collab 不持有 OSS 密钥，Runtime 使用 vault 绑定的 `oss.default`。新路由仍受 Runtime 协作开关控制，尚未部署或进行双人端到端验收。
+
+#### Enterprise Host → Codocs 部门文档协作（Runtime 批次 R1，代码已实现，默认关闭）
+
+设计与用户批准见[部门协作设计](./Codocs-Host-Department-Collaboration-Design.md)（2026-09-29，A-1…A-7、Q1–Q7）。**不新增服务 capability，不新增 Console grant**：Host→Runtime 复用 `codocs:enterprise-host:execute`，Collab→Runtime 复用 `collab.runtime` 的 `codocs:collaboration-snapshots:read/publish`，人员权限复用 `departments:edit`（普通读取 `departments:view`）。
+
+**Host → Runtime 固定操作**（`POST /v1/enterprise/codocs/department-documents:<action>`，permit 资源固定 `department-documents`，路由 `code`=`dept_code`、`subId`=文档 UUID；仅当 `apps.codocs.snapshotV2Enabled`、`collaborationV2Enabled` 与新增 `departmentCollaborationV2Enabled` 三者同时为 true 时登记，默认全关）：
+
+| 操作 | permit 动作 | 请求体 | 说明 |
+| --- | --- | --- | --- |
+| `collaboration-open` | `edit` | 必须为空 | 仅**可写者**获得会话与一次性票据：Directory 关系 R∈{member,manager} 且（manager ∨ owner ∨ `document_shares.permission='write'`）；leader/parent/无写权限成员 403 `department_writer_required`/`department_document_write_denied`。要求文档已 v2（否则 409 `document_not_on_snapshot_v2`）、类型/部门/`project_code=''`/未回收/未只读。租期 90 秒；同 epoch 复用活动会话并作废该用户旧的未兑换票据（票据不可重放，会话由稳定业务键决定，故不要求 `Idempotency-Key`）；每 (用户,文档) 每分钟 ≤6 次（429 `collaboration_open_rate_limited`）；每会话并发写者（已兑换参与者 + 未兑换有效票据）≤20（409 `collaboration_writer_limit_reached`）。 |
+| `snapshot-read` | `read` | 必须为空 | 任一部门关系（含 leader/parent）读取已发布 head（generation/epoch/精确对象版本或 `legacy:true`）；**不创建 head，阅读不触发转换**。 |
+| `snapshot-prepare` / `snapshot-publish` | `edit` | 快照命令；必须带 `Idempotency-Key` | **仅用于 v1→v2 转换**：Directory 加锁的写者、`generation=0`、仅 Markdown（无 Yjs）。head 已 >0 时 CAS 失败 409 `snapshot_generation_conflict`（两名并发点击者恰一人成功，另一人重读 head 后开会话）；`generation≠0` 409 `department_snapshot_conversion_only`；带 Yjs 400 `department_snapshot_conversion_invalid`。转换后部门正文只经 Collab 变更；旧 PUT / Host v1 保存 / v1 Collab 版本被 `document_on_snapshot_v2` 拒绝。 |
+
+每次 Host 写操作在 Codocs 事务前取 `lockEnterpriseCodocsDepartment`（Directory 库只读事务 `FOR SHARE`，跨不同 schema 持有到 Codocs 事务结束）。Directory 不可用一律 503 `department_directory_unavailable`，不伪装成 403。
+
+**Collab → Runtime**：路由与 capability 不变（`collaboration-snapshots:admit|read|prepare|publish|renew|close|upload|download`）。会话新增策略列 `policy(private|department)` 与 `dept_code`，Collab 每次调用只带 `sessionId`，Runtime 由会话反查文档与部门，**不接受 Collab 传入部门或 actor**。部门会话的差异：
+
+- `admit`：先经只读 `PeekCollaborationTicket` 得知票据的策略/部门/用户，再取 Directory 锁重算该用户 R 与编辑规则，事务内重验文档（`FOR SHARE`）、会话、epoch 后兑换并记参与者 `status=active`；成功响应多返回 `deptCode`、`participantAccess`（个人响应字段不变）。失权 403 `collaboration_ticket_invalid`。
+- `renew`（Collab 每 ≤30 秒）：请求体可选 `{"connectedUids":[...]}`（≤100 个 uid；个人会话带该字段仍为 400）。Runtime 在**一次批量 Directory 锁**下重算全部活动参与者与所报已连接用户的 R 与编辑规则：失权者置 `revoked` 并列入响应 `revokedUids`（连接却从未兑换的 uid 亦列入）；已上报列表之外的活动参与者置 `left`；通过者保持/恢复 `active`。响应 `{"expiresAt","revokedUids":[]}`（个人仍仅 `{"expiresAt"}`）。租期刷新为 90 秒。文档级失败（回收/只读/类型/部门变化、epoch 不符）或全部参与者失权 → 409 `collaboration_session_invalid`（后者同时将会话置 `revoked`），Collab 关整间房；参与者级失败只断开 `revokedUids`。
+- `publish`：文档行锁下重验会话、epoch、文档状态，并在批量 Directory 锁下重算所有 `active` 参与者；任一失权 → 409 `collaboration_participant_revoked`，错误体 `error.details.revokedUids` 列出这些 uid（Runtime 同时将其置 `revoked`），Collab 断开后在下一保存周期重试；发布记录的参与者集合含 `active` 与 `left`，不含 `revoked`。撤销/过期会话上的迟到发布因 `status<>'active'` 或 epoch 不符被拒。参与者集合在加锁与事务之间变化时内部最多重试 3 次，仍变化则 409 `collaboration_participants_changed`。
+- `prepare|read|download|upload`：会话活动 + 文档仍为可写部门文档（不做 Directory 重验）。
+- 关闭 `departmentCollaborationV2Enabled` 后，部门会话在下一次 Collab 调用返回 409，个人协作不受影响。
+
+**互斥**（同一 Codocs 事务内、文档行锁下）：部门 `readonly=true`、`recycle`、个人→部门移交接收、项目移交、文档分享变更均执行 `invalidateCollaboration`（epoch+1、活动会话置 `revoked`）；`readonly=false`/`restore`/`edit-metadata` 不撤销会话（标题与目录不属协作状态）。部门接收保留快照 head（v2 正文仍权威），不做退出 v2。加锁顺序固定为 Directory（共享）→ 文档行 → 快照 head → 会话/票据/参与者 → 候选。
+
+Schema：`codocs/docs/migrations/20260929_department_collaboration.sql`（会话 `policy`/`dept_code`、参与者 `status`/`checked_at`、按 UUID 的 head/会话索引），DDL 不可事务回滚，安装须另获环境批准；未安装该迁移时个人路径行为不变（缺列读作 private）。本批次仅 Runtime 与迁移文件，尚未部署、未做双人端到端验收。
+
+**自托管生产制品（P0，2026-09-29，代码与模板就绪、未安装未启用）：** 用户决定上线时启用共享个人文档协作，正式路径为 Host → Gateway `/codocs/ws` → 独立 `hzy-collab.service`（`127.0.0.1:31007`）→ Runtime；Console 内嵌 Collab 保持 `CONSOLE_COLLAB_MODE=disabled`。服务身份为生产 `collab.runtime`（`aud=data-runtime`，仅 `codocs:collaboration-snapshots:read|publish`，绑定 `${tenant}-collab`），注册与 grant 见 `console/scripts/collab-prod-registration.mjs` 与 G-7 目录（可选 `bindings.deployments.collab`），令牌签发探测含 2 个正例与 15 个反例（错 audience/来源/租户/部署/能力、Enterprise 不得持有 Collab scope）。Runtime 还要求 `deploymentBindings.collab` 等于该部署码、`snapshotV2Enabled` 与 `collaborationV2Enabled`；Host 需 `HZY_ENTERPRISE_CODOCS_SNAPSHOT_V2`、`HZY_ENTERPRISE_CODOCS_COLLABORATION_V2` 与运行期覆盖 `NUXT_PUBLIC_CODOCS_COLLABORATION_V2`（页面开关由构建期环境派生，发布构建不设置它们），模板默认全部 `false`。Gateway 对无 `Upgrade` 的普通 `/codocs/ws` 请求直接返回 426。schema 安装清单见数据迁移 runbook §3a，快照桶“版本 ID + 写一次”实测方案见 [Go-Live-Self-Hosted-Snapshot-Bucket-Test-Plan](./Go-Live-Self-Hosted-Snapshot-Bucket-Test-Plan.md)，两者均待批准、未执行。
+
+#### Codocs v2 快照文档的非 Host 正文消费者（批次 H1b，代码已实现，随协作开关生效）
+
+依据 [正文消费者盘点](./Codocs-Collaboration-Body-Consumers-Inventory.md)：v2 文档的**权威正文是发布头指向的精确对象版本**（校验长度与 SHA-256），`documents.oss_path` 仅是尽力而为的派生镜像；不做异步镜像（Q9）。**不新增 capability、grant 或 schema。**
+
+- **Runtime 计划变体**：发文归档计划在无冻结副本且源为 v2 时返回 `sourceBodyRef` 并置 `sourceOssPath=""`；组织资产快速发布计划（独立端 `company-assets/quick-publish/prepare` 与 Host `enterprise.codocs.quick-publish.prepare.v1`）对 v2 源项返回 `bodyRef`、`sourcePath=""`，并在源文档行锁下复核 head 仍为规划时的 generation（否则 409 `document_snapshot_changed`）。`bodyRef` 形状 `{generation,epoch,markdown:{key,version},size,sha256}`，v1 与已存旧计划仍按 `sourcePath` 重放。**Host 的快速发布复制需读取 `bodyRef`（本批次未改 enterprise/**）。**
+- **独立端元数据**：`GET /v1/codocs/documents/{uuid}` 与开放部门单文档读取带 `snapshot_generation`（0=v1）；`/v1/codocs/documents?oss_path=…&include_snapshot_ref=1` 及受信单文档读取（`include_snapshot_ref=1`）返回 `snapshot_ref`，仅服务端调用方使用，独立端转发中间件不允许浏览器索取。独立 Codocs 对 v2 文档的打开/下载/批量取正文/复制/版本查看/开放部门预览/`GET /api/v1/documents/{uuid}/content`/周报修订，以及 `PUT` 带正文（**在任何 OSS 写入之前**）一律 409 `document_on_snapshot_v2`（Q2）；仅改标题等元数据仍允许。
+- **发文冻结顺序（Q6）**：`POST /api/reviews/publish-requests` 先 `readonly_flag=true`（Runtime 同事务推进 epoch 并撤销协作会话），再读取冻结稿；v2 的冻结稿由精确快照生成，读取失败则取消申请并 503，不回退镜像。归档执行按 `sourceBodyRef` 读取精确版本。
+- **服务内容授权（Q7）**：Aims 项目文档、Altoc 实体文档、产品文档内容授权与项目文档评审版本内容对 v2 文档返回 409 `document_on_snapshot_v2`，不再交出过期的 `ossPath`。项目仍可引用 v1 的部门/私人文档；未按“类型”整体拒绝部门文档以免回退既有引用能力。
+- **转换白名单（Q4）**：部门协作会话/转换拒绝 `oss_path` 含 `/weekly-reports/` 的文档（403 `department_document_not_collaborative`）；`company/knowledge/product/project/slide`、`status<>1` 与归档物本就不满足部门协作门槛。
+- **管理端图片清理**：引用判断读取所属文档的精确快照；v2 无法读取或校验时拒绝删除（503）。`cleanup-yjs` 排除 `codocs/snapshots/`。
+- 回滚到 v1 所需的镜像重建脚本（Q8）属发布计划，不在本批次。
+
+#### Enterprise Host → Codocs 部门文档协作：Host 侧（批次 H1a，代码已实现，默认关闭）
+
+Host 端点、人员权限与转换流程见 `enterprise/docs/API_SPEC.md`「部门文档协作」。合同要点：Foundation 操作表追加 `codocs.department-documents-{collaboration-open,snapshot-read,snapshot-prepare,snapshot-publish}`，服务 capability 仍由路径域推导为 `codocs:enterprise-host:execute`，**不新增 capability 与 grant**（hzy0 egress 投影不变，且不列出这四个操作，`generate-console-egress-scopes.mjs --check` 覆盖）。Host 人员权限为 `departments:edit`（开会话、转换）/`departments:view`（读快照头、详情），permit 资源固定 `department-documents`；Host 不向 Runtime 传关系、角色、文档类型或 owner 事实，Runtime 的 Directory 关系与所有者/写分享/经理规则是最终门槛。转换请求携带稳定意图幂等键；`collaboration-open` 沿用“会话由业务键决定、票据一次性”的规则解读。正文读取一律以已发布快照为准，镜像 `oss_path` 不被读取、也不在读取时修复（个人 v2 路径同样取消读时修复）。正文引用是 Q1 决定的单一授权点：H1b 的快速发布计划已对 v2 源项返回 `bodyRef`（`sourcePath` 置空），Host 快速发布按其读取精确快照版本（校验长度与 SHA-256）、暂存到内容寻址键后拷贝；开放部门单文档读取 Runtime 已标注 `snapshot_generation`，Host 对 0 读原路径，>0 需要 `snapshot_ref`（H1c 已由 Runtime 补齐，见下）。环境（开关、Collab、`collab.runtime` 核验、schema 迁移）仍按设计文档 E-1…E-13 逐项审批，本批次未部署、未做浏览器双人验收。
+
+#### Codocs 部门文档协作收尾：开放部门读取、回收站恢复、只读版本历史（批次 H1c，代码已实现，随部门协作开关生效）
+
+**不新增 capability、grant 或 schema**（沿用 `codocs:enterprise-host:execute`、`department-documents` 读 permit 与既有迁移）。
+
+- **开放部门读取（A6）**：企业 `open-department-documents:view` 的 Runtime 查询由服务端追加 `include_snapshot_ref=1`（浏览器 `query` 白名单不含该键，`list` 也不带），v2 文档在元数据中带 `snapshot_generation` 与精确 `snapshot_ref`；授权、部门范围与 permit 动作（`read`）不变。Host 对 `snapshot_generation=0` 读原路径，>0 按引用读取精确版本，缺失引用仍失败关闭。
+- **回收站恢复（A9/A10/B4）**：个人与部门 `restore-plan`/`restore` 读取当前发布头代际；代际 >0 时计划带 `snapshot_backed: true`，`state_sha256` 绑定该代际（转换发生在预检与提交之间则 409 `*_state_changed`），v1 计划哈希不变。恢复**只翻转状态**（标题、目录、`oss_path` 目标沿用既有规则），不读取、不复制、不重建镜像与 `.yjs`，发布头与 epoch 不动；恢复后可重新开会话。Host 看到 `snapshot_backed=true` 跳过存储阶段，不再因镜像缺失误报“正文与快照均不存在”；未带该标记（v1）的行为不变。
+- **部门文档版本历史（A11，Q3 首版只读）**：随部门协作三开关注册 `department-documents:versions` 与 `:version-view`（读 permit、`departments:view`，Foundation 操作 `codocs.department-documents-{versions,version-view}`，hzy0 egress 投影排除）。Runtime 先校验部门读关系与文档归属（`doc_type=department` 且 `dept_code` 相符），再由 Codocs 适配器在精确部门读取上下文下返回 `document_versions` 行；Host 读取行内 `object_key`（必须位于 `codocs/snapshots/`）或 v1 行的 `oss_path` 对象的指定版本并校验长度与 SHA-256。无回滚、无删除、无差异；页面对部门文档隐藏差异入口，只读成员可查看。
+- 验证：Runtime 单元与隔离 MySQL（Directory 与 Codocs 分 schema：镜像路径与 `recycle.bin/` 路径的 v2 恢复、v1 对照、陈旧哈希、非经理与错部门、无分享部门成员读取版本历史）；Host 恢复与版本桥接测试；Foundation 操作表与 egress 生成器 `--check`。
+
+### FE-2 产品资料只读闭包（C000001 MVP 候审）
+
+Enterprise Host 的 `GET /aims/api/v1/products/{productCode}/roadmaps/documents`、`/requests`、`/search`、`/content` 对应 Runtime 的 `POST /v1/enterprise/aims/product-documents:list|requests|search|content`，四个操作均要求精确 `aims:product-documents:read` 服务能力和签名 actor。Host 从 Aims 产品授权事实与 Foundation Console scoped 授权先判定 `products:view`（不可见为 404），再判定 `product_documents:view`（可见但无资料权限为 403），才准备对应 Runtime 许可；依赖故障为 503。Runtime 绑定 tenant、Host deployment、actor、产品编码及 15 秒内有效的 `product_documents:view` permit，在 Registry 读取事务内重验产品对象权限与关系；请求状态只返回申请编号、用途、状态和是否关联，不返回文档 UUID。
+
+列表和名称搜索只遍历 Aims 产品关系，再逐条调用 Codocs 当前 owner/share/relation ACL；受限文档从结果中剔除，且不公开受限计数。正文先重验同产品未移除关系和 Codocs ACL，Runtime 只把存储路径交给受信 Host；Host 下载后复查产品权限、关系、Codocs ACL、存储路径与更新时间，只返回正文和必要展示字段。客户端不能提供文档 UUID 或存储路径作为读取依据；该限制只针对正文读取。候选 grant 的 seed/verify 位于 `console/docs/sql/Console-SQL-{Seed,Verify}-FE2-Product-Documents-Read.sql`，只初始化缺失的 `enterprise.runtime` 双 Runtime audience 精确 read grant，不恢复被撤销项。
+
+### FE-2 后续 #7：现有文档与项目产品关系写入（阶段 A 候审）
+
+Enterprise `POST /aims/api/v1/products/{productCode}/roadmaps/documents` 仅接受既有 Codocs `documentUuid`、用途、预期产品修订及 `Idempotency-Key`。Host 在签发 `aims:product-documents:create` 前，以 Foundation/Console 产品对象事实判定 `products:view` 与 `product_documents:edit`；Runtime 绑定签名 actor、tenant、部署和短时 permit，先重验 Codocs 当前 ACL，再复用 Aims `CreateProductDocument` 原子命令。关系写入不授予 Codocs 正文或分享权限；同键同 payload 返回原 receipt，旧修订或重复关系为 409。模板创建、用途编辑、解除/恢复关联均不在本闭包。
+
+Enterprise `GET/POST /aims/api/v1/projects/{id}/products` 分别要求 `aims:project-products:read|create`，Host 先查 `projects:view|edit`，POST 再查目标 `products:view` 的当前对象事实；缺权拒绝后才签发 Runtime 许可。Runtime 用签名 actor 重验项目成员/经理与产品事实，只允许活动的产品研发项目关联现有产品。新增关联不指定版本；已有主产品与版本限定不变，第一个关联可成为主产品。重复关联为 409，POST 同键同 payload 以服务端 receipt 重放。由于本批没有版本 ID 输入，旧规则中版本归属和已有工作项冲突检查仅在后续版本限定操作适用；本批不开放这些操作。产品 owner 同意不是此 MVP 关联的前置条件。关联列表仍按项目成员可见性过滤，不向无权用户返回第二个项目的关系或名称。
+
+两条写入与项目列表均为精确 Host 路由、Foundation 操作和 Runtime 路由，不接受任意旧 Aims 路径透传。候选 grant 见 `console/docs/sql/Console-SQL-{Seed,Verify}-FE2-Followup-7-Product-Links.sql`；阶段 A 代码不表示环境已发布。
+
+## Gateway 断言 keyset（候选、默认关闭）
+
+员工会话以显式 `ops.deployments:deploy` 经 Platform gateway-keys 命令登记公钥，
+复核 active deployment site 与冻结 site_code/tenant/environment；轮换修订与审计同一事务。
+Gateway 公钥 FK deployment_sites.id，既有 gateway_deployment 字段承载 site_code；
+不新增应用/订阅/部署，不进入目录、权益或策略包；员工 identity 导出严格核对 public_url host。
+Runtime 经独立 `GET /api/v1/runtime/gateway-keyset` 用已登记控制 token 读取同租户/环境
+的 Platform 签名清单，以操作员预固定公钥验签，不从无签名 heartbeat 换根。
+严格复核 Runtime/Gateway 绑定、时间、单调 revision，0600 原子持久化；坏签名/回滚
+失败关闭，重启必须成功新鲜拉取，最长缓存 5 分钟。同步默认关闭且不启用 exchange；
+keyset 不是授权。代码与隔离测试不表示环境迁移/登记/上线完成，详见
+[签名 keyset 合同](Gateway-Service-Assertion-Keyset.md)。
+
+Gateway断言exchange候选：Console→Foundation `exchangeConsoleGatewayToken`→精确
+`/v1/console/auth/service-tokens/gateway-exchange`，须真实console.runtime JWT和独立
+`console:service-token:gateway-exchange`；Runtime自行验Gateway Ed25519签名与登记
+keyset/源deployment，对照DB active client/精确grant，在同事务消费jti、签发及审计。
+新路径默认关闭，Console不替Gateway验签、不传私钥/可信布尔值；仅503
+`gateway_keyset_unavailable`可由Gateway回原三次调用，安全失败不得降级。
+每次事务清理≤100条超过30秒容差的过期replay。参见[exchange合同](Gateway-Service-Assertion-Exchange.md)；
+真实Worker接线/环境grant/上线未完成，不改变原路径或默认权限。
+
+Gateway断言第四批签名：Tenant Gateway仅对原内部凭证已验证、registry源部署精确匹配的JSON无密钥请求签独立Ed25519 proof；员工导出的Gateway登记绑定限定租户/环境，Runtime仍自行验固定根keyset及grant。签名lane剥离入站proof/Gateway头并以显式受信头白名单经Console Binding转发；唯一Foundation回退helper只匹配503专用机器码。Console proof存在而开关关闭时明确disabled、不得静默旧路径。先Runtime keyset→Runtime exchange→Console开关→最后Gateway lane，回滚先关Gateway；全部选中grant缺绑定先报告。详见 [第四批上线计划](Gateway-Service-Assertion-Rollout.md)。
+
+### 企业部署中的 Workflow 通知操作目标（2026-09-26）
+
+Console runtime config 目录与通知目标目录复用验签 `moduleAvailability` 投影：未部署项无可执行 home，已部署事实随目录返回。单任务 Workflow 通知在受验签目录的 Enterprise 为 active+deployed 时，使用目录绑定的 `/enterprise/approvals/{taskId}`，`actionTargetAppCode=targetAppCode=enterprise`；业务来源仍在 `businessTargetAppCode`，资格 purpose 与审批敏感动作/受托人校验不变。无可信部署证据则保留 Workflow 回退；矛盾目录或 Enterprise home 无法解析时失败关闭，不回退绕过。实例/并行多任务/状态通知在 Workflow 具备受信且已部署 home 时保留原 Workflow 实例链接；仅当 Enterprise 为 active+deployed 而 Workflow 无受信入口时，回退到同一 Enterprise home 下的宿主审批列表 `/enterprise/approvals`（`actionTargetAppCode=enterprise`，固定日志 `workflow_action_target_host_list_fallback`），不新增宿主实例详情路由；两者均不可信时失败关闭。Console 继续严格校验注册 home 的 origin/basePath，不信任通知请求提供的地址。
+
+### Enterprise 原生项目可访问文档读取（2026-09-26）
+
+Host `GET /aims/api/v1/project-documents/accessible` 使用 Foundation `aims.project-document-accessible-list` → Runtime `POST /v1/enterprise/aims/project-documents:accessible`；精确业务 capability 为 `aims:project-documents:read`（business 格式），Host 先检查 `projects:view`，短期 permit 绑定签名 actor、项目、租户与 Host 部署。Host 复用 Foundation 当前项目 `projects:admin` 求值，permit 内 `projectAdmin` 以目标 Runtime Token 的独立 HMAC 签名覆盖全部 permit 字段、方法和精确路径；Runtime 拒绝篡改、跨项目及过期。该管理员事实仅作用于当前项目，部门和成员关系仍由 Runtime 自读。请求仅包含 `projectId/tenant/deployment/authorization`，不接受 UUID 候选、角色、部门或项目关系事实。
+
+Runtime 由 Aims 读取项目可见性、活动成员、项目候选、工作项里程碑和完整分页成果，再内部调用 Codocs 既有 `documentAccessCheck` 策略核心。目录事实由 Runtime Directory 读取当前用户主部门及其负责部门的下级范围；不存在额外 Codocs Service API、来源身份改写或任意 UUID 能力。缺失/明确拒绝的引用省略，仓库引用仍按项目成员关系，祖先目录与成员空目录保留；依赖失败返回整列表 503，分页最多 100×100，超限不返回部分结果。独立 Aims 路径不变。当前本机仅使用 data-runtime：v2.23 安装 Enterprise 的 `data-runtime:aims:project-documents/read` 物理行，以 audience+semanticScope 映射原业务 scope；tenant-runtime 待实际使用时安装。
+
+## Console 批次 A 用户页面组合（2026-09-26）
+
+Enterprise `/enterprise/notifications[/:notificationId]` 与 `/enterprise/todos` 原生页面共用 Foundation NotificationCenter/TodoList，Console 旧页面继续消费相同组件并保留原路由。只新增 `GET /enterprise/api/notifications/todos` 薄用户 BFF：验证现有 user 上下文，严格白名单 todoKind/cursor/limit（1–50），经既有 `fetchConsoleNotificationsForUser` / Console binding 调 Console `/api/v1/console/notifications/todos`。通知其他操作复用既有 Foundation 通知处理器（Host 经 `/enterprise/api/foundation/notifications/**`，见下节 G-12），来源对象授权和幂等写回执不变；无新 capability/grant/Runtime 操作，也不把服务 token 当用户。上游 401/403/503 透传，响应禁止共享缓存。Host 通知抽屉“查看全部”及工作台“我的待办”通往新页面；来源 action URL、旧 Console 重定向、密码/头像/会话与后台任务不在本步骤。真实环境与视觉验收另行记录，页面注册不代表已验收。
+
+### Enterprise Host 共享用户 API 基址（G-12，2026-09-29）
+
+租户网关（Cloudflare Worker 与自托管 Gateway 同源拓扑）把根路径 `/api/*` 交给 Console，而 Console 不识别按应用命名的 Host 会话 Cookie，Host 页面经根路径调用 Foundation 用户 API 会得到 401。Host 因此在自身保留基址 `/enterprise/api/foundation` 下提供 Host 页面实际使用的 Foundation 用户 API；Foundation 浏览器侧 `sharedApiPath('/api/…')` 仅在 `appCode=enterprise` 且构建期 public `sharedApiBase` 恰为该值（Host pilot 构建）时改写路径，其他应用与非 pilot Host 保持根路径合同。不用 `/enterprise/api/<op>` 直挂，是因为 `/enterprise/api/directory/{users,departments,projects}` 已是 Console 管理页 BFF（需 `directory_*:view`），而选择器查询面向所有已登录员工，两者语义与权限不同。
+
+| 方法 | Host 路径（`/enterprise/api/foundation` + ） | 复用的处理器 |
+| --- | --- | --- |
+| GET | `/workflow-proxy/instances/by-biz`、`/instances/by-biz-history`、`/instances/:id`、`/tasks/pending`、`/tasks/:id` | Host `enterpriseWorkflowProxy`（与根路由相同操作） |
+| POST | `/workflow-proxy/tasks/:id/approve`、`/tasks/:id/reject` | 同上，保留 `Idempotency-Key` |
+| GET | `/notifications`、`/notifications/summary`、`/notifications/:notificationId/detail` | Foundation `server/api/notifications/**` |
+| POST | `/notifications/read-all`、`/notifications/:notificationId/read`、`/notifications/:notificationId/archive` | 同上 |
+| GET | `/user/applications` | Foundation `server/api/user/applications.get` |
+| GET | `/directory/me`、`/directory/users`、`/directory/departments`、`/directory/projects`、`/directory/business-domains` | Foundation `server/api/directory/**` |
+| POST | `/directory/users/batch` | 同上 |
+
+- 授权：Foundation 处理器原样复用（通知详情仍由 Console 端 verifier 链实时授权，写操作幂等回执不变），Host 仅在其前加 `requireEnterpriseUser`，与其他 `/enterprise/api` 路由一样要求已验证 Host 会话（access token、tenant、deployment，Gateway 上下文须为 enterprise）；不新增 capability、grant 或 Runtime 操作，不从 Header 取身份。根路径同名接口保持现状（hzy0 兼容与非 pilot Host）。
+- 精确登记：Host 路由文件、`enterprise/composition/business-api-routes.generated.mjs` 就绪边界与 `deploy/test-env/enterprise-topology.mjs` 按 METHOD + 路径一一对应（`enterprise/test/host-shared-api.test.mjs` 做漂移检查）；基址下其他路径或方法由网关返回不可用。新页面若使用未登记的 Foundation 用户 API，需同时补 Host 路由与拓扑，否则按 `enterprise_module_runtime_not_ready` 失败关闭。
+- 图标：pilot Host 的 Nuxt Icon `localApiEndpoint` 为 `/enterprise/_nuxt_icon`（公开 JSON，网关按 asset 转发并剥离 Cookie）。
+- 认证入口仍为 `/enterprise/api/auth/*`（网关改写为 Host 根 `/api/auth/*`），唯一例外是下节的 `GET /enterprise/api/auth/permissions`（Host API，不改写）；头像 `/api/oss/avatar` 与 RUM `/api/rum` 仍归 Console/观测入口，不依赖 Host 会话。
+
+### Enterprise Host 浏览器权限快照（2026-09-28）
+
+此前 Foundation `useAuthorization` 在 Host 请求 `/enterprise/api/auth/permissions`，网关改写为 Host 根 `/api/auth/permissions`，Host 无此路由而命中 SPA 回退（200 HTML），被静默当作空快照，导致组合页面所有 `hasPermission` 为 false（服务端判权本身正确）。现合同：
+
+- `GET /enterprise/api/auth/permissions?app=<module>`：`requireEnterpriseUser` → 严格 `app`（唯一 query 键、单值）→ 可选 verified-policy gate → Foundation `loadAuthorizationSnapshotFromConsoleRuntime(uid, app, event)`，与 Host 服务端 handler 判权使用同一普通合并快照（不传角色选择、localDev 或管理员扩展）。`app` 白名单由生成的 `enterpriseNavigation.navigationSources`（即组合注册表 `navigationContributors`：aims/assets/codocs/console/altoc）派生，不手写；未知/重复/多余参数 400（先验证会话，未登录一律 401）。返回 `{ code: 0, data: { appCode, uid, roles, availableRoles: [], activeRoleCode: '', resources, actionPolicies } }`，`private, no-store`；Console 依赖失败或快照无效一律 503 `enterprise_authorization_unavailable`，上游 401/403 保留，绝不返回空 200。
+- 按模块而非合并：不同模块资源码可重名（如 `products`），浏览器按页面所属模块分别请求并分别缓存。页面归属来自构建期路由 meta `authorizationApp`：业务页由 `registerBusinessPages` 按模块写入，Host 原生页由 `annotateHostNativePageAuthorization` 依已校验的原生页投影（Console/Altoc）写入；无归属的 Host 页面（登录、审批、工作台）不请求模块快照。浏览器快照只是 UI 提示，Host 各 handler 仍逐次服务端判权。
+- 网关：`deploy/test-env/enterprise-topology.mjs` 对该精确路径（仅 GET）返回 `kind: 'api'`，其余 `/enterprise/api/auth/*` 仍按 auth 改写；Cloudflare 与自托管网关共用该拓扑。
+- 失败可见：Foundation 校验响应信封（对象、`code === 0`、`data.resources` 为动作数组映射、Host 下 `data.appCode` 等于请求模块），否则置 `error` 并以空快照失败关闭；Host 布局显示“权限信息加载失败”与重试。Host 未登记的 `/enterprise/api/**` 由就绪中间件返回 JSON 404 `enterprise_api_not_found`；经 auth 改写到达 Host 根 `/api/**` 的未登记路径由 `server/routes/api/[...].ts` 返回同一 JSON 404。该兜底文件不计入就绪清单，业务模块前缀仍保持 503 `enterprise_module_runtime_not_ready`。
+- 不新增 capability、grant、Runtime 操作或 Console 接口；独立应用 `/api/auth/permissions` 合同不变。
+
+### Console 企业资料 Host 读取（2026-09-26）
+
+Host `/enterprise/org-profile` → GET `/enterprise/api/org-profile` → Foundation 已登记 `org-profile.read` → Console GET `/api/v1/console/profile`。拒绝全部 query、保留已验证用户与 Console 原有 org_profile 权限、上游 401/403/503。展示共用 Foundation `OrgProfileDetails`，编辑继续 `/console/org-profile`；不改身份 helper、不新增 capability/grant/Runtime operation。
+
+### Enterprise → Console C1 当前公司配置只读（2026-09-26）
+
+GET `/enterprise/api/organization/business-domains`、`/enterprise/api/organization/regions` 和 `/enterprise/api/organization/regions/:regionCode/divisions` 仅通过已登记Console用户API转发。当前公司来自Console `/api/v1/console/profile` 的tenantCode；对应 `/api/v1/companies/:companyCode/business-domains`、`/regions`、`/regions/:regionCode/divisions` 均由Console org_profile:view与公司校验授权。区划读取前重新检查当前公司区域列表含目标regionCode，拒绝任意company/tenant/uid/query，不注册写动作；字段白名单、固定错误、private/no-store。新增API、导航与Gateway拓扑同时登记，运行登录验收另由协调者安排。
+
+### Enterprise → Console C2 安全运行状态（2026-09-26）
+
+GET `/enterprise/api/runtime-status/data` →已登记用户API `/api/v1/console/data-runtime/status`，Console data_runtime:view判权；GET `/enterprise/api/runtime-status/applications` → `/api/v1/console/runtime/apps`，Console runtime_apps:view判权。仅这两条GET，无query覆盖、config/action/update登记。BFF只在单次请求处理上游，重建7字段摘要；异常固定文本，401/403/404/503保留、其他502、private/no-store。应用整体状态来自Console已启用应用，不返回appCode、processName、port、ecosystem或原始stdout/stderr。运行日志/缓存/崩溃采集验收由Codex-sol另行核验。
+
+### PA-03 Enterprise 项目写授权候选
+
+项目基本信息与成员add/role/remove保留原精确capability、业务输入、人员有效性、幂等回执和审计。Host读取Runtime完整项目对象后经Foundation `loadProjectWriteAuthorization` 调Console scoped projects:edit，发出 `static-or-project-manager` 短期许可：静态allowed仅代表对当前对象的真实范围求值；false时仅由Runtime在项目行锁内检查当前leader或status=active的manager。两分支按OR判定，不把普通member/viewer升级为经理。未知模式/跨actor、租户、部署、项目、动作/过期许可403；Console失败503。
+
+Runtime在幂等回执读取前复核当前关系，已撤经理不能重放旧结果。旧无mode的allowed=true许可保留原经理门槛，避免旧Host未做对象范围求值时获得新静态通道。静态许可不携带客户端关系事实；同键payload不同仍409，旧revision仍409，leader不可移除等领域守卫保持。详情的canEditProject只贡献当前项目编辑发现入口，服务端每次重新授权。
+
+本候选未增加manifest/grant/schema，需新Runtime与Host一起按本地部署关口启用，再重跑M/R；PA-01列表/详情/写/导出完整范围投影仍独立待办，不能据此标记所有范围合同生效。
+
+### PA-01 第1批：项目范围事实投影（尚未接入业务读取）
+
+Foundation `compileFoundationProjectScope` 接收 Console 已按角色合并/模拟/有效期筛选的 grant，与 product 投影一样逐个有限事实调用现有 scoped evaluator，保留权限与三组范围的授权单元绑定。支持已登记的 tenant:global、project:code/member/owner、department:self/tree、subject:self，以及当前 C000001 projects:view 基线的 relation:participant；未知谓词或超过4096单元返回null，调用方应503失败关闭，不能截断或删除范围。
+
+投影version=1包含按UTF-8字节排序的project_codes、department_codes、department_tree_roots和扁平masks。项目/部门索引0表示未登记编码；单元索引为`((projectIndex*(departmentCount+1)+departmentIndex)*2^rootCount+ancestorMask)`。每个单元16bit对应四个独立事实（active成员、负责人、创建人、显式participant）；state分别按1/2/4/8组合，再读`mask & (1 << state)`。部门树位来自真实祖先集合，部门本身等于root时由Foundation evaluator固有规则处理；不把company可见、manager或member自动等同participant。`subject:self`取created_by，缺失时按既有对象helper回退leader；project:owner取leader，两者不得混同。
+
+Go `internal/projectscope`仅严格验证形状/边界与选择事实结果，不解释角色/动作/策略。TS与Go共用`foundation/test/fixtures/project-scope-projection.json`，验证项目263精确范围、部门树AND成员、创建人与负责人独立。投影本身不构成许可：后续接线必须签入actor/tenant/deployment/action/对象及policy revision/hash绑定、≤15s且不越过源授权有效期的permit，Runtime自行读取当前事实。该批未改变列表/详情/写入访问，也未改company语义、manifest、grant、schema或环境；第2批前须提交真实数据改前/改后矩阵并裁定意外访问损失。
+
+
+### PA-01 第2批候选：项目公开读取与范围执行（2026-09-27）
+
+**有意设计：范围view不隐藏company公开项目。** company可见性且密级L0/L1时，持有任一有效projects:view（含按现有策略蕴含得到view）的主体可读，不论该view的范围。完全无有效view仍403；未知/不可表达谓词仍503失败关闭，不得利用公开例外跳过编译。非company（含project_team、department、whitelist；现行schema无private枚举）保留原可见性/安全级别约束，并与同一动作的Foundation范围投影相交。写入、批量与导出没有公开例外，待第3批逐入口核对。
+
+Host列表/详情同时复核当前Console scoped grants确有view，不依赖可能较旧的聚合发现快照。scope version=1、hasViewPermission、bundleVersion/hash、policyRevision随现有签名命令一并绑定actor/tenant/deployment/projects:view；截止时间≤14秒，并截到Console从已验签payload计算的最早active源记录未来到期（保守覆盖全部源记录，不能延长授权）。缺期限/身份/绑定/投影503，不签发许可；Runtime拒绝缺scope、无view、错actor/tenant/deployment/action或过期/超过15秒许可。
+
+Runtime participant事实=active项目成员 OR leader OR creator，全部取当前权威行；creator沿用created_by为空回退leader。浏览器不能提交participant/member/owner、部门树或SQL。部门树根由签名投影固定，Runtime内部Directory读取active父子关系派生后代；循环、过大图、依赖不可用失败关闭。项目/部门编码及身份比较用BINARY/TRIM，保持Foundation精确区分大小写。
+
+两个读取入口仅经Server认证后注入内部context：旧独立Aims无该context时路径行为不变，HTTP query不能设置context。列表COUNT与LIMIT/OFFSET之前、详情主行SELECT都使用同一SQL投影条件，不读取全库再JS筛选；非公司范围外详情404。无新capability/grant/manifest/schema。仅候选代码，统一Runtime/Host上线与浏览器回归另经审查。
+
+
+### PA-01 第3批A：嵌套项目读取许可（候选）
+
+项目成员、计划milestones/items、看板、需求list/view保留各自业务资源许可，同时在同一签名命令中增加 `projectReadAuthorization`：复用 projects:view 完整范围投影、策略version/hash/revision与≤14s源期限，并额外绑定精确projectId。Runtime在任何子资源查询前拒绝缺失/错项目/错主体/过期许可；目录树事实不可取得503。查询参数或客户端关系事实不得替代许可。owning Aims先以原可见性AND投影SQL验证项目，旧admin标志不能绕过非公开范围，再进入原子资源处理（原业务人员/对象归属检查不删）。company L0/L1公开读取例外仍仅在此读许可生效，写/批量/导出不得使用它。
+
+项目计划按页≤100读完；响应未声明total时继续到短页，100页上限失败关闭503而不返回部分结果。其他嵌套业务与写命令逐入口在后续小批接线；本批不新增服务scope、grant、manifest、表或导出能力。部署须Runtime与Host配套切换，旧嵌套permit无兼容放行；候选在独立worktree，不影响现行hzy0。
+
+
+### PA-01 第3批B候选：工作项新建、基本编辑、版本关联
+
+这三个 Host 命令仍使用各自既有 capability，人员动作分别为 work_items:create/edit/edit；Foundation 从该动作自身的同源 grants 编译项目范围投影，不以 projects:view 或公开可见性代替写授权。签名许可同时绑定 actor/tenant/deployment/projectId/workItemId/action、策略版本/hash/revision 与不超过15秒的期限。缺投影或策略事实403；无法表达范围或缺部门树权威事实503。
+
+Runtime 在 owning 事务中先锁项目，再读当前 active 成员/leader/creator 与工作项项目归属，选择投影并保留原业务关系门槛（新建为经理/leader，编辑/关联为 active成员/leader）。company L0/L1无写例外。该复核位于 ExecuteInTransaction 读取既有回执之前，因此同键成功回放也必须满足当次许可和当前关系；许可不纳入业务幂等摘要，以允许同业务命令更新短期许可后安全回放。跨项目ID和过期许可失败关闭，拒绝时无业务/回执变化。
+
+这里只迁移 create/edit/associate；状态、完成/replay、批量与其它领域命令仍在后续小批，不宣称已全部 scoped。独立旧库命令未携此可信 Enterprise 投影时保留其现有领域门槛；Enterprise HTTP 入口这三动作必须携带投影，无旧 permit 降级。无新能力、grant、schema 或导出入口。候选需审后 Runtime/Host 配套切换。
+
+### PA-01 F1：项目创建/删除、事项删除与批量修改的范围复核（候选）
+
+项目创建的 `projects:create` 短期签名许可绑定最终 `projectCode`、`deptCode`、actor/tenant/deployment、策略版本/hash/revision 与项目范围投影。创建前尚无关系行，member/owner/participant/subject:self 一律为 false，请求中的负责人不能为自身产生授权；空部门只能匹配不含部门约束的范围。Runtime 在读取旧幂等回执前按拟建 code/部门求值，部门树只取目录权威事实，撤权后的同键续行失败关闭。独立的人员/负责人校验仍须通过。
+
+项目删除保留既有特权能力与草稿限制，额外要求 `admin:admin` 的项目范围许可；事项删除要求自身 `work_items:delete` 范围许可。两者在事务和旧回执读取前按当前项目事实复核，project_team/private 写入不借 company 公开读取例外。批量修改要求 `work_items:edit` 的同源投影，在单个事务中对所有 owning project 逐一锁定和预检，再锁定全部事项并复核归属；任一越权、缺失或归属变化整批回滚。旧独立 Aims 路径仍执行原领域门槛。此候选不增加能力、grant、schema、导出或新的删除入口，需 Host/Runtime 配套上线。
+
+### PA-01 F2a：目标任务树分配与确认范围复核（候选）
+
+Host 的 `append-tasks`、`breakdown`、`confirm-distribute`、`revoke-distribute`、`confirm-append`、`reject-append` 使用各动作原有的 `work_items:edit` 或独立 `work_items:confirm` 人员授权编译项目范围，签名绑定 actor/tenant/deployment/项目/目标/策略版本和不超过 15 秒的期限。Runtime 在旧回执读取前，于同一写事务锁住项目与目标并按当前关系事实重算范围；company 公开读取例外不适用于此处。原项目经理、审批确认和状态前置条件各自保留，不把确认能力视为编辑能力。任务树变化前锁定并核对全部将受影响的子事项归属；若出现跨项目子项，整笔拒绝且不产生回执或部分写入。独立 Aims 旧入口仍走原领域规则。此批不新增能力、grant 或 schema。
+
+### PA-01 F2b：需求分解提交与模板克隆范围复核（候选）
+
+Enterprise Host 的两条既有工作项分解写路由继续要求 `work_items:edit` 人员授权，并增加同一 Foundation helper 编译的签名项目投影；许可固定绑定受验签 actor/tenant/deployment、源工作项 ID、策略版本与不超过 15 秒的期限。Host 不从浏览器接收项目范围事实。Runtime 由源工作项权威行取得 owning project，在写事务中先锁项目和源事项、重算范围与当前经理关系，再锁定并读取最新源字段后创建目标/子项；范围外 company 项目也不能写。原模板类型、锚点、工时和经理规则保留。独立 Aims 路径没有 Enterprise 投影时仍执行原领域门槛。两路既有命令没有 service-command receipt，本批不宣称响应丢失后的同键重放保证，归入 PA-04 后续。
+
+### PA-01 F3：事项工时三写范围复核（候选）
+
+事项工时 create/update/delete 与项目工时三写使用同一个 `timesheet:submit` 人员动作与 Foundation 项目范围投影，签名绑定 actor/tenant/deployment、源工作项 ID、指定工时 ID、策略版本事实和不超过 15 秒的期限。Runtime 从权威事项行取得 owning project，在同一事务中依次锁项目、当前成员、事项及目标工时，复核范围与事项/工时归属后再写；范围外 company 项目只有读例外，不能写。原 active 成员/owner、草稿或退回状态与工时数值规则仍保留，独立 Aims 旧入口无 Enterprise 投影时按原领域规则执行。三条既有工时命令尚无 service-command receipt，列入 PA-04，不宣称同键回放保证。
+
+PA-04 B2 已为 Host 通道的事项工时三写加入目标事务内 service-command receipt。写入和同键回放都要求当前项目 active 成员、负责人、经理或 scoped admin，与独立 Runtime 的 `requireProjectMemberOrScopedAdmin` 门槛对齐；已暂停的成员不能再写入或回放自己的事项工时。校验在回执读取前执行，独立 Aims 入口的原领域规则不变。
+
+PA-04 C 的需求分解同键回放使用与业务写同一事务插入的 `project_activity_logs` 审计记录 ID 标识**本次执行**。同一源可在新的章节锚点再次分解，`decomposition_source_id` 只表示溯源，不是批次 ID；子项自增 ID 区间也不作批次标识。审计 `changes` 记录本批子项 ID 和本批工时 ID；回放先复核当前 scope、成员和经理，再要求审计的项目、源、动作、actor、请求键与回执一致，缺失或损坏固定返回 `409 receipt_result_unavailable`，绝不重新写入。回放只读取本批且当前仍属该项目的子项，已删除或移往别的项目的子项不返回、不重建；本批工时若已离开项目则 `timeEntryId=null`；源状态取当前值。同键只保证无重复副作用，**响应是当前状态，不是冻结快照**，客户端不能要求与首次响应逐字节一致。Host 收到 `receipt_result_unavailable` 时只提示“该操作已提交，请刷新查看”并返回详情刷新，不自动换键重试。现有 Runtime、独立 Aims 与运维脚本未发现删除或改写 `project_activity_logs` 的生产路径，表对项目的外键为 `ON DELETE RESTRICT`；若运维清理审计行，旧回执将冲突关闭。独立 Aims 分解入口仍保留原有写合同。
+
+PA-04 D1 的 Host 里程碑新建、编辑、删除和需求变更目标新建使用每次用户意图独立的 Idempotency-Key；同键同载荷的 service-command 回执与业务写在同一事务提交，异载荷为 409。回放前重新复核当前项目范围与经理或 scoped admin 门槛，撤权不能取回原成功结果。删除后的里程碑只通过已成功回执定位原项目，重新核权后返回删除回放，不重建对象；目标新建回放从当前项目内的工作项重建响应，已删除目标只返回已删除标志。独立 Aims 无 Host 上下文的入口保留原行为；人工 rollover 继续使用原周期快照合同。无新 capability、grant 或 schema。
+
+PA-04 D2 的 Host 项目仓库关联/解除使用各自的用户意图键；GitLab 手动同步由 Host 先用既有只读凭据拉取，再按本次观察到的批次内容生成稳定键，Runtime 只负责入库。仓库关联、解除、GitLab 批次入库与各自的 service-command 回执在同一事务提交；回放前复核当前项目范围、经理或 scoped admin 门槛，GitLab 批次另复核每个仓库仍属于当前项目。异载荷 409、撤权或仓库关系失效均不回放旧结果。仓库回放的 `linked` 返回当前关联状态，页面成功后重新拉取列表；旧解除键不能删除后来重新关联的仓库。同步命令的回执只存批次内容哈希和提交数，不复制提交消息或邮箱；Runtime 不外发 GitLab 请求，原独立 Aims 通道保留旧行为。`commit-files-changed` 是对当前提交的绝对值覆盖，同值重复写天然不产生额外副作用，因此不加 service-command 回执；更新前在同一事务内锁定并确认提交仍属当前项目和事项，同值重写返回成功，跨项目/事项为 404。无新 capability、grant 或 schema。
+
+### Altoc G1：Enterprise 基础只读闭包候选
+
+Host 六条 `/altoc/api/v1/{customers|contracts|payments}` list/detail GET，经 Foundation 固定操作访问已登记 `/v1/enterprise/altoc/{customers|contracts|receivable-plans}:{list|view}`。人员动作取 Altoc manifest 的 customer/contract/receivable:view；服务能力取同资源三条精确 capability。Console当前scoped授权编译许可，原owner/dept/催收关系由 owning reader 当前行判断；不继承客户view给合同，也不借回款许可返回关联主档动态名称。
+
+许可身份/对象/query/范围/策略字段由现有项目文档 `signHmac` 机制独立签署，actor委托签名同时保留。Registry持久tenant/environment/runtimeDeployment/schema/generation栅栏先于业务SQL，COUNT分页同WHERE/snapshot；只解析Altoc Read与七张物理表白名单，不访问Finance/Codocs/Aims/Workflow、不写业务/receipt/outbox、不签文件URL。Host/BFF两层固定白名单与固定错误，private/no-store；页面直达仍由handler授权。
+
+原独立Altoc读写入口继续保留。新增导航只是Altoc manifest贡献，不安装完整应用组合模块。三条grant仍为 `data-runtime:altoc:<resource>/view` + semanticScope，共享现时校验按已验证audience复用签发映射；环境安装由授权操作员另行执行，不得补语义重复/宽grant绕过。候选、SQL隔离测试与页面组件测试不构成环境启用或财务/履约链验收。
+
+### Altoc G2：Enterprise 线索/商机/报价基础只读闭包候选
+
+六 GET Host BFF→Foundation固定操作→六 `/v1/enterprise/altoc/{leads|opportunities|quotations}:{list|view}` POST。复用当前Console普通view gate/scoped授权、Altoc原scope compiler/global-admin兼容与Directory当前事实，permit取最早授权到期及14秒上界并独立HMAC签名完整query（包含opportunityId）；人员权限与服务cap分开。当前三主档自身owner/dept及quotation父子范围由Runtime snapshot读取，不继承关联客户/商机范围。
+
+仅Altoc五表读，不读Finance/Codocs/Aims/Workflow/联系人/活动；不输出动态关联名、成本毛利、自由诊断/URL，不写receipt/outbox/状态。Host重建白名单，报价item必须父ID相同且不超过1000；固定错误/no-store。新grant保持qualified `data-runtime:altoc:{lead|opportunity|quotation}/view` + 对应semanticScope，未安装前不宣称环境启用。E1/AA-04与原独立写流程仍另审。
+
+### P5a1 普通工时可选分页
+
+Enterprise 本人/项目普通工时复用既有固定操作与精确读 capability，添加可选 page/pageSize≤100 及完整日期/项目汇总；无分页参数保留旧全量响应。本人所有权与项目动态范围均在 owning reader 执行，分页 COUNT/明细/DECIMAL 聚合共用 read-only RepeatableRead；不新增跨应用调用或 grant，不改变 Finance/People 全量期间消费者。字段、筛选、自然月与周日修正、日编辑全天基线见 [Aims-Time-Entry-Pagination-API](../aims/docs/Aims-Time-Entry-Pagination-API.md)。审核队列授权闭包另列 P5a2，未在本批实施。
+
+P5a2审核队列复用现 `aims:time-entry-reviews:view`：Host 当前 Console approve OR submit 有效分支的项目scope投影与 query 独立HMAC签入专用permit，Runtime当前服务grant/actor/期限/元数据先验证、动态项目范围与reviewer_uid_snapshot再约束COUNT/page。无分页保留原形状；分页状态计数来自完整集合。浏览器仅periodKey/page/pageSize，无公开项目授权旁路；审核 POST 按下述合同启用，读取与写入分别校验权限。详见同一 [工时API合同](../aims/docs/Aims-Time-Entry-Pagination-API.md)。
+
+#### 成员工时审核写入合同（20）
+
+正式入口沿用 `POST /aims/api/v1/projects/:id/time-entry-reviews`，Host 固定操作 `aims.time-entry-review-submit` 仅映射 `POST /v1/enterprise/aims/time-entry-reviews:submit`；服务令牌走既有 `aims:enterprise-host:execute`，不得用旧的 `time-entry-reviews/edit` permit、`timesheet:submit`、`timesheet:admin` 或项目公开读取替代人员的显式 `timesheet:approve`。独立 Aims 的 `POST /v1/aims/projects/{id}/time-entry-reviews` 保持原合同，Host 不向它传浏览器可伪造的 `current_user_can_approve_timesheet` 标志。
+
+- **入参与签名。** 浏览器只传 `action=approve|return`、不重复且升序规范化的 `entries=[{id,rowVersion}]`（1–100 条）、退回原因（`return` 必填，≤1000 字）及格式合法的 `Idempotency-Key`；项目 ID 来自路径。Host 从当前已验签会话读取 actor/tenant/deployment，向 Console 取 `aims/timesheet:approve` 的当前有效 scoped grants，由 Foundation 唯一 scope evaluator 编译项目投影；无有效授权立即 403，策略/目录依赖不可用 503。Host 以现有短期（≤15 秒）项目范围许可绑定 actor、租户、Host 部署、项目 ID、策略版本/hash/修订及有效期；Foundation 另以服务令牌绑定的 HMAC 签名动作、条目 ID/rowVersion、原因和幂等键；Runtime 同时校验 service grant、签名用户委托、许可 HMAC 和精确业务 `timesheet/approve`，不从 body/query/header 接受审核标志或范围事实。授权改变后旧 permit 不可用于回执重放。
+- **对象与职责。** Runtime 在一个事务内按 ID 顺序锁定 owning project、当前经理/负责人/有效代理关系和所有选中 `time_entries`；在读既有幂等回执之前，对同一项目执行当前 `timesheet:approve` 范围判断（无 company 公开读例外），确认操作者当前具备该项目审核关系、每条记录属于该项目、`review_route=project_manager`、`reviewer_uid_snapshot` 精确等于 actor、首次执行时 `review_status=submitted`、`row_version` 等于请求值，且每条 `uid` 不等于 actor。不得用 `timesheet:submit` 的被分派队列读取分支取得审核权。任何一条失败整批不写、不留成功回执；已失权的旧键也不得重放。项目不存在/不可见与跨项目对象按 404 处理；已知项目但缺 approve/项目范围/经理关系为 403；自审批为 403。**已知限制：**经理更换后，旧经理快照名下的 submitted 工时不会自动转给新经理；现有独立 Aims 只在提交时写 `reviewer_uid_snapshot`，审核时精确比较该快照，没有重新分派命令。本批不扩展分派语义，存量悬挂项单列后续治理。
+- **事务、回执与审计。** 复用 Aims 已有 Host 写入的 `service_command_receipt` 与 `ReceiptRepository.ExecuteInTransaction`（项目成员/项目工时同一机制），不新建回执表。同一事务内更新全部审核状态与 rowVersion、追加每条 `time_entry_review_events`（actor、动作、原因）、写入持久幂等回执；不发跨应用 outbox。回执身份至少绑定已验证 tenant/deployment/actor、项目、`Idempotency-Key` 与版本化审核命令，冻结规范化 payload hash 和结果。相同键/相同 payload 仅回放原结果，不重复事件；相同键/不同 payload 409；并发同键仅一笔提交。跨键竞争、旧 rowVersion 或非 submitted 状态返回 409，客户端保留原键和草稿、刷新后再决定。回执读取前仍复核当前授权/关系；审计失败整笔回滚。现有独立 Aims 审核事务只有状态/事件，尚无该 Host 幂等回执与范围门槛，不得直接透传启用。
+- **读取与提交配对。** 审核队列列表每条必须返回当前 `rowVersion`；页面选择当前页记录时保存对应版本，确认/退回使用这一版生成请求，刷新后的版本不能与旧草稿混用。现有 Runtime 分页 reader 已返回 `rowVersion`，Host 页面类型也已有该字段；合同测试固定传递。
+- **响应与测试门槛。** 成功 `200` 返回 `action,entryIds,updatedCount` 与可识别的 `replayed`；输入/超 100 条/缺退回原因或键为 `400`；未认证 `401`；能力、人员 approve、项目范围、职责冲突 `403`；越权或不存在对象 `404`；旧版本、状态改变、同键异体 `409`；策略/目录/Runtime 不可用 `503`。合同测试覆盖合法确认与退回、缺 approve、仅 submit、跨项目 ID、自审批、撤权后同键、同键回放、同键异体及并发，核对全部写入与事件计数。Host 页面仅在审核权限满足时展示确认/退回，失败保留当前选择与原因。
+
+### Aims 全局周报可选分页（P5b1，2026-09-27）
+
+既有 Host 周报 overview 固定读链/capability不变。显式 page/pageSize 启用真实 SQL COUNT/page，完整合计与四图表基于相同授权项目集合、同 RR snapshot；关键词只影响列表，不影响指标图表。搜索限 Aims 自有项目字段与周报部门/人员快照、UID/编码，Console 当前目录改名后的展示回退名不参与匹配（已批准限制），不引入目录查询或新 grant。原无页响应与导出保持全量。cumulativeLaborCost 为成本，统一两位小数且不猜币种，不再显示成人天。详细字段及兼容见 `aims/docs/Aims-Weekly-Report-Pagination-API.md`。
+
+### Aims 项目周报分页（P5b2，2026-09-27）
+
+既有 weekly-report-list/view 精确读操作/cap不变，可选 page/pageSize；周期列表提供独立轻量周历，周期详情提供两集合页标识/完整已保存统计/独立历史锚点，includeBaseline=1 才附完整初始化写输入。原 owning 项目范围与经理/代理判定复用，在 RR 内重验，不新增浏览器权限 flag。实际按UID工时合计仍通过既有 timesheet:view 的 time-entry-list 独立查询；只增加 includeUidHours=1 的分页摘要，不把工时许可塞入周报权限。旧无页与整份替换写合同保留，完整基线+跨页草稿不截断提交，无新增grant/环境写。见 `aims/docs/Aims-Weekly-Report-Pagination-API.md`。
+
+### P6a 项目总览与候选分页（2026-09-27）
+
+Enterprise 既有项目 GET/portfolios GET 复用 `aims.project-list` / `aims:projects:view` 的当前 Console 结构化 project permit；portfolios 只读响应 projectCount 为可见数，canDelete 由宿主当前 portfolios:admin 事实及 owning 完整项目存在性检查生成布尔，绝不返回隐藏计数。Runtime 按当前项目可见性+permit scope 在 RR 内执行 COUNT/page/完整组、年度、状态汇总；项目集根保留空组，独立桶及组内项目分别分页；候选角色与收藏条件在页前。真实项目集写合同及 DELETE 完整 COUNT 不变，无新 grant/Host 路径。API 字段、兼容与跨请求快照限制见 `aims/docs/Aims-Project-Overview-Pagination-API.md`。
+
+### PA-01 第3批C候选：状态、完成申请与完成重放的范围复核
+
+Host 的 plan-ready/start/reset/reopen、target/matter completion 与 completion-replay 使用同一 Foundation 项目命令投影 helper。状态/完成仍取 work_items:edit 自身授权，重放独立取 integration_operations:replay；不借 projects:view，也不使用 company 公开读取例外。许可绑定主体、租户、宿主部署、父项目、事项、动作及策略版本/hash/revision，最长15秒；Runtime 入口拒绝旧无范围许可。
+
+Runtime 在 owning 事务内、查询既有 receipt 之前锁父项目并派生当前关系事实，求值动作投影并锁定事项的 project_id；范围外、错父项目与过期许可不能回放成功结果。原状态规则、成员/scoped 管理员门槛、target 负责人、matter 执行人、恢复经理与完成就绪/冻结规则保持独立；共享 scope helper 不替代这些领域门槛。旧独立调用路径不强加 Enterprise 投影。本批不修改 callback：回调继续消费已冻结申请与现有受信合同，不由审批人的项目范围替代申请人授权。
+
+无新增 capability/grant/manifest/schema；候选须 Host 与 Runtime 配套上线。删除、分配/分解、其他领域写入及批量全事务仍按后续小批逐入口处理，不据此宣称 PA-01 全部完成。
+
+### PA-01 第3批D候选：成果写入与批量全事务范围
+
+项目成果 batch-create/update/delete 继续使用既有 projects:edit，工作项成果证据 update 继续使用 work_items:edit；Host 为这四条精确 delegated 操作另带 `projectWriteAuthorization`，以 Foundation 同一动作 grants 编译投影，不借公开项目读取例外。许可绑定 actor/tenant/deployment、人员 resource/action、objectId/subId、空 parent 标识（其真实项目须由 Runtime 派生）和完整策略事实，≤15秒。整个命令仍由原受信签名保护；Runtime 不信任 payload 中宣称的项目授权事实。其他 delegated 操作拒绝此额外字段，缺许可或错绑定403，部门树事实缺失503。
+
+Runtime 将该许可安装为不可由 body/query 构造的 owning context。成果写事务先锁项目，重新派生当前关系并求值投影，再核对锁内事项/成果归属；项目成果仍需 manager/scoped admin，证据仍允许 active member/scoped admin，不将其升为经理门槛。批量项目行按ID顺序锁定，全部项目与所有成果归属在 INSERT 前复核，一项越权整批回滚。matter 的项目→事项冻结锁与 in_progress 限制不变。原独立路径保留原合同。
+
+已知缺口 **PA-04（成果写入幂等）**：这四个既有 delegated 成果 handler 未使用 service-command receipt；本批不扩展回执体系，列入后续。每次调用（含重试）均重新复核现时范围，原重复名称/返回合同不变。不新增能力/grant/schema。Host 与 Runtime 须配套上线；里程碑、承接、工时、周报及其余工作项批量仍为后续小批。
+
+
+### PA-01 F4b：事项文档关联的双重授权
+
+Enterprise Host 的事项文档关联和按 `documentId` 解绑，先按原 `work_items:edit` 人员动作签入 owning project 范围；Runtime 在事务里锁定项目和事项，依据权威归属与当前关系求值，不借 company 公开读取例外。关联还要求 UUID 出现在 Aims 的项目文档来源索引，且 Runtime 原生 Codocs ACL 对已验签 actor 当前给出该文档的 `view`；来源缺失、Codocs 拒绝或依赖不可用时均不得写入。项目关系本身不授予 Codocs 正文访问。按 ID 解绑仅允许当前事项已有的关联，不要求操作者仍持有 Codocs 文档查看权；它不修改文档或 ACL。无具体 `documentId` 的集合 DELETE 保持拒绝，Host 不展示批量解绑入口。独立 Aims 路径保持原领域规则。本批不新增 capability、grant 或服务身份。
+
+### PA-01 F5：仓库、提交、同步与评论范围
+
+Enterprise Host 仓库 link/unlink 使用 `projects:edit` 自身人员许可和签名项目投影；事项评论、提交 link/unlink 与 GitLab 同步入库使用各自原有的 `work_items:edit` 人员许可及同源投影。Runtime 锁 owning project/事项后按当前关系复核范围，保留原经理或成员业务门槛。提交关联还要求提交属于该项目且仓库当前仍与项目关联；解绑可清理已失去仓库关系的旧提交关联。GitLab 同步必须在同一事务内核对每个仓库 ID 与 code 的当前项目关系，范围或仓库错配时整批不写；全局唯一提交键已属另一项目时拒绝跨项目 UPSERT。Enterprise 批次任一 SQL 失败即回滚游标与提交。相同 payload 产生稳定幂等键，Runtime 的唯一提交键 UPSERT 保证重试不新增重复行。手动同步是入站拉取后入库，没有外发事件；因此本操作没有 outbox 投递对象。若将来改为后台定时同步，应另按受控调度与 outbox 合同设计。仓库/评论/关联写尚无 service-command receipt，与其他 PA-04 项一并收敛，不能宣称响应丢失后精确一次。独立 Aims 现有同步入口与业务门槛不因本批改变。
+
+### PA-01 里程碑写范围（2026-09-27）
+
+Enterprise 里程碑 create/update/delete 的项目编辑范围由 Foundation 统一 helper 投影到短期签名许可；Runtime 验证 actor/tenant/deployment/action/项目或对象绑定，body/query 无法建立范围上下文。Runtime 先按权威归属锁项目，再锁里程碑并复核归属、范围及当前经理/范围管理员关系；company 公开例外仅适用于读取。里程碑与配套成果同步共用同一事务，任一领域校验失败整笔回滚；完成审批冻结规则仍保留。独立 Aims 无 Enterprise 上下文的路径保持原领域行为。
+
+本小批覆盖 Host 已暴露的三条里程碑写操作；系统定时 rollover 是固定 system 身份的受控维护路径，未新增人员许可或 Host 人工 rollover 入口。人工 rollover/完成相关通道继续按 PA-01 逐入口清单核查，不将三写完成宣称为全部里程碑写通道完成。
+
+### PA-01 人工里程碑 rollover 与需求变更目标（2026-09-27）
+
+Host 已有人工 rollover 与需求变更创建目标入口均附带 Foundation 的短期签名 projects:edit 范围许可，保留各自业务能力与原经理/范围管理员门槛。Runtime 从权威项目/里程碑归属派生 owning project，按项目→里程碑顺序锁定，事务内复核当前关系和写范围；company 公开读取例外不用于写入。人工 rollover 在返回既有周期快照之前复核许可，以受信 actor 记录操作人，不接受 body 伪造的 operator_uid。需求变更目标的归属、阶段、冻结检查、计数器与插入共用事务，拒绝不留下目标。
+
+固定 system 定时 rollover 未改变。里程碑完成申请/绑定 Workflow 尚无 Enterprise Host 入口，记为迁移缺口，本批不新增操作或能力。人工 rollover 的既有周期快照幂等合同保持不变；需求变更目标的 Host 回执由 PA-04 D1 补齐。
+
+### PA-01 项目工时三写范围（2026-09-27）
+
+Enterprise 项目工时 create/update/delete 使用 Foundation 的 timesheet:submit 人员动作投影与短期签名许可（固定 actor、tenant/deployment、parent projectId、entry subId 与策略版本事实），不借用 projects:edit，不新增经理门槛。Runtime 先锁 owning project 和当前成员行并求值同一项目范围，之后锁指定工时行复核归属。company 公开读取例外不应用于工时写入；跨项目 entry ID 不可用于读写其他项目。
+
+原有负责人/活动 manager 或 member/范围管理员门槛、仅本人编辑删除、仅 draft/returned 可变规则保留，并在该事务内复核。主写与响应回读共用同一事务；失败回滚，不在持锁期间借第二个连接。独立 Aims 无受信 Enterprise scoped context 的路径保持原行为。审核和周提交批量尚为后续小批，不以三写完成宣称全工时整改完成。
+
+已知缺口 PA-04（成果+工时写入幂等）：这三个存量工时写入口目前未实现 service-command receipt；本批增加范围和事务，不新建平行回执体系。不能以幂等键发送或拒绝重试测试宣称有服务端幂等，回执重放验证为既有缺口，后续需单独整改。
+
+### Aims 管理员项目 Host 委托（代码候选，待发布）
+
+企业宿主独立提供 `GET /aims/api/v1/admin/projects` 与 `PUT /aims/api/v1/admin/projects/:id`，只面向 Console 快照中拥有**无对象范围静态** `aims:admin:admin` 的人员；项目经理关系及 `projects:edit` 不能替代。Host 在调用 Runtime 前使用 Foundation 统一授权求值，依赖失败返回 503、缺权返回 403。Service Token 能力分别为 `aims:admin-projects:view` 与 `aims:admin-projects:edit`，对应两条精确 Enterprise POST 操作，均由 Runtime 核对 enterprise 来源、部署、actor、audience 和当前服务凭据；人员许可绑定 actor/tenant/deployment 与 `admin/admin`，最长 15 秒。项目内 PA-02 编辑路径保持原 scoped projects:edit 加当前 leader/active manager 门槛，两个入口的许可不能互用。
+
+管理员列表只接受界定的筛选与 1–100 页大小，在单个一致快照中计算 COUNT、稳定分页和编辑版本，输出基本字段及访问控制字段白名单。管理员编辑与 PA-02 共用字段校验、项目行锁、editVersion、同事务 receipt/活动日志、负责人同步和 L2/L3 收紧；管理员独立 operation code/required capability，审计 action 为 `admin-edit` 且记录入口和操作者，旧键重放前仍重新校验现时管理员授权。删除、批量常规项目创建、项目集创建不在此入口开放。manifest 增加细粒度服务资源声明，不给人员推荐角色新增权限。C000001 的两个 data-runtime qualified grant 尚待代码审查与正式安装后才生效。
+
+### Host 本人工时填报动作与周提交（2026-09-29）
+
+人员权限与 manifest 对齐：项目/事项工时 create/update/delete 以及本人整周提交均要求 `timesheet:submit`，Foundation 编译该动作自己的范围，Runtime 验证同一签名动作。`edit/admin` 不替代显式 submit；内部传输 permit 的 `edit` 标签及既有服务能力不变。个人日历导航允许 view OR submit；submit 仅额外允许读本人记录，不开放项目全量或他人工时。
+
+周提交无需请求体，actor 来自受信会话。Runtime 先验证短期 submit 范围，再在同一事务按项目顺序锁定当前范围/成员事实并复核既有填写资格，最后锁定本人该周期 draft/returned 工时；任何项目不满足条件时整周回滚。并发加入未经复核的项目返回 409 要求重新提交。状态和审核事件同事务写入，重复提交无可编辑记录时冲突关闭，不宣称整周提交具有 service-command receipt 回放合同。Host/Runtime 必须配套更新或回滚；审核写入口仍关闭，未修改 manifest、角色或环境 grant。

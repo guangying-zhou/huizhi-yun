@@ -31,3 +31,12 @@ test('Console and Foundation preserve Platform-resolved per-application home URL
     'buildAppHomeUrl(deploymentPublicUrl, basePath)'
   )
 })
+
+test('runtime config projects the same signed deployment availability as notification target catalog', () => {
+  const runtime = readFileSync(new URL('../server/api/v1/console/runtime/apps/[appCode]/config.get.ts', import.meta.url), 'utf8')
+  const catalog = readFileSync(new URL('../server/utils/userApplications.ts', import.meta.url), 'utf8')
+  for (const source of [runtime, catalog]) {
+    assert.match(source, /enterpriseModuleAvailability\(bundle.payload, app.appCode\)/)
+    assert.match(source, /homeUrl: availability.deploymentState === 'deployed' \? app.homeUrl : null/)
+  }
+})

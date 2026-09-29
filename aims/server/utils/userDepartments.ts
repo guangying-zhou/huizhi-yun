@@ -1,4 +1,5 @@
 import type { H3Event } from 'h3'
+import { fetchConsoleDirectoryApi, fetchDirectoryApi } from '@hzy/foundation/server/utils/directoryApi'
 
 interface DeptNode {
   deptCode: string
@@ -66,11 +67,11 @@ export async function fetchUserDepartments(event: H3Event, uid: string): Promise
     return { departments: [], primaryDeptCode: null, managedDeptCodes: [] }
   }
 
-  const deptResponse = await fetchDirectoryApi<{
+  const deptResponse = await fetchConsoleDirectoryApi<{
     code: number
     data: { tree: RawDeptNode[], flat: RawDeptNode[] }
   }>(
-    '/api/v1/directory/departments',
+    '/departments',
     { event, timeout: 10000 }
   )
 
@@ -90,9 +91,10 @@ export async function fetchUserDepartments(event: H3Event, uid: string): Promise
   }
 
   let userCommitteeIds: string[] = []
-  try {
-    const userDeptResponse = await fetchDirectoryApi<{ code: number, data: ConsoleUserDepartmentResponseData }>(
-      '/api/v1/directory/user-departments',
+  {
+    // Authorization facts must fail closed when their source is unavailable.
+    const userDeptResponse = await fetchConsoleDirectoryApi<{ code: number, data: ConsoleUserDepartmentResponseData }>(
+      '/user-departments',
       { event, params: { uid } }
     )
     if (userDeptResponse.code === 0 && userDeptResponse.data) {
@@ -100,10 +102,6 @@ export async function fetchUserDepartments(event: H3Event, uid: string): Promise
       userCommitteeIds = (userDeptResponse.data.departments || [])
         .filter(dept => dept.orgType === 'committee')
         .map(dept => dept.deptCode)
-    }
-  } catch {
-    if (managedDeptCodes.size > 0) {
-      primaryDeptCode = [...managedDeptCodes][0] || null
     }
   }
 

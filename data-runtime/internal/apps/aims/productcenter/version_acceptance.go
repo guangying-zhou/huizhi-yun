@@ -108,13 +108,30 @@ func loadVersionAcceptanceScopes(ctx context.Context, tx *sql.Tx, code string, v
 // The immutable checklist freezes the full scope that was reviewed. A later
 // scope revision requires a new acceptance, never an update to this record.
 func AcceptProductVersion(ctx context.Context, db *sql.DB, identity CommandIdentity, permit AuthorizationPermit, input ProductVersionAcceptanceInput, executionReviewHash ...string) (CommandResult, error) {
+	return acceptProductVersion(ctx, identity, permit, input, executionReviewHash, func(authorize AuthorizeCommand, apply ApplyCommand) (CommandResult, error) {
+		return ExecuteCommand(ctx, db, identity, input, authorize, apply)
+	})
+}
+
+// AcceptProductVersionInTransaction leaves successful commit to the caller.
+func AcceptProductVersionInTransaction(ctx context.Context, tx *sql.Tx, identity CommandIdentity, permit AuthorizationPermit, input ProductVersionAcceptanceInput, executionReviewHash ...string) (CommandResult, error) {
+	result, err := acceptProductVersion(ctx, identity, permit, input, executionReviewHash, func(authorize AuthorizeCommand, apply ApplyCommand) (CommandResult, error) {
+		return ExecuteCommandInTransaction(ctx, tx, identity, input, authorize, apply)
+	})
+	if err != nil && tx != nil {
+		_ = tx.Rollback()
+	}
+	return result, err
+}
+
+func acceptProductVersion(ctx context.Context, identity CommandIdentity, permit AuthorizationPermit, input ProductVersionAcceptanceInput, executionReviewHash []string, execute func(AuthorizeCommand, ApplyCommand) (CommandResult, error)) (CommandResult, error) {
 	if identity.Action != "product_versions:accept" {
 		return CommandResult{}, invalid("product_command_identity_invalid", "版本验收命令不匹配")
 	}
 	if err := ValidateProductVersionAcceptance(input); err != nil {
 		return CommandResult{}, err
 	}
-	return ExecuteCommand(ctx, db, identity, input, func(ctx context.Context, tx *sql.Tx) error {
+	return execute(func(ctx context.Context, tx *sql.Tx) error {
 		return AuthorizeWorkspaceTransaction(ctx, tx, identity.ProductCode, identity.ActorUID, "product_versions", "accept", permit)
 	}, func(ctx context.Context, tx *sql.Tx) (any, error) {
 		root, err := loadWorkspace(ctx, tx, identity.ProductCode)

@@ -116,29 +116,31 @@ const { data: settingsData, refresh: refreshSettings } = await useFetch<ApiRespo
   }
 )
 
-async function refreshMetadataPreservingCommand() {
-  const current = metadataData.value?.data
-  const result = await $fetch<ApiResponse<ConnectorMetadata>>('/api/v1/console/connector-runtime/install-command')
-  const commandStillValid = Boolean(
-    current?.installCommand
-    && current.expiresAt
-    && new Date(current.expiresAt).getTime() > Date.now()
-    && current.connector?.lastSeenAt === result.data.connector?.lastSeenAt
-  )
-  metadataData.value = commandStillValid
-    ? {
-        ...result,
-        data: {
-          ...result.data,
-          installCommand: current!.installCommand,
-          enrollmentCodeLast4: current!.enrollmentCodeLast4,
-          expiresAt: current!.expiresAt
-        }
-      }
-    : result
+// 一次性安装码只属于当前页面实例，不写入 useFetch 的共享缓存。
+const installationCommand = ref<Pick<ConnectorMetadata, 'installCommand' | 'expiresAt' | 'enrollmentCodeLast4'> | null>(null)
+let commandExpiryTimer: ReturnType<typeof setTimeout> | null = null
+let disposed = false
+
+function clearInstallationCommand() {
+  installationCommand.value = null
+  if (commandExpiryTimer) clearTimeout(commandExpiryTimer)
+  commandExpiryTimer = null
 }
 
-const metadata = computed(() => metadataData.value?.data || emptyMetadata)
+async function refreshMetadataPreservingCommand() {
+  const previousLastSeenAt = metadataData.value?.data.connector?.lastSeenAt
+  const result = await $fetch<ApiResponse<ConnectorMetadata>>('/api/v1/console/connector-runtime/install-command')
+  metadataData.value = result
+  if (previousLastSeenAt !== result.data.connector?.lastSeenAt) clearInstallationCommand()
+}
+
+const metadata = computed(() => ({
+  ...(metadataData.value?.data || emptyMetadata),
+  installCommand: '',
+  expiresAt: undefined,
+  enrollmentCodeLast4: undefined,
+  ...installationCommand.value
+}))
 const runtimeSetting = computed(() => settingsData.value?.data.items.find(item => item.settingKey === 'connector.runtimeApiUrl') || null)
 const identitySetting = computed(() => settingsData.value?.data.items.find(item => item.settingKey === 'connector.identityEnabled') || null)
 const dingtalkIdentitySetting = computed(() => settingsData.value?.data.items.find(item => item.settingKey === 'connector.dingtalkIdentityEnabled') || null)
@@ -283,14 +285,25 @@ async function sendWecomTest() {
 async function generateCommand() {
   if (!canAdmin.value) return
   commandPending.value = true
+  clearInstallationCommand()
   try {
-    metadataData.value = await $fetch<ApiResponse<ConnectorMetadata>>(
+    const result = await $fetch<ApiResponse<ConnectorMetadata>>(
       '/api/v1/console/connector-runtime/install-command',
       {
         method: 'POST',
         headers: { 'Idempotency-Key': crypto.randomUUID() }
       }
     )
+    if (disposed) return
+    const remaining = new Date(result.data.expiresAt || '').getTime() - Date.now()
+    if (remaining > 0) {
+      installationCommand.value = {
+        installCommand: result.data.installCommand,
+        expiresAt: result.data.expiresAt,
+        enrollmentCodeLast4: result.data.enrollmentCodeLast4
+      }
+      commandExpiryTimer = setTimeout(clearInstallationCommand, remaining)
+    }
     toast.add({ color: 'success', title: '安装指令已生成', description: '安装码 15 分钟内有效且只能使用一次' })
   } catch (error) {
     toast.add({ color: 'error', title: '生成失败', description: errorMessage(error) })
@@ -302,6 +315,7 @@ async function generateCommand() {
 async function copyCommand() {
   if (!metadata.value.installCommand) return
   await navigator.clipboard.writeText(metadata.value.installCommand)
+  clearInstallationCommand()
   toast.add({ color: 'success', title: '已复制', description: '请在企业固定出口 Linux 服务器执行' })
 }
 
@@ -348,6 +362,7 @@ async function saveRuntimeUrl() {
   try {
     await $fetch('/api/v1/console/settings/values/connector.runtimeApiUrl', {
       method: 'PUT',
+      headers: { 'Idempotency-Key': crypto.randomUUID() },
       body: { value: runtimeApiUrl.value.trim() }
     })
     await Promise.all([refreshSettings(), refreshMetadata()])
@@ -359,7 +374,11 @@ async function saveRuntimeUrl() {
   }
 }
 
+onBeforeRouteLeave(clearInstallationCommand)
+
 onBeforeUnmount(() => {
+  disposed = true
+  clearInstallationCommand()
   if (metadataRefreshTimer) clearTimeout(metadataRefreshTimer)
 })
 
@@ -678,6 +697,15 @@ onMounted(() => {
                   @click="copyCommand"
                 >
                   复制
+                </UButton>
+                <UButton
+                  v-if="metadata.installCommand"
+                  icon="i-lucide-x"
+                  color="neutral"
+                  variant="ghost"
+                  @click="clearInstallationCommand"
+                >
+                  关闭
                 </UButton>
               </div>
             </div>

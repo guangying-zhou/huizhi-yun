@@ -3,6 +3,7 @@ package aims
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -96,31 +97,93 @@ func (a *Adapter) workItemDecomposeSubmit(ctx context.Context, workItemID string
 	if err := a.requireProjectManagerOrScopedAdmin(ctx, item.ProjectID, uid, query); err != nil {
 		return nil, err
 	}
-	if !allowedDecomposeTemplateKeys[stringValue(item.TemplateKey)] {
-		return nil, httperror.New(http.StatusBadRequest, "unsupported_decompose_item", "当前工作项不支持需求分解")
-	}
-	if item.ApprovalStatus == "pending" {
-		return nil, httperror.New(http.StatusBadRequest, "approval_pending", "当前分解任务已提交审批，无法再次提交")
-	}
-
-	conflicts, err := a.decomposeSubmitAnchorConflicts(ctx, payload, item.ProjectID)
-	if err != nil {
-		return nil, err
-	}
-	if len(conflicts) > 0 {
-		parts := make([]string, 0, len(conflicts))
-		for _, conflict := range conflicts {
-			parts = append(parts, fmt.Sprintf("%s(%s)", conflict["headingAnchor"], conflict["workItemKey"]))
+	// The independent Aims lane keeps its original pre-transaction validation.
+	// Host receipt replay must pass through current authorization before business
+	// preconditions that a successful earlier command has already changed.
+	if !validDeliverableReceiptIdentity(ctx) {
+		if !allowedDecomposeTemplateKeys[stringValue(item.TemplateKey)] {
+			return nil, httperror.New(http.StatusBadRequest, "unsupported_decompose_item", "当前工作项不支持需求分解")
 		}
-		return nil, httperror.New(http.StatusConflict, "duplicate_decompose_anchor", "以下章节已被分解："+strings.Join(parts, ", ")+"，请刷新页面后重试")
+		if item.ApprovalStatus == "pending" {
+			return nil, httperror.New(http.StatusBadRequest, "approval_pending", "当前分解任务已提交审批，无法再次提交")
+		}
+		conflicts, err := a.decomposeSubmitAnchorConflicts(ctx, payload, item.ProjectID)
+		if err != nil {
+			return nil, err
+		}
+		if len(conflicts) > 0 {
+			parts := make([]string, 0, len(conflicts))
+			for _, conflict := range conflicts {
+				parts = append(parts, fmt.Sprintf("%s(%s)", conflict["headingAnchor"], conflict["workItemKey"]))
+			}
+			return nil, httperror.New(http.StatusConflict, "duplicate_decompose_anchor", "以下章节已被分解："+strings.Join(parts, ", ")+"，请刷新页面后重试")
+		}
 	}
-
-	tx, err := a.DB().BeginTx(ctx, nil)
+	tx, repo, err := a.beginDeliverableWrite(ctx)
 	if err != nil {
 		return nil, err
 	}
 	defer tx.Rollback()
+	identity, _ := ctx.Value(enterpriseProjectCommandScopeKey{}).(EnterpriseProjectUpdateIdentity)
+	if err := requireEnterpriseProjectCommandScopeTx(ctx, tx, identity, strconv.FormatInt(item.ProjectID, 10), workItemID, "decompose-submit"); err != nil {
+		return nil, err
+	}
+	if identity.CommandScope != nil {
+		var leader string
+		if err := tx.QueryRowContext(ctx, "SELECT COALESCE(leader_uid,'') FROM aims_projects WHERE id=? FOR UPDATE", item.ProjectID).Scan(&leader); err != nil {
+			return nil, err
+		}
+		if err := requireEnterpriseProjectManagerTx(ctx, tx, identity, strconv.FormatInt(item.ProjectID, 10), leader); err != nil {
+			return nil, err
+		}
+	}
+	lockedItem, err := decomposeSubmitSourceItemFrom(ctx, tx, workItemID, true)
+	if err != nil {
+		return nil, err
+	}
+	if lockedItem == nil || lockedItem.ProjectID != item.ProjectID {
+		return nil, httperror.New(http.StatusConflict, "work_item_project_changed", "工作项归属已变化")
+	}
+	item = lockedItem
+	write := func(writeCtx context.Context) (map[string]any, error) {
+		if !allowedDecomposeTemplateKeys[stringValue(item.TemplateKey)] || item.ApprovalStatus == "pending" {
+			return nil, httperror.New(http.StatusConflict, "decompose_source_changed", "分解源已变化，请刷新后重试")
+		}
+		conflicts, err := a.decomposeSubmitAnchorConflicts(writeCtx, payload, item.ProjectID)
+		if err != nil {
+			return nil, err
+		}
+		if len(conflicts) > 0 {
+			parts := make([]string, 0, len(conflicts))
+			for _, conflict := range conflicts {
+				parts = append(parts, fmt.Sprintf("%s(%s)", conflict["headingAnchor"], conflict["workItemKey"]))
+			}
+			return nil, httperror.New(http.StatusConflict, "duplicate_decompose_anchor", "以下章节已被分解："+strings.Join(parts, ", ")+"，请刷新页面后重试")
+		}
+		return a.finishDecomposeSubmit(writeCtx, tx, item, payload, uid)
+	}
+	var result map[string]any
+	if repo == nil {
+		result, err = write(ctx)
+	} else {
+		result, err = executeLegacyWorkItemReceipt(ctx, tx, repo, legacyWorkItemReceiptConfig[map[string]any]{Action: "decompose-submit", Capability: "aims:work-item-decomposition:edit", BizType: "work-item-decomposition", Command: map[string]any{"workItemId": workItemID, "payload": body}, BizCode: func(value map[string]any) string { return fmt.Sprint(value["executionId"]) }, Replay: func(ctx context.Context, code string) (map[string]any, error) {
+			return replayDecomposeSubmit(ctx, tx, item.ProjectID, item.ID, code)
+		}, Decorate: func(value map[string]any, receipt string, existing bool) map[string]any {
+			out := decorateLegacyWorkItemMap(value, receipt, existing)
+			out["replayed"] = existing
+			return out
+		}}, write)
+	}
+	if err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+	return result, nil
+}
 
+func (a *Adapter) finishDecomposeSubmit(ctx context.Context, tx *sql.Tx, item *decomposeSubmitSourceItem, payload decomposeSubmitPayload, uid string) (map[string]any, error) {
 	created := make([]decomposeCreatedWorkItem, 0)
 	for _, payloadItem := range payload.Items {
 		targetNumber, err := nextDecomposeItemNumber(ctx, tx, item.ProjectID)
@@ -228,28 +291,124 @@ func (a *Adapter) workItemDecomposeSubmit(ctx context.Context, workItemID string
 	`, nextStatus, nextApproval, item.ID); err != nil {
 		return nil, err
 	}
-
-	if err := tx.Commit(); err != nil {
-		return nil, err
+	var executionID int64
+	if identity, enterprise := ctx.Value(enterpriseProjectCommandScopeKey{}).(EnterpriseProjectUpdateIdentity); enterprise && identity.IdempotencyKey != "" {
+		ids := make([]int64, 0, len(created))
+		for _, child := range created {
+			ids = append(ids, child.ID)
+		}
+		changes, err := json.Marshal(map[string]any{"createdIds": ids, "timeEntryId": timeEntryID})
+		if err != nil {
+			return nil, err
+		}
+		log, err := tx.ExecContext(ctx, "INSERT INTO project_activity_logs(project_id,object_type,object_code,action,actor_uid,changes,request_id) VALUES(?,'work_item',?,'decompose-submit',?,?,?)", item.ProjectID, item.ID, uid, changes, identity.IdempotencyKey)
+		if err != nil {
+			return nil, err
+		}
+		executionID, err = log.LastInsertId()
+		if err != nil {
+			return nil, err
+		}
 	}
 
-	return map[string]any{
+	result := map[string]any{
 		"createdWorkItems":             created,
 		"timeEntryId":                  timeEntryID,
 		"sourceWorkItemStatus":         nextStatus,
 		"sourceWorkItemApprovalStatus": nextApproval,
-	}, nil
+	}
+	if executionID > 0 {
+		result["executionId"] = executionID
+	}
+	return result, nil
+}
+
+func replayDecomposeSubmit(ctx context.Context, tx *sql.Tx, expectedProjectID, sourceID int64, code string) (map[string]any, error) {
+	executionID, err := strconv.ParseInt(code, 10, 64)
+	if err != nil || executionID <= 0 {
+		return nil, httperror.New(409, "receipt_result_unavailable", "Work item receipt result is unavailable")
+	}
+	identity, ok := ctx.Value(enterpriseProjectCommandScopeKey{}).(EnterpriseProjectUpdateIdentity)
+	if !ok || identity.IdempotencyKey == "" {
+		return nil, httperror.New(409, "receipt_result_unavailable", "Work item receipt result is unavailable")
+	}
+	var changes []byte
+	var projectID int64
+	var actor, requestID string
+	err = tx.QueryRowContext(ctx, "SELECT project_id,actor_uid,request_id,changes FROM project_activity_logs WHERE id=? AND object_type='work_item' AND object_code=? AND action='decompose-submit'", executionID, sourceID).Scan(&projectID, &actor, &requestID, &changes)
+	if err == sql.ErrNoRows {
+		return nil, httperror.New(409, "receipt_result_unavailable", "Work item receipt result is unavailable")
+	}
+	if err != nil {
+		return nil, err
+	}
+	if projectID != expectedProjectID || actor != identity.ActorUID || requestID != identity.IdempotencyKey {
+		return nil, httperror.New(409, "receipt_result_unavailable", "Work item receipt result is unavailable")
+	}
+	var saved struct {
+		CreatedIDs  []int64 `json:"createdIds"`
+		TimeEntryID int64   `json:"timeEntryId"`
+	}
+	if err := json.Unmarshal(changes, &saved); err != nil || saved.TimeEntryID <= 0 || len(saved.CreatedIDs) == 0 {
+		return nil, httperror.New(409, "receipt_result_unavailable", "Work item receipt result is unavailable")
+	}
+	seen := map[int64]bool{}
+	for _, childID := range saved.CreatedIDs {
+		if childID <= 0 || seen[childID] {
+			return nil, httperror.New(409, "receipt_result_unavailable", "Work item receipt result is unavailable")
+		}
+		seen[childID] = true
+	}
+	created := make([]decomposeCreatedWorkItem, 0, len(saved.CreatedIDs))
+	for _, childID := range saved.CreatedIDs {
+		var child decomposeCreatedWorkItem
+		err := tx.QueryRowContext(ctx, "SELECT id,item_key,tier,type FROM work_items WHERE id=? AND project_id=? AND decomposition_source_id=?", childID, projectID, sourceID).Scan(&child.ID, &child.ItemKey, &child.Tier, &child.Type)
+		if err == sql.ErrNoRows {
+			continue
+		}
+		if err != nil {
+			return nil, err
+		}
+		child.Role = child.Tier
+		created = append(created, child)
+	}
+	var status, approval string
+	if err := tx.QueryRowContext(ctx, "SELECT status,approval_status FROM work_items WHERE id=? AND project_id=?", sourceID, projectID).Scan(&status, &approval); err != nil {
+		return nil, err
+	}
+	var timeEntryProject int64
+	err = tx.QueryRowContext(ctx, "SELECT project_id FROM time_entries WHERE id=?", saved.TimeEntryID).Scan(&timeEntryProject)
+	if err != nil && err != sql.ErrNoRows {
+		return nil, err
+	}
+	var timeEntryID any
+	if err == nil && timeEntryProject == projectID {
+		timeEntryID = saved.TimeEntryID
+	}
+	return map[string]any{"executionId": executionID, "createdWorkItems": created, "timeEntryId": timeEntryID, "sourceWorkItemStatus": status, "sourceWorkItemApprovalStatus": approval}, nil
 }
 
 func (a *Adapter) decomposeSubmitSourceItem(ctx context.Context, workItemID string) (*decomposeSubmitSourceItem, error) {
-	row := a.DB().QueryRowContext(ctx, `
+	return decomposeSubmitSourceItemFrom(ctx, a.DB(), workItemID, false)
+}
+
+type decomposeSubmitQuerier interface {
+	QueryRowContext(context.Context, string, ...any) *sql.Row
+}
+
+func decomposeSubmitSourceItemFrom(ctx context.Context, db decomposeSubmitQuerier, workItemID string, lock bool) (*decomposeSubmitSourceItem, error) {
+	query := `
 		SELECT
 			wi.id, wi.project_id, p.project_code, wi.milestone_id, wi.item_key, wi.title,
 			wi.priority, wi.template_key, wi.review_level, wi.approval_status, wi.status
 		FROM work_items wi
 		JOIN aims_projects p ON p.id = wi.project_id
 		WHERE wi.id = ?
-	`, workItemID)
+	`
+	if lock {
+		query += " FOR UPDATE"
+	}
+	row := db.QueryRowContext(ctx, query, workItemID)
 
 	var item decomposeSubmitSourceItem
 	var templateKey, approvalStatus sql.NullString

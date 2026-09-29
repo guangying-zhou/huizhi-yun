@@ -25,3 +25,26 @@ test('coordination rejects malformed facts before authorization and preserves se
   const outage = new Error('authorization unavailable')
   await assert.rejects(filterExecutionCoordination(value, 'P', 1, 1, 20, async () => { throw outage }), err => err === outage)
 })
+
+test('coordination sums safe integer counters exactly without overflowing Number', async () => {
+  const maximum = Number.MAX_SAFE_INTEGER
+  const exact = {
+    ...value,
+    target_count: maximum,
+    incomplete_target_count: maximum,
+    total_weight: maximum,
+    completed_weight: maximum,
+    projects: [
+      { ...counts, project_id: 1, target_count: maximum - 1, incomplete_target_count: maximum - 1, total_weight: maximum - 1, completed_weight: maximum - 1 },
+      { ...counts, project_id: 2, target_count: 1, incomplete_target_count: 1, total_weight: 1, completed_weight: 1 }
+    ]
+  }
+  const result = await filterExecutionCoordination(exact, 'P', 1, 1, 20, async () => true)
+  assert.equal(result.total_weight, maximum)
+  assert.equal(result.projects.length, 2)
+
+  await assert.rejects(filterExecutionCoordination({
+    ...exact,
+    projects: exact.projects.map((project, index) => index ? { ...project, total_weight: 2 } : project)
+  }, 'P', 1, 1, 20, async () => true), /协调汇总与项目统计不一致/)
+})

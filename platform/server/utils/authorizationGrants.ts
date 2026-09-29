@@ -206,6 +206,7 @@ const KNOWN_SCOPE_PREDICATES = new Set([
   'tree',
   'code',
   'member',
+  'manager',
   'owner',
   'team',
   'assigned'

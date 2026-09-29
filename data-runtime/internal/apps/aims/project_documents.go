@@ -3,7 +3,10 @@ package aims
 import (
 	"context"
 	"database/sql"
+	"errors"
+
 	"fmt"
+	"github.com/go-sql-driver/mysql"
 	"net/http"
 	"net/url"
 	"strings"
@@ -90,6 +93,10 @@ func (a *Adapter) handleProjectDocumentRuntime(ctx context.Context, method strin
 			return data, "aims.projects.documents.replace", true, err
 		}
 	}
+	if projectIDText, documentIDText, matched := nestedPathParam(path, "/v1/aims/projects/", "/documents/"); matched && method == http.MethodGet {
+		data, err := a.projectDocumentDetail(ctx, projectIDText, documentIDText, query)
+		return data, "aims.projects.documents.detail", true, err
+	}
 
 	projectIDText, ok = pathParam(path, "/v1/aims/projects/", "/codocs-project-documents-context")
 	if ok && method == http.MethodGet {
@@ -101,6 +108,43 @@ func (a *Adapter) handleProjectDocumentRuntime(ctx context.Context, method strin
 		return nil, "", false, nil
 	}
 	return nil, "", true, httperror.New(http.StatusNotImplemented, "runtime_action_not_supported", "This tenant-runtime adapter does not support the requested action yet")
+}
+
+func (a *Adapter) projectDocumentDetail(ctx context.Context, projectIDText string, documentIDText string, query url.Values) (map[string]any, error) {
+	if strings.TrimSpace(query.Get("current_user")) == "" {
+		return nil, httperror.New(http.StatusUnauthorized, "missing_current_user", "current_user is required")
+	}
+	if err := a.requireProjectReadAccess(ctx, projectIDText, query); err != nil {
+		return nil, err
+	}
+	projectID, err := parseID(projectIDText, "project_id")
+	if err != nil {
+		return nil, err
+	}
+	documentID, err := parseID(documentIDText, "document_id")
+	if err != nil {
+		return nil, err
+	}
+	rows, err := a.DB().QueryContext(ctx, `
+		SELECT id, uuid, title, doc_category, codocs_uuid,
+		       document_source, repo_project_code, repo_file_path, repo_commit_id,
+		       created_by, DATE_FORMAT(created_at, '%Y-%m-%d %H:%i:%s') AS created_at
+		FROM project_documents
+		WHERE id = ? AND project_id = ? AND work_item_id IS NULL AND is_folder = 0
+		LIMIT 1
+	`, documentID, projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items, err := aimsRowsToMaps(rows)
+	if err != nil {
+		return nil, err
+	}
+	if len(items) != 1 {
+		return nil, httperror.New(http.StatusNotFound, "project_document_not_found", "project document not found")
+	}
+	return mapProjectDocumentResponse(items[0]), nil
 }
 
 func (a *Adapter) createDirectDocument(ctx context.Context, query url.Values, body map[string]any) (map[string]any, error) {
@@ -138,13 +182,7 @@ func (a *Adapter) createDirectDocument(ctx context.Context, query url.Values, bo
 
 	isFolder := bodyBool(body, "is_folder", "isFolder")
 	documentSource := normalizeDocumentSource(body)
-	result, err := a.DB().ExecContext(ctx, `
-		INSERT INTO project_documents
-		  (uuid, portfolio_id, project_id, project_code, milestone_id, work_item_id, parent_id,
-		   title, doc_category, is_folder, oss_path, codocs_uuid, document_source,
-		   repo_project_code, repo_file_path, repo_commit_id, content_size, created_by, updated_by)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-	`,
+	args := []any{
 		docUUID,
 		nullableInt64Value(owner.PortfolioID),
 		nullableInt64Value(owner.ProjectID),
@@ -164,11 +202,38 @@ func (a *Adapter) createDirectDocument(ctx context.Context, query url.Values, bo
 		int64BodyValue(body, "content_size", "contentSize"),
 		currentUser,
 		currentUser,
-	)
-	if err != nil {
-		return nil, err
 	}
-	id, _ := result.LastInsertId()
+	result, err := a.DB().ExecContext(ctx, `
+		INSERT INTO project_documents
+		  (uuid, portfolio_id, project_id, project_code, milestone_id, work_item_id, parent_id,
+		   title, doc_category, is_folder, oss_path, codocs_uuid, document_source,
+		   repo_project_code, repo_file_path, repo_commit_id, content_size, created_by, updated_by)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, args...)
+	var id int64
+	if err != nil {
+		var duplicate *mysql.MySQLError
+		if !errors.As(err, &duplicate) || duplicate.Number != 1062 {
+			return nil, err
+		}
+		// Re-authorized above, and every creation field must still match.
+		// A UUID collision never permits updating another document.
+		err = a.DB().QueryRowContext(ctx, `SELECT id FROM project_documents WHERE
+		  uuid = ? AND portfolio_id <=> ? AND project_id <=> ? AND project_code <=> ?
+		  AND milestone_id <=> ? AND work_item_id <=> ? AND parent_id <=> ?
+		  AND title = ? AND doc_category <=> ? AND is_folder = ? AND oss_path <=> ?
+		  AND codocs_uuid <=> ? AND document_source <=> ? AND repo_project_code <=> ?
+		  AND repo_file_path <=> ? AND repo_commit_id <=> ? AND content_size = ?
+		  AND created_by = ? AND updated_by = ? LIMIT 1`, args...).Scan(&id)
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, httperror.New(http.StatusConflict, "document_uuid_conflict", "Document UUID already belongs to a different creation")
+		}
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		id, _ = result.LastInsertId()
+	}
 
 	folderPath, err := a.directDocumentFolderPath(ctx, parentID)
 	if err != nil {

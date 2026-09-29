@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import { useAimsModule } from '../../../layer/useAimsModule'
+
+const { moduleUrl, cacheKey, hosted } = useAimsModule()
 const props = defineProps<{ productCode: string, disabled?: boolean }>()
 interface Project { id: number, project_code: string, name: string, category: string, lifecycle_status: string }
 const selected = defineModel<Project | null>({ default: null })
@@ -9,9 +12,9 @@ const { search, debounced, flush } = useDebouncedSearch({
     page.value = 1
   }
 })
-const { data, status, error, refresh } = useFetch('/api/v1/projects', {
-  server: false,
-  query: computed(() => ({ product_code: props.productCode, category: 'product_dev', lifecycle_status: 'active', search: debounced.value || undefined, page: page.value, pageSize })),
+const { data, status, error, refresh } = useFetch(() => hosted ? moduleUrl(`/api/v1/products/${encodeURIComponent(props.productCode)}/handoff/projects`) : '/api/v1/projects', {
+  server: false, key: computed(() => cacheKey('handoff-projects:' + props.productCode)),
+  query: computed(() => ({ ...(hosted ? {} : { product_code: props.productCode, category: 'product_dev', lifecycle_status: 'active' }), search: debounced.value || undefined, page: page.value, pageSize })),
   transform: (response: { code: number, data: { items: Project[], total: number } }) => {
     const result = response.data
     if (response.code !== 0 || !Array.isArray(result?.items) || !Number.isSafeInteger(result.total) || result.total < 0 || result.items.some(item => !Number.isSafeInteger(item.id) || item.id < 1 || !item.project_code || typeof item.name !== 'string' || item.category !== 'product_dev' || item.lifecycle_status !== 'active')) throw new Error('项目列表响应不完整')

@@ -2,6 +2,8 @@
 const colorMode = useColorMode()
 const { user } = useAuth()
 const config = useRuntimeConfig()
+const route = useRoute()
+const editorShell = computed(() => route.meta.publicEditorShell === true)
 
 const color = computed(() => colorMode.value === 'dark' ? '#1b1718' : 'white')
 const appBaseURL = String(config.app?.baseURL || '/')
@@ -10,7 +12,7 @@ const faviconPath = `${appBaseURL}${'favicon.png'}`.replace(/\/{2,}/g, '/')
 // 全局快捷创建文档 Ctrl+K / ⌘+K（仅登录后生效）
 const { registerShortcut } = useQuickCreateDoc()
 watch(user, (uid) => {
-  if (uid) registerShortcut()
+  if (uid && !editorShell.value) registerShortcut()
 }, { immediate: true })
 
 useHead({
@@ -28,7 +30,7 @@ useHead({
 })
 
 // 应用信息（从 Account 获取，兜底"汇智云"）
-const { appName, appLogo } = useAppInfo()
+const { appName, appLogo } = useAppInfo({ loadOnMount: !editorShell.value })
 
 useSeoMeta({
   title: appName,
@@ -58,6 +60,6 @@ onErrorCaptured((err: Error) => {
       <NuxtPage :transition="false" />
     </NuxtLayout>
 
-    <QuickCreateDocModal v-if="user" />
+    <QuickCreateDocModal v-if="user && !editorShell" />
   </UApp>
 </template>

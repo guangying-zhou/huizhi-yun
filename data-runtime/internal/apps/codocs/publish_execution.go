@@ -63,15 +63,19 @@ type publishExecutionRow struct {
 }
 
 type publishArchivePlan struct {
-	ArchiveKey              string
-	ArchiveLabel            string
-	ArchiveOSSPath          string
-	PublishedDocumentUUID   string
-	PublishedDocumentType   string
-	InitialExecutionStatus  string
-	NeedsOfficialSeal       bool
-	PublishScope            string
-	SourceOSSPath           string
+	ArchiveKey             string
+	ArchiveLabel           string
+	ArchiveOSSPath         string
+	PublishedDocumentUUID  string
+	PublishedDocumentType  string
+	InitialExecutionStatus string
+	NeedsOfficialSeal      bool
+	PublishScope           string
+	SourceOSSPath          string
+	// SourceBodyRef is set instead of SourceOSSPath when the source has no
+	// frozen review copy and lives in a v2 snapshot: the exact published
+	// version, never the derived mirror.
+	SourceBodyRef           *DocumentBodyRef
 	SourceDocumentType      string
 	ReviewSnapshotOSSPath   string
 	SourceDepartmentCode    string
@@ -254,7 +258,7 @@ func buildPublishArchivePlan(row publishExecutionRow) (publishArchivePlan, error
 }
 
 func publishArchivePlanResponse(row publishExecutionRow, plan publishArchivePlan, alreadyArchived bool) map[string]any {
-	return map[string]any{
+	response := map[string]any{
 		"publishRequestId":          row.ID,
 		"alreadyArchived":           alreadyArchived,
 		"sourceOssPath":             plan.SourceOSSPath,
@@ -276,6 +280,10 @@ func publishArchivePlanResponse(row publishExecutionRow, plan publishArchivePlan
 		"sourceDocumentUuid":        row.DocumentUUID,
 		"sourceDocumentContentSize": row.DocumentContentSize,
 	}
+	if plan.SourceBodyRef != nil {
+		response["sourceBodyRef"] = plan.SourceBodyRef.Map()
+	}
+	return response
 }
 
 func validatePublishArchiveState(row publishExecutionRow, actorUID string) error {
@@ -335,6 +343,19 @@ func (a *Adapter) preparePublishArchive(ctx context.Context, rawID string, query
 	}
 	if err := tx.Commit(); err != nil {
 		return nil, err
+	}
+	// Without a frozen review copy the body is read from the live document. A
+	// v2 document's mirror may be stale, so hand out the exact published
+	// version instead and withhold the mirror path. Resolved after the plan
+	// transaction so no nested read runs under its locks.
+	if plan.ReviewSnapshotOSSPath == "" {
+		ref, err := a.resolveDocumentBodyRef(ctx, row.DocumentUUID)
+		if err != nil {
+			return nil, err
+		}
+		if ref != nil {
+			plan.SourceBodyRef, plan.SourceOSSPath = ref, ""
+		}
 	}
 	return publishArchivePlanResponse(row, plan, false), nil
 }

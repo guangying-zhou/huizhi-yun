@@ -1,4 +1,5 @@
 import type { RouteLocationNormalized } from 'vue-router'
+import { isLoggedOutLoginRoute, isLoginRoutePath, loginRedirectTarget } from '../utils/loginRoute'
 
 type JwtClaims = {
   exp?: number
@@ -113,16 +114,8 @@ function isTokenActive(claims: JwtClaims | null) {
   return claims.exp > Math.floor(Date.now() / 1000) + 15
 }
 
-function resolveRedirectUrl(to: RouteLocationNormalized) {
-  return useAppUrls().resolveCurrentAppUrl(to.fullPath)
-}
-
 function resolveDisplayName(claims: JwtClaims | null, uid: string) {
   return String(claims?.real_name || claims?.name || claims?.nickname || uid || '').trim()
-}
-
-function isLoggedOutRoute(to: RouteLocationNormalized) {
-  return to.path === '/login' && (to.query.logged_out === '1' || to.query.state === 'logged_out')
 }
 
 function cookieScope(value: unknown) {
@@ -142,8 +135,13 @@ function getOidcCookieNames(pub: Record<string, unknown>) {
     uid: `hzy_${scope}_uid`,
     tenant: `hzy_${scope}_tenant`,
     subjectCode: `hzy_${scope}_subject_code`,
-    policyVersion: `hzy_${scope}_policy_ver`
+    policyVersion: `hzy_${scope}_policy_ver`,
+    sessionExpiry: `hzy_${scope}_session_exp`
   } as const
+}
+
+function publicFlag(value: unknown) {
+  return value === true || String(value || '').trim().toLowerCase() === 'true'
 }
 
 function readBrowserCookie(name: string) {
@@ -166,6 +164,8 @@ export function useConsoleOidcAuth() {
   const config = useRuntimeConfig()
   const pub = (config.public || {}) as Record<string, unknown>
   const { resolveCurrentAppUrl } = useAppUrls()
+  const authPrefix = pub.authApiPrefix === '/enterprise' && pub.appCode === 'enterprise' ? '/enterprise' : ''
+  const resolveAuthUrl = (path: string) => authPrefix ? `${authPrefix}${path}` : resolveCurrentAppUrl(path)
   const authMode = String(pub.authMode || '').trim()
   const legacyAuthBridge = pub.legacyAuthBridge === true || String(pub.legacyAuthBridge || '').toLowerCase() === 'true'
   const consoleUrl = String(pub.consoleUrl || '').trim()
@@ -173,13 +173,18 @@ export function useConsoleOidcAuth() {
   const { cookieOptions } = useCookieOptions()
   const opts = cookieOptions()
   const cookieNames = getOidcCookieNames(pub)
+  // HttpOnly mode (Enterprise Host): the server keeps the access/ID tokens in
+  // HttpOnly cookies, so browser code never sees them. Session liveness comes
+  // from the non-secret uid + session-expiry cookies instead.
+  const httpOnlyTokens = publicFlag(pub.oidcHttpOnlyTokens)
 
-  const token = useCookie<string | null | undefined>(cookieNames.accessToken, opts)
+  const tokenCookie = useCookie<string | null | undefined>(cookieNames.accessToken, opts)
   const idToken = useCookie<string | null | undefined>(cookieNames.idToken, opts)
   const userCookie = useCookie<string | null | undefined>(cookieNames.uid, opts)
   const tenantCookie = useCookie<string | null | undefined>(cookieNames.tenant, opts)
   const subjectCodeCookie = useCookie<string | null | undefined>(cookieNames.subjectCode, opts)
   const policyVersionCookie = useCookie<string | null | undefined>(cookieNames.policyVersion, opts)
+  const sessionExpiryCookie = useCookie<string | number | null | undefined>(cookieNames.sessionExpiry, opts)
 
   const legacyToken = useCookie<string | null | undefined>('hzy_access_token', opts)
   const legacyIdToken = useCookie<string | null | undefined>('hzy_id_token', opts)
@@ -189,7 +194,24 @@ export function useConsoleOidcAuth() {
   const legacyPolicyVersionCookie = useCookie<string | null | undefined>('hzy_policy_ver', opts)
   const serverValidatedTokenKey = useState<string>('console-oidc-server-validated-token', () => '')
 
-  const claims = computed(() => decodeJwtClaims(token.value))
+  const sessionClaims = computed<JwtClaims | null>(() => {
+    const exp = Number(sessionExpiryCookie.value)
+    const uid = String(userCookie.value || '').trim()
+    if (!Number.isSafeInteger(exp) || exp <= 0 || !uid) return null
+    return {
+      exp,
+      sub: `user:${uid}`,
+      tenant: String(tenantCookie.value || '').trim() || undefined,
+      policy_ver: String(policyVersionCookie.value || '').trim() || undefined,
+      hzy: { uid, subjectCode: String(subjectCodeCookie.value || '').trim() || undefined }
+    }
+  })
+  // In HttpOnly mode `token` is a non-secret session marker that changes with
+  // every rotation, so renewal scheduling and session watchers keep working.
+  const token = httpOnlyTokens
+    ? computed(() => sessionClaims.value ? `session:${sessionClaims.value.hzy?.uid}:${sessionClaims.value.exp}` : null)
+    : tokenCookie
+  const claims = computed(() => httpOnlyTokens ? sessionClaims.value : decodeJwtClaims(tokenCookie.value))
   const idClaims = computed(() => decodeJwtClaims(idToken.value))
   const user = computed(() => String(userCookie.value || claims.value?.hzy?.uid || claims.value?.sub?.replace(/^user:/, '') || '').trim())
   const userEmail = computed(() => String(idClaims.value?.email || claims.value?.email || '').trim() || null)
@@ -206,8 +228,12 @@ export function useConsoleOidcAuth() {
   const authenticated = computed(() => Boolean(enabled.value && token.value && user.value && isTokenActive(claims.value)))
 
   function clearLocalOidcState() {
-    token.value = null
-    idToken.value = null
+    if (httpOnlyTokens) {
+      sessionExpiryCookie.value = null
+    } else {
+      tokenCookie.value = null
+      idToken.value = null
+    }
     userCookie.value = null
     tenantCookie.value = null
     subjectCodeCookie.value = null
@@ -223,8 +249,12 @@ export function useConsoleOidcAuth() {
   function syncOidcCookiesFromBrowser() {
     if (!import.meta.client) return
 
-    token.value = readBrowserCookie(cookieNames.accessToken)
-    idToken.value = readBrowserCookie(cookieNames.idToken)
+    if (httpOnlyTokens) {
+      sessionExpiryCookie.value = readBrowserCookie(cookieNames.sessionExpiry)
+    } else {
+      tokenCookie.value = readBrowserCookie(cookieNames.accessToken)
+      idToken.value = readBrowserCookie(cookieNames.idToken)
+    }
     userCookie.value = readBrowserCookie(cookieNames.uid)
     tenantCookie.value = readBrowserCookie(cookieNames.tenant)
     subjectCodeCookie.value = readBrowserCookie(cookieNames.subjectCode)
@@ -240,11 +270,11 @@ export function useConsoleOidcAuth() {
   async function login(redirect?: string) {
     const target = redirect || (import.meta.client ? window.location.href : '/')
     const query = new URLSearchParams({ redirect: target })
-    return navigateTo(resolveCurrentAppUrl(`/api/auth/oidc-login?${query.toString()}`), { external: true })
+    return navigateTo(resolveAuthUrl(`/api/auth/oidc-login?${query.toString()}`), { external: true })
   }
 
   async function logout() {
-    return navigateTo(resolveCurrentAppUrl('/api/auth/logout?state=logged_out'), { external: true })
+    return navigateTo(resolveAuthUrl('/api/auth/logout?state=logged_out'), { external: true })
   }
 
   async function refresh() {
@@ -255,7 +285,7 @@ export function useConsoleOidcAuth() {
       hasActiveToken: () => isTokenActive(claims.value),
       syncCookies: syncOidcCookiesFromBrowser,
       performRefresh: async () => {
-        await $fetch(resolveCurrentAppUrl('/api/auth/refresh'), { method: 'POST' })
+        await $fetch(resolveAuthUrl('/api/auth/refresh'), { method: 'POST' })
       },
       withCrossTabLock: lockManager
         ? (name, task) => lockManager.request(name, task)
@@ -268,7 +298,7 @@ export function useConsoleOidcAuth() {
   async function getServerSession() {
     try {
       return await $fetch<ConsoleServerSession>(
-        resolveCurrentAppUrl('/api/auth/me'),
+        resolveAuthUrl('/api/auth/me'),
         { credentials: 'include' }
       )
     } catch {
@@ -318,8 +348,8 @@ export function useConsoleOidcAuth() {
       return
     }
 
-    if (to.path === '/login') {
-      if (isLoggedOutRoute(to)) {
+    if (isLoginRoutePath(pub, to.path)) {
+      if (isLoggedOutLoginRoute(pub, to)) {
         clearLocalOidcState()
       }
       return
@@ -335,7 +365,7 @@ export function useConsoleOidcAuth() {
       }
 
       clearLocalOidcState()
-      return login(resolveRedirectUrl(to))
+      return login(loginRedirectTarget(pub, to, resolveCurrentAppUrl))
     }
 
     if (await recoverServerSession()) {
@@ -343,7 +373,7 @@ export function useConsoleOidcAuth() {
     }
 
     clearLocalOidcState()
-    return login(resolveRedirectUrl(to))
+    return login(loginRedirectTarget(pub, to, resolveCurrentAppUrl))
   }
 
   return {

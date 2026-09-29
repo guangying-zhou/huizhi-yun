@@ -25,6 +25,6 @@ test('distributed targets expose an explicit start execution action', () => {
   assert.match(startGuard, /item\.status === 'todo'/)
   assert.match(startGuard, /children\.every\(child => child\.status !== 'planning'\)/)
   assert.match(startGuard, /isProjectLeader\.value/)
-  assert.match(startAction, /body: \{ status: 'in_progress' \}/)
+  assert.match(startAction, /runTreeAction\('update-status', 'in_progress'\)/)
   assert.match(source, /v-if="canStartTargetExecution"[\s\S]*?label="开始执行"/)
 })

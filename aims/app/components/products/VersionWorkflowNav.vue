@@ -1,9 +1,12 @@
 <script setup lang="ts">
+import { useAimsModule } from '../../../layer/useAimsModule'
+
+const { moduleUrl } = useAimsModule()
 const props = defineProps<{ productCode: string, versionId: string }>()
 const route = useRoute()
-const base = computed(() => `/products/${encodeURIComponent(props.productCode)}/versions/${encodeURIComponent(props.versionId)}`)
+const base = computed(() => moduleUrl(`/products/${encodeURIComponent(props.productCode)}/versions/${encodeURIComponent(props.versionId)}`))
 const query = computed(() => route.query.view === 'gtm' ? { view: 'gtm' } : {})
-const { data: mode, error: modeError, refresh, status } = await useFetch(() => `/api/v1/products/${encodeURIComponent(props.productCode)}/versions/${encodeURIComponent(props.versionId)}`, {
+const { data: mode, error: modeError, refresh, status } = await useFetch(() => moduleUrl(`/api/v1/products/${encodeURIComponent(props.productCode)}/versions/${encodeURIComponent(props.versionId)}`), {
   key: `version-workflow-mode:${props.productCode}:${props.versionId}`,
   server: false,
   transform: (response: { code: number, data: { id: number, product_code: string, planning_mode: 'simple' | 'cycle' } }) => {
@@ -28,7 +31,7 @@ const steps = computed(() => mode.value === 'cycle'
     ]
   : simpleSteps.map(step => ({ ...step, product: false })))
 function stepPath(step: typeof steps.value[number]) {
-  return `${step.product ? `/products/${encodeURIComponent(props.productCode)}` : base.value}${step.path}`
+  return `${step.product ? moduleUrl(`/products/${encodeURIComponent(props.productCode)}`) : base.value}${step.path}`
 }
 function current(step: typeof steps.value[number]) {
   if (step.path === '/plan') return route.path === `${base.value}/plan` && (route.hash || '#version-goal') === step.hash
@@ -41,7 +44,7 @@ function current(step: typeof steps.value[number]) {
   <nav aria-label="版本工作流程" class="mx-auto min-w-0 max-w-7xl space-y-3 border-b border-default px-4 py-3 sm:px-6">
     <div class="flex flex-wrap gap-2">
       <UButton
-        :to="{ path: `/products/${encodeURIComponent(productCode)}/versions`, query }"
+        :to="{ path: moduleUrl(`/products/${encodeURIComponent(productCode)}/versions`), query }"
         color="neutral"
         variant="ghost"
         size="sm"

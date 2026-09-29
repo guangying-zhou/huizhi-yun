@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { projectModuleEnabled } from '~/utils/projectModuleConfig'
+import { releaseStatusBadge } from '../../../utils/projectDeliverablePresentation'
 
 definePageMeta({
   layoutHeader: true,
@@ -114,20 +115,6 @@ const attachForm = reactive({
   workItemIds: [] as number[],
   featureId: null as number | null
 })
-
-const statusLabel: Record<string, string> = {
-  planning: '规划中',
-  developing: '开发中',
-  released: '已发布',
-  archived: '已归档'
-}
-
-const statusColor: Record<string, string> = {
-  planning: 'neutral',
-  developing: 'info',
-  released: 'success',
-  archived: 'neutral'
-}
 
 const featureStatusLabel: Record<string, string> = {
   planned: '规划',
@@ -464,8 +451,8 @@ onMounted(loadAll)
                       <div class="min-w-0">
                         <div class="flex items-center gap-2">
                           <span class="font-semibold">{{ release.version_code }}</span>
-                          <UBadge :color="(statusColor[release.status] as any)" variant="subtle">
-                            {{ statusLabel[release.status] || release.status }}
+                          <UBadge :color="releaseStatusBadge(release.status).color" variant="subtle">
+                            {{ releaseStatusBadge(release.status).label }}
                           </UBadge>
                         </div>
                         <div class="text-sm text-muted truncate">
@@ -513,8 +500,8 @@ onMounted(loadAll)
                     <h2 class="text-lg font-semibold">
                       {{ selectedRelease.version_code }}
                     </h2>
-                    <UBadge :color="(statusColor[selectedRelease.status] as any)" variant="subtle">
-                      {{ statusLabel[selectedRelease.status] || selectedRelease.status }}
+                    <UBadge :color="releaseStatusBadge(selectedRelease.status).color" variant="subtle">
+                      {{ releaseStatusBadge(selectedRelease.status).label }}
                     </UBadge>
                   </div>
                   <p class="text-sm text-muted">

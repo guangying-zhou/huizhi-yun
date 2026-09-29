@@ -1,10 +1,12 @@
 <script setup lang="ts">
-import type { UpdateProjectRequest, AimsProject } from '~/types/aims'
+import type { UpdateProjectRequest, AimsProject } from '../../types/aims'
 import {
-  methodologyOptions as methodologyOpts,
-  projectSecurityLevelConfig,
-  projectSecurityLevelOptions
-} from '~/config/project'
+  methodologyOptions as methodologyOpts
+} from '../../config/project'
+import ProjectAccessControlFields from './ProjectAccessControlFields.vue'
+import { useAccessibleDepartments } from '../../composables/useAccessibleDepartments'
+import { usePortfolioStore } from '../../stores/portfolio'
+import { useProjectStore } from '../../stores/project'
 
 const props = defineProps<{
   open: boolean
@@ -94,13 +96,6 @@ const form = ref<UpdateProjectRequest>({
   customerName: '',
   oppId: null,
   contractId: null
-})
-const selectedSecurityLevelConfig = computed(() => projectSecurityLevelConfig[form.value.securityLevel || 'company'])
-const accessWhitelist = computed({
-  get: () => form.value.accessWhitelist || [],
-  set: (value: string[]) => {
-    form.value.accessWhitelist = value
-  }
 })
 
 // 名称校验
@@ -325,25 +320,12 @@ const modalOpen = computed({
             />
           </div>
         </UFormField>
-        <UFormField label="可见范围">
-          <div class="space-y-3 rounded-lg border border-default px-3 py-3">
-            <USelect
-              v-model="form.securityLevel"
-              :items="projectSecurityLevelOptions"
-              value-key="value"
-              class="w-full"
-            />
-            <p class="text-xs text-muted">
-              {{ selectedSecurityLevelConfig.description }}
-            </p>
-            <UserTreeSelector
-              v-if="form.securityLevel === 'whitelist'"
-              v-model="accessWhitelist"
-              placeholder="选择白名单用户"
-              width-class="w-full"
-            />
-          </div>
-        </UFormField>
+        <div class="rounded-lg border border-default px-3 py-3">
+          <ProjectAccessControlFields
+            v-model:security-level="form.securityLevel"
+            v-model:access-whitelist="form.accessWhitelist"
+          />
+        </div>
         <div class="grid grid-cols-2 gap-4">
           <UFormField label="客户编码">
             <UInput

@@ -19,13 +19,28 @@ type ProductVersionTransitionInput struct {
 }
 
 func TransitionProductVersion(ctx context.Context, db *sql.DB, identity CommandIdentity, permit AuthorizationPermit, input ProductVersionTransitionInput, sourceContext ...integrationoperation.TrustedContext) (CommandResult, error) {
+	return transitionProductVersion(ctx, identity, permit, input, sourceContext, func(authorize AuthorizeCommand, apply ApplyCommand) (CommandResult, error) {
+		return ExecuteCommand(ctx, db, identity, input, authorize, apply)
+	})
+}
+func TransitionProductVersionInTransaction(ctx context.Context, tx *sql.Tx, identity CommandIdentity, permit AuthorizationPermit, input ProductVersionTransitionInput, sourceContext ...integrationoperation.TrustedContext) (CommandResult, error) {
+	result, err := transitionProductVersion(ctx, identity, permit, input, sourceContext, func(authorize AuthorizeCommand, apply ApplyCommand) (CommandResult, error) {
+		return ExecuteCommandInTransaction(ctx, tx, identity, input, authorize, apply)
+	})
+	if err != nil && tx != nil {
+		_ = tx.Rollback()
+	}
+	return result, err
+}
+func transitionProductVersion(ctx context.Context, identity CommandIdentity, permit AuthorizationPermit, input ProductVersionTransitionInput, sourceContext []integrationoperation.TrustedContext, execute func(AuthorizeCommand, ApplyCommand) (CommandResult, error)) (CommandResult, error) {
+
 	if identity.Action != "product_versions:transition" {
 		return CommandResult{}, invalid("product_command_identity_invalid", "版本状态命令不匹配")
 	}
 	if input.VersionID <= 0 || input.ExpectedRevision == 0 || input.ExpectedVersionRevision == 0 || input.ToStatus != "developing" || !utf8.ValidString(input.Reason) || strings.TrimSpace(input.Reason) == "" || utf8.RuneCountInString(input.Reason) > 2000 || strings.ContainsRune(input.Reason, '\x00') {
 		return CommandResult{}, invalid("product_version_transition_invalid", "只能明确记录原因后进入开发")
 	}
-	return ExecuteCommand(ctx, db, identity, input, func(ctx context.Context, tx *sql.Tx) error {
+	return execute(func(ctx context.Context, tx *sql.Tx) error {
 		return AuthorizeWorkspaceTransaction(ctx, tx, identity.ProductCode, identity.ActorUID, "product_versions", "edit", permit)
 	}, func(ctx context.Context, tx *sql.Tx) (any, error) {
 		root, err := loadWorkspace(ctx, tx, identity.ProductCode)

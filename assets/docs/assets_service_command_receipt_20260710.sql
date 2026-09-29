@@ -42,6 +42,15 @@ CREATE TABLE IF NOT EXISTS service_command_receipt (
   INDEX idx_scr_status_lock (status, locked_until),
   INDEX idx_scr_target_biz (tenant_code, deployment_code, target_app, target_biz_type, target_biz_code),
   INDEX idx_scr_received (received_at),
-  CONSTRAINT chk_scr_cross_app CHECK (source_app <> target_app),
+  CONSTRAINT chk_scr_cross_app CHECK (source_app <> target_app OR (
+    source_app = 'assets' AND target_app = 'assets'
+    AND source_deployment_code = deployment_code
+    AND original_actor_uid IS NOT NULL AND CHAR_LENGTH(TRIM(original_actor_uid)) > 0
+    AND command_schema_version = 'assets-owned-command.v1'
+    AND (
+      (operation_code IN ('assets.products.create.v1', 'assets.products.edit.v1') AND required_capability = 'assets:product:edit')
+      OR (operation_code = 'assets.product-categories.save.v1' AND required_capability = 'assets:admin:admin')
+    )
+  )),
   CONSTRAINT chk_scr_status CHECK (status IN ('processing', 'succeeded', 'rejected'))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='目标服务命令 Inbox 回执；业务 mutation 与 succeeded 必须同事务';

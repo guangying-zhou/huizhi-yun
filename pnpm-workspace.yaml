@@ -2,6 +2,7 @@ shamefullyHoist: true
 
 packages:
   - 'foundation'
+  - 'enterprise'
   - 'foundation/packages/*'
   # legacy 源码保留在 monorepo；默认 active 校验仍排除 account
   - 'account'
@@ -40,4 +41,5 @@ overrides:
   'pptx-preview@1.0.7>uuid': 14.0.1
   'pdfjs-dist@6.3.289>@napi-rs/canvas': 1.0.8
 patchedDependencies:
+  mammoth@1.12.0: patches/mammoth@1.12.0.patch
   nitropack@2.13.4: patches/nitropack@2.13.4.patch

@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs'
 import test from 'node:test'
 
 const page = readFileSync(
-  new URL('../app/pages/directory/departments.vue', import.meta.url),
+  new URL('../../foundation/app/components/DirectoryDepartmentEditor.vue', import.meta.url),
   'utf8'
 )
 
@@ -16,5 +16,5 @@ test('department editing uses valid select values and sends only changed fields'
     page.indexOf('async function deleteDepartment(')
   )
   assert.match(submit, /modalMode\.value === 'create'\s*\? departmentPayload\(\)\s*:\s*departmentChanges\(\)/)
-  assert.match(submit, /method: 'PATCH'[\s\S]*body: payload/)
+  assert.match(submit, /method: modalMode\.value === 'create' \? 'POST' : 'PATCH'[\s\S]*body: payload/)
 })

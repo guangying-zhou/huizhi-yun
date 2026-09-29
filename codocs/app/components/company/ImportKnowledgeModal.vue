@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import type { Department } from '~/types/account'
+import type { Department } from '../../types/account'
+import { useCodocsModule } from '../../../layer/useCodocsModule'
 
 interface SourceFolder { id: number, name: string, parent_id: number | null }
 interface SourceDocument { uuid: string, title: string, updated_at: string }
@@ -23,6 +24,7 @@ const emit = defineEmits<{ 'update:open': [value: boolean], 'imported': [] }>()
 const toast = useToast()
 const isOpen = computed({ get: () => props.open, set: value => emit('update:open', value) })
 const { resolveCurrentAppPath } = useAppUrls()
+const { hosted, moduleUrl } = useCodocsModule()
 const departments = ref<Department[]>([])
 const folders = ref<SourceFolder[]>([])
 const documents = ref<SourceDocument[]>([])
@@ -68,7 +70,7 @@ async function loadSource() {
   loading.value = true
   errorMessage.value = ''
   try {
-    const res = await $fetch<ImportSourceResponse>(resolveCurrentAppPath('/api/company-assets/import-source'), {
+    const res = await $fetch<ImportSourceResponse>(hosted ? moduleUrl('/api/company-assets/import-source') : resolveCurrentAppPath('/api/company-assets/import-source'), {
       params: {
         deptCode: selectedDeptCode.value || undefined,
         folderId: selectedFolderId.value === 'root' ? undefined : selectedFolderId.value,
@@ -137,7 +139,7 @@ async function publish() {
   errorMessage.value = ''
   operationId.value ||= crypto.randomUUID()
   try {
-    const res = await $fetch<ImportResponse>(resolveCurrentAppPath('/api/company-assets/import-documents'), {
+    const res = await $fetch<ImportResponse>(hosted ? moduleUrl('/api/company-assets/import-documents') : resolveCurrentAppPath('/api/company-assets/import-documents'), {
       method: 'POST',
       body: { subdir: props.subdir, targetPath: props.targetPath || undefined, documentUuids: selectedUuids.value, operationId: operationId.value }
     })

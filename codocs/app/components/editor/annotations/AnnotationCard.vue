@@ -58,21 +58,21 @@ const handleReply = () => {
 
 <template>
   <div
-    class="border rounded-lg bg-white dark:bg-gray-800 transition-all duration-200"
+    class="border rounded-lg bg-default transition-all duration-200"
     :class="[
       isResolved ? 'opacity-60' : 'opacity-100',
-      'hover:shadow-md border-gray-200 dark:border-gray-700'
+      'hover:shadow-md border-default'
     ]"
     @click="$emit('click-card', annotation.id)"
   >
     <!-- Header -->
-    <div class="flex items-start justify-between p-3 border-b border-gray-100 dark:border-gray-700/50">
+    <div class="flex items-start justify-between p-3 border-b border-default">
       <div class="flex items-center gap-2">
         <UAvatar :alt="annotation.author_name" size="xs" />
         <div class="flex flex-col">
-          <span class="text-xs font-medium text-gray-900 dark:text-gray-100">{{ annotation.author_name
+          <span class="text-xs font-medium text-default">{{ annotation.author_name
           }}</span>
-          <span class="text-[10px] text-gray-500">{{ formatDate(annotation.created_at) }}</span>
+          <span class="text-[10px] text-muted">{{ formatDate(annotation.created_at) }}</span>
         </div>
       </div>
 
@@ -93,7 +93,7 @@ const handleReply = () => {
             color="neutral"
             variant="ghost"
             size="xs"
-            class="text-red-500 hover:text-red-600"
+            class="text-error hover:text-error"
             title="删除"
             @click.stop="$emit('delete', annotation.id)"
           />
@@ -119,14 +119,14 @@ const handleReply = () => {
     </div>
 
     <!-- Quoted Text (Context) -->
-    <div class="px-3 py-2 bg-gray-50 dark:bg-gray-800/50 border-b border-gray-100 dark:border-gray-700/50">
-      <div class="text-xs text-gray-500 italic border-l-2 border-primary-500 pl-2 line-clamp-2">
+    <div class="px-3 py-2 bg-default border-b border-default">
+      <div class="text-xs text-muted italic border-l-2 border-primary-500 pl-2 line-clamp-2">
         {{ annotation.selected_text }}
       </div>
     </div>
 
     <!-- Content -->
-    <div class="p-3 text-sm text-gray-800 dark:text-gray-200 whitespace-pre-wrap">
+    <div class="p-3 text-sm text-default whitespace-pre-wrap">
       {{ annotation.content }}
     </div>
 
@@ -135,16 +135,16 @@ const handleReply = () => {
       <div
         v-for="reply in annotation.replies"
         :key="reply.id"
-        class="flex gap-2 text-sm pl-2 border-l border-gray-200 dark:border-gray-700"
+        class="flex gap-2 text-sm pl-2 border-l border-default"
       >
         <UAvatar :alt="reply.author_name" size="2xs" class="mt-0.5" />
         <div class="flex-1 min-w-0">
           <div class="flex justify-between items-baseline">
-            <span class="text-xs font-semibold text-gray-700 dark:text-gray-300">{{ reply.author_name
+            <span class="text-xs font-semibold text-default">{{ reply.author_name
             }}</span>
-            <span class="text-[10px] text-gray-400">{{ formatDate(reply.created_at) }}</span>
+            <span class="text-[10px] text-dimmed">{{ formatDate(reply.created_at) }}</span>
           </div>
-          <div class="text-gray-600 dark:text-gray-400 mt-0.5 break-words">
+          <div class="text-muted mt-0.5 break-words">
             {{ reply.content }}
           </div>
         </div>
@@ -168,7 +168,7 @@ const handleReply = () => {
           variant="link"
           color="neutral"
           size="xs"
-          class="p-0 text-gray-400 hover:text-primary-500"
+          class="p-0 text-dimmed hover:text-primary-500"
           @click.stop="showReplyInput = true"
         />
       </div>

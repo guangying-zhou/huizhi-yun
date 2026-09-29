@@ -36,6 +36,17 @@ describe('Console application entry', () => {
     assert.doesNotMatch(applications, /catch \{\s*return \[currentApp\]/)
   })
 
+  test('keeps unavailable enterprise modules visible with their operational reason instead of treating them as purchase gates', () => {
+    const entitlement = source('server/utils/enterpriseEntitlement.ts')
+    const workspace = source('app/pages/index.vue')
+
+    assert.match(entitlement, /availabilityCode: 'module_not_configured'/)
+    assert.match(entitlement, /availabilityCode: 'module_not_deployed'/)
+    assert.match(workspace, /const unavailableApps = computed/)
+    assert.match(workspace, /app\.availabilityMessage/)
+    assert.doesNotMatch(entitlement, /planCode|plan_code|subscription/)
+  })
+
   test('reloads both permissions and application menu when simulation starts or ends', () => {
     const session = source('app/composables/useAuthorizationSimulationSession.ts')
     const applications = source('../foundation/app/composables/useUserApplications.ts')

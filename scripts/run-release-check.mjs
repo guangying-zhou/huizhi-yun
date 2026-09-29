@@ -80,6 +80,7 @@ run(
 run('P3/P4 release manifest discovery behavior', 'node', ['--test', 'scripts/test/p3-p4-release-manifest-discovery.test.mjs'])
 
 const pnpmChecks = [
+  ['Enterprise composed-module alias boundary', 'validate:enterprise-module-aliases'],
   ['monorepo history, tags and secret tracking', 'validate:monorepo-migration'],
   ['Cloudflare deployment command gates', 'validate:cloudflare-deploy-gates'],
   ['tracked environment policy', 'validate:env-tracking'],
@@ -117,6 +118,10 @@ const pnpmChecks = [
 ]
 
 for (const [label, script] of pnpmChecks) run(label, 'corepack', ['pnpm', 'run', script])
+
+for (const module of ['aims', 'assets', 'codocs', 'altoc']) {
+  run(`Enterprise composition owner typecheck: ${module}`, 'corepack', ['pnpm', '--dir', module, 'typecheck'])
+}
 
 run(
   'affected workspace selection behavior',

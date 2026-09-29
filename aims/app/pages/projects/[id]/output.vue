@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { Project } from '~/types/account'
+import { qualityStatusBadge } from '../../../utils/projectDeliverablePresentation'
 
 definePageMeta({
   layoutHeader: true,
@@ -162,23 +163,6 @@ const deliverableStats = computed(() => {
   return { total, approved, submitted, pending }
 })
 
-const deliverableStatusConfig: Record<string, { label: string, color: string }> = {
-  pending: { label: '待提交', color: 'neutral' },
-  submitted: { label: '已提交', color: 'info' },
-  approved: { label: '已通过', color: 'success' },
-  rejected: { label: '已驳回', color: 'error' }
-}
-
-const qualityStatusConfig: Record<string, { label: string, color: string }> = {
-  not_submitted: { label: '未送检', color: 'neutral' },
-  pending: { label: '未送检', color: 'neutral' },
-  preparing_review: { label: '送检准备中', color: 'warning' },
-  awaiting_review: { label: '质量待审', color: 'info' },
-  returned: { label: '质量退回', color: 'error' },
-  passed: { label: '质量通过', color: 'success' },
-  waived: { label: '已豁免', color: 'warning' }
-}
-
 const documentDeliverables = computed(() =>
   deliverables.value.filter(d => d.deliverableType === 'document')
 )
@@ -266,6 +250,11 @@ const alreadyLinkedCodes = computed(() => new Set(repos.value.map(r => r.repoPro
 // 关联仓库弹窗
 // ========================
 const showAddRepoModal = ref(false)
+watch(showAddRepoModal, (open) => {
+  if (!open) {
+    for (const code of Object.keys(selectedRepoCodes.value)) projectStore.abandonRepoIntent('link', projectId.value, code)
+  }
+}, { flush: 'sync' })
 const addingRepo = ref(false)
 
 // 从 Account 加载部门仓库树
@@ -376,7 +365,10 @@ async function handleRemoveRepo(repoProjectCode: string) {
     message: `确定解除仓库 ${repoProjectCode} 的关联？可稍后重新关联。`,
     confirmLabel: '解除关联',
     tone: 'warning'
-  }))) return
+  }))) {
+    projectStore.abandonRepoIntent('unlink', projectId.value, repoProjectCode)
+    return
+  }
   await projectStore.unlinkRepo(projectId.value, repoProjectCode)
 }
 
@@ -725,11 +717,11 @@ async function submitQualityWaiver() {
 
                 <template #status-cell="{ row }">
                   <UBadge
-                    :color="(qualityStatusConfig[row.original.original.qualityStatus]?.color as any) || 'neutral'"
+                    :color="qualityStatusBadge(row.original.original.qualityStatus, row.original.status).color"
                     variant="subtle"
                     size="sm"
                   >
-                    {{ qualityStatusConfig[row.original.original.qualityStatus]?.label || deliverableStatusConfig[row.original.status]?.label || row.original.status }}
+                    {{ qualityStatusBadge(row.original.original.qualityStatus, row.original.status).label }}
                   </UBadge>
                 </template>
                 <template #submittedDocumentName-cell="{ row }">

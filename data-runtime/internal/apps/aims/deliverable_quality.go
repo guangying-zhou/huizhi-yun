@@ -995,7 +995,7 @@ func (a *Adapter) requireCurrentProjectManagerResponsibility(ctx context.Context
 func (a *Adapter) requireDeliverableQualityBeforeApproval(ctx context.Context, deliverableID int64) error {
 	var deliverableType, qualityStatus string
 	var required int
-	err := a.DB().QueryRowContext(ctx, `
+	err := a.milestoneDB(ctx).QueryRowContext(ctx, `
 		SELECT deliverable_type, `+"`required`"+`, quality_status
 		FROM deliverables
 		WHERE id = ?

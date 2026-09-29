@@ -109,7 +109,9 @@ export async function executeClaimedCompanyWeeklySummaryOperation(
   try {
     const content = await io.callRuntime<RuntimeRow>(
       `/v1/aims/company-weekly-summary-versions/${encodeURIComponent(summaryVersionId)}:publish-content`,
-      { markdownSha256 }
+      // operationKey lets the unified scheduler bind this read to the live lease;
+      // the legacy per-app route ignores it.
+      { markdownSha256, operationKey }
     )
     if (
       text(content.summaryVersionId) !== summaryVersionId
@@ -128,10 +130,16 @@ export async function executeClaimedCompanyWeeklySummaryOperation(
       periodKey,
       operation
     )
-    result = validateServiceCommandReceipt(operation, response, {
-      targetBizType: 'company_weekly_summary_document',
-      targetBizCode: periodKey
-    }) as unknown as RuntimeRow
+    // validateServiceCommandReceipt returns only the normalized receipt identity.
+    // The document evidence (uuid, version, hash, url) lives on the same Codocs
+    // response, so keep it alongside the validated fields, which take precedence.
+    result = {
+      ...objectBody(response),
+      ...validateServiceCommandReceipt(operation, response, {
+        targetBizType: 'company_weekly_summary_document',
+        targetBizCode: periodKey
+      })
+    } as unknown as RuntimeRow
     if (
       !text(result.documentUuid)
       || !/^[1-9][0-9]*$/.test(text(result.documentVersionId))

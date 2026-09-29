@@ -187,6 +187,27 @@ func (a *Adapter) rolloverProjectMilestone(ctx context.Context, projectCode stri
 }
 
 func rolloverProjectMilestoneTx(ctx context.Context, tx *sql.Tx, projectCode string, milestoneID int64, body map[string]any) (map[string]any, error) {
+	// Manual Enterprise rollover is distinct from the fixed system scheduler.
+	// Recheck scope and current manager before all idempotent snapshot returns.
+	if id, scoped := ctx.Value(enterpriseProjectCommandScopeKey{}).(EnterpriseProjectUpdateIdentity); scoped {
+		var projectID int64
+		if err := tx.QueryRowContext(ctx, "SELECT id FROM aims_projects WHERE project_code=?", projectCode).Scan(&projectID); err != nil {
+			if err == sql.ErrNoRows {
+				return nil, httperror.New(404, "project_not_found", "Project not found")
+			}
+			return nil, err
+		}
+		if err := requireEnterpriseDeliverableProjectScopeTx(ctx, tx, id.ActorUID, projectID, true); err != nil {
+			return nil, err
+		}
+		trustedBody := make(map[string]any, len(body)+1)
+		for key, value := range body {
+			trustedBody[key] = value
+		}
+		trustedBody["operator_uid"] = id.ActorUID
+		body = trustedBody
+	}
+
 	row, err := aimsQueryOneMap(ctx, tx, `
 		SELECT
 		  p.id AS project_id,

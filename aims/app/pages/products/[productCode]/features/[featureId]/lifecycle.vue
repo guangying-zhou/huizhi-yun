@@ -1,19 +1,22 @@
 <script setup lang="ts">
+import { useAimsModule } from '../../../../../../layer/useAimsModule'
+
+const { moduleUrl, cacheKey } = useAimsModule()
 definePageMeta({ layoutHeader: true, layoutHeaderTitle: '功能生命周期', layoutHeaderProjectSwitcher: false })
 const route = useRoute()
 const code = computed(() => String(route.params.productCode || ''))
 const id = computed(() => String(route.params.featureId || ''))
-const path = computed(() => `/api/v1/products/${encodeURIComponent(code.value)}/features/${encodeURIComponent(id.value)}`)
+const path = computed(() => moduleUrl(`/api/v1/products/${encodeURIComponent(code.value)}/features/${encodeURIComponent(id.value)}`))
 const states = { candidate: '候选', active: '已生效', deprecated: '已弃用' }
 interface Evidence { kind: string, description: string, release_biz_id: string, confirmed_by: string, confirmed_at: string, reason: string }
 interface Feature { biz_id: string, product_code: string, title: string, lifecycle: keyof typeof states, revision: number, lifecycle_evidence: Evidence | null }
 interface Permission { product_code: string, status: string, revision: number, lifecycle: boolean }
-const { data, status, error, refresh } = await useFetch(path, { server: false, transform: (response: { code: number, data: Feature }) => {
+const { data, status, error, refresh } = await useFetch(path, { server: false, key: computed(() => cacheKey('feature-lifecycle-1:' + code.value + ':' + String(route.params.featureId))), transform: (response: { code: number, data: Feature }) => {
   const f = response.data
   if (response.code !== 0 || f?.biz_id !== id.value || f.product_code !== code.value || !Object.hasOwn(states, f.lifecycle) || !Number.isSafeInteger(f.revision) || f.revision < 1) throw new Error('功能响应不完整')
   return f
 } })
-const { data: permission, status: permissionStatus, error: permissionError, refresh: refreshPermission } = await useFetch<{ code: number, data: Permission }>(() => `/api/v1/products/${encodeURIComponent(code.value)}/features/permissions`, { server: false })
+const { data: permission, status: permissionStatus, error: permissionError, refresh: refreshPermission } = await useFetch<{ code: number, data: Permission }>(() => moduleUrl(`/api/v1/products/${encodeURIComponent(code.value)}/features/permissions`), { server: false, key: computed(() => cacheKey('feature-lifecycle-11:' + code.value + ':' + String(route.params.featureId))) })
 const canChange = computed(() => status.value === 'success' && data.value && permissionStatus.value === 'success' && permission.value?.code === 0 && permission.value.data.product_code === code.value && permission.value.data.status === 'active' && permission.value.data.lifecycle === true && Number.isSafeInteger(permission.value.data.revision) && permission.value.data.revision > 0)
 const target = computed(() => data.value?.lifecycle === 'active' ? 'deprecated' : 'active')
 const label = computed(() => data.value?.lifecycle === 'active' ? '弃用功能' : data.value?.lifecycle === 'deprecated' ? '恢复功能' : '确认功能生效')
@@ -57,7 +60,7 @@ async function save() {
   } finally {
     busy.value = false
   }
-  if (saved) await navigateTo(`/products/${encodeURIComponent(code.value)}/features/${id.value}`)
+  if (saved) await navigateTo(moduleUrl(`/products/${encodeURIComponent(code.value)}/features/${id.value}`))
 }
 watch([code, id], () => {
   kind.value = 'legacy'
@@ -75,7 +78,7 @@ onBeforeRouteUpdate(() => !busy.value)
   <div class="mx-auto min-w-0 max-w-3xl space-y-4 p-4 sm:p-6">
     <div class="flex flex-wrap gap-2">
       <UButton
-        :to="`/products/${encodeURIComponent(code)}/features/${id}`"
+        :to="moduleUrl(`/products/${encodeURIComponent(code)}/features/${id}`)"
         color="neutral"
         variant="ghost"
         :disabled="busy"

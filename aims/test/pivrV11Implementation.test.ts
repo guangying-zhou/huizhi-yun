@@ -62,7 +62,8 @@ describe('PIVR V1.1 implementation contract', () => {
       assert.match(createSource, /serviceLineCode/)
       assert.match(createSource, /servicePeriodLabel/)
     }
-    assert.match(workItems, /navigateTo\(`\/projects\/\$\{projectId\.value\}\/board`/)
+    // 跳转统一经 moduleUrl（非宿主模式原样返回路径），断言的仍是"跳到本项目看板"。
+    assert.match(workItems, /navigateTo\(moduleUrl\(`\/projects\/\$\{projectId\.value\}\/board`\)/)
     assert.match(board, /RoutineQuarterReview/)
     assert.match(board, /RoutineTaskCreateModal/)
     assert.match(routineCreateModal, /type: 'task'/)

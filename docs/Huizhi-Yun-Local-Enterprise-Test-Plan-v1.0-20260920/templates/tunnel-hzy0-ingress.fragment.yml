@@ -1,0 +1,11 @@
+# 仅为待合并的一条 ingress 示例，不是完整配置；不要覆盖已有 Tunnel。
+# 远程管理 Tunnel 在对应管理面修改 hzy0 唯一规则，不使用本文件替代远程配置。
+# runtime 主机规则以及其当前 service/originRequest/访问保护保持原样。
+# cloudflared 在容器中时，必须改为实际可达的 Caddy 地址并保留最小网络范围。
+
+- hostname: hzy0.isme.dev
+  service: http://127.0.0.1:23180
+
+# 合并后必须继续保留所有其他既有规则，包括：
+# hzy-test-runtime.isme.dev -> 原 Runtime upstream（端口未在本方案假定）。
+# 以及原配置最后的 catch-all。

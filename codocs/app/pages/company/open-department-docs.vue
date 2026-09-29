@@ -1,5 +1,8 @@
 <script setup lang="ts">
 import type { ProjectDocsTreeItem } from '~/types'
+import { useCodocsModule } from '../../../layer/useCodocsModule'
+
+const { moduleUrl, cacheKey } = useCodocsModule()
 
 interface OpenDepartmentDocument {
   uuid: string
@@ -38,10 +41,6 @@ interface OpenDepartmentDocsResponse {
   }
 }
 
-definePageMeta({
-  layout: 'default'
-})
-
 usePageTitle('部门开放文档')
 
 const toast = useToast()
@@ -57,11 +56,12 @@ const previewDoc = ref<OpenDepartmentDocument | null>(null)
 const previewContent = ref('')
 const previewAbstract = ref('')
 const previewLoading = ref(false)
+let previewEpoch = 0
 
 const { data, pending, refresh } = await useAsyncData(
-  'open-department-docs',
+  cacheKey('open-department-docs'),
   async () => {
-    const response = await $fetch<OpenDepartmentDocsResponse>('/api/open-department-docs')
+    const response = await $fetch<OpenDepartmentDocsResponse>(moduleUrl('/api/open-department-docs'))
     return response.data.departments || []
   },
   {
@@ -91,6 +91,7 @@ watch(departmentGroups, (groups) => {
 }, { immediate: true })
 
 watch(selectedGroup, (group) => {
+  previewEpoch++
   selectedNodeId.value = ''
   selectedNodeType.value = null
   previewDoc.value = null
@@ -131,11 +132,13 @@ const toggleFolder = (folderId: number) => {
 }
 
 const selectNode = async (nodeId: string, nodeType: 'folder' | 'document', raw?: Record<string, unknown>) => {
+  const epoch = ++previewEpoch
   selectedNodeId.value = nodeId
   selectedNodeType.value = nodeType
   showMobileSidebar.value = false
 
   if (nodeType === 'folder') {
+    previewLoading.value = false
     previewDoc.value = null
     previewContent.value = ''
     previewAbstract.value = ''
@@ -149,11 +152,13 @@ const selectNode = async (nodeId: string, nodeType: 'folder' | 'document', raw?:
   previewAbstract.value = ''
 
   try {
-    const response = await $fetch<{ success: boolean, data: OpenDepartmentDocument }>(`/api/open-department-docs/${encodeURIComponent(doc.uuid)}`)
+    const response = await $fetch<{ success: boolean, data: OpenDepartmentDocument }>(moduleUrl(`/api/open-department-docs/${encodeURIComponent(doc.uuid)}`))
+    if (epoch !== previewEpoch) return
     previewDoc.value = response.data
     previewContent.value = response.data.content || ''
     previewAbstract.value = String(response.data.ai_abstract || '')
   } catch (error: unknown) {
+    if (epoch !== previewEpoch) return
     const err = error as { data?: { message?: string }, message?: string }
     toast.add({
       title: '加载失败',
@@ -161,7 +166,7 @@ const selectNode = async (nodeId: string, nodeType: 'folder' | 'document', raw?:
       color: 'error'
     })
   } finally {
-    previewLoading.value = false
+    if (epoch === previewEpoch) previewLoading.value = false
   }
 }
 

@@ -1,8 +1,12 @@
+import { unifiedIntegrationOperationRoute } from './unifiedIntegrationOperationRoute'
 import { sendProductFeedbackProgress } from './productFeedbackProgressTransport'
 import { sendProductCostRules } from './productCostRulesTransport'
 import { sendProductFeedbackStatus } from './productFeedbackStatusTransport'
+import { sendWorkItemCompletion } from './workItemCompletionTransport'
 import { createError, getHeader, type H3Event } from 'h3'
 import { serviceAppFetch } from '@hzy/foundation/server/utils/appServiceBinding'
+import { localCodocsSchedulerHeaders, localUnifiedCompanySummaryCodocsHeaders } from './localCodocsSchedulerHeaders'
+import type { requireTenantGatewaySchedulerRequest } from '@hzy/foundation/server/utils/tenantGatewayTrust'
 import {
   buildServiceCommandRuntimeHeaders,
   maybeCallTenantRuntime,
@@ -28,6 +32,8 @@ interface RuntimeEnvelope<T> {
   data?: T
   message?: string
 }
+
+type VerifiedScheduler = Awaited<ReturnType<typeof requireTenantGatewaySchedulerRequest>>
 
 function text(value: unknown) {
   return String(value || '').trim()
@@ -174,7 +180,8 @@ async function callCodocsOperationService(
   idempotencyKey: string,
   periodKey: string,
   operation: ClaimedDeliveryOperation,
-  targetDeploymentOverride = ''
+  targetDeploymentOverride = '',
+  verifiedScheduler?: VerifiedScheduler
 ) {
   const productCreation = operation.operationCode === 'aims.codocs.product-document.create.v1'
   if (!productCreation && operation.operationCode !== 'aims.company-weekly-summary.codocs-publish.v1') throw createError({ statusCode: 409, message: 'Unsupported Codocs operation.' })
@@ -210,6 +217,11 @@ async function callCodocsOperationService(
     async request(token) {
       const requestId = text(event && (getHeader(event, 'x-request-id') || getHeader(event, 'x-correlation-id')))
         || crypto.randomUUID()
+      const localHeaders = !productCreation
+        ? event
+          ? await localUnifiedCompanySummaryCodocsHeaders(verifiedScheduler, operation, requestTarget, targetDeploymentCode, requestId)
+          : await localCodocsSchedulerHeaders(requestTarget, targetDeploymentCode, requestId)
+        : {}
       const signedHeaders = await buildServiceCommandRuntimeHeaders({
         token,
         method: 'POST',
@@ -229,13 +241,13 @@ async function callCodocsOperationService(
         url,
         {
           method: 'POST',
+          ...(!event ? { scheduledTargetDeployment: targetDeploymentCode } : {}),
           headers: {
-            ...(event
+            ...localHeaders,
+            ...(event && Object.keys(localHeaders).length === 0
               ? forwardedContextHeaders(event, 'codocs', idempotencyKey)
               : {
                   'x-hzy-tenant': tenantCode,
-                  'x-hzy-deployment': targetDeploymentCode,
-                  'x-hzy-app-code': 'codocs',
                   'idempotency-key': idempotencyKey
                 }),
             'x-request-id': requestId,
@@ -255,8 +267,9 @@ async function callCodocsOperationService(
   })
 }
 
-export function createRequestServiceTicketDeliveryOperationIO(event: H3Event): ServiceTicketDeliveryOperationIO {
+export function createRequestServiceTicketDeliveryOperationIO(event: H3Event, verifiedScheduler?: VerifiedScheduler): ServiceTicketDeliveryOperationIO {
   return {
+    callWorkflowWorkItemCompletion: (command, operation) => sendWorkItemCompletion(event, operation, command),
     callRuntime: <T>(path: string, body: RuntimeRow) => callAimsOperationRuntime<T>(event, path, body),
     callAltoc: (command, idempotencyKey) => callAltocDeliveryService(event, command, idempotencyKey),
     callAltocReceivable: (command, idempotencyKey) => callAltocReceivableService(event, command, idempotencyKey),
@@ -266,16 +279,37 @@ export function createRequestServiceTicketDeliveryOperationIO(event: H3Event): S
     callAltocProductFeedbackProgress: (command, operation) => sendProductFeedbackProgress(event, operation, command),
     callCodocsProductDocument: (command, operation) => callCodocsOperationService(event, command, operation.idempotencyKey, '', operation),
     callCodocsCompanySummary: (command, idempotencyKey, periodKey, operation) =>
-      callCodocsOperationService(event, command, idempotencyKey, periodKey, operation)
+      callCodocsOperationService(event, command, idempotencyKey, periodKey, operation, '', verifiedScheduler)
   }
+}
+
+// All persistence calls (including notification checkpoints) share the same
+// signed selection. External transports retain the real Aims event identity.
+export function createUnifiedRequestServiceTicketDeliveryOperationIO(event: H3Event, generation: string, verifiedScheduler?: VerifiedScheduler): ServiceTicketDeliveryOperationIO {
+  const io = createRequestServiceTicketDeliveryOperationIO(event, verifiedScheduler)
+  return { ...io, callRuntime: async <T>(path: string, body: RuntimeRow) => {
+    const routed = unifiedIntegrationOperationRoute(path, body)
+    const runtime = await maybeCallTenantRuntime<RuntimeEnvelope<T>>(event, routed.path, {
+      appCode: 'aims', scope: 'aims:integration_operation:execute', capabilityFormat: 'business',
+      serviceTokenSourceBinding: 'service-client-policy', enterpriseScheduler: { generation },
+      method: 'POST', query: {}, body: routed.body
+    })
+    if (!runtime.handled) throw createError({ statusCode: 503, message: 'Unified Aims scheduler Runtime is unavailable.' })
+    if (runtime.data.code !== undefined && String(runtime.data.code) !== '0') {
+      throw createError({ statusCode: 502, message: runtime.data.message || 'Unified Aims integration operation failed.' })
+    }
+    return runtime.data.data as T
+  } }
 }
 
 export function createScheduledServiceTicketDeliveryOperationIO(
   callRuntime: ServiceTicketDeliveryOperationIO['callRuntime'],
-  targetDeployments: { codocs: string, altoc?: string, finance?: string }
+  targetDeployments: { codocs: string, altoc?: string, finance?: string, workflow?: string },
+  taskContext?: import('./workItemCompletionTransport').CompletionScheduledContext
 ): ServiceTicketDeliveryOperationIO {
   return {
     callRuntime,
+    callWorkflowWorkItemCompletion: (command, operation) => sendWorkItemCompletion(null, operation, command, targetDeployments.workflow || '', taskContext),
     callAltoc: (command, idempotencyKey) => callAltocDeliveryService(null, command, idempotencyKey),
     callAltocReceivable: (command, idempotencyKey) => callAltocReceivableService(null, command, idempotencyKey),
     callPeople: (command, idempotencyKey) => callPeopleContributionService(null, command, idempotencyKey),

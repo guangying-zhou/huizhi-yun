@@ -61,6 +61,7 @@ func TrustedServiceCommandContextFromMap(values map[string]any) (TrustedServiceC
 }
 
 type TrustedContext struct {
+	OutboxTables    *OutboxTables
 	TenantCode      string
 	DeploymentCode  string
 	SourceApp       string

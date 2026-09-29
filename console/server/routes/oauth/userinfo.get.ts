@@ -1,5 +1,6 @@
 import { createError, defineEventHandler, getHeader } from 'h3'
 import { getUserinfoForPayload, verifyAccessToken, writeTokenEvent } from '~~/server/utils/oidc'
+import { authDiagnosticRequestId } from '@hzy/foundation/server/utils/authDependencyDiagnostic'
 
 function bearerToken(value: unknown) {
   const header = String(value || '')
@@ -25,13 +26,22 @@ export default defineEventHandler(async (event) => {
     }
     throw error
   })
+  const auditStartedAt = Date.now()
   await writeTokenEvent(event, {
     eventType: 'introspect',
     clientId: typeof payload.aud === 'string' ? payload.aud : null,
     uid: typeof (payload.hzy as { uid?: unknown } | undefined)?.uid === 'string' ? String((payload.hzy as { uid?: unknown }).uid) : null,
     sessionHash: typeof payload.sid === 'string' ? payload.sid : null,
     result: 'success'
-  }).catch(() => undefined)
+  }).catch(() => {
+    console.warn(JSON.stringify({ event: 'console-auth-audit-failure', requestId: authDiagnosticRequestId(event),
+      stage: 'token-event', durationMs: Date.now() - auditStartedAt }))
+  })
+  const auditDurationMs = Date.now() - auditStartedAt
+  if (auditDurationMs > 1000) {
+    console.info(JSON.stringify({ event: 'console-auth-audit-slow', requestId: authDiagnosticRequestId(event),
+      stage: 'token-event', durationMs: auditDurationMs }))
+  }
 
   return getUserinfoForPayload(payload)
 })

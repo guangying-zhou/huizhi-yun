@@ -325,13 +325,16 @@ test('Cloudflare due task is bounded, opt-in, server-owned and closes lifecycle 
   assert.match(drain, /options\.event \|\| taskEligibilityEvent\(options\.taskContext\)/)
   assert.ok(drain.indexOf('if (!isAssetsDueNotificationDeliveryEnabled())') < drain.lastIndexOf('requireAssetsDueNotificationRuntimeBinding()'))
   assert.ok(drain.lastIndexOf('requireAssetsDueNotificationRuntimeBinding()') < drain.indexOf('options.event || taskEligibilityEvent'))
-  assert.ok(drain.indexOf('if (!isAssetsDueNotificationDeliveryEnabled())') < drain.lastIndexOf('await deliverCandidate(eligibilityEvent, candidate)'))
+  assert.ok(drain.indexOf('if (!isAssetsDueNotificationDeliveryEnabled())') < drain.lastIndexOf('await deliverCandidate(runtime, eligibilityEvent, candidate)'))
+  // Without an injected unified caller the legacy purpose-signed worker contract is used.
+  assert.match(drain, /const runtime: DueRuntimeCaller = options\.runtime \|\| callAssetsDueNotificationRuntime/)
+  assert.doesNotMatch(drain, /callAssetsDueNotificationRuntime(<[^>]*>)?\('\/v1\/assets/)
   assert.match(drain, /assetsDueRecipientTransition\(candidate, recipientUid\)/)
   assert.match(drain, /previousObjectVersion: transition\.previousObjectVersion/)
   assert.match(drain, /authorizationDescriptor:\s*descriptor/)
   assert.match(drain, /actionableState:\s*'pending'/)
   assert.match(drain, /notifications:acknowledge-closure/)
-  assert.match(drain, /await closeActionable\([\s\S]{0,300}await acknowledgeClosure\(closure\)/)
+  assert.match(drain, /await closeActionable\([\s\S]{0,300}await acknowledgeClosure\(runtime, closure\)/)
   assert.doesNotMatch(`${drain}\n${task}\n${render}`.toLowerCase(), /gitlab-runner|\.gitlab-ci/)
 })
 

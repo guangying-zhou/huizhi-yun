@@ -6,6 +6,12 @@
 
 ## 概述
 
+### 项目文档服务（2026-09-19）
+
+`POST /api/v1/service/project-document-access/execute` 接受 `{ serviceCommand }`。固定调用方 `aims.runtime`，分别校验 `codocs:project-document-access:read`（search/summary/policy-read/check/audit）、`:manage`（policy-update）、`:create`（create）。签名 schema、actor/tenant/deployment 绑定及幂等约束见根 `docs/MODULE_CONTRACTS.md` 的项目文档补充。调用方签名不能替代当前项目关系与对象授权；目标使用自己的 Runtime token。
+
+项目文件柜上传增加可选 `document_uuid`；提供时只接受一个文件。相同 UUID 和不可变元数据可重放，不同内容或归属冲突。正文创建和附件创建失败可用原 UUID 重试；存储错误不再伪装成功。正文读取携带当前 event 解析 Console 存储配置，不依赖某次此前上传留下的全局配置。
+
 Codocs 对外提供的 RESTful API，供汇智云平台其他模块（Aims、Workflow、Altoc 等）调用。当前 `/api/v1/documents/**` 服务接口由 Codocs Nuxt BFF 完成鉴权、OSS 内容读写和响应兼容，文档元数据、搜索、批量摘要、创建记录等数据访问必须通过 tenant-runtime 的 `/v1/codocs/**` 合同完成，不再直连 Codocs DB。
 
 `document-shares`、`document-versions`、`annotations`、`annotation-replies` 与 `issue-comments` 没有独立的 generic runtime CRUD 合同。它们只能经已有的文档、批注或问题嵌套路由，由 BFF 和 runtime 共同校验父对象 ACL；任何直达 `/v1/codocs/{resource}/**` 的 generic 形态均返回 `503 scoped_resource_contract_required` 且不会访问数据库。
@@ -162,7 +168,7 @@ POST /api/v1/service/department-documents/search
 POST /api/v1/service/project-documents/{uuid}/content
 ```
 
-仅用于 Aims 已关联项目文档的 Markdown 正文读取。认证必须是 Console service token：`aud=codocs`、`token_use=service`、来源应用 `aims`、来源 client `aims.runtime`、精确 capability `codocs:project-document:content:read`；`codocs:*`、`codocs:admin` 与 `codocs:documents:read` 都不能替代。Codocs 在读取 body、调用 runtime 或读取 OSS 前，必须把 token tenant/deployment 与受信 `x-hzy-tenant` / `x-hzy-deployment` 精确绑定。
+仅用于已关联项目文档的 Markdown 正文读取。认证必须是 Console service token：`aud=codocs`、`token_use=service`、精确 capability `codocs:project-document:content:read`；`codocs:*`、`codocs:admin` 与 `codocs:documents:read` 都不能替代。来源应用只接受两条**并列**条目之一——`aims` + `aims.runtime`，或 ADR-018 统一企业宿主的 `enterprise` + `enterprise.runtime`。两条的 capability、`operationCode` 与命令 schema 完全相同，宿主不是放宽 Aims 那条；app 与 client 必须各自匹配，`aims` + `enterprise.runtime`（及反向）等交叉组合在 BFF 与 runtime 两层都拒绝，未登记的第三方来源一律拒绝。Codocs 在读取 body、调用 runtime 或读取 OSS 前，必须把 token tenant/deployment 与受信 `x-hzy-tenant` / `x-hzy-deployment` 精确绑定。
 
 请求只接受固定 schema `aims.codocs.project-document.content.v1` 的 one-shot service-command：command 内的 `actorUid`、`projectCode`、路径 UUID 和 `action=content:read` 必须相互一致，并由 Aims 刚签发的短时 `aud=codocs` service token 对 canonical method/path、tenant/deployment、source/target app+client、完整固定 envelope、command hash 与 request ID 做 60 秒 HMAC。Codocs 必须在读取 runtime 或 OSS 前验证该首跳 HMAC；任何 actor、project、UUID、route、envelope、hash 或时限篡改均拒绝，然后才以自身 runtime bearer 重签第二跳。Aims 必须先在本域验证 active 项目成员、leader、creator 或 scoped-admin，并证明该 UUID 精确出现在 `project_documents.codocs_uuid` 或文档型 deliverable；浏览器不可指定 capability、actor、project、UUID 或 command hash。
 
@@ -185,6 +191,8 @@ Codocs runtime 使用受签名 actor 重施 Codocs 原 owner/share/relation ACL�
 ```
 
 该合同不恢复 `/api/v1/documents/{uuid}/{summary|url|content}` 的宽 service read、search、batch-summary 或 preview-access；后者仍按各自 fail-closed 合同处理。
+
+宿主来源时，本域项目文档访问权限由 Enterprise Host 在发起调用前判定（`assertCodocsProjectDocumentAccess`），Codocs 侧的验证与 ACL 重施完全不变。合同与验收状态见根 `docs/MODULE_CONTRACTS.md`「ADR-018 Enterprise → Codocs 项目文档正文」。
 
 ---
 
@@ -597,6 +605,8 @@ GET /api/v1/documents/{uuid}/versions
 
 **调用方：** Aims（里程碑交付物检查时查看文档是否有最新版本）
 
+Enterprise 完整文档工作区另以固定 `codocs:personal-documents:read` 委托操作读取版本：列表目标为 `GET /v1/codocs/documents/{uuid}/versions`；指定版本目标为 `GET /v1/codocs/documents/{uuid}/versions/{versionId}`。后者在受信 actor 和当前文档 ACL 通过后，以 `versionId + document_id` 精确查询单行，返回 `success/data` 版本行；无该文档版本为 404，不再为详情拉取全部版本。两条路径均不得接受浏览器提供的 actor 或受信标记。此为源码合同，目标环境 Runtime 更新与实际 OSS 历史正文读取仍需单独验证。
+
 ---
 
 ## 6. AI 能力
@@ -730,6 +740,7 @@ POST /api/reviews/{id}/receive
 这四个用户态接口只处理 `document_publish_requests` 中由 Workflow 审批通过的发布申请，不再写入历史兼容表 `document_reviews`。Codocs BFF 校验当前会话和应用权限，tenant-runtime 再以受信 actor、发布申请发起人、Workflow 终态、发布版本绑定和当前执行状态校验业务动作。
 
 - `archive`：要求发起人和 `reviews:archive`。runtime 先通过内部 `archive-plan` 生成稳定发布 UUID、带发布申请 ID 后缀的无冲突 OSS 路径和初始执行状态；BFF 复制审批快照后调用 `archive` 提交，runtime 在单事务中创建只读发布文档、写源文档 `publish_info`、更新发布申请并建立协作文档关系。
+- v2（协作快照）文档：无冻结副本时 `archive-plan` 返回 `sourceBodyRef`（`generation/epoch/markdown{key,version}/size/sha256`）并置 `sourceOssPath=""`，BFF 读取精确版本并校验长度与 SHA-256，不读派生镜像。`POST /api/reviews/publish-requests` 先置只读并撤销协作会话，再生成冻结稿；v2 冻结稿读取失败则取消申请并返回 503。独立端对 v2 文档的正文读写（打开、下载、复制、版本查看、`PUT` 带正文等）统一返回 409 `document_on_snapshot_v2`，`PUT` 在任何 OSS 写入前拒绝。详见 `docs/MODULE_CONTRACTS.md`「Codocs v2 快照文档的非 Host 正文消费者」。
 - `seal`：要求 `reviews:admin`，请求体为 `{ "sealTypes": ["official"], "pageCount": 3, "remark": "..." }`。仅 `pending_seal` 且申请声明需要盖章时可执行，成功后进入 `pending_send`。
 - `send`：要求发起人和 `reviews:archive`，请求体为 `{ "senderUid": "...", "receiverName": "...", "receiverPhone": "...", "channel": "email", "sentDate": "YYYY-MM-DD", "targetAccount": "...", "remark": null }`。成功后进入 `pending_receive`，并给指定发送人建立 `outside_sender` 关系。
 - `receive`：要求 `reviews:view`，但 runtime 只允许发送登记中的指定发送人操作；请求体为 `{ "receiveDate": "YYYY-MM-DD" }`，日期不得早于发送日期，成功后进入 `received`。
@@ -943,7 +954,7 @@ POST /api/dept-cabinet/{uuid}/to-document
 
 `GET /api/dept-shares` 与 `PATCH /api/dept-shares/{id}` 保留既有 BFF 的 `requireRequestUid + requireDepartmentManagerAccess` 和通知编排。列表与更新均使用 BFF 在部门经理核验后写入的目标部门签名 marker；runtime 只接受签名 delegated actor，更新只允许 pending 记录进入 accepted/rejected。runtime 不把 service subject 或浏览器字段推断为部门经理。
 
-Codocs 不再提供 `/api/reviews/templates`；发文流程定义、路由和节点统一在 Workflow 应用维护。个人 `cabinet/folders/**` 与部门柜目录的 create/update/delete 尚没有 owner/部门经理绑定的专用 runtime command，统一返回 `503 cabinet_folder_scope_contract_required`，不得退回通用资源 CRUD。
+Codocs 不再提供 `/api/reviews/templates`；发文流程定义、路由和节点统一在 Workflow 应用维护。独立端历史 `cabinet/folders/**` 与部门柜目录 create/update/delete 若没有 owner/部门经理绑定的专用 runtime command，返回 `503 cabinet_folder_scope_contract_required`，不得退回通用资源 CRUD。Enterprise Host 部门柜目录使用下述 `department-cabinet:folder-create|folder-update|folder-delete` 专用命令与事务内 Directory 关系复核。
 
 ### 10.7 文档正文下载兼容代理
 
@@ -1125,3 +1136,75 @@ PC-16 Nuxt Service API 已加入 `POST /api/v1/service/product-documents/{uuid}/
 ### 2026-09-08：创建回执补齐派发确认身份
 
 创建Runtime及外部Service回执增加 operationId/operationCode/idempotencyKey/commandSchemaVersion/commandSha256，均取已验证创建信封；Service逐项与本次冻结命令比较，避免仅凭目标UUID确认另一条命令。保留原receiptId/status/target/result白名单，不外发存储路径。四项handler组合测试和创建Go专项通过，新增回执command hash不匹配拒绝，相关Lint通过。后台派发器分支尚待实现。
+
+
+### ADR-018 Enterprise → Codocs 产品文档元数据
+
+`POST /api/v1/service/assets-product-documents/{uuid}/metadata` 额外接受物理 `enterprise` / `enterprise.runtime`，仅限原 `assets.codocs.product-document.read.v1`、精确 `codocs:product-document:read`、`metadata:read` 命令。Assets 原身份继续可用，两组 app/client 必须各自匹配，不允许交叉组合。JWT 的 Codocs audience、当前授权、源部署与目标部署分别验证；HMAC 绑定 method/path/request ID、actor、productCode、UUID 及完整命令 hash。产品上下文不授予文档 ACL，Codocs Runtime 仍按当前 owner/share/relation 判断，仅返回 uuid/title/doc_type/updated_at。Aims 文档接口和正文读取不因此接受 Enterprise。
+
+此为代码合同，目标环境 Enterprise→Codocs grant/部署与真实跨服务验收尚未完成；该 Codocs audience 能力独立于 Enterprise→Runtime 的 data-runtime 能力集合。
+## Enterprise 个人文档接入候选（2026-09-19）
+
+2026-09-20：Host `PUT /codocs/api/documents/{uuid}` 保存前新增只读 Runtime `personal-documents:update-plan`（复用精确 edit capability）。先校验当前写 ACL 与完整幂等回执，已成功同请求返回 replay，不读取或覆盖 OSS；同 key 异意图返回 409。无回执才沿既有 key 存储，之后重新取得业务权限并提交原版本/回执事务。Host body 和编辑器入口不变，详细输入与未关闭风险见 [Enterprise API](../../enterprise/docs/API_SPEC.md)。此为已完成请求重放修正，不是 OSS/数据库原子事务；未提交并发写、Collab 竞争和真实存储恢复仍阻塞写入闭环验收。未部署或修改生产对象。
+
+目录分页补充：文件柜转存目录选择显式传 `page/pageSize=20`，显示 total、翻页、加载/错误/重试和当前选中目录；跨页保留选择，用户/租户切换清除选择。standalone `GET /api/folders` 同步返回 Runtime 的 `pageSize`（保留旧 `limit`），保留既有 401/403/503，不把授权或依赖错误统一改为 500。Host 沿用已有固定个人目录读取合同，无新增 capability。
+
+P6b2 私人目录树：Host `GET /codocs/api/folders?folder_type=private&parent_id=null|<id>&page=&pageSize=` 使用既有 `personal-documents:folders` 固定读操作；`parent_id` 加显式页码才启用层级投影。响应保留 `items,total,page,pageSize`，新增 `parentChain`（根到所请求父目录）、每行 `folderCount`（直属私人子目录）、`documentCount`（直属可见、未删且排除工作日志的私人文档）。父链每级按当前受信 actor/owner 重验，不存在或越界为 404，环/深度异常 503。COUNT、子数和当前页在同一只读 RR 快照中，页内排序为 `sort_order,created_at DESC,id DESC`；页上限100。未传 `parent_id` 的文件柜转存目录列表与未分页调用保留旧合同。Host `GET /codocs/api/documents?type=private&folder_id=null|<id>&page=&pageSize=` 独立翻直属文档页，COUNT/页同 RR，`updated_at DESC,id DESC` 稳定排序；未分页及旧 `page+limit` 保持原语义。页面展开、根/子目录页与文档页分别维护，移动目标弹窗独立按父目录翻页，不能把显示页当完整可选目标集合。未新增 METHOD+路径、capability 或 grant。
+
+个人柜转文档（后续增量，更新下方早期“转换待完成”的代码状态）：`POST /codocs/api/cabinet/{uuid}/to-document`，body `{title,folder_id?:number|null}`，必传有效 Idempotency-Key，不接受 query/额外字段。同时要求 documents:view/create，经精确 `codocs:personal-cabinet:create` 的 `conversion-plan`/`convert` 固定命令直达 Runtime。只读计划→读取原文件→Office 转 Markdown→条件 PUT→重新授权→Runtime 同事务创建 documents/owner relation/源文件转存关联；返回 `{success:true,data:{uuid,title}}`。源最大 100 MiB、正文最大 10 MiB；无效 DOC/DOCX 422、源对象缺失 404、状态/摘要/同 key 不同意图冲突 409、存储依赖故障 503、身份或授权失败保留 401/403。已成功重放不再存储、创建或重置关联；当前源/目标归属仍校验。原柜对象与旧文档不变，提交失败保留对象便于相同请求重试。真实 DOCX 转换在隔离测试使用原转换器；旧二进制 DOC 不以此宣称兼容。真实 DB/OSS 并发、环境授权与页面组合尚待完成。
+
+个人柜上传：`POST /codocs/api/cabinet/upload`，multipart 字段 `files`、可选 `owner_uid`（必须本人）、可选 `folder_id`（空/null 为根目录），必传有效 `Idempotency-Key`，拒绝 query/重复及其他字段。每请求 1–30 个文件、文件字节总量最多 100 MiB，额外 multipart/表单开销最多 1 MiB；页面逐个请求保留单文件 100 MiB 与多选能力，仍受实际网关上限约束。支持原文件柜扩展名集合，Markdown 继续使用文档上传。返回 `{success:成功数,failed:失败数,items:[{filename,status,uuid?,message?}]}`；单文件错误脱敏汇总，身份/授权错误 401/403 中止。Host 固定 plan→条件 OSS PUT→commit，两次 documents:create 新鲜授权，精确 `codocs:personal-cabinet:create`；Runtime 生成稳定 UUID/完整元数据摘要路径，上传后事务复查目录与记录，重复请求不重复创建，删除/变更冲突不复活或覆盖。OSS 与数据库非原子，失败保留原请求重试；转文档与环境启用仍待完成。
+
+个人文件柜软删除：`DELETE /codocs/api/cabinet/{uuid}`，必传 `Idempotency-Key`（8–200 位字母数字/冒号/下划线/短横线，首位字母数字），无 body/query。documents:delete 与 `codocs:personal-cabinet:delete` 分别校验；Runtime 锁定当前 actor 个人柜范围后状态与回执同事务提交。返回 `{success:true,data:{uuid,deleted:true}}`；不可见对象 404，同 key 不同文件 409，依赖故障保留真实错误。已删除重试成功，历史成功重放不重新删除恢复后的文件；保留 OSS 原 key、字节及已转存文档。转文档与环境启用仍待完成。
+
+个人文件柜读取：`GET /codocs/api/cabinet?page=1&pageSize=20&folder_id=null` 返回 `{success,data:{items,total,page,pageSize}}`，分页上限 200。`GET /codocs/api/cabinet/{uuid}/{preview|preview-html|preview-pptx|converted-info}` 使用 documents:view 与 Runtime `codocs:personal-cabinet:read`；`download` 使用独立 documents:export/`codocs:personal-cabinet:export` 并 302 到 300 秒附件签名 URL。元数据必须为当前用户非部门/项目个人柜；浏览器不得指定其他 owner 或 OSS key。预览支持既有文本、直接媒体/PDF、Office HTML 和 PPTX 分支，Office 内容以 CSP sandbox 隔离；Office 转换失败 422，缺对象 404，存储故障 503。转存文档撤权返回 403，只有无关联/目标不存在返回 null。Host 请求级 OSS 配置隔离；standalone 列表现在也保留 total/page/pageSize。文件柜转文档写入与环境启用仍待后续闭环。
+
+部门文件柜 Host 通道：`/codocs/api/dept-cabinet` 的文件和目录列表返回 `{success,data:{items,total,page,pageSize}}`，页大小最多 200，COUNT 与列表使用同一部门、父目录及有效状态范围。预览、转存信息和下载分别使用 Runtime `codocs.department-cabinet-view|converted-info|download`；下载另验 `departments:export`。所有请求先验当前人员权限，再由 `codocs.department-access-resolve` 查询当前部门关系 R；R=none 返回 403，Directory 故障返回 503。管理动作要求 `departments:edit` 且 R=manager，转文档另验 `departments:create`；Runtime 在同一事务中用 Directory Tx 版本重验 R，早于 service-command 回执读取。浏览器提供的 `dept_code` 只用作待验证的目标，`owner_uid`、OSS 路径及可信角色标记均不得作为写入依据。
+
+部门柜上传和转文档采用 plan→请求级 OSS 条件写→新鲜授权→事务 commit；单次源文件最多 100 MiB，OSS 与 SQL 不构成跨系统原子事务。删除采用 metadata 软删除，保留 OSS 对象。写请求使用用户意图 `Idempotency-Key`；同键同载荷回放不重复写，同键异载荷返回 409，重放前仍重新验证当前部门关系。部门 PDF 发布还要求 `admin:admin`、`company:publish`、源文件 R 可读，目标分类白名单；Host 对 `codocs/company/{category}/{sourceUUID}.pdf` 做条件复制并复核源和目标 ETag 与目标元数据，Runtime `publish-record` 在 SQL 中提交持久 service-command 回执，绑定源、目标、actor 和意图。该回执是发布记录；OSS 复制和回执之间存在可用原键恢复的非原子窗口，目标已被他人删除或占用时返回冲突，不自动覆盖。
+
+部门移交 Host 通道：`GET /codocs/api/dept-shares?dept_code=...&page=1&pageSize=20` 先验 `departments:view` 与当前目标部门 R 可读，Runtime `codocs.department-shares:list` 仅返回该部门 pending 记录及同一只读快照中的 total（最大页大小 200）。`PATCH /codocs/api/dept-shares/{id}?dept_code=...` 只接受 `{action:"accept"|"reject"}` 与有效 `Idempotency-Key`；Host 验 `departments:edit` 与 R=manager，Runtime `codocs.department-shares:decide` 在 Serializable 事务内使用 Directory Tx 版再次验经理且早于读取回执。移交记录本身确定目标 `dept_code`，请求体不得指定目标部门；路径中的 id 与受信部门不匹配返回 403。锁定移交记录及源文档后复核源仍为未删除个人文档、owner 等于记录发起人；接收把原行改成 `doc_type=department`、目标 `dept_code`、部门根目录，**保留 owner**，同事务更新关系索引、操作日志、移交状态和 service-command 回执。拒绝只变更移交状态并记日志。已由其他意图处理的记录返回 409；同键重放不重复写入，同键异载荷 409，撤销经理后旧键也不得回放。源文档对象本身保留原 OSS key，文档元数据和权限已转为部门范围；本通道不移动或覆盖存储字节。
+
+恢复前置查询：`GET /codocs/api/documents/check-name` 接 title、doc_type、folder_id、exclude_uuid，服务端 owner 绑定 actor，Runtime 使用 `personal-documents:check-name`/精确 read。省略 folder_id 等价根目录；仅个人类型，不接受部门/项目 scope。trash 支持个人 type 筛选。客户端 Host 模式不将查询故障解释为无冲突/空回收站。
+
+个人软删除/恢复候选：`DELETE /codocs/api/documents/{uuid}` 需 documents:delete，保留原 OSS key，仅事务写回收状态与幂等回执。`POST /codocs/api/documents/{uuid}/restore` 需 documents:edit，body 仅 `{ new_title?: string }`；两者必须提供稳定 Idempotency-Key。恢复使用精确 edit 的 Runtime restore-plan/restore 固定操作，绑定当前元数据状态、提交前重验 ACL/原目录与同名冲突。原 codocs/ 对象不移动；历史 recycle.bin/ 正文及存活 Yjs 条件复制到 UUID/状态摘要隔离的新 key，不删除源文件，不覆盖现有目标。缺正文及快照返回 404，存储故障 503，计划变化/同名/同 key 异意图 409；事务与持久回执保证成功请求的迟到重放不会再次恢复随后删除的文档。新恢复动作成功清除客户端重试键，失败保留。仍需真实 DB/OSS、保留期和环境授权核验，不表示整体整合已启用。
+
+Markdown 批量上传：`POST /codocs/api/documents/upload`，multipart 的 files（可重复）、doc_type（private/slide）、folder_id 和兼容 owner_uid（仅自身）；必填 Idempotency-Key，其他/重复标量字段拒绝。每文件 10 MiB，每批 30 文件/30 MiB，仅 UTF-8 .md；逐项返回 success/failed/items，无权限保留 401/403。复用同一 Runtime create capability 和正文条件创建，不新增代理写入域；重试保留批次键及文件顺序，前端按会话、目录、文件名与内容摘要识别同一失败批次。成功文件通过事件上下文向 Console best-effort 上报操作审计（物理 sourceApp=enterprise，action=codocs.document.upload），审计幂等键隔离租户/部署/actor/批次/序号。未启用环境 grants，不代表上传生产验收完成。
+
+文档创建：`POST /codocs/api/documents`，必填 Idempotency-Key，title，支持 private/slide、folder_id、content（UTF-8 不超过 10 MiB）；兼容 owner_uid 只能等于当前 actor。经 documents:create 和精确 `codocs:personal-documents:create` 直达 Runtime，稳定 UUID + 规范请求摘要支持重试，字段或内容冲突 409。元数据及 owner relation 复用原领域事务；初始正文条件写入，不覆盖已有正文，存储失败 503 后可使用相同 key 和 payload 修复。目录在事务内校验归属，API 不接受任意 UUID/存储路径/项目部门归属。此为创建候选，不包含上传或正文覆盖。
+
+创建目录：Host `POST /codocs/api/folders` 要求 `Idempotency-Key`，支持 private/slide；服务端派生 owner，精确 Runtime capability `codocs:personal-folders:create`，回执和创建同事务，重放重验权限、不同内容返回 409。详情读取候选可读取正文/恢复 Yjs，`skip_content=1` 仅取元数据。带 event 的 OSS 配置按请求隔离，不进入全局缓存。
+
+正文下载：`GET /codocs/api/documents/{uuid}/download` 要求 documents:export 及 Runtime `codocs:personal-documents:export`，返回 UTF-8 Markdown 附件。company 对象在返回正文之前经 Host 内部 `document-access-records:record` 合同记录访问，精确能力 `codocs:document-access-records:record`；仅接受 eventId 与 pathSha256，Runtime 重验 UUID 当前 ACL 和对象路径摘要，不以传入路径授权。读取使用 view、下载使用 export 的当前权限，审计失败返回脱敏 503 且不交付正文；元数据-only、非 company 路径及存储失败不记录。未开放浏览器审计写入口，也未启用环境授权。
+
+审计依赖故障映射 503；授权失效保留 401/403，存储路径变更保留 409，错误消息脱敏且不交付正文。
+
+目录详情/修改/删除新增：`GET/PATCH/DELETE /codocs/api/folders/{id}` → `POST /v1/enterprise/codocs/personal-folders:{view|update|delete}`，分别精确 read/edit/delete。PATCH 字段仅 name/parent_id；个人 owner 由签名 actor 校验，目录移动不能跨 namespace 或形成循环，非空目录（包含回收站文档）删除返回 409。此候选未启用真实环境；创建接线见上文，真实数据库并发验证尚待完成。
+
+新增元数据候选：`PATCH /codocs/api/documents/{uuid}` 接受 `title/folder_id/star_flag/home_flag/readonly_flag`，经 `documents:edit` 和精确 Runtime capability `codocs:personal-documents:edit` 调用 `personal-documents:edit-metadata`。保留已有 OSS key；正文替换、对象回收与恢复另行编排，不能传入任意 OSS path 或修改文档 owner/type。Runtime 对目标目录、只读状态及原文档 ACL 继续验证。
+
+Host 新增 `/codocs/api/documents`、`/codocs/api/documents/{uuid}`、`/codocs/api/documents/trash`、`/codocs/api/folders` 的 GET 候选。它们通过物理 Enterprise 身份、逻辑 Codocs `documents:view` 和精确 `codocs:personal-documents:read` 调用 Runtime 的 `POST /v1/enterprise/codocs/personal-documents:{list|view|trash|folders}`，不转发到独立 Codocs HTTP 服务，也不更换 Codocs DB。Runtime 要求签名 actor、当前 service grant、绑定租户/部署的短 permit，并复用现有文档 ACL。
+
+`GET /codocs/api/documents` 的既有 `search` 查询参数现在按文档标题过滤（与当前 actor 可见性、个人类型及分页条件合取），供 Enterprise 产品资料关联选择器使用；关键词最多 100 个 Unicode 字符，`%`、`_`、反斜杠均按字面字符匹配；未传或空白时保持原列表行为。选择器也可读取已有的 `/codocs/api/collab-docs?category=shared&scope=all&keyword=...` 作为共享文档来源。两种列表只提供候选 UUID/标题，最终关联仍由 Aims/Assets/Codocs 原有权限链重验，不因候选可见自动取得正文权限。
+
+这些候选不表示附件与完整 mydocs 动作已经接通。页面注册、其余写入/共享/日志周报/演示、权限目录组合和环境启用仍在实施中；未进行本轮页面验证。完整合同见根 `docs/MODULE_CONTRACTS.md` 的“Enterprise 个人文档接入候选”。
+## 未启用的文档快照事务（2026-09-20）
+
+Runtime 内部新增候选准备/发布方法、受权已发布引用读取方法及 `document_snapshot_heads`、`document_snapshot_candidates`，尚未注册 HTTP API、安装目标 schema 或接入 Host/Collab。仅处理 private 文档内容；generation/epoch、当前 owner/write-share、精确对象版本、配对引用和幂等发布规则见[写入协调合同](../../docs/Codocs-Document-Write-Coordination.md)。现有保存/读取 API 不因该内部增量改变；正式存储校验器、全部读者和旧 writer 切换均是放行前置条件。
+## Enterprise Host v2 协作会话（2026-09-24 候选）
+
+`POST /codocs/api/documents/{uuid}/collaboration` 不接受 query/body，由 Host 当前用户身份与 Codocs `documents:edit` 授权打开 Runtime `personal-documents:collaboration-open`（精确 `codocs:personal-documents:edit`）。只有 `HZY_ENTERPRISE_CODOCS_SNAPSHOT_V2` 与 `HZY_ENTERPRISE_CODOCS_COLLABORATION_V2` 均为 `true` 才登记；关闭时 404，缺权限 403，Runtime/授权依赖故障保留 503。成功返回 `{success:true,data:{token:"v2.<一次性票据>",sessionId,expiresAt}}`，并设 `Cache-Control: no-store`。票据每次连接重新领取，Collab 兑换后不能重放；Host 共享私人文档正文只经 Collab 发布，不经普通 PUT。环境与双人验收尚未完成，见[协调合同](../../docs/Codocs-Document-Write-Coordination.md)。
+
+阶段 B 的 Collab → Runtime 对象字节路由均为 `POST`，仅在 Runtime `snapshotV2Enabled` 和 `collaborationV2Enabled` 同时开启时登记。`:upload` 使用 `codocs:collaboration-snapshots:publish`，请求为 `{sessionId,generation,epoch,markdownSha256,markdownSize,yjsSha256,yjsSize,attempt,part,contentBase64}`，并带 `Idempotency-Key`；`attempt` 为 32 位小写十六进制，`part` 为 `markdown|yjs`。Runtime 要求活动会话、已 prepare 且命令摘要匹配的候选，核对本次字节长度与 SHA-256，仅在其前缀下写一次上传，返回 `{key,version}`。`:download` 使用 `codocs:collaboration-snapshots:read`，请求 `{sessionId,part}`，只按该会话文档的当前已发布 head 返回 `{key,version,size,sha256,contentBase64}`，重验精确版本及内容。两路由都要求 `collab.runtime` 的精确服务身份和 active grant；每对象最多 16 MiB，Markdown 仍受命令层 10 MiB 上限。Collab 不接收 OSS 凭据；字节由 Runtime 使用 vault 绑定的 `oss.default` 读写。未部署、未做双人端到端验收。
+
+## Enterprise 部门文档协作（Runtime 批次 R1，2026-09-29 候选）
+
+Runtime 新增 Host 固定操作 `POST /v1/enterprise/codocs/department-documents:{collaboration-open,snapshot-read,snapshot-prepare,snapshot-publish}`（permit `department-documents` + `edit`/`read`，服务能力仍为 `codocs:enterprise-host:execute`），仅在 `apps.codocs.snapshotV2Enabled`、`collaborationV2Enabled`、`departmentCollaborationV2Enabled` 同时开启时登记。`collaboration-open` 仅向 Directory 关系为 member/manager 且是 owner/写分享/manager 的用户签发一次性票据（租期 90 秒、每会话并发写者 ≤20）；`snapshot-prepare/publish` 只做 v1→v2 转换（期望 generation=0，仅 Markdown）。Collab→Runtime 路由不变：`renew` 请求体新增可选 `connectedUids`，响应新增 `revokedUids`；`admit` 响应对部门会话新增 `deptCode`、`participantAccess`；`publish` 在任一活动参与者失权时返回 409 `collaboration_participant_revoked` 且 `error.details.revokedUids`。会话表新增 `policy`/`dept_code`，参与者表新增 `status`/`checked_at`（迁移 `20260929_department_collaboration.sql`）。完整合同见 `docs/MODULE_CONTRACTS.md`「Enterprise Host → Codocs 部门文档协作」。代码已实现、默认关闭，未安装到任何环境、未做双人端到端验收。
+
+## Enterprise 部门文档复制暂存（B1 候选）
+
+Host 部门文档复制只接源 UUID、源/目标部门编码、标题和目标目录。源文档须经 `department-documents:view` 及源部门当前可读关系核验；目标部门须具备 `departments:create`，Runtime 在创建元数据和回执的同一事务重验目标部门写关系。浏览器不提供 OSS 路径、正文摘要、owner 或身份事实。
+
+Host 从已验证的 tenant、Enterprise deployment、actor 与 Idempotency-Key 派生 `codocs/copy-staging/` 独立前缀下的对象键。首次源正文读取后以条件写暂存字节与规范化复制意图摘要；同键重试先核暂存摘要，再读第一次暂存字节，不覆盖对象。Runtime 创建命令只接 Host 计算的暂存正文摘要/大小与源 UUID，目标正文在元数据回执后条件写入；写入失败可用同键从暂存恢复，不覆盖已编辑正文。
+
+**暂存清理（取代 OSS 生命周期规则）：**为 `codocs/copy-staging/` 单独配置 1 天过期的 OSS 生命周期规则已被 OSS 拒绝：桶上已有前缀 `codocs/` 的 Expiration 规则，嵌套前缀不能共用同一动作类型。应用**不在复制成功后即时删除**暂存：成功后保留，使 24 小时内对已成功请求的同键重放（如响应丢失）仍复用首份字节，避免重新读取源正文得到不同摘要而被 Runtime 回执判 409。仅由维护脚本 `scripts/cleanup-codocs-copy-staging.mjs`（`pnpm codocs:cleanup-copy-staging -- --client-module <file>`）清理超过 24 小时的对象：默认只读 dry-run；实际删除须同时给 `--apply --confirm-delete-copy-staging`，拒绝任何其它前缀；凭据不在脚本内，由运维在受控环境提供工厂模块（示例见 `scripts/cleanup-codocs-copy-staging.client.example.mjs`），不输出、不硬编码。桶为测试与生产共用并启用版本控制：删除只产生删除标记，非当前版本按现有 `codocs/` 规则保留 30 天。若暂存已被清理而目标正文仍缺失，原键无法自动恢复，须走人工审计恢复；不得静默改用当时的源正文。

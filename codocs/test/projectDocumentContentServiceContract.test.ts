@@ -10,7 +10,7 @@ test('Aims project document content service route binds service identity before 
   const route = read('server/api/v1/service/project-documents/[uuid]/content.post.ts')
 
   assert.match(route, /AIMS_PROJECT_DOCUMENT_CONTENT_SERVICE_AUTH/)
-  assert.match(route, /requireCodocsServiceTenantDeploymentBinding/)
+  assert.match(route, /requireCodocsCrossAppServiceTenantDeploymentBinding/)
   assert.match(route, /verifyServiceCommandRuntimeHeaders/)
   assert.match(route, /hashServiceCommandPayload/)
   assert.match(route, /getHeader\(event, 'x-hzy-tenant'\)/)
@@ -25,11 +25,17 @@ test('Aims project document content service route binds service identity before 
   assert.match(route, /serviceTokenSourceBinding:\s*'service-client-policy'/)
   assert.match(route, /serviceCommandActor:\s*\{\s*uid:\s*text\(serviceCommand\.command\?\.actorUid\)\s*\}/)
   assert.match(route, /downloadDocument/)
-  assert.ok(route.indexOf('requireCodocsServiceTenantDeploymentBinding(') < route.indexOf('readBody<'))
+  // 跨应用调用经受信网关到达时 `x-hzy-deployment` 是目标（codocs）部署，
+  // 来源部署只能取自已验签令牌。两者必须分别传入签名校验，不得互相替代。
+  assert.match(route, /sourceDeploymentCode:\s*binding\.sourceDeployment/)
+  assert.match(route, /targetDeploymentCode:\s*binding\.targetDeployment/)
+  assert.match(route, /tenantCode:\s*binding\.tenant/)
+  assert.doesNotMatch(route, /targetDeploymentCode:\s*text\(auth\.deployment\)/)
+  assert.ok(route.indexOf('requireCodocsCrossAppServiceTenantDeploymentBinding(') < route.indexOf('readBody<'))
   const runtimeCall = route.indexOf('grant = await callCodocsTenantRuntime')
   const ossRead = route.indexOf('content = (await downloadDocument')
   const signatureVerify = route.indexOf('await verifyServiceCommandRuntimeHeaders')
-  assert.ok(route.indexOf('requireCodocsServiceTenantDeploymentBinding(') < runtimeCall)
+  assert.ok(route.indexOf('requireCodocsCrossAppServiceTenantDeploymentBinding(') < runtimeCall)
   assert.ok(signatureVerify < runtimeCall)
   assert.ok(runtimeCall < ossRead)
   assert.match(route, /tenant runtime rejected/)
@@ -45,13 +51,16 @@ test('runtime contract is source-bound and reuses Codocs document ACL rather tha
   const policy = read('server/lib/serviceAuthPolicy.ts')
 
   assert.match(policy, /scope: 'codocs:project-document:content:read', allowedApps: \['aims'\], allowedClientCodes: \['aims\.runtime'\], exactScope: true/)
-  assert.match(route, /sourceClientId:\s*'aims\.runtime'/)
+  // source client 由已验签的来源应用派生，不是可自由填写的字面量，
+  // 因此 aims 令牌无法声明 enterprise.runtime（反向同理）。
+  assert.match(route, /sourceClientId:\s*`\$\{sourceApp\}\.runtime`/)
+  assert.match(route, /const sourceApp = auth\?\.appCode === 'enterprise' \? 'enterprise' : 'aims'/)
   assert.match(read('../foundation/server/utils/serviceOidc.ts'), /const gatewayContext = input\.event/)
   assert.match(read('../foundation/server/utils/serviceOidc.ts'), /const requestHeaders = gatewayContext/)
   assert.match(read('../foundation/server/utils/serviceOidc.ts'), /headers: requestHeaders/)
   assert.match(read('../foundation/server/utils/tenantRuntimeClient.ts'), /usesServiceClientPolicy[\s\S]*tokenMetadata\.deployment/)
-  assert.match(runtime, /TrustedServiceCommandSourceAppKey\)\) != "aims"/)
-  assert.match(runtime, /TrustedServiceCommandSourceClientKey\)\) != "aims\.runtime"/)
+  assert.match(runtime, /TrustedServiceCommandSourceAppKey\)\) != sourceApp/)
+  assert.match(runtime, /TrustedServiceCommandSourceClientKey\)\) != sourceApp\+"\.runtime"/)
   assert.match(runtime, /hzy_runtime_actor_purpose"\)\) != "service-command"/)
   assert.match(runtime, /a\.documentAccess\(ctx, uuid, query\)/)
   assert.match(runtime, /int64Value\(document\["status"\]\) != 1/)

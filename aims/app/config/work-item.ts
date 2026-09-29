@@ -1,4 +1,4 @@
-import type { WorkItemType, WorkItemTier, Priority, Severity } from '~/types/aims'
+import type { WorkItemType, WorkItemTier, Priority, Severity } from '../types/aims'
 
 // ============================================================
 // 工作项层级配置

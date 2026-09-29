@@ -5,7 +5,8 @@
 import { requireRequestUid } from '~~/server/utils/authIdentity'
 import { callCodocsTenantRuntime, getCodocsDocumentMetadata, updateCodocsDocumentMetadata } from '~~/server/utils/codocsRuntime'
 import { fetchDirectoryData } from '~~/server/utils/directoryCompat'
-import { downloadDocument, uploadDocument } from '~~/server/utils/oss'
+import { createRuntimeOSSClient, downloadDocument, uploadDocument } from '~~/server/utils/oss'
+import { isSnapshotV2Document, parseBodyRef, readBodyByRef } from '~~/server/utils/documentBodyRef'
 import { requirePermission } from '~~/server/utils/checkPermission'
 
 interface SubmitPublishRequestBody {
@@ -185,31 +186,69 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 500, message: '创建发布申请失败' })
   }
 
-  const reviewOssPath = buildSafeReviewPath(requestId, document.title || 'untitled')
-  try {
-    if (document.oss_path) {
-      const content = await downloadDocument(document.oss_path, document.doc_type)
-      if (content) {
-        await uploadDocument(reviewOssPath, content)
-        await callCodocsTenantRuntime(event, `/v1/codocs/reviews/publish-requests/${encodeURIComponent(String(requestId))}`, {
-          method: 'PATCH',
-          scope: 'codocs.write',
-          body: {
-            review_oss_path: reviewOssPath,
-            current_user: uid
-          }
-        })
-      }
+  const cancelDraftRequest = async () => {
+    try {
+      await callCodocsTenantRuntime(event, `/v1/codocs/reviews/publish-requests/${encodeURIComponent(String(requestId))}`, {
+        method: 'PATCH',
+        scope: 'codocs.write',
+        body: { workflow_status: 'cancelled', current_user: uid }
+      })
+    } catch (cancelError) {
+      console.warn('[PublishRequest] Failed to cancel draft request:', cancelError)
     }
-  } catch (error) {
-    console.warn('[PublishRequest] Failed to copy document snapshot:', error)
   }
 
-  await updateCodocsDocumentMetadata(event, document.uuid, {
-    readonly_flag: true,
-    actorUid: uid,
-    current_user: uid
-  })
+  // 冻结顺序（Q6）：先置只读并撤销协作会话（Runtime 同事务推进 epoch），
+  // 之后再拷贝正文，保证审批冻结稿不会被在线协作继续改动。
+  try {
+    await updateCodocsDocumentMetadata(event, document.uuid, {
+      readonly_flag: true,
+      actorUid: uid,
+      current_user: uid
+    })
+  } catch (error) {
+    await cancelDraftRequest()
+    throw error
+  }
+
+  const reviewOssPath = buildSafeReviewPath(requestId, document.title || 'untitled')
+  const frozen = await getCodocsDocumentMetadata(event, document.uuid, { actorUid: uid, include_snapshot_ref: '1' })
+  if (isSnapshotV2Document(frozen)) {
+    // v2：冻结稿必须由精确快照生成；失败则取消申请，不允许无冻结稿或读旧镜像。
+    try {
+      const client = await createRuntimeOSSClient({ event })
+      const content = await readBodyByRef(client, parseBodyRef(frozen.snapshot_ref))
+      await uploadDocument(reviewOssPath, content.toString('utf-8'))
+      await callCodocsTenantRuntime(event, `/v1/codocs/reviews/publish-requests/${encodeURIComponent(String(requestId))}`, {
+        method: 'PATCH',
+        scope: 'codocs.write',
+        body: { review_oss_path: reviewOssPath, current_user: uid }
+      })
+    } catch (error) {
+      console.error('[PublishRequest] Failed to freeze snapshot body:', error)
+      await cancelDraftRequest()
+      throw createError({ statusCode: 503, message: '无法冻结文档正文，发布申请已取消，请稍后重试' })
+    }
+  } else {
+    try {
+      if (document.oss_path) {
+        const content = await downloadDocument(document.oss_path, document.doc_type)
+        if (content) {
+          await uploadDocument(reviewOssPath, content)
+          await callCodocsTenantRuntime(event, `/v1/codocs/reviews/publish-requests/${encodeURIComponent(String(requestId))}`, {
+            method: 'PATCH',
+            scope: 'codocs.write',
+            body: {
+              review_oss_path: reviewOssPath,
+              current_user: uid
+            }
+          })
+        }
+      }
+    } catch (error) {
+      console.warn('[PublishRequest] Failed to copy document snapshot:', error)
+    }
+  }
 
   return {
     code: 0,

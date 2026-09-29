@@ -1,7 +1,12 @@
 <script setup lang="ts">
-import { typeConfig, priorityConfig } from '~/config/work-item'
+import ContentPageHeader from '../../../foundation/app/components/ContentPageHeader.vue'
+import { useAimsModule } from '../../layer/useAimsModule'
+import { typeConfig, priorityConfig } from '../config/work-item'
 
+// 同一份代码供独立应用与企业宿主使用：非宿主模式下 moduleUrl 原样返回路径。
+const { moduleUrl, hosted } = useAimsModule()
 definePageMeta({
+  hostContentInset: false,
   layoutHeader: true,
   layoutHeaderTitle: '任务看板',
   layoutHeaderProjectSwitcher: false
@@ -40,9 +45,14 @@ const { user: authUser } = useAuth()
 const { users: accountUsers } = useAccountUsers()
 
 const loading = ref(false)
-const items = ref<GlobalWorkItem[]>([])
+const itemsByColumn = ref<Record<string, GlobalWorkItem[]>>({})
+const columnTotals = ref<Record<string, number>>({})
+const columnPages = ref<Record<string, number>>({})
+const summary = ref<{ total: number, projectCount: number, status: Record<string, number> }>({ total: 0, projectCount: 0, status: {} })
+const availableProjects = ref<{ id: number, projectCode: string, projectName: string }[]>([])
 const swimlaneMode = ref<SwimlaneMode>('none')
-const searchText = ref('')
+const { search: searchText, debounced: debouncedSearchText } = useDebouncedSearch()
+let loadGeneration = 0
 
 const scopeOptions: { label: string, value: BoardScope }[] = [
   { label: '我负责的', value: 'assigned' },
@@ -126,60 +136,32 @@ const selectedProjectId = computed<string>({
 })
 
 const projectOptions = computed(() => {
-  const projectMap = new Map<number, { label: string, value: string }>()
-  for (const item of items.value) {
-    if (!projectMap.has(item.projectId)) {
-      projectMap.set(item.projectId, {
-        label: `${item.projectCode} · ${item.projectName}`,
-        value: String(item.projectId)
-      })
-    }
-  }
-
   return [
     { label: '全部项目', value: 'all' },
-    ...Array.from(projectMap.entries())
-      .sort((a, b) => a[1].label.localeCompare(b[1].label, 'zh-CN'))
-      .map(([, option]) => option)
+    ...availableProjects.value.map(project => ({
+      label: `${project.projectCode} · ${project.projectName}`,
+      value: String(project.id)
+    }))
   ]
 })
 
-const totalCount = computed(() => filteredItems.value.length)
-
-const projectCount = computed(() => {
-  return new Set(filteredItems.value.map(item => item.projectId)).size
-})
+const totalCount = computed(() => summary.value.total)
+const projectCount = computed(() => summary.value.projectCount)
 
 const statusSummary = computed(() => ({
-  planning: filteredItems.value.filter(item => item.status === 'planning').length,
-  todo: filteredItems.value.filter(item => item.status === 'todo').length,
-  inProgress: filteredItems.value.filter(item => item.status === 'in_progress').length,
-  inReview: filteredItems.value.filter(item => item.status === 'in_review').length,
-  completed: filteredItems.value.filter(item => item.status === 'completed').length
+  planning: summary.value.status.planning || 0,
+  todo: summary.value.status.todo || 0,
+  inProgress: summary.value.status.in_progress || 0,
+  inReview: summary.value.status.in_review || 0,
+  completed: summary.value.status.completed || 0
 }))
 
-const filteredItems = computed(() => {
-  const keyword = searchText.value.trim().toLowerCase()
-  return items.value.filter((item) => {
-    if (selectedProjectId.value !== 'all' && String(item.projectId) !== selectedProjectId.value) {
-      return false
-    }
-    if (!keyword) return true
-    return [
-      item.itemKey,
-      item.title,
-      item.projectName,
-      item.projectCode,
-      item.milestoneName || '',
-      getUserName(item.assigneeUid)
-    ].some(field => field.toLowerCase().includes(keyword))
-  })
-})
+const filteredItems = computed(() => Object.values(itemsByColumn.value).flat())
 
 const boardData = computed(() => {
   const data: Record<string, GlobalWorkItem[]> = {}
   for (const col of columns) {
-    data[col.key] = filteredItems.value.filter(item => item.status === col.key)
+    data[col.key] = itemsByColumn.value[col.key] || []
   }
   return data
 })
@@ -233,47 +215,64 @@ function formatDueDate(dueDate: string | null) {
 
 function openItem(item: GlobalWorkItem) {
   if (['in_progress', 'in_review', 'completed'].includes(item.status)) {
-    navigateTo(`/projects/${item.projectId}/board/${item.id}/execution`)
+    navigateTo(moduleUrl(`/projects/${item.projectId}/board/${item.id}/execution`))
     return
   }
-  navigateTo(`/projects/${item.projectId}/board`)
+  navigateTo(moduleUrl(`/projects/${item.projectId}/board`))
 }
 
 async function loadItems() {
   if (!authUser.value) return
+  const generation = ++loadGeneration
   loading.value = true
   try {
-    const params = new URLSearchParams()
-    params.set('filter', activeFilter.value)
-    params.set('uid', authUser.value)
-
-    const res = await $fetch<{ code: number, data: { items: GlobalWorkItem[] } }>(
-      `/api/v1/my-work-items?${params.toString()}`
-    )
-    items.value = res.code === 0 ? res.data.items : []
+    const results = await Promise.all(columns.map(async (column) => {
+      const params = new URLSearchParams({ filter: activeFilter.value, uid: authUser.value!, status: column.key, page: String(columnPages.value[column.key] || 1), pageSize: '20' })
+      if (selectedProjectId.value !== 'all') params.set('projectId', selectedProjectId.value)
+      if (debouncedSearchText.value.trim()) params.set('search', debouncedSearchText.value.trim())
+      const res = await $fetch<{ code: number, data: { items: GlobalWorkItem[], total: number, summary: typeof summary.value, projects: typeof availableProjects.value } }>(moduleUrl(`/api/v1/my-work-items?${params.toString()}`))
+      if (res.code !== 0) throw new Error('工作项读取失败')
+      return { key: column.key, data: res.data }
+    }))
+    if (generation !== loadGeneration) return
+    itemsByColumn.value = Object.fromEntries(results.map(result => [result.key, result.data.items]))
+    columnTotals.value = Object.fromEntries(results.map(result => [result.key, result.data.total]))
+    summary.value = results[0]?.data.summary || { total: 0, projectCount: 0, status: {} }
+    availableProjects.value = results[0]?.data.projects || []
   } catch (err) {
+    if (generation !== loadGeneration) return
     console.error('[GlobalWorkBoard] loadItems failed:', err)
-    items.value = []
+    itemsByColumn.value = {}
+    columnTotals.value = {}
+    summary.value = { total: 0, projectCount: 0, status: {} }
   } finally {
-    loading.value = false
+    if (generation === loadGeneration) loading.value = false
   }
 }
 
-onMounted(async () => {
-  await loadItems()
-})
-
-watch(activeFilter, () => {
+watch([activeFilter, selectedProjectId, debouncedSearchText, authUser], () => {
+  columnPages.value = {}
   loadItems()
-})
+}, { immediate: true })
+
+function changeColumnPage(key: string, page: number) {
+  columnPages.value = { ...columnPages.value, [key]: page }
+  loadItems()
+}
 </script>
 
 <template>
   <UDashboardPanel id="global-work-board" :ui="{ root: 'relative flex flex-col min-w-0 h-full shrink-0', body: 'flex flex-col flex-1 min-h-0 p-0 overflow-hidden' }">
     <template #body>
       <div class="flex flex-col h-full min-h-0">
-        <div class="flex-1 min-h-0 overflow-y-auto px-6 pt-4 pb-8 space-y-5">
-          <div class="grid grid-cols-2 gap-3 sm:grid-cols-6 xl:min-w-160">
+        <div class="flex-1 min-h-0 overflow-y-auto p-4 sm:p-6 space-y-5 work-items-container" style="container-type: inline-size">
+          <ContentPageHeader
+            :hosted="hosted"
+            title="任务中心"
+            description="查看并推进你参与的项目工作项。"
+            breadcrumb="交付与服务 / 执行协同"
+          />
+          <div class="work-items-summary">
             <UCard class="p-0">
               <div class="px-4 py-3">
                 <div class="text-xs text-muted">
@@ -337,7 +336,7 @@ watch(activeFilter, () => {
           </div>
 
           <section class="flex flex-col gap-3 rounded-2xl border border-default bg-default p-4">
-            <div class="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+            <div class="flex flex-col gap-3 work-items-filter-layout" :class="hosted ? 'is-hosted' : 'xl:flex-row xl:items-center xl:justify-between'">
               <div class="flex flex-wrap items-center gap-2">
                 <span class="text-sm text-muted">视角</span>
                 <UButton
@@ -354,7 +353,7 @@ watch(activeFilter, () => {
                 <UInput
                   v-model="searchText"
                   icon="i-lucide-search"
-                  placeholder="搜索编号、标题、项目、负责人"
+                  placeholder="搜索编号、标题、项目、负责人 UID"
                   class="w-full sm:w-60"
                 />
                 <USelect
@@ -386,14 +385,15 @@ watch(activeFilter, () => {
             <div
               v-for="col in columns"
               :key="col.key"
-              class="shrink-0 w-48 xl:w-11/60"
+              class="shrink-0 w-48 xl:w-11/60 work-items-kanban-column"
+              :class="hosted ? 'is-hosted' : ''"
             >
               <div class="flex items-center justify-between rounded-t-xl border-t-2 border-x border-b-0 px-4 py-3" :class="columnColorClass[col.color]">
                 <div class="text-sm font-medium">
                   {{ col.label }}
                 </div>
                 <div class="text-xs text-muted">
-                  {{ getColumnItems(col.key).length }} 项
+                  {{ columnTotals[col.key] || 0 }} 项
                 </div>
               </div>
               <div class="min-h-40 space-y-3 rounded-b-xl border border-default bg-elevated/50 p-3">
@@ -440,6 +440,14 @@ watch(activeFilter, () => {
                 <div v-if="getColumnItems(col.key).length === 0" class="py-10 text-center text-xs text-muted">
                   暂无任务
                 </div>
+                <UPagination
+                  v-if="(columnTotals[col.key] || 0) > 20"
+                  :page="columnPages[col.key] || 1"
+                  :total="columnTotals[col.key] || 0"
+                  :items-per-page="20"
+                  size="xs"
+                  @update:page="changeColumnPage(col.key, $event)"
+                />
               </div>
             </div>
           </div>
@@ -454,7 +462,7 @@ watch(activeFilter, () => {
                 <UIcon :name="swimlaneMode === 'assignee' ? 'i-lucide-user' : 'i-lucide-signal'" class="size-4" />
                 {{ lane.label }}
                 <UBadge color="neutral" variant="subtle" size="xs">
-                  {{ columns.reduce((sum, col) => sum + getSwimlaneColumnItems(col.key, lane.key).length, 0) }}
+                  本页 {{ columns.reduce((sum, col) => sum + getSwimlaneColumnItems(col.key, lane.key).length, 0) }}
                 </UBadge>
               </div>
               <div class="flex gap-4 overflow-x-auto p-4">
@@ -495,9 +503,48 @@ watch(activeFilter, () => {
                 </div>
               </div>
             </section>
+            <div class="flex flex-wrap gap-3">
+              <div v-for="col in columns" :key="col.key" class="min-w-40 text-xs text-muted">
+                {{ col.label }} · 共 {{ columnTotals[col.key] || 0 }} 条
+                <UPagination
+                  v-if="(columnTotals[col.key] || 0) > 20"
+                  :page="columnPages[col.key] || 1"
+                  :total="columnTotals[col.key] || 0"
+                  :items-per-page="20"
+                  size="xs"
+                  @update:page="changeColumnPage(col.key, $event)"
+                />
+              </div>
+            </div>
           </div>
         </div>
       </div>
     </template>
   </UDashboardPanel>
 </template>
+
+<style scoped>
+.work-items-summary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+@container (min-width: 56rem) {
+  .work-items-summary {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+}
+
+@container (min-width: 56rem) {
+  .work-items-filter-layout.is-hosted {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .work-items-kanban-column.is-hosted {
+    width: 18.333333%;
+  }
+}
+</style>

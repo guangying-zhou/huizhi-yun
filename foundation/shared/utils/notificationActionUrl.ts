@@ -29,6 +29,7 @@ export interface NotificationTargetApplication {
   homeUrl?: string | null
   basePath?: string | null
   status?: string | null
+  deploymentState?: 'deployed' | 'not-deployed'
 }
 
 export interface NotificationActionTargetCatalog {
@@ -105,14 +106,57 @@ function applicationHome(
   }
 }
 
+/**
+ * The Enterprise Host's own pages live under this site path on whatever origin
+ * serves the Host. Only the Host itself passes this context (see
+ * `hostNotificationTarget()` in the app utils); servers never do.
+ */
+export const ENTERPRISE_HOST_NOTIFICATION_TARGET = Object.freeze({
+  appCode: 'enterprise',
+  basePath: '/enterprise/'
+} as const)
+
+export type NotificationHostTarget = typeof ENTERPRISE_HOST_NOTIFICATION_TARGET
+
+// Host API, asset and framework paths are never navigation targets.
+const HOST_RESERVED_SEGMENT = /^(?:api|_nuxt|_nuxt_icon|_nitro|_hzy0_worker_health|__.*)$/i
+
+/**
+ * Resolves a notification whose explicit action target is the Enterprise Host
+ * while the viewer is inside that Host. The Host's pages are native entries,
+ * not catalog applications, and the stored absolute URL carries the origin of
+ * the signed deployment catalog, which a mirrored site (for example the local
+ * hzy0 stack) does not share. The result is therefore a site-relative path:
+ * only the path/query/hash of a safe http(s) or single-slash value is kept, it
+ * must stay inside the Host base path, and navigation stays on the current
+ * origin, so no external or open redirect is possible.
+ */
+function resolveHostNativeActionUrl(actionValue: string, currentOrigin: string, host: NotificationHostTarget) {
+  const action = safeHttpUrl(actionValue, currentOrigin)
+  if (!action || action.pathname.includes('//') || !pathWithinBase(action.pathname, host.basePath)) return ''
+  const relative = action.pathname.slice(host.basePath.length)
+  const firstSegment = relative.split('/')[0] || ''
+  // Host route names are literal. Reject encoded first segments rather than
+  // letting the browser/router decode a reserved API or framework route later.
+  if (firstSegment.includes('%') || HOST_RESERVED_SEGMENT.test(firstSegment)) return ''
+  return `${action.pathname}${action.search}${action.hash}`
+}
+
 export function resolveNotificationActionUrl(
   detail: NotificationActionTarget,
   applications: NotificationTargetApplication[],
-  currentOrigin: string
+  currentOrigin: string,
+  host?: NotificationHostTarget | null
 ) {
   const actionValue = String(detail.actionUrl || '').trim()
   const targetAppCode = String(detail.actionTargetAppCode || detail.sourceAppCode || '').trim().toLowerCase()
   if (!actionValue || !targetAppCode || (!actionValue.startsWith('/') && !/^https?:\/\//i.test(actionValue))) return ''
+
+  // Only the Host's own target is Host-native; every other target (and the
+  // Host target viewed outside the Host) keeps the catalog rules below.
+  if (host && host === ENTERPRISE_HOST_NOTIFICATION_TARGET && targetAppCode === host.appCode) {
+    return resolveHostNativeActionUrl(actionValue, currentOrigin, host)
+  }
 
   const application = applications.find(app => (
     String(app.appCode || '').trim().toLowerCase() === targetAppCode

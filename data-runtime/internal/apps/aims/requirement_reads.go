@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 
 	"github.com/huizhi-yun/data-runtime/internal/httperror"
@@ -117,6 +118,25 @@ type requirementDetailVersion struct {
 	ApprovedAt   *string `json:"approvedAt"`
 	CreatedBy    string  `json:"createdBy"`
 	CreatedAt    string  `json:"createdAt"`
+}
+
+func (a *Adapter) projectRequirementDetail(ctx context.Context, rawProjectID, rawRequirementID string, query url.Values) (*requirementDetailData, error) {
+	projectID, err := strconv.ParseInt(strings.TrimSpace(rawProjectID), 10, 64)
+	if err != nil || projectID <= 0 {
+		return nil, httperror.New(http.StatusBadRequest, "invalid_project_id", "Invalid project ID")
+	}
+	detail, err := a.requirementDetail(ctx, rawRequirementID, query)
+	if err != nil {
+		return nil, err
+	}
+	if !requirementBelongsToProject(detail, projectID) {
+		return nil, httperror.New(http.StatusNotFound, "requirement_not_found", "Requirement not found")
+	}
+	return detail, nil
+}
+
+func requirementBelongsToProject(detail *requirementDetailData, projectID int64) bool {
+	return detail != nil && projectID > 0 && detail.ProjectID == projectID
 }
 
 type requirementImpactTask struct {

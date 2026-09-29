@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { h, resolveComponent } from 'vue'
+import { useDocumentDownload } from '../../composables/useDocumentDownload'
+import { useCodocsModule } from '../../../layer/useCodocsModule'
 
-definePageMeta({
-  layout: 'default'
-})
+definePageMeta({ hostContentInset: false })
 
 interface FavoriteDocument {
   uuid: string
@@ -15,6 +15,7 @@ interface FavoriteDocument {
 interface DocumentsListResponse {
   data?: {
     items: FavoriteDocument[]
+    total: number
   }
 }
 
@@ -28,31 +29,37 @@ interface ColumnHeaderContext {
 }
 
 usePageTitle('个人收藏')
+const { page, pageSize } = useListPage({ pageSize: 20 })
+const total = ref(0)
 
 const UButton = resolveComponent('UButton')
 const toast = useToast()
 const apiFetch = useRequestFetch()
+const { moduleUrl, documentUrl, cacheKey, hosted } = useCodocsModule()
 const { user } = useAuth()
 const { downloadDocument } = useDocumentDownload()
 const uid = computed(() => user.value || 'user1')
 
 // Fetch starred documents
 const fetchFavorites = async () => {
-  const response = await apiFetch<DocumentsListResponse>('/api/documents', {
-    query: {
-      owner: uid.value,
-      starred: true
-    }
+  // The Enterprise Host derives the owner from the verified session and only
+  // accepts bounded page/pageSize; standalone keeps its legacy owner + limit.
+  const response = await apiFetch<DocumentsListResponse>(moduleUrl('/api/documents'), {
+    query: hosted
+      ? { starred: true, page: page.value, pageSize }
+      : { owner: uid.value, starred: true, page: page.value, limit: pageSize }
   })
+  total.value = Number(response?.data?.total || 0)
   return response?.data?.items || []
 }
 
 const { data: documents, pending, refresh } = await useAsyncData(
-  'my-favorites',
+  cacheKey('my-favorites'),
   fetchFavorites,
   {
     getCachedData: () => undefined, // Always fetch fresh data on navigation
-    server: false
+    server: false,
+    watch: [page]
   }
 )
 
@@ -116,7 +123,7 @@ const toggleStar = async (doc: FavoriteDocument) => {
   // Better to just call API and refresh.
 
   try {
-    await $fetch(`/api/documents/${doc.uuid}`, {
+    await $fetch(moduleUrl(`/api/documents/${doc.uuid}`), {
       method: 'PATCH',
       body: { star_flag: newStatus }
     })
@@ -129,17 +136,25 @@ const toggleStar = async (doc: FavoriteDocument) => {
 
 const handleRowSelect = (_e: Event, row: { original?: FavoriteDocument }) => {
   if (row.original?.uuid) {
-    navigateTo(`/documents/${row.original.uuid}`)
+    navigateTo(documentUrl(row.original.uuid))
   }
 }
 </script>
 
 <template>
   <UDashboardPanel grow>
+    <div class="px-4 pt-4 sm:px-6 sm:pt-6">
+      <ContentPageHeader
+        :hosted="hosted"
+        title="收藏"
+        description="快速访问已收藏的文档。"
+        breadcrumb="文档 / 文档空间"
+      />
+    </div>
     <UDashboardToolbar>
       <template #left>
         <div class="flex items-center gap-2">
-          <UIcon name="i-lucide-star" class="w-4 h-4 text-yellow-500" />
+          <UIcon name="i-lucide-star" class="w-4 h-4 text-warning" />
           <span class="text-sm font-medium">我的收藏文档</span>
           <UBadge color="neutral" variant="subtle" size="sm">
             {{ documents?.length || 0 }} 个文档
@@ -172,10 +187,10 @@ const handleRowSelect = (_e: Event, row: { original?: FavoriteDocument }) => {
 
             <template #title-cell="{ row }">
               <div class="flex items-center gap-2">
-                <UIcon name="i-lucide-file-text" class="w-4 h-4 text-gray-500" />
+                <UIcon name="i-lucide-file-text" class="w-4 h-4 text-muted" />
                 <span
-                  class="font-medium text-gray-900 dark:text-gray-100 cursor-pointer hover:underline"
-                  @click.stop="row?.original?.uuid && navigateTo(`/documents/${row.original.uuid}`)"
+                  class="font-medium text-default cursor-pointer hover:underline"
+                  @click.stop="row?.original?.uuid && navigateTo(documentUrl(row.original.uuid))"
                 >
                   {{ row.original.title }}
                 </span>
@@ -197,7 +212,7 @@ const handleRowSelect = (_e: Event, row: { original?: FavoriteDocument }) => {
                 color="neutral"
                 variant="ghost"
                 icon="i-lucide-edit"
-                @click.stop="navigateTo(`/documents/${row.original.uuid}`)"
+                @click.stop="navigateTo(documentUrl(row.original.uuid))"
               />
               <UDropdownMenu
                 :items="[
@@ -217,6 +232,10 @@ const handleRowSelect = (_e: Event, row: { original?: FavoriteDocument }) => {
               </UDropdownMenu>
             </template>
           </UTable>
+          <div class="mt-3 flex flex-wrap items-center justify-between gap-3">
+            <span class="text-sm text-muted">共 {{ total }} 条</span>
+            <UPagination v-model:page="page" :items-per-page="pageSize" :total="total" />
+          </div>
         </div>
       </ClientOnly>
     </div>

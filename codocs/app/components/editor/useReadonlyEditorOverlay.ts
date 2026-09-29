@@ -18,13 +18,6 @@ interface UseReadonlyEditorOverlayOptions {
   toast: ToastLike
 }
 
-const escapeWatermarkText = (value: string) => value
-  .replace(/&/g, '&amp;')
-  .replace(/</g, '&lt;')
-  .replace(/>/g, '&gt;')
-  .replace(/"/g, '&quot;')
-  .replace(/'/g, '&apos;')
-
 export const useReadonlyEditorOverlay = ({
   editorRef,
   readonly,
@@ -53,23 +46,6 @@ export const useReadonlyEditorOverlay = ({
   const readonlyWatermarkText = computed(() => {
     if (!readonly.value || viewMode.value === 'source') return ''
     return String(watermarkText.value || '').trim()
-  })
-
-  const readonlyWatermarkStyle = computed(() => {
-    if (!readonlyWatermarkText.value) return {}
-
-    const text = escapeWatermarkText(readonlyWatermarkText.value)
-    const svg = `
-      <svg xmlns="http://www.w3.org/2000/svg" width="280" height="180" viewBox="0 0 280 180">
-        <g transform="rotate(-24 140 90)">
-          <text x="24" y="98" font-size="20" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" fill="rgba(100,116,139,0.16)">${text}</text>
-        </g>
-      </svg>
-    `.trim()
-
-    return {
-      '--readonly-watermark-image': `url("data:image/svg+xml,${encodeURIComponent(svg)}")`
-    }
   })
 
   const getReadonlyCodeBlockText = (block: HTMLElement) => {
@@ -235,7 +211,7 @@ export const useReadonlyEditorOverlay = ({
   return {
     readonlyCodeBlocks,
     readonlyLinks,
-    readonlyWatermarkStyle,
+    readonlyWatermarkText,
     scheduleReadonlyCodeBlockRefresh,
     setupReadonlyCodeBlockObserver,
     syncReadonlyCodeBlockObserver,

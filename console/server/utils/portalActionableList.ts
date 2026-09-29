@@ -8,6 +8,8 @@ export interface PendingActionableListInput {
   category?: unknown
   sourceAppCode?: unknown
   limit?: unknown
+  page?: unknown
+  pageSize?: unknown
   cursor?: unknown
 }
 

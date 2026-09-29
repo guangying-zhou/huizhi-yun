@@ -133,6 +133,10 @@ func persistActionableLifecycleEffects(ctx context.Context, tx *sql.Tx, instance
 	if effects == nil {
 		return nil
 	}
+	dependencies, err := persistWorkflowNotificationEffects(ctx, tx, instanceID, actionID, effects)
+	if err != nil {
+		return err
+	}
 	for index := range effects.ActionableLifecycles {
 		effect := &effects.ActionableLifecycles[index]
 		if effect.ActionableKey == "" || effect.ExpectedVersion == "" || effect.NextVersion == "" || effect.ExpectedVersion == effect.NextVersion || len(effect.Recipients) == 0 {
@@ -149,14 +153,18 @@ func persistActionableLifecycleEffects(ctx context.Context, tx *sql.Tx, instance
 		result, err := tx.ExecContext(ctx, `
 			INSERT INTO flow_actionable_outbox (
 				instance_id, action_id, actionable_key, expected_version, next_version,
-				next_state, recipients, prerequisite_notifications, delivery_status, attempt_count, created_at, updated_at
-			) VALUES (?, NULLIF(?, 0), ?, ?, ?, ?, ?, ?, 'pending', 0, NOW(), NOW())
-		`, instanceID, actionID, effect.ActionableKey, effect.ExpectedVersion, effect.NextVersion, effect.State, string(recipientsJSON), string(prerequisiteNotificationsJSON))
+				next_state, recipients, prerequisite_notifications, depends_on_notification_outbox_id,
+				delivery_status, attempt_count, created_at, updated_at
+			) VALUES (?, NULLIF(?, 0), ?, ?, ?, ?, ?, ?, NULLIF(?, 0), 'pending', 0, NOW(), NOW())
+		`, instanceID, actionID, effect.ActionableKey, effect.ExpectedVersion, effect.NextVersion, effect.State, string(recipientsJSON), string(prerequisiteNotificationsJSON), dependencies[effect.ActionableKey])
 		if err != nil {
 			return err
 		}
 		effect.EffectID, err = result.LastInsertId()
 		if err != nil {
+			return err
+		}
+		if err := tx.QueryRowContext(ctx, "SELECT version_no FROM flow_actionable_outbox WHERE id=? FOR UPDATE", effect.EffectID).Scan(&effect.VersionNo); err != nil {
 			return err
 		}
 	}
@@ -182,9 +190,31 @@ func (a *Adapter) pendingActionableLifecycleOutbox(ctx context.Context, limit in
 		limit = 100
 	}
 	rows, err := queryMaps(ctx, a.db, `
-		SELECT id, actionable_key, expected_version, next_version, next_state, recipients, prerequisite_notifications
-		FROM flow_actionable_outbox
-		WHERE delivery_status = 'pending'
+		SELECT id, version_no, actionable_key, expected_version, next_version, next_state, recipients, prerequisite_notifications
+		FROM flow_actionable_outbox o
+		WHERE o.delivery_status = 'pending'
+		  AND o.attempt_count < 12
+		  AND (o.depends_on_notification_outbox_id IS NULL OR EXISTS (
+		    SELECT 1 FROM flow_notification_outbox dependency
+		    WHERE dependency.id = o.depends_on_notification_outbox_id
+		      AND dependency.instance_id = o.instance_id
+		      AND dependency.delivery_status = 'delivered'
+		  ))
+		  -- A lifecycle CAS needs its projection; a non-NULL action also waits
+		  -- for new-key notifications created by that same action.
+		  AND NOT EXISTS (
+		    SELECT 1 FROM flow_notification_outbox n
+		    WHERE n.instance_id = o.instance_id
+		      AND (n.actionable_key = o.actionable_key OR (o.action_id IS NOT NULL AND n.action_id = o.action_id))
+		      AND n.delivery_status <> 'delivered'
+		  )
+		  AND (attempt_count = 0 OR last_attempt_at IS NULL OR
+		       TIMESTAMPDIFF(SECOND, last_attempt_at, NOW()) >= CASE
+		         WHEN attempt_count = 1 THEN 600
+		         WHEN attempt_count = 2 THEN 1200
+		         WHEN attempt_count = 3 THEN 2400
+		         ELSE 3600
+		       END)
 		ORDER BY id
 		LIMIT ?
 	`, limit)
@@ -205,6 +235,7 @@ func (a *Adapter) pendingActionableLifecycleOutbox(ctx context.Context, limit in
 		}
 		effects = append(effects, WorkflowActionableLifecycle{
 			EffectID:                  anyInt64(row["id"]),
+			VersionNo:                 anyInt64(row["version_no"]),
 			ActionableKey:             cleanAnyString(row["actionable_key"]),
 			ExpectedVersion:           cleanAnyString(row["expected_version"]),
 			NextVersion:               cleanAnyString(row["next_version"]),
@@ -216,43 +247,10 @@ func (a *Adapter) pendingActionableLifecycleOutbox(ctx context.Context, limit in
 	return InstanceAPIResponse{Code: 0, Data: effects}, "workflow.actionable_lifecycle.pending", nil
 }
 
-func (a *Adapter) acknowledgeActionableLifecycleOutbox(ctx context.Context, effectID string) (InstanceAPIResponse, string, error) {
-	result, err := a.db.ExecContext(ctx, `
-		UPDATE flow_actionable_outbox
-		SET delivery_status = 'delivered', delivered_at = COALESCE(delivered_at, NOW()), updated_at = NOW()
-		WHERE id = ? AND delivery_status = 'pending'
-	`, effectID)
-	if err != nil {
-		return InstanceAPIResponse{}, "", err
-	}
-	affected, err := result.RowsAffected()
-	if err != nil {
-		return InstanceAPIResponse{}, "", err
-	}
-	if affected == 0 {
-		exists, err := existsByQuery(ctx, a.db, "SELECT id FROM flow_actionable_outbox WHERE id = ? AND delivery_status = 'delivered'", effectID)
-		if err != nil {
-			return InstanceAPIResponse{}, "", err
-		}
-		if !exists {
-			return InstanceAPIResponse{}, "", fmt.Errorf("actionable lifecycle outbox effect %s not found", effectID)
-		}
-	}
-	return InstanceAPIResponse{Code: 0, Data: map[string]any{"effect_id": parseInt64Fallback(effectID), "status": "delivered"}}, "workflow.actionable_lifecycle.ack", nil
+func (a *Adapter) acknowledgeActionableLifecycleOutbox(ctx context.Context, effectID string, body map[string]any) (InstanceAPIResponse, string, error) {
+	return a.acknowledgeWorkflowDelivery(ctx, workflowActionableDelivery, effectID, body)
 }
 
-func (a *Adapter) failActionableLifecycleOutbox(ctx context.Context, effectID string) (InstanceAPIResponse, string, error) {
-	result, err := a.db.ExecContext(ctx, `
-		UPDATE flow_actionable_outbox
-		SET attempt_count = attempt_count + 1, last_attempt_at = NOW(), updated_at = NOW()
-		WHERE id = ? AND delivery_status = 'pending'
-	`, effectID)
-	if err != nil {
-		return InstanceAPIResponse{}, "", err
-	}
-	affected, err := result.RowsAffected()
-	if err != nil {
-		return InstanceAPIResponse{}, "", err
-	}
-	return InstanceAPIResponse{Code: 0, Data: map[string]any{"effect_id": parseInt64Fallback(effectID), "pending": affected > 0}}, "workflow.actionable_lifecycle.fail", nil
+func (a *Adapter) failActionableLifecycleOutbox(ctx context.Context, effectID string, body map[string]any) (InstanceAPIResponse, string, error) {
+	return a.failWorkflowDelivery(ctx, workflowActionableDelivery, effectID, body)
 }

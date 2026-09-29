@@ -1,0 +1,243 @@
+{
+  "observedAt": "2026-09-14T14:19:15.938925+00:00",
+  "tenant": "C000001",
+  "environment": "test",
+  "snapshotSha256": "fbc73bfb0a92493206fd16864acdbc5c9e4552c0e62da8b842cf2087bc38a295",
+  "signatureVerified": true,
+  "mode": "open",
+  "revision": 2,
+  "unresolvedCount": 41,
+  "window": {
+    "from": "2026-09-14T05:23:00Z",
+    "to": "2026-09-14T06:23:00Z"
+  },
+  "runtimeLogGroups": [
+    {
+      "operation": "console.auth.service_token.issue",
+      "status": "200",
+      "errorCode": "",
+      "count": 986
+    },
+    {
+      "operation": "console:policy-bundle:write",
+      "status": "200",
+      "errorCode": "",
+      "count": 19
+    },
+    {
+      "operation": "console:policy-bundle:read",
+      "status": "200",
+      "errorCode": "",
+      "count": 322
+    },
+    {
+      "operation": "console.auth.identity.resolve_or_bind",
+      "status": "200",
+      "errorCode": "",
+      "count": 1
+    },
+    {
+      "operation": "console.directory.user.read",
+      "status": "200",
+      "errorCode": "",
+      "count": 1
+    },
+    {
+      "operation": "console.auth.session.issue",
+      "status": "200",
+      "errorCode": "",
+      "count": 1
+    },
+    {
+      "operation": "console.audit.append",
+      "status": "200",
+      "errorCode": "",
+      "count": 1
+    },
+    {
+      "operation": "console.auth.oidc.client.resolve",
+      "status": "200",
+      "errorCode": "",
+      "count": 4
+    },
+    {
+      "operation": "console.auth.session.resolve",
+      "status": "200",
+      "errorCode": "",
+      "count": 239
+    },
+    {
+      "operation": "console.auth.oidc.authorization_code.issue",
+      "status": "200",
+      "errorCode": "",
+      "count": 1
+    },
+    {
+      "operation": "console.auth.oidc.authorization_code.consume",
+      "status": "200",
+      "errorCode": "",
+      "count": 1
+    },
+    {
+      "operation": "console.auth.oidc.token.sign",
+      "status": "200",
+      "errorCode": "",
+      "count": 19
+    },
+    {
+      "operation": "console.auth.oidc.refresh_token.issue",
+      "status": "200",
+      "errorCode": "",
+      "count": 2
+    },
+    {
+      "operation": "console.auth.oidc.token_event.append",
+      "status": "200",
+      "errorCode": "",
+      "count": 139
+    },
+    {
+      "operation": "console.auth.oidc.jwks.read",
+      "status": "200",
+      "errorCode": "",
+      "count": 170
+    },
+    {
+      "operation": "console.settings.read",
+      "status": "200",
+      "errorCode": "",
+      "count": 18
+    },
+    {
+      "operation": "console.auth.runtime_app_identity.consume",
+      "status": "200",
+      "errorCode": "",
+      "count": 15
+    },
+    {
+      "operation": "aims.products.authorization_object",
+      "status": "200",
+      "errorCode": "",
+      "count": 23
+    },
+    {
+      "operation": "console.notifications.summary",
+      "status": "200",
+      "errorCode": "",
+      "count": 14
+    },
+    {
+      "operation": "error",
+      "status": "403",
+      "errorCode": "console_service_token_grant_inactive",
+      "count": 1
+    },
+    {
+      "operation": "aims.products.workspace.view",
+      "status": "200",
+      "errorCode": "",
+      "count": 2
+    },
+    {
+      "operation": "aims.product-requests.list",
+      "status": "200",
+      "errorCode": "",
+      "count": 2
+    },
+    {
+      "operation": "console.avatar_object.read",
+      "status": "200",
+      "errorCode": "",
+      "count": 2
+    },
+    {
+      "operation": "console.runtime.presence.heartbeat",
+      "status": "200",
+      "errorCode": "",
+      "count": 10
+    },
+    {
+      "operation": "aims.portfolios.list",
+      "status": "200",
+      "errorCode": "",
+      "count": 2
+    },
+    {
+      "operation": "console.directory.departments.read",
+      "status": "200",
+      "errorCode": "",
+      "count": 1
+    },
+    {
+      "operation": "console.directory.user-departments.read",
+      "status": "200",
+      "errorCode": "",
+      "count": 1
+    },
+    {
+      "operation": "aims.projects.list",
+      "status": "200",
+      "errorCode": "",
+      "count": 1
+    },
+    {
+      "operation": "aims.favorites.list",
+      "status": "200",
+      "errorCode": "",
+      "count": 2
+    },
+    {
+      "operation": "aims.products.list",
+      "status": "200",
+      "errorCode": "",
+      "count": 4
+    },
+    {
+      "operation": "runtime.health",
+      "status": "200",
+      "errorCode": "",
+      "count": 5
+    },
+    {
+      "operation": "console.auth.oidc.refresh_token.consume",
+      "status": "200",
+      "errorCode": "",
+      "count": 1
+    },
+    {
+      "operation": "error",
+      "status": "403",
+      "errorCode": "insufficient_scope",
+      "count": 1
+    },
+    {
+      "operation": "aims.workspace.read",
+      "status": "200",
+      "errorCode": "",
+      "count": 2
+    },
+    {
+      "operation": "aims.my_work_items.list",
+      "status": "200",
+      "errorCode": "",
+      "count": 1
+    },
+    {
+      "operation": "console.auth.oidc.service_token_state.verify",
+      "status": "200",
+      "errorCode": "",
+      "count": 1
+    },
+    {
+      "operation": "console.directory.users.read",
+      "status": "200",
+      "errorCode": "",
+      "count": 1
+    }
+  ],
+  "limitations": [
+    "Aggregate Runtime logs lack direct activity ID correlation.",
+    "Does not prove completeness of Worker or downstream external execution.",
+    "No activity approved or reconciled."
+  ]
+}

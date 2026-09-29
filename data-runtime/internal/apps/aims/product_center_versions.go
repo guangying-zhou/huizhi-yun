@@ -100,7 +100,7 @@ func (a *Adapter) handleProductCenterVersionsRuntime(ctx context.Context, method
 				}
 			}
 			key, _ := body["idempotency_key"].(string)
-			result, err := productcenter.CreateLightweightVersionPlanItem(ctx, a.DB(), productcenter.CommandIdentity{ProductCode: code, ActorUID: query.Get("current_user"), Action: "product_versions:plan-item-create", IdempotencyKey: key}, permit, requestViewPermit, requestDecisionPermit, planningPermit, input)
+			result, err := productcenter.CreateLightweightVersionPlanItem(ctx, a.DB(), productcenter.CommandIdentity{ProductCode: code, ActorUID: query.Get("current_user"), Action: "product_versions:plan-item-create", IdempotencyKey: key}, permit, requestViewPermit, requestDecisionPermit, planningPermit, input, integrationoperation.TrustedContext{TenantCode: query.Get("hzy_runtime_tenant_code"), DeploymentCode: query.Get("hzy_runtime_deployment_code"), SourceApp: "aims", ServiceClientID: query.Get("hzy_runtime_service_client_id")})
 			return result, operation, true, productRuntimeError(err)
 		}
 		if action == "plan-item-edit" {

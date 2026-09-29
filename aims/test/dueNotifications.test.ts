@@ -170,7 +170,10 @@ test('Cloudflare scheduled notification source is frozen, bounded, server-owned 
   assert.match(drain, /options\.event \|\| taskEligibilityEvent\(options\.taskContext\)/)
   assert.ok(drain.indexOf('if (!isAimsDueNotificationDeliveryEnabled())') < drain.lastIndexOf('requireAimsDueNotificationRuntimeBinding()'))
   assert.ok(drain.lastIndexOf('requireAimsDueNotificationRuntimeBinding()') < drain.indexOf('options.event || taskEligibilityEvent'))
-  assert.ok(drain.indexOf('if (!isAimsDueNotificationDeliveryEnabled())') < drain.lastIndexOf('await deliverCandidate(eligibilityEvent, candidate)'))
+  assert.ok(drain.indexOf('if (!isAimsDueNotificationDeliveryEnabled())') < drain.lastIndexOf('await deliverCandidate(runtime, eligibilityEvent, candidate)'))
+  // Without an injected unified caller the legacy purpose-signed worker contract is used.
+  assert.match(drain, /const runtime: DueRuntimeCaller = options\.runtime \|\| callAimsDueNotificationRuntime/)
+  assert.doesNotMatch(drain, /callAimsDueNotificationRuntime(<[^>]*>)?\('\/v1\/aims/)
   assert.match(drain, /resolveAimsDueRecipient/)
   assert.doesNotMatch(drain, /findDepartment|managerId/)
   assert.match(drain, /eventVersion: candidate\.eventVersion/)

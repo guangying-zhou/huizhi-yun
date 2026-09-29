@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -86,6 +87,45 @@ func (a *Adapter) submitTimesheetWeek(
 		return nil, httperror.New(http.StatusConflict, "invalid_period_timezone", "weekly reporting period timezone is invalid")
 	}
 
+	// Lock current project/member facts before time-entry rows, matching individual
+	// writes. A newly appearing project is rejected after the final row lock.
+	identity, hosted := ctx.Value(enterpriseProjectCommandScopeKey{}).(EnterpriseProjectUpdateIdentity)
+	checkedProjects := map[int64]bool{}
+	if hosted {
+		if identity.ActorUID != actor || identity.CommandScope == nil {
+			return nil, httperror.New(403, "enterprise_project_command_scope_invalid", "Project authorization is invalid")
+		}
+		projectRows, err := tx.QueryContext(ctx, "SELECT DISTINCT project_id FROM time_entries WHERE uid=? AND entry_date BETWEEN DATE(?) AND DATE(?) AND review_status IN ('draft','returned') ORDER BY project_id", actor, weekStart, weekEnd)
+		if err != nil {
+			return nil, err
+		}
+		var projectIDs []int64
+		for projectRows.Next() {
+			var projectID int64
+			if err := projectRows.Scan(&projectID); err != nil {
+				projectRows.Close()
+				return nil, err
+			}
+			projectIDs = append(projectIDs, projectID)
+		}
+		err = projectRows.Err()
+		projectRows.Close()
+		if err != nil {
+			return nil, err
+		}
+		for _, projectID := range projectIDs {
+			code := strconv.FormatInt(projectID, 10)
+			if err := requireEnterpriseProjectCommandScopeTx(ctx, tx, identity, code, "", "time-entry"); err != nil {
+				return nil, err
+			}
+			txCtx := context.WithValue(ctx, enterpriseTimeEntryTxKey{}, tx)
+			if err := a.requireProjectTimesheetAccess(txCtx, code, actor, query); err != nil {
+				return nil, err
+			}
+			checkedProjects[projectID] = true
+		}
+	}
+
 	rows, err := tx.QueryContext(ctx, `
 		SELECT id, project_id, entry_date, review_status
 		FROM time_entries
@@ -124,6 +164,13 @@ func (a *Adapter) submitTimesheetWeek(
 		return nil, httperror.New(http.StatusConflict, "timesheet_week_has_no_editable_entries", "timesheet week has no draft or returned entries")
 	}
 
+	if hosted {
+		for _, item := range candidates {
+			if !checkedProjects[item.projectID] {
+				return nil, httperror.New(409, "timesheet_week_changed", "Week entries changed; reload before submitting")
+			}
+		}
+	}
 	managerRouteCount := 0
 	summaryRouteCount := 0
 	entryIDs := make([]int64, 0, len(candidates))
@@ -204,6 +251,14 @@ func (a *Adapter) listProjectTimeEntryReviews(
 	if _, _, err := parseISOPeriodKey(periodKey); err != nil {
 		return nil, err
 	}
+	page, paged, err := timeEntryPagination(query)
+	if err != nil {
+		return nil, err
+	}
+	_, scoped := ctx.Value(enterpriseReviewScopeKey{}).(enterpriseReviewScopes)
+	if paged || scoped {
+		return a.listProjectTimeEntryReviewPage(ctx, projectID, actor, periodKey, query, page, paged)
+	}
 	rows, err := a.DB().QueryContext(ctx, `
 		SELECT
 		  entry.id,
@@ -272,6 +327,9 @@ func (a *Adapter) reviewProjectTimeEntries(
 	query url.Values,
 	body map[string]any,
 ) (map[string]any, error) {
+	if _, hosted := ctx.Value(enterpriseProjectCommandScopeKey{}).(EnterpriseProjectUpdateIdentity); hosted {
+		return a.reviewEnterpriseProjectTimeEntries(ctx, rawProjectID, query, body)
+	}
 	if !truthyQuery(
 		query,
 		"current_user_can_approve_timesheet",

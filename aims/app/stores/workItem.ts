@@ -1,4 +1,7 @@
 import { defineStore } from 'pinia'
+import { hostedWorkItemCreator } from '../utils/hostedWorkItemCreate'
+import { createCommandIntents } from '../utils/commandIntent'
+import { useAimsModule } from '../../layer/useAimsModule'
 import type {
   WorkItem,
   WorkItemDetail,
@@ -7,9 +10,11 @@ import type {
   UpdateWorkItemRequest,
   WorkItemListQuery,
   PaginatedList
-} from '~/types/aims'
+} from '../types/aims'
 
 type RawWorkItem = Partial<WorkItem> & Record<string, unknown>
+
+const legacyWorkItemIntents = createCommandIntents()
 
 function nullableNumber(value: unknown): number | null {
   if (value === undefined || value === null || value === '') return null
@@ -95,17 +100,28 @@ function groupWorkItemsByStatus(items: WorkItem[]) {
 }
 
 export const useWorkItemStore = defineStore('workItem', () => {
+  // 同一份 store 供独立应用与企业宿主使用：非宿主模式下 moduleUrl 原样返回路径。
+  const { moduleUrl, hosted, cacheKey } = useAimsModule()
+  const createHostedItem = hostedWorkItemCreator((path, options) => $fetch(moduleUrl(path), options))
   // ---- State ----
   const items = ref<WorkItem[]>([])
   const total = ref(0)
+  const listAncestors = ref<{ id: number, parentId: number | null, itemKey: string, title: string }[]>([])
   const currentItem = ref<WorkItemDetail | null>(null)
   const loading = ref(false)
+  let listReadGeneration = 0
 
   // 看板分组数据（按 status 分组）
   const boardColumns = ref<Record<string, WorkItem[]>>({})
+  const boardError = ref('')
+  const boardTotals = ref<Record<string, number>>({})
+  const boardSummary = ref<{ total: number, status: Record<string, number>, type: Record<string, number>, severity: Record<string, number>, wipStatus: Record<string, number> }>({ total: 0, status: {}, type: {}, severity: {}, wipStatus: {} })
+  const boardAncestors = ref<{ id: number, parentId: number | null, itemKey: string, title: string }[]>([])
+  let boardReadGeneration = 0
 
   // ---- Actions ----
   async function fetchItems(projectId: number, query?: WorkItemListQuery) {
+    const generation = ++listReadGeneration
     loading.value = true
     try {
       const params = new URLSearchParams()
@@ -122,14 +138,19 @@ export const useWorkItemStore = defineStore('workItem', () => {
       if (query?.pageSize) params.set('page_size', String(query.pageSize))
 
       const res = await $fetch<{ code: number, data: PaginatedList<WorkItem> | unknown }>(
-        `/api/v1/projects/${projectId}/work-items?${params.toString()}`
+        moduleUrl(`/api/v1/projects/${projectId}/work-items?${params.toString()}`)
       )
       if (res.code === 0) {
+        if (generation !== listReadGeneration) return
         items.value = normalizeWorkItemList(res.data)
-        total.value = Number((res.data as PaginatedList<WorkItem>)?.total) || items.value.length
+        const responseTotal = Number((res.data as PaginatedList<WorkItem>)?.total)
+        total.value = Number.isFinite(responseTotal) ? responseTotal : items.value.length
+        listAncestors.value = Array.isArray((res.data as { ancestors?: unknown })?.ancestors)
+          ? (res.data as { ancestors: typeof listAncestors.value }).ancestors
+          : []
       }
     } finally {
-      loading.value = false
+      if (generation === listReadGeneration) loading.value = false
     }
   }
 
@@ -143,7 +164,7 @@ export const useWorkItemStore = defineStore('workItem', () => {
       if (opts?.versionId) params.set('version_id', String(opts.versionId))
 
       const res = await $fetch<{ code: number, data: Record<string, WorkItem[]> | PaginatedList<WorkItem> | unknown }>(
-        `/api/v1/projects/${projectId}/work-items?${params.toString()}`
+        moduleUrl(`/api/v1/projects/${projectId}/work-items?${params.toString()}`)
       )
       if (res.code === 0) {
         if (res.data && typeof res.data === 'object' && Array.isArray((res.data as { items?: unknown }).items)) {
@@ -166,11 +187,61 @@ export const useWorkItemStore = defineStore('workItem', () => {
     }
   }
 
+  async function fetchBoardPages(projectId: number, opts: {
+    milestoneId?: number | '__null__'
+    type?: string
+    tier?: string
+    versionId?: number
+    quickFilter?: 'all' | 'my_assigned' | 'my_reported' | 'unassigned'
+    pages?: Record<string, number>
+  }) {
+    const generation = ++boardReadGeneration
+    loading.value = true
+    boardError.value = ''
+    try {
+      const statuses = ['planning', 'todo', 'in_progress', 'in_review', 'completed']
+      const results = await Promise.all(statuses.map(async (status) => {
+        const params = new URLSearchParams({ view: 'board', status, page: String(opts.pages?.[status] || 1), pageSize: '20' })
+        if (opts.milestoneId) params.set('milestoneId', String(opts.milestoneId))
+        if (opts.type) params.set('type', opts.type)
+        if (opts.tier) params.set('tier', opts.tier)
+        if (opts.versionId) params.set('version_id', String(opts.versionId))
+        if (opts.quickFilter && opts.quickFilter !== 'all') params.set('quickFilter', opts.quickFilter)
+        const response = await $fetch<{
+          code: number
+          data: {
+            items: RawWorkItem[]
+            total: number
+            summary: typeof boardSummary.value
+            ancestors: typeof boardAncestors.value
+          }
+        }>(moduleUrl(`/api/v1/projects/${projectId}/work-items?${params.toString()}`))
+        if (response.code !== 0) throw new Error('看板读取失败')
+        return { status, data: response.data }
+      }))
+      if (generation !== boardReadGeneration) return
+      boardColumns.value = Object.fromEntries(results.map(result => [result.status, result.data.items.map(normalizeWorkItem)]))
+      boardTotals.value = Object.fromEntries(results.map(result => [result.status, Number(result.data.total) || 0]))
+      boardSummary.value = results[0]?.data.summary || { total: 0, status: {}, type: {}, severity: {}, wipStatus: {} }
+      boardAncestors.value = results.flatMap(result => result.data.ancestors || [])
+    } catch (err) {
+      if (generation !== boardReadGeneration) return
+      console.error('[WorkItemStore] fetchBoardPages failed:', err)
+      boardColumns.value = {}
+      boardTotals.value = {}
+      boardSummary.value = { total: 0, status: {}, type: {}, severity: {}, wipStatus: {} }
+      boardAncestors.value = []
+      boardError.value = '看板加载失败，请重试'
+    } finally {
+      if (generation === boardReadGeneration) loading.value = false
+    }
+  }
+
   async function fetchItem(id: number) {
     loading.value = true
     try {
       const res = await $fetch<{ code: number, data: WorkItemDetail }>(
-        `/api/v1/work-items/${id}`
+        moduleUrl(`/api/v1/work-items/${id}`)
       )
       if (res.code === 0) {
         currentItem.value = res.data
@@ -181,14 +252,21 @@ export const useWorkItemStore = defineStore('workItem', () => {
   }
 
   async function createItem(projectId: number, data: CreateWorkItemRequest) {
-    const res = await $fetch<{ code: number, data: WorkItem }>(
-      `/api/v1/projects/${projectId}/work-items`,
-      { method: 'POST', body: data }
-    )
+    const res = hosted
+      ? { code: 0, data: await createHostedItem(cacheKey('commands'), projectId, data) as RawWorkItem }
+      : await $fetch<{ code: number, data: WorkItem }>(
+          moduleUrl(`/api/v1/projects/${projectId}/work-items`),
+          { method: 'POST', body: data }
+        )
     if (res.code === 0) {
       const item = normalizeWorkItem(res.data as RawWorkItem)
-      items.value.unshift(item)
-      total.value++
+      const existing = hosted ? items.value.findIndex(row => row.id === item.id) : -1
+      if (existing >= 0) {
+        items.value[existing] = item
+      } else {
+        items.value.unshift(item)
+        total.value++
+      }
       return item
     }
     return normalizeWorkItem(res.data as RawWorkItem)
@@ -196,7 +274,7 @@ export const useWorkItemStore = defineStore('workItem', () => {
 
   async function updateItem(id: number, data: UpdateWorkItemRequest) {
     const res = await $fetch<{ code: number, data: WorkItem }>(
-      `/api/v1/work-items/${id}`,
+      moduleUrl(`/api/v1/work-items/${id}`),
       { method: 'PUT', body: data }
     )
     if (res.code === 0) {
@@ -212,7 +290,7 @@ export const useWorkItemStore = defineStore('workItem', () => {
   }
 
   async function deleteItem(id: number) {
-    await $fetch(`/api/v1/work-items/${id}`, { method: 'DELETE' })
+    await $fetch(moduleUrl(`/api/v1/work-items/${id}`), { method: 'DELETE' })
     items.value = items.value.filter(i => i.id !== id)
     total.value--
     if (currentItem.value?.id === id) {
@@ -221,19 +299,25 @@ export const useWorkItemStore = defineStore('workItem', () => {
   }
 
   async function batchUpdate(ids: number[], changes: Record<string, unknown>) {
+    const body = { ids, changes }
+    const intent = `batch:${ids.join(',')}`
     const res = await $fetch<{ code: number, data: { updated: number } }>(
-      '/api/v1/work-items/batch',
-      { method: 'PATCH', body: { ids, changes } }
+      moduleUrl('/api/v1/work-items/batch'),
+      { method: 'PATCH', body, headers: legacyWorkItemIntents.headers(intent, body), retry: 0 }
     )
+    legacyWorkItemIntents.complete(intent)
     return res.data
   }
 
   // ---- Comments ----
   async function addComment(workItemId: number, content: string) {
+    const body = { content }
+    const intent = `comment:${workItemId}`
     const res = await $fetch<{ code: number, data: WorkItemComment }>(
-      `/api/v1/work-items/${workItemId}/comments`,
-      { method: 'POST', body: { content } }
+      moduleUrl(`/api/v1/work-items/${workItemId}/comments`),
+      { method: 'POST', body, headers: legacyWorkItemIntents.headers(intent, body), retry: 0 }
     )
+    legacyWorkItemIntents.complete(intent)
     if (res.code === 0 && currentItem.value?.id === workItemId) {
       if (!currentItem.value.comments) currentItem.value.comments = []
       currentItem.value.comments.push(res.data)
@@ -244,11 +328,17 @@ export const useWorkItemStore = defineStore('workItem', () => {
   return {
     items,
     total,
+    listAncestors,
     currentItem,
     loading,
     boardColumns,
+    boardError,
     fetchItems,
     fetchBoardItems,
+    fetchBoardPages,
+    boardTotals,
+    boardSummary,
+    boardAncestors,
     fetchItem,
     createItem,
     updateItem,

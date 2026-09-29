@@ -1,5 +1,7 @@
 <script setup lang="ts">
-import type { ProductLineGroup, ProductTreeItem, ProductTreePage } from '~/types/productTree'
+import { useAimsModule } from '../../../layer/useAimsModule'
+const { moduleUrl } = useAimsModule()
+import type { ProductLineGroup, ProductTreeItem, ProductTreePage } from '../../types/productTree'
 
 const emit = defineEmits<{ onboarded: [] }>()
 interface PreviewItem { product_code: string, product_name: string, onboardable: boolean }
@@ -28,7 +30,7 @@ async function selectLine(line: ProductLineGroup) {
 async function loadManagedCodes(line: string) {
   const codes = new Set<string>()
   for (let page = 1; page <= 20; page++) {
-    const response = await $fetch<{ code: number, data: ProductTreePage }>('/api/v1/products', {
+    const response = await $fetch<{ code: number, data: ProductTreePage }>(moduleUrl('/api/v1/products'), {
       query: { tree: 'true', childLine: line, page: String(page), pageSize: '100' }
     })
     const items: ProductTreeItem[] = response?.code === 0 && Array.isArray(response.data?.items) ? response.data.items : []
@@ -47,7 +49,7 @@ async function loadPreview() {
   error.value = null
   try {
     const [response, managedCodes] = await Promise.all([
-      $fetch<{ code: number, data: Preview }>('/api/v1/product-candidates', { query: { mode: 'line', productLine: line } }),
+      $fetch<{ code: number, data: Preview }>(moduleUrl('/api/v1/product-candidates'), { query: { mode: 'line', productLine: line } }),
       loadManagedCodes(line)
     ])
     if (current !== generation) return
@@ -96,7 +98,7 @@ async function save() {
   busy.value = true
   error.value = null
   try {
-    const response = await $fetch<{ code: number }>('/api/v1/products', { method: 'POST', body, headers: { 'Idempotency-Key': retry.key } })
+    const response = await $fetch<{ code: number }>(moduleUrl('/api/v1/products'), { method: 'POST', body, headers: { 'Idempotency-Key': retry.key } })
     if (response.code !== 0) throw new Error('启用结果不完整，请重试')
     open.value = false
     toast.add({ title: '产品线已启用统一产品管理', color: 'success' })

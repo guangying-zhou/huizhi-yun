@@ -7,6 +7,7 @@ import (
 
 type Adapter struct {
 	*compat.Adapter
+	enterpriseWrites *enterpriseWriteBinding
 }
 
 var requiredTables = []string{
@@ -22,6 +23,7 @@ var requiredTables = []string{
 	"weekly_reporting_settings",
 	"weekly_reporting_pilot_projects",
 	"project_lifecycle_events",
+	"project_activity_logs",
 	"project_manager_delegations",
 	"weekly_reporting_periods",
 	"weekly_report_obligations",

@@ -1,10 +1,18 @@
 <script setup lang="ts">
-import { projectStatusConfig, getProjectCategoryLabel } from '~/config/project'
+import { useAimsModule } from '../../../layer/useAimsModule'
+import { useProjectStore } from '../../stores/project'
+import { useProjectContext } from '../../composables/useProjectContext'
+import { projectStatusConfig, getProjectCategoryLabel } from '../../config/project'
 import {
   deriveProjectLifecycleFromWorkflow,
   projectWorkflowActionOrder
-} from '~/utils/projectWorkflow'
-import { projectModuleEnabled } from '~/utils/projectModuleConfig'
+} from '../../utils/projectWorkflow'
+import { useTimeEntryReadPage } from '../../composables/useTimeEntryPage'
+import { isProjectProjection, type ProjectGroupPage } from '../../utils/projectOverviewPagination'
+import { projectModuleEnabled } from '../../utils/projectModuleConfig'
+
+// 同一份组件供独立应用与企业宿主使用：非宿主模式下 moduleUrl 原样返回路径。
+const { moduleUrl, hosted } = useAimsModule()
 
 const route = useRoute()
 const projectStore = useProjectStore()
@@ -15,9 +23,22 @@ const isProjectSettingsRoute = computed(() => route.path === `/projects/${projec
 
 const project = computed(() => projectStore.currentProject)
 const projectSwitcherOpen = ref(false)
-const projectSwitcherSearch = ref('')
+const { search: projectSwitcherSearch, debounced: switcherSearch } = useDebouncedSearch()
+const switcherPage = ref(1)
+const switcherRead = useTimeEntryReadPage<ProjectGroupPage>(isProjectProjection)
 const projectSwitcherFavoritesOnly = ref(false)
 
+async function readSwitcher(page = 1) {
+  switcherPage.value = page
+  await switcherRead.read(moduleUrl('/api/v1/projects'), { projection: 'switcher', participating_only: '1', favoritesOnly: projectSwitcherFavoritesOnly.value ? '1' : undefined, search: switcherSearch.value || undefined, page, pageSize: 20 })
+}
+watch([switcherSearch, projectSwitcherFavoritesOnly], () => {
+  if (hosted && projectSwitcherOpen.value) void readSwitcher()
+})
+watch(switcherRead.fingerprint, () => {
+  projectSwitcherOpen.value = false
+  switcherRead.clear()
+}, { flush: 'sync' })
 const switchableProjects = computed(() => {
   return projectStore.projects.filter(item =>
     item.canAccess !== false
@@ -27,6 +48,7 @@ const switchableProjects = computed(() => {
 })
 
 const projectSwitcherItems = computed(() => {
+  if (hosted) return (switcherRead.data.value?.items || []).map(projectStore.normalizeProject)
   const keyword = projectSwitcherSearch.value.trim().toLowerCase()
 
   return [...switchableProjects.value]
@@ -55,6 +77,12 @@ const projectSwitcherItems = computed(() => {
 })
 
 watch(projectSwitcherOpen, (open) => {
+  // A deep link lands here without the project list page having loaded the
+  // store, so the switcher fetches the accessible projects on first open.
+  if (hosted && open) void readSwitcher()
+  else if (open && !projectStore.projects.length && !projectStore.loading) {
+    void projectStore.fetchProjects({ pageSize: 100 })
+  }
   if (!open) {
     projectSwitcherSearch.value = ''
     projectSwitcherFavoritesOnly.value = false
@@ -63,6 +91,7 @@ watch(projectSwitcherOpen, (open) => {
 
 async function handleProjectFavoriteToggle(id: number) {
   await projectStore.toggleFavorite(id)
+  if (hosted) await readSwitcher(switcherPage.value)
 }
 
 async function handleProjectSwitch(id: number) {
@@ -86,7 +115,7 @@ async function fetchRequirementTargets() {
   if (!projectId.value) return
   try {
     const res = await $fetch<{ code: number, data: { items?: Array<{ id: number }>, total?: number } }>(
-      `/api/v1/projects/${projectId.value}/work-items`,
+      moduleUrl(`/api/v1/projects/${projectId.value}/work-items`),
       {
         params: {
           type: 'requirement',
@@ -106,55 +135,62 @@ const tabs = computed(() => {
   const p = project.value
   const moduleConfig = p?.moduleConfig
   const category = p?.category
+  // Host 未注册 /projects/:id/settings，"设置" 改跳 Host 的项目编辑页；独立应用保持原设置页。
+  const settingsTab = { label: '设置', icon: 'i-lucide-settings', to: hosted ? moduleUrl(`/projects/${pid}/edit`) : moduleUrl(`/projects/${pid}/settings`) }
   if (category === 'routine') {
     return [
-      { label: '概览', icon: 'i-lucide-layout-dashboard', to: `/projects/${pid}` },
-      { label: '工作项', icon: 'i-lucide-list-checks', to: `/projects/${pid}/board` },
-      { label: '工时', icon: 'i-lucide-clock', to: `/projects/${pid}/timesheet` },
-      { label: '设置', icon: 'i-lucide-settings', to: `/projects/${pid}/settings` }
+      { label: '概览', icon: 'i-lucide-layout-dashboard', to: moduleUrl(`/projects/${pid}`) },
+      { label: '工作项', icon: 'i-lucide-list-checks', to: moduleUrl(`/projects/${pid}/board`) },
+      { label: '工时', icon: 'i-lucide-clock', to: moduleUrl(`/projects/${pid}/timesheet`) },
+      settingsTab
     ]
   }
   const items = [
-    { label: '概览', icon: 'i-lucide-layout-dashboard', to: `/projects/${pid}` },
-    { label: '目标', icon: 'i-lucide-target', to: `/projects/${pid}/work-items` },
-    { label: '任务', icon: 'i-lucide-calendar-check', to: `/projects/${pid}/board` },
-    { label: '文档', icon: 'i-lucide-files', to: `/projects/${pid}/documents` },
-    { label: '成果', icon: 'i-lucide-award', to: `/projects/${pid}/output` },
-    { label: '工时', icon: 'i-lucide-clock', to: `/projects/${pid}/timesheet` },
-    { label: '周报', icon: 'i-lucide-calendar-days', to: `/projects/${pid}/weekly-reports` },
-    { label: '设置', icon: 'i-lucide-settings', to: `/projects/${pid}/settings` }
+    { label: '概览', icon: 'i-lucide-layout-dashboard', to: moduleUrl(`/projects/${pid}`) },
+    { label: '目标', icon: 'i-lucide-target', to: moduleUrl(`/projects/${pid}/work-items`) },
+    { label: '任务', icon: 'i-lucide-calendar-check', to: moduleUrl(`/projects/${pid}/board`) },
+    { label: '文档', icon: 'i-lucide-files', to: moduleUrl(`/projects/${pid}/documents`) },
+    { label: '成果', icon: 'i-lucide-award', to: moduleUrl(`/projects/${pid}/output`) },
+    { label: '工时', icon: 'i-lucide-clock', to: moduleUrl(`/projects/${pid}/timesheet`) },
+    { label: '周报', icon: 'i-lucide-calendar-days', to: moduleUrl(`/projects/${pid}/weekly-reports`) },
+    settingsTab
   ]
   const insertAfterOverview: Array<{ label: string, icon: string, to: string }> = []
   if (projectModuleEnabled(moduleConfig, category, 'milestones')) {
-    insertAfterOverview.push({ label: '里程碑', icon: 'i-lucide-flag', to: `/projects/${pid}/plan` })
+    insertAfterOverview.push({ label: '里程碑', icon: 'i-lucide-flag', to: moduleUrl(`/projects/${pid}/plan`) })
   }
   if (projectModuleEnabled(moduleConfig, category, 'requirements') && hasRequirementTarget.value) {
-    insertAfterOverview.push({ label: '需求', icon: 'i-lucide-clipboard-list', to: `/projects/${pid}/requirements` })
+    insertAfterOverview.push({ label: '需求', icon: 'i-lucide-clipboard-list', to: moduleUrl(`/projects/${pid}/requirements`) })
   }
   if (projectModuleEnabled(moduleConfig, category, 'releases')) {
-    insertAfterOverview.push({ label: '版本', icon: 'i-lucide-git-branch', to: `/projects/${pid}/releases` })
+    insertAfterOverview.push({ label: '版本', icon: 'i-lucide-git-branch', to: moduleUrl(`/projects/${pid}/releases`) })
   }
-  if (projectModuleEnabled(moduleConfig, category, 'environments')) {
-    insertAfterOverview.push({ label: '环境', icon: 'i-lucide-server-cog', to: `/projects/${pid}/environments` })
+  // Host 未注册 /projects/:id/environments，宿主模式下隐藏该入口；独立应用不变。
+  if (!hosted && projectModuleEnabled(moduleConfig, category, 'environments')) {
+    insertAfterOverview.push({ label: '环境', icon: 'i-lucide-server-cog', to: moduleUrl(`/projects/${pid}/environments`) })
   }
-  if (projectModuleEnabled(moduleConfig, category, 'service_desk')) {
-    insertAfterOverview.push({ label: '工单', icon: 'i-lucide-headset', to: `/projects/${pid}/service-desk` })
+  // Host 同样未注册 /projects/:id/service-desk，宿主模式下隐藏。
+  if (!hosted && projectModuleEnabled(moduleConfig, category, 'service_desk')) {
+    insertAfterOverview.push({ label: '工单', icon: 'i-lucide-headset', to: moduleUrl(`/projects/${pid}/service-desk`) })
   }
   items.splice(1, 0, ...insertAfterOverview)
   return items
 })
 
+// Tab targets carry the Host prefix (moduleUrl) when hosted, so compare
+// against prefixed paths; otherwise the overview tab matches every sub-page.
 function isActive(tabTo: string) {
-  const milestoneDetailPrefix = `/projects/${projectId.value}/milestones/`
-  if (tabTo === `/projects/${projectId.value}/plan`) {
+  const projectRoot = moduleUrl(`/projects/${projectId.value}`)
+  const planTab = moduleUrl(`/projects/${projectId.value}/plan`)
+  if (tabTo === planTab) {
     return route.path === tabTo
       || route.path.startsWith(`${tabTo}/`)
-      || route.path.startsWith(milestoneDetailPrefix)
+      || route.path.startsWith(moduleUrl(`/projects/${projectId.value}/milestones/`))
   }
-  if (tabTo === `/projects/${projectId.value}`) {
+  if (tabTo === projectRoot) {
     return route.path === tabTo
   }
-  return route.path.startsWith(tabTo)
+  return route.path === tabTo || route.path.startsWith(`${tabTo}/`)
 }
 
 onMounted(async () => {
@@ -175,6 +211,9 @@ watch(projectId, () => {
 })
 
 async function syncApprovalStatus() {
+  // Host 只提供 aims/tasks/complete 合同。项目生命周期由领域命令维护，
+  // 不运行独立 Aims 的 projects 审批轮询及客户端补偿写入。
+  if (hosted) return
   const p = project.value
   if (!p || p.lifecycleStatus === 'archived') return
 
@@ -209,13 +248,13 @@ async function syncApprovalStatus() {
 
 <template>
   <div class="border-b border-default bg-default">
-    <div class="px-6 pt-0 pb-0">
+    <div class="px-4 pt-0 pb-0 sm:px-6">
       <template v-if="project">
-        <div class="flex items-start justify-between gap-6">
+        <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-6">
           <!-- 左侧：项目信息（占 2/3） -->
-          <div class="min-w-0 w-2/3">
+          <div class="min-w-0 w-full sm:w-2/3">
             <!-- 项目编码 + 状态指示灯 -->
-            <div class="flex items-center gap-2 mb-2">
+            <div class="flex flex-wrap items-center gap-2 mb-2">
               <UBadge color="info" variant="subtle" size="sm">
                 {{ getProjectCategoryLabel(project.category) }}
               </UBadge>
@@ -241,7 +280,7 @@ async function syncApprovalStatus() {
                 </span>
               </div>
               <WorkflowBadge
-                v-if="!isProjectSettingsRoute"
+                v-if="!hosted && !isProjectSettingsRoute"
                 app-code="aims"
                 resource-code="projects"
                 :biz-id="String(project.id)"
@@ -293,6 +332,18 @@ async function syncApprovalStatus() {
                     </div>
                   </div>
 
+                  <div v-if="hosted" class="space-y-2 px-4 py-2">
+                    <span class="text-xs text-muted">共 {{ switcherRead.data.value?.total || 0 }} 条</span>
+                    <UPagination
+                      :sibling-count="0"
+                      size="xs"
+                      :page="switcherPage"
+                      :items-per-page="20"
+                      :total="switcherRead.data.value?.total || 0"
+                      @update:page="readSwitcher"
+                    />
+                    <UButton v-if="switcherRead.error.value" label="读取失败，重试" @click="readSwitcher(switcherPage)" />
+                  </div>
                   <div class="max-h-80 overflow-y-auto p-2">
                     <div
                       v-for="item in projectSwitcherItems"
@@ -376,7 +427,7 @@ async function syncApprovalStatus() {
           </div>
 
           <!-- 右侧：操作按钮插槽 -->
-          <div class="shrink-0 flex items-start gap-2 pt-1">
+          <div class="flex flex-wrap items-start gap-2 sm:shrink-0 sm:flex-nowrap sm:pt-1">
             <slot name="actions" />
           </div>
         </div>

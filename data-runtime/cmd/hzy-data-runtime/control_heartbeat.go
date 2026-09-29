@@ -62,7 +62,7 @@ func startControlHeartbeat(
 							restartRequired = true
 						}
 					}
-					if bindingsChanged(cfg.DeploymentBindings, response.DeploymentBindings) {
+					if bindingsChanged(cfg.DeploymentBindings, response.DeploymentBindings, os.Getenv("HZY_LOCAL_WORKFLOW_DEPLOYMENT")) {
 						if err := writeDeploymentBindings(response.DeploymentBindings); err != nil {
 							log.Printf("[hzy-data-runtime] persist Platform deployment bindings failed: %v", err)
 						} else {
@@ -155,11 +155,20 @@ func normalizeDeploymentBindings(input map[string]string) map[string]string {
 	return bindings
 }
 
-func bindingsChanged(current map[string]string, next map[string]string) bool {
+func bindingsChanged(current map[string]string, next map[string]string, localWorkflowDeployment string) bool {
 	if len(next) == 0 {
 		return false
 	}
-	return !reflect.DeepEqual(normalizeDeploymentBindings(current), normalizeDeploymentBindings(next))
+	current = normalizeDeploymentBindings(current)
+	next = normalizeDeploymentBindings(next)
+	// The exact local Workflow receiver is added after loading the Platform
+	// overlay. It is not a Platform binding and must not trigger a restart on
+	// every heartbeat. A real Platform Workflow binding still wins comparison.
+	if localWorkflowDeployment == "C000001-test-workflow-local" &&
+		current["workflow"] == localWorkflowDeployment && next["workflow"] == "" {
+		delete(current, "workflow")
+	}
+	return !reflect.DeepEqual(current, next)
 }
 
 func normalizePlatformSigningKey(input controlPlatformSigningKey) controlPlatformSigningKey {

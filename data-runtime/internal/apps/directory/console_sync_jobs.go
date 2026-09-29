@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -24,16 +25,35 @@ type consoleSyncJobRow struct {
 	CreatedAt, UpdatedAt                                 time.Time
 }
 
-func (a *Adapter) ConsoleDirectorySyncJobs(ctx context.Context, query url.Values) ([]map[string]any, error) {
+func (a *Adapter) ConsoleDirectorySyncJobs(ctx context.Context, query url.Values) (any, error) {
 	limit, err := boundedConsoleSyncLimit(query.Get("limit"), 20, 100)
 	if err != nil {
 		return nil, err
 	}
-	rows, err := a.db.QueryContext(ctx, `SELECT job_code,provider_code,sync_type,object_scope,
+	page, size, paged, err := consoleSyncPagination(query)
+	if err != nil {
+		return nil, err
+	}
+	conn, tx, total, err := a.consoleSyncSnapshot(ctx, paged, "directory_sync_jobs", "", nil)
+	if err != nil {
+		return nil, err
+	}
+	if tx != nil {
+		defer tx.Rollback()
+	}
+	statement := `SELECT job_code,provider_code,sync_type,object_scope,
 		cursor_before,cursor_after,status,started_at,finished_at,requested_by,
 		total_count,created_count,updated_count,deleted_count,skipped_count,error_count,
 		error_message,created_at,updated_at
-		FROM directory_sync_jobs ORDER BY created_at DESC LIMIT ?`, limit)
+		FROM directory_sync_jobs ORDER BY created_at DESC`
+	args := []any{limit}
+	if paged {
+		statement += ",job_code DESC LIMIT ? OFFSET ?"
+		args = []any{size, (page - 1) * size}
+	} else {
+		statement += " LIMIT ?"
+	}
+	rows, err := conn.QueryContext(ctx, statement, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -46,7 +66,7 @@ func (a *Adapter) ConsoleDirectorySyncJobs(ctx context.Context, query url.Values
 		}
 		result = append(result, mapConsoleSyncJob(row))
 	}
-	return result, rows.Err()
+	return finishConsoleSyncPage(rows, tx, result, total, page, size, paged)
 }
 
 func (a *Adapter) ConsoleDirectorySyncJob(ctx context.Context, jobCode string) (map[string]any, error) {
@@ -72,7 +92,7 @@ func (a *Adapter) ConsoleDirectorySyncEvents(
 	ctx context.Context,
 	jobCode string,
 	query url.Values,
-) ([]map[string]any, error) {
+) (any, error) {
 	if _, err := a.ConsoleDirectorySyncJob(ctx, jobCode); err != nil {
 		return nil, err
 	}
@@ -80,10 +100,27 @@ func (a *Adapter) ConsoleDirectorySyncEvents(
 	if err != nil {
 		return nil, err
 	}
-	rows, err := a.db.QueryContext(ctx, `SELECT id,job_code,object_type,object_code,change_type,
+	page, size, paged, err := consoleSyncPagination(query)
+	if err != nil {
+		return nil, err
+	}
+	conn, tx, total, err := a.consoleSyncSnapshot(ctx, paged, "directory_sync_events", " WHERE job_code=?", []any{jobCode})
+	if err != nil {
+		return nil, err
+	}
+	if tx != nil {
+		defer tx.Rollback()
+	}
+	statement := `SELECT id,job_code,object_type,object_code,change_type,
 		source_provider,external_ref,status,message,before_hash,after_hash,created_at
 		FROM directory_sync_events WHERE job_code=?
-		ORDER BY created_at DESC,id DESC LIMIT ?`, jobCode, limit)
+		ORDER BY created_at DESC,id DESC LIMIT ?`
+	args := []any{jobCode, limit}
+	if paged {
+		statement += " OFFSET ?"
+		args = []any{jobCode, size, (page - 1) * size}
+	}
+	rows, err := conn.QueryContext(ctx, statement, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -107,7 +144,7 @@ func (a *Adapter) ConsoleDirectorySyncEvents(
 			"afterHash":  nullableConsoleStringValue(afterHash), "createdAt": createdAt,
 		})
 	}
-	return result, rows.Err()
+	return finishConsoleSyncPage(rows, tx, result, total, page, size, paged)
 }
 
 func (a *Adapter) ConsoleStartSubjectSync(
@@ -355,4 +392,65 @@ func nullableConsoleTimeValue(value sql.NullTime) any {
 		return value.Time
 	}
 	return nil
+}
+
+// Only optional page mode changes the legacy array/limit contract.
+func consoleSyncPagination(query url.Values) (int, int, bool, error) {
+	_, hasPage := query["page"]
+	_, hasSize := query["pageSize"]
+	if !hasPage && !hasSize {
+		return 0, 0, false, nil
+	}
+	if _, hasLimit := query["limit"]; hasLimit {
+		return 0, 0, true, httperror.New(400, "directory_sync_pagination_invalid", "Cannot mix limit and page")
+	}
+	page, size := 1, 20
+	for key, dest := range map[string]*int{"page": &page, "pageSize": &size} {
+		if values, ok := query[key]; ok {
+			if len(values) != 1 {
+				return 0, 0, true, httperror.New(400, "directory_sync_pagination_invalid", "Invalid pagination")
+			}
+			n, err := strconv.Atoi(values[0])
+			if err != nil || n < 1 || strconv.Itoa(n) != values[0] || (key == "page" && n > 1000000) || (key == "pageSize" && n > 100) {
+				return 0, 0, true, httperror.New(400, "directory_sync_pagination_invalid", "Invalid pagination")
+			}
+			*dest = n
+		}
+	}
+	return page, size, true, nil
+}
+
+type consoleSyncQueryer interface {
+	QueryContext(context.Context, string, ...any) (*sql.Rows, error)
+}
+
+func (a *Adapter) consoleSyncSnapshot(ctx context.Context, paged bool, table, where string, args []any) (consoleSyncQueryer, *sql.Tx, int64, error) {
+	if !paged {
+		return a.db, nil, 0, nil
+	}
+	tx, err := a.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true, Isolation: sql.LevelRepeatableRead})
+	if err != nil {
+		return nil, nil, 0, err
+	}
+	var total int64
+	if err = tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM "+table+where, args...).Scan(&total); err != nil {
+		tx.Rollback()
+		return nil, nil, 0, err
+	}
+	return tx, tx, total, nil
+}
+func finishConsoleSyncPage(rows *sql.Rows, tx *sql.Tx, items []map[string]any, total int64, page, size int, paged bool) (any, error) {
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	if !paged {
+		return items, nil
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+	return map[string]any{"items": items, "total": total, "page": page, "pageSize": size}, nil
 }

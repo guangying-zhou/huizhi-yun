@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { renderSafeMarkdown } from '~/utils/safeMarkdown'
+import { renderSafeMarkdown } from '../utils/safeMarkdown'
 
 const props = defineProps<{
   markdown: string | null | undefined

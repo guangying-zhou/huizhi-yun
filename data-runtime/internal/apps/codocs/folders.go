@@ -62,7 +62,9 @@ func documentReadVisibilityPredicate(actorUID string, trustedDepartmentReadDeptC
 // Folder metadata is visible only through its owning namespace. Generic user
 // reads do not infer project membership or publish visibility.
 func folderReadVisibilityPredicate(actorUID string, trustedDepartmentReadDeptCode string) (string, []any) {
-	predicate := "(folder_type = 'private' AND owner_uid = ?)"
+	// Slide folders are a personal namespace, just like private folders. They
+	// must never become visible through the department branch below.
+	predicate := "((folder_type = 'private' OR folder_type = 'slide') AND owner_uid = ?)"
 	args := []any{actorUID}
 	if trustedDepartmentReadDeptCode != "" {
 		predicate += " OR (folder_type = 'department' AND dept_code = ?)"
@@ -76,8 +78,21 @@ func (a *Adapter) foldersList(ctx context.Context, query url.Values) (map[string
 	if err != nil {
 		return nil, err
 	}
-	page := positiveInt(query.Get("page"), 1)
-	pageSize := positiveInt(firstNonEmpty(query.Get("limit"), query.Get("pageSize"), query.Get("page_size")), 5000)
+	page, pageSize, paged, pageErr := trashPagination(query)
+	if pageErr != nil {
+		return nil, pageErr
+	}
+	if query.Has("pageSize") && query.Has("limit") {
+		return nil, httperror.New(400, "invalid_pagination", "Invalid pagination")
+	}
+	if query.Has("limit") {
+		paged = false // preserve legacy page+limit callers
+	}
+	if paged && query.Get("folder_type") == "private" && query.Has("parent_id") {
+		return a.privateFoldersPage(ctx, query, actorUID, page, pageSize)
+	}
+	page = positiveInt(query.Get("page"), 1)
+	pageSize = positiveInt(firstNonEmpty(query.Get("limit"), query.Get("pageSize"), query.Get("page_size")), 5000)
 	offset := (page - 1) * pageSize
 
 	hasOpenColumn, err := a.columnExists(ctx, "folders", "is_open")
@@ -123,16 +138,29 @@ func (a *Adapter) foldersList(ctx context.Context, query url.Values) (map[string
 		}
 	}
 	whereSQL := strings.Join(where, " AND ")
+	var readDB interface {
+		QueryRowContext(context.Context, string, ...any) *sql.Row
+		QueryContext(context.Context, string, ...any) (*sql.Rows, error)
+	} = a.db
+	var tx *sql.Tx
+	if paged && query.Get("folder_type") == "department" {
+		tx, err = a.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelRepeatableRead, ReadOnly: true})
+		if err != nil {
+			return nil, err
+		}
+		defer tx.Rollback()
+		readDB = tx
+	}
 	var total int64
-	if err := a.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM folders WHERE "+whereSQL, args...).Scan(&total); err != nil {
+	if err := readDB.QueryRowContext(ctx, "SELECT COUNT(*) FROM folders WHERE "+whereSQL, args...).Scan(&total); err != nil {
 		return nil, err
 	}
-	rows, err := a.db.QueryContext(ctx, `
+	rows, err := readDB.QueryContext(ctx, `
       SELECT id, name, folder_type, owner_uid, dept_code, project_code,
              parent_id, sort_order, `+openSelect+`, created_at, updated_at
       FROM folders
       WHERE `+whereSQL+`
-      ORDER BY sort_order ASC, created_at DESC
+	  ORDER BY sort_order ASC, created_at DESC, id DESC
       LIMIT ? OFFSET ?`, append(args, pageSize, offset)...)
 	if err != nil {
 		return nil, err
@@ -141,6 +169,11 @@ func (a *Adapter) foldersList(ctx context.Context, query url.Values) (map[string
 	items, err := rowsToMaps(rows)
 	if err != nil {
 		return nil, err
+	}
+	if tx != nil {
+		if err = tx.Commit(); err != nil {
+			return nil, err
+		}
 	}
 	return map[string]any{"items": items, "total": total, "page": page, "pageSize": pageSize}, nil
 }
@@ -162,7 +195,7 @@ func (a *Adapter) createFolder(ctx context.Context, query url.Values, body map[s
 	folderType := strings.TrimSpace(stringValue(body["folder_type"]))
 	var ownerUID, deptCode, projectCode string
 	switch folderType {
-	case "private":
+	case "private", "slide":
 		ownerUID = actorUID
 	case "department":
 		deptCode = strings.TrimSpace(query.Get(codocsTrustedDepartmentManageQueryKey))
@@ -235,7 +268,7 @@ func (a *Adapter) validateFolderParent(
 	scopeMismatch := parentFolderType != folderType
 	if !scopeMismatch {
 		switch folderType {
-		case "private":
+		case "private", "slide":
 			scopeMismatch = strings.TrimSpace(parentOwnerUID.String) != ownerUID ||
 				strings.TrimSpace(parentDeptCode.String) != "" ||
 				strings.TrimSpace(parentProjectCode.String) != ""

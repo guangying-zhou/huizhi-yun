@@ -1,4 +1,5 @@
 import type { H3Event } from 'h3'
+import { isProductionPlatformEnvironment } from '../../shared/utils/productionEnvironment'
 
 interface RuntimeConfigShape {
   hzy?: Record<string, unknown>
@@ -62,8 +63,10 @@ export function loadHzyLocalDevRuntimeMode(event?: H3Event): HzyLocalDevRuntimeM
 
   const runMode = configuredRunMode || (process.env.NODE_ENV === 'development' ? 'dev' : 'prod')
   const normalizedRunMode = runMode.toLowerCase()
-  const isDevMode = normalizedRunMode === 'dev'
-    || (process.env.NODE_ENV === 'development' && !['prod', 'production', 'test'].includes(normalizedRunMode))
+  // Self-hosted production runs plain Node processes; a stray run mode or
+  // NODE_ENV must not turn on local applications or the Runtime bypass there.
+  const isDevMode = !isProductionPlatformEnvironment(process.env.HZY_PLATFORM_ENVIRONMENT) && (normalizedRunMode === 'dev'
+    || (process.env.NODE_ENV === 'development' && !['prod', 'production', 'test'].includes(normalizedRunMode)))
   const devApplicationsEnabled = isDevMode && runtimeBoolean(
     localDev.devApplicationsEnabled,
     ['HZY_DEV_APPLICATIONS_ENABLED', 'HZY_LOCAL_DEV_APPLICATIONS_ENABLED'],

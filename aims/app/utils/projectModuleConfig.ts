@@ -1,4 +1,4 @@
-import type { ModuleConfig, ProjectCategory } from '~/types/aims'
+import type { ModuleConfig, ProjectCategory } from '../types/aims'
 
 export const projectModuleKeys = [
   'milestones',

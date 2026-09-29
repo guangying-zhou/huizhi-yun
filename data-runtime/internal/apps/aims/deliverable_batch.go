@@ -73,17 +73,17 @@ func (a *Adapter) createDeliverablesBatch(ctx context.Context, query url.Values,
 		if row == nil {
 			continue
 		}
-		if row.MilestoneOwnerID != nil {
+		if !validDeliverableReceiptIdentity(ctx) {
 			if milestoneID, ok := row.MilestoneOwnerID.(int64); ok {
 				if err := a.requireMilestoneCompletionUnlocked(ctx, milestoneID); err != nil {
 					return nil, err
 				}
 			}
-		}
-		for _, owner := range []any{row.TargetID, row.MatterID} {
-			if workItemID, ok := owner.(int64); ok {
-				if err := a.requireWorkItemMilestoneCompletionUnlocked(ctx, workItemID); err != nil {
-					return nil, err
+			for _, owner := range []any{row.TargetID, row.MatterID} {
+				if workItemID, ok := owner.(int64); ok {
+					if err := a.requireWorkItemMilestoneCompletionUnlocked(ctx, workItemID); err != nil {
+						return nil, err
+					}
 				}
 			}
 		}
@@ -103,7 +103,7 @@ func (a *Adapter) createDeliverablesBatch(ctx context.Context, query url.Values,
 		return nil, err
 	}
 
-	tx, err := a.DB().BeginTx(ctx, nil)
+	tx, receipts, err := a.beginDeliverableWrite(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -111,49 +111,86 @@ func (a *Adapter) createDeliverablesBatch(ctx context.Context, query url.Values,
 	if err := lockDeliverableBatchProjects(ctx, tx, rows); err != nil {
 		return nil, err
 	}
-	for _, row := range rows {
-		if err := ensureDeliverableBatchNameAvailable(ctx, tx, row); err != nil {
+	for projectID := range authorizedProjects {
+		if err := requireEnterpriseDeliverableProjectScopeTx(ctx, tx, uid, projectID, true); err != nil {
 			return nil, err
 		}
 	}
+	for _, row := range rows {
+		if err := requireDeliverableBatchOwnerProjectTx(ctx, tx, row); err != nil {
+			return nil, err
+		}
+	}
+	out, err := executeEnterpriseDeliverableReceipt(ctx, tx, receipts, "project-batch-create", "aims:project-deliverables:edit", "deliverable-batch.v1", "deliverable-batch", map[string]any{"payload": body}, map[string]any{"created": len(rows)}, func() (map[string]any, string, error) {
+		for _, row := range rows {
+			if receipts != nil {
+				if milestoneID, ok := row.MilestoneOwnerID.(int64); ok {
+					if err := requireMilestoneCompletionUnlockedTx(ctx, tx, milestoneID); err != nil {
+						return nil, "", err
+					}
+				}
+				for _, owner := range []any{row.TargetID, row.MatterID} {
+					if workItemID, ok := owner.(int64); ok {
+						if err := requireWorkItemMilestoneCompletionUnlockedTx(ctx, tx, workItemID); err != nil {
+							return nil, "", err
+						}
+					}
+				}
+			}
+			if row.OwnerKind == deliverableOwnerMatter {
+				if err := lockMatterDeliverableWriteTx(ctx, tx, row.ProjectID, row.OwnerID); err != nil {
+					return nil, "", err
+				}
+			}
+		}
+		for _, row := range rows {
+			if err := ensureDeliverableBatchNameAvailable(ctx, tx, row); err != nil {
+				return nil, "", err
+			}
+		}
 
-	stmt, err := tx.PrepareContext(ctx, `
+		stmt, err := tx.PrepareContext(ctx, `
 		INSERT INTO deliverables
 			(project_owner_id, milestone_owner_id, target_id, matter_id,
 			 name, description, acceptance_criteria, deliverable_type, `+"`required`"+`, sort_order,
 			 status, project_id, project_code, created_by, template_key)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?)
 	`)
+		if err != nil {
+			return nil, "", err
+		}
+		defer stmt.Close()
+
+		for _, row := range rows {
+			if _, err := stmt.ExecContext(ctx,
+				row.ProjectOwnerID,
+				row.MilestoneOwnerID,
+				row.TargetID,
+				row.MatterID,
+				row.Name,
+				row.Description,
+				row.Acceptance,
+				row.DeliverableType,
+				row.Required,
+				row.SortOrder,
+				row.ProjectID,
+				row.ProjectCode,
+				row.CreatedBy,
+				row.TemplateKey,
+			); err != nil {
+				return nil, "", err
+			}
+		}
+		return map[string]any{"created": len(rows)}, deliverableReceiptCode(len(rows)), nil
+	})
 	if err != nil {
 		return nil, err
-	}
-	defer stmt.Close()
-
-	for _, row := range rows {
-		if _, err := stmt.ExecContext(ctx,
-			row.ProjectOwnerID,
-			row.MilestoneOwnerID,
-			row.TargetID,
-			row.MatterID,
-			row.Name,
-			row.Description,
-			row.Acceptance,
-			row.DeliverableType,
-			row.Required,
-			row.SortOrder,
-			row.ProjectID,
-			row.ProjectCode,
-			row.CreatedBy,
-			row.TemplateKey,
-		); err != nil {
-			return nil, err
-		}
 	}
 	if err := tx.Commit(); err != nil {
 		return nil, err
 	}
 
-	return map[string]any{"created": len(rows)}, nil
+	return out, nil
 }
 
 func (a *Adapter) deliverableBatchRow(ctx context.Context, item map[string]any, uid string) (*deliverableBatchRow, error) {

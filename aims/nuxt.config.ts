@@ -78,6 +78,7 @@ export default defineNuxtConfig({
       authMode: process.env.HZY_AUTH_MODE || '',
       legacyAuthBridge: process.env.HZY_LEGACY_AUTH_BRIDGE === 'true',
       dataAccessMode: process.env.HZY_AIMS_DATA_ACCESS_MODE || process.env.HZY_DATA_ACCESS_MODE || 'tenant-runtime',
+      schedulerOnly: process.env.HZY_AIMS_SCHEDULER_ONLY === 'true',
       tenantRuntime: {
         endpoint: process.env.HZY_AIMS_TENANT_RUNTIME_URL || process.env.HZY_TENANT_RUNTIME_URL || process.env.HZY_AIMS_DATA_RUNTIME_URL || process.env.HZY_DATA_RUNTIME_URL || '',
         token: process.env.HZY_AIMS_TENANT_RUNTIME_TOKEN || process.env.HZY_TENANT_RUNTIME_TOKEN || process.env.HZY_AIMS_DATA_RUNTIME_TOKEN || process.env.HZY_DATA_RUNTIME_TOKEN || '',
@@ -101,6 +102,9 @@ export default defineNuxtConfig({
       },
       notifications: {
         dueEnabled: process.env.HZY_AIMS_DUE_NOTIFICATIONS_ENABLED === 'true'
+      },
+      enterprise: {
+        enableMilestoneReceivable: process.env.HZY_AIMS_ENTERPRISE_ENABLE_MILESTONE_RECEIVABLE === 'true'
       },
       serviceClient: {
         clientId: process.env.HZY_AIMS_SERVICE_CLIENT_ID || process.env.HZY_SERVICE_CLIENT_ID || '',

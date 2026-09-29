@@ -1,9 +1,16 @@
 <script setup lang="ts">
-import { assetCategoryScopeMap, type AssetCategoryScope } from '~~/shared/assetCategoryDefaults'
-import type { ApiResponse, AssetCategoryGroup } from '~/types'
+import { useAssetsModule } from '../../../layer/useAssetsModule'
+import AssetFormSurface from './AssetFormSurface.vue'
+import { assetCategoryScopeMap, type AssetCategoryScope } from '../../../shared/assetCategoryDefaults'
+import type { ApiResponse, AssetCategoryGroup } from '../../types'
+
+const { moduleUrl } = useAssetsModule()
+const submissionKey = ref('')
+const surface = ref<InstanceType<typeof AssetFormSurface> | null>(null)
 
 const props = defineProps<{
   open: boolean
+  page?: boolean
   category: AssetCategoryGroup | null
   scope: AssetCategoryScope
   mode?: 'create' | 'category' | 'items'
@@ -70,6 +77,10 @@ const state = reactive({
   items: [] as EditableItem[]
 })
 
+watch(state, () => {
+  submissionKey.value = ''
+}, { deep: true, flush: 'sync' })
+
 function hydrate() {
   state.label = props.category?.label || ''
   state.value = props.category?.value || ''
@@ -104,6 +115,8 @@ watch(() => props.scope, () => {
     hydrate()
   }
 })
+
+if (props.page && props.open) hydrate()
 
 function addItem() {
   state.items.push({
@@ -168,13 +181,15 @@ async function handleSubmit() {
     }
 
     if (!isCreateMode.value && props.category?.id) {
-      await $fetch<ApiResponse<AssetCategoryGroup>>(`/api/v1/admin/asset-categories/${props.category.id}`, {
+      await $fetch<ApiResponse<AssetCategoryGroup>>(moduleUrl(`/api/v1/admin/asset-categories/${props.category.id}`), {
         method: 'PUT',
+        headers: { 'Idempotency-Key': submissionKey.value ||= crypto.randomUUID() },
         body
       })
     } else {
-      await $fetch<ApiResponse<AssetCategoryGroup>>('/api/v1/admin/asset-categories', {
+      await $fetch<ApiResponse<AssetCategoryGroup>>(moduleUrl('/api/v1/admin/asset-categories'), {
         method: 'POST',
+        headers: { 'Idempotency-Key': submissionKey.value ||= crypto.randomUUID() },
         body
       })
     }
@@ -187,6 +202,7 @@ async function handleSubmit() {
     })
 
     await loadDictionaries(true)
+    surface.value?.markSaved()
     emit('saved')
     isOpen.value = false
   } catch (error) {
@@ -204,8 +220,12 @@ async function handleSubmit() {
 </script>
 
 <template>
-  <UModal
+  <AssetFormSurface
+    ref="surface"
     v-model:open="isOpen"
+    :page="props.page"
+    :draft="JSON.stringify(state)"
+    :busy="submitting"
     :title="modalTitle"
     :description="modalDescription"
     :ui="{ content: 'sm:max-w-5xl' }"
@@ -259,7 +279,7 @@ async function handleSubmit() {
             :key="`${state.value || 'asset-category'}-${index}`"
             variant="subtle"
           >
-            <div class="grid gap-3 md:grid-cols-[1fr_1fr_160px_1.2fr_120px_auto] md:items-center">
+            <div class="grid gap-3" :class="props.page ? 'sm:grid-cols-2' : 'md:grid-cols-[1fr_1fr_160px_1.2fr_120px_auto] md:items-center'">
               <UFormField :label="`${scopeMeta.itemLabel}名称`">
                 <UInput v-model="item.label" class="w-full" placeholder="例如：笔记本" />
               </UFormField>
@@ -301,5 +321,5 @@ async function handleSubmit() {
         </UButton>
       </div>
     </template>
-  </UModal>
+  </AssetFormSurface>
 </template>

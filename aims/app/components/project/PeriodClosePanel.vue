@@ -4,6 +4,7 @@ interface PeriodicMilestone {
   name: string
   mode: string
   status: string
+  templateKey?: string | null
   recurrenceRule?: string | null
 }
 
@@ -49,7 +50,8 @@ function errorMessage(error: unknown, fallback: string) {
   return value?.data?.message || value?.message || fallback
 }
 
-const periodicMilestones = computed(() => props.milestones.filter(item => item.mode === 'periodic' && item.status !== 'completed'))
+const legacyPeriodicMilestones = computed(() => props.milestones.filter(item => item.mode === 'periodic' && !item.templateKey))
+const periodicMilestones = computed(() => props.milestones.filter(item => item.mode === 'periodic' && Boolean(item.templateKey) && item.status !== 'completed'))
 const milestoneOptions = computed(() => periodicMilestones.value.map(item => ({ label: item.name, value: item.id })))
 const failedCheckKeys = computed(() => new Set(gate.value?.checks.filter(item => !item.passed).map(item => item.key) || []))
 const hasActionableChecks = computed(() => ['overdue_remediation', 'time_and_cost', 'sla_review', 'period_review'].some(key => failedCheckKeys.value.has(key)))
@@ -119,6 +121,9 @@ async function closePeriod() {
 </script>
 
 <template>
+  <div v-if="legacyPeriodicMilestones.length" class="rounded-lg border border-warning/40 bg-warning/5 p-3 text-sm text-warning">
+    {{ legacyPeriodicMilestones.map(item => item.name).join('、') }}：无法关期，请迁至模板
+  </div>
   <UCard v-if="periodicMilestones.length">
     <template #header>
       <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">

@@ -4,24 +4,61 @@
  * Persists Yjs snapshots and Markdown mirrors to OSS.
  */
 
-import type { Extension, onLoadDocumentPayload, onStoreDocumentPayload } from '@hocuspocus/server'
+import type { afterUnloadDocumentPayload, Extension, onLoadDocumentPayload, onStoreDocumentPayload } from '@hocuspocus/server'
 import crypto from 'node:crypto'
 import OSS from 'ali-oss'
 import * as Y from 'yjs'
 // yjs 类型由 @hocuspocus/server 的 onLoadDocumentPayload.document 提供
 import type { OssConfig } from '../config.js'
-import { createDocumentVersion, loadDocumentContext } from '../utils/document-context.js'
+import { callCodocsRuntime } from '../utils/codocs-runtime.js'
+import { createDocumentVersion, createHookError, loadDocumentContext, parseDocumentName } from '../utils/document-context.js'
 import { yjsDocumentToMarkdown } from '../utils/prosemirror-markdown.js'
+import type { V2Snapshots } from '../utils/v2-snapshots.js'
+
+type V2Context = { mode?: string, sessionId?: string }
+const v2SessionOf = (context: unknown) => {
+  const value = context as V2Context | undefined
+  return value?.mode === 'v2' && value.sessionId ? value.sessionId : null
+}
+
+/**
+ * Fresh Runtime read of the collaboration context. The Runtime refuses it with
+ * 409 once the document is on snapshot v2 (document_on_snapshot_v2). Any other
+ * failure also aborts the save: an unknown state is treated as possibly v2.
+ */
+export async function refuseIfSnapshotV2(documentName: string): Promise<void> {
+  const uuid = parseDocumentName(documentName)
+  try {
+    await callCodocsRuntime(`/v1/codocs/collaboration/documents/${uuid}/context`)
+  } catch (error: unknown) {
+    if (/^codocs-runtime-error:409:/.test(String((error as Error)?.message || ''))) throw createHookError('document_on_snapshot_v2')
+    throw error
+  }
+}
 
 export class PersistenceExtension implements Extension {
   private defaultClient: OSS | null = null
   private projectsClient: OSS | null = null
   private config: OssConfig
   private lastStoredHash = new Map<string, string>()
+  private v2: V2Snapshots | null = null
+  private v2Sessions = new Map<string, string>()
+  // Documents the Runtime reported as converted to v2: legacy v1 rooms must never save them.
+  private v1RefusedDocs = new Set<string>()
+  private v1Guard: (documentName: string) => Promise<void> = documentName => refuseIfSnapshotV2(documentName)
 
   constructor(config: OssConfig) {
     this.config = config
     this.initOSSClient()
+  }
+
+  useV2(v2: V2Snapshots | null) {
+    this.v2 = v2
+  }
+
+  /** Overrides the pre-save v2 check (tests). It must throw to refuse the save. */
+  useV1Guard(guard: (documentName: string) => Promise<void>) {
+    this.v1Guard = guard
   }
 
   private getYjsSnapshotPath(ossPath: string): string {
@@ -99,13 +136,23 @@ export class PersistenceExtension implements Extension {
    */
   async onLoadDocument(data: onLoadDocumentPayload): Promise<void> {
     const { documentName, document } = data
+    const v2Session = v2SessionOf(data.context)
+    if (v2Session) {
+      if (!this.v2) throw new Error('collab-v2-disabled')
+      await this.v2.load(documentName, v2Session, document)
+      this.v2Sessions.set(documentName, v2Session)
+      this.v2.startLease(documentName, v2Session, () => {
+        console.warn(`[collab] v2 session lost, closing room: ${documentName}`)
+        data.instance.closeConnections(documentName)
+      })
+      return
+    }
 
     try {
       const { ossPath, docType } = await loadDocumentContext(documentName, data.context)
       const client = this.clientForDocument(docType)
       if (!client) {
-        console.log(`[collab] loading document without OSS: ${documentName}`)
-        return
+        throw new Error('collab-storage-unavailable')
       }
 
       const yjsPath = this.getYjsSnapshotPath(ossPath)
@@ -162,6 +209,7 @@ export class PersistenceExtension implements Extension {
     } catch (error: unknown) {
       const err = error as Record<string, unknown>
       console.error(`[collab] failed to load document: ${documentName}`, err.message)
+      throw error
     }
   }
 
@@ -172,14 +220,40 @@ export class PersistenceExtension implements Extension {
    */
   async onStoreDocument(data: onStoreDocumentPayload): Promise<void> {
     const { documentName, document } = data
+    const v2Session = this.v2Sessions.get(documentName) || v2SessionOf(data.context)
+    if (v2Session) {
+      if (!this.v2) throw new Error('collab-v2-disabled')
+      // Failures propagate so the store is retried; nothing is published partially.
+      await this.v2.store(documentName, v2Session, document)
+      return
+    }
+
+    // Legacy v1 room: fail closed if the document is (or may be) on v2. The
+    // check runs against fresh Runtime state before any object is written,
+    // never against the context captured when the connection opened.
+    if (this.v1RefusedDocs.has(documentName)) {
+      data.instance?.closeConnections(documentName)
+      return
+    }
+    try {
+      await this.v1Guard(documentName)
+    } catch (error: unknown) {
+      if ((error as { reason?: string }).reason === 'document_on_snapshot_v2') {
+        this.v1RefusedDocs.add(documentName)
+        console.warn(`[collab] refuse v1 save, document is on snapshot v2: ${documentName}`)
+        data.instance?.closeConnections(documentName)
+        return
+      }
+      console.error(`[collab] v1 save blocked, cannot confirm document is not on snapshot v2: ${documentName}`)
+      throw error
+    }
 
     try {
       const context = await loadDocumentContext(documentName, data.context)
       const { ossPath } = context
       const client = this.clientForDocument(context.docType)
       if (!client) {
-        console.log(`[collab] storing document without OSS: ${documentName}`)
-        return
+        throw new Error('collab-storage-unavailable')
       }
 
       const yjsPath = this.getYjsSnapshotPath(ossPath)
@@ -214,6 +288,7 @@ export class PersistenceExtension implements Extension {
         const responseHeaders = (markdownResult.res?.headers || {}) as Record<string, string | undefined>
         const versionId = String(
           responseHeaders['x-oss-version-id']
+          || responseHeaders['x-amz-version-id']
           || (markdownResult as unknown as { versionId?: string }).versionId
           || ''
         )
@@ -234,6 +309,16 @@ export class PersistenceExtension implements Extension {
     } catch (error: unknown) {
       const err = error as Record<string, unknown>
       console.error(`[collab] failed to store document: ${documentName}`, err.message)
+      throw error
+    }
+  }
+
+  async afterUnloadDocument(data: afterUnloadDocumentPayload): Promise<void> {
+    this.v1RefusedDocs.delete(data.documentName)
+    const session = this.v2Sessions.get(data.documentName)
+    if (session && this.v2) {
+      this.v2Sessions.delete(data.documentName)
+      await this.v2.release(data.documentName, session)
     }
   }
 }

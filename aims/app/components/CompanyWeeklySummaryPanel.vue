@@ -1,4 +1,10 @@
 <script setup lang="ts">
+import { useAimsModule } from '../../layer/useAimsModule'
+import { weeklyReportingErrorMessage } from '../utils/weeklyReportingError'
+import { codocsDocumentHref, summaryVersionTimeLabel } from '../utils/companyWeeklySummaryPresentation'
+
+// 同一份代码供独立应用与企业宿主使用：非宿主模式下 moduleUrl 原样返回路径。
+const { moduleUrl, hosted } = useAimsModule()
 interface SummaryObligation {
   obligationId: number
   projectId: number
@@ -116,6 +122,14 @@ function statusColor(status: SummaryProjection['status']): 'neutral' | 'warning'
   return 'neutral'
 }
 
+// UCheckbox（Reka CheckboxRoot）单独使用时只输出 true/false，不支持数组 v-model；
+// 直接绑数组会把选择清单替换成布尔值，导致已选数为 0、发布按钮始终禁用。
+function toggleObligation(obligationId: number, checked: boolean) {
+  const next = includedObligationIds.value.filter(id => id !== obligationId)
+  if (checked) next.push(obligationId)
+  includedObligationIds.value = next.sort((left, right) => left - right)
+}
+
 function recipientSelectionForKey(key: string): RecipientSelection | null {
   const [subjectType, ...codeParts] = key.split(':')
   const subjectCode = codeParts.join(':')
@@ -154,10 +168,10 @@ async function load() {
   try {
     const [summaryResponse, versionResponse] = await Promise.all([
       $fetch<{ code: number, data: SummaryProjection }>(
-        `/api/v1/company-weekly-summaries/${encodeURIComponent(props.periodKey)}`
+        moduleUrl(`/api/v1/company-weekly-summaries/${encodeURIComponent(props.periodKey)}`)
       ),
       $fetch<{ code: number, data: { items?: SummaryVersion[] } }>(
-        `/api/v1/company-weekly-summaries/${encodeURIComponent(props.periodKey)}/versions`
+        moduleUrl(`/api/v1/company-weekly-summaries/${encodeURIComponent(props.periodKey)}/versions`)
       ).catch(() => ({ code: 0, data: { items: [] } }))
     ])
     applyProjection(summaryResponse.data)
@@ -165,7 +179,7 @@ async function load() {
   } catch (error: unknown) {
     console.error('[CompanyWeeklySummary] load failed:', error)
     toast.add({
-      title: (error as { data?: { message?: string } })?.data?.message || '加载公司项目周报汇总失败',
+      title: weeklyReportingErrorMessage(error, '加载公司项目周报汇总失败'),
       color: 'error'
     })
   } finally {
@@ -177,14 +191,14 @@ async function generate() {
   loading.value = true
   try {
     const response = await $fetch<{ code: number, data: SummaryProjection }>(
-      `/api/v1/company-weekly-summaries/${encodeURIComponent(props.periodKey)}:generate`,
+      moduleUrl(`/api/v1/company-weekly-summaries/${encodeURIComponent(props.periodKey)}:generate`),
       { method: 'POST' }
     )
     applyProjection(response.data)
     toast.add({ title: '汇总草稿已生成，并已继承上次抄送清单', color: 'success' })
   } catch (error: unknown) {
     toast.add({
-      title: (error as { data?: { message?: string } })?.data?.message || '生成汇总草稿失败',
+      title: weeklyReportingErrorMessage(error, '生成汇总草稿失败'),
       color: 'error'
     })
   } finally {
@@ -200,7 +214,7 @@ async function saveDraft() {
       .map(recipientSelectionForKey)
       .filter((item): item is RecipientSelection => Boolean(item))
     const response = await $fetch<{ code: number, data: SummaryProjection }>(
-      `/api/v1/company-weekly-summaries/${encodeURIComponent(props.periodKey)}/draft`,
+      moduleUrl(`/api/v1/company-weekly-summaries/${encodeURIComponent(props.periodKey)}/draft`),
       {
         method: 'PUT',
         body: {
@@ -216,7 +230,7 @@ async function saveDraft() {
     toast.add({ title: '公司项目周报汇总草稿已保存', color: 'success' })
   } catch (error: unknown) {
     toast.add({
-      title: (error as { data?: { message?: string } })?.data?.message || '保存汇总草稿失败',
+      title: weeklyReportingErrorMessage(error, '保存汇总草稿失败'),
       color: 'error'
     })
   } finally {
@@ -236,7 +250,7 @@ async function publish() {
     const response = await $fetch<{
       code: number
       data: { status: string, delivery?: { synced?: boolean, pending?: boolean } }
-    }>(`/api/v1/company-weekly-summaries/${encodeURIComponent(props.periodKey)}:publish`, {
+    }>(moduleUrl(`/api/v1/company-weekly-summaries/${encodeURIComponent(props.periodKey)}:publish`), {
       method: 'POST',
       body: { correctionReason: correctionReason.value.trim() || undefined }
     })
@@ -249,7 +263,7 @@ async function publish() {
     await load()
   } catch (error: unknown) {
     toast.add({
-      title: (error as { data?: { message?: string } })?.data?.message || '发布公司项目周报汇总失败',
+      title: weeklyReportingErrorMessage(error, '发布公司项目周报汇总失败'),
       color: 'error'
     })
   } finally {
@@ -264,7 +278,7 @@ async function retryPublish() {
     const response = await $fetch<{
       code: number
       data: { delivery?: { synced?: boolean } }
-    }>(`/api/v1/company-weekly-summaries/${encodeURIComponent(props.periodKey)}:retry`, {
+    }>(moduleUrl(`/api/v1/company-weekly-summaries/${encodeURIComponent(props.periodKey)}:retry`), {
       method: 'POST'
     })
     toast.add({
@@ -274,7 +288,7 @@ async function retryPublish() {
     await load()
   } catch (error: unknown) {
     toast.add({
-      title: (error as { data?: { message?: string } })?.data?.message || '重试发布失败',
+      title: weeklyReportingErrorMessage(error, '重试发布失败'),
       color: 'error'
     })
   } finally {
@@ -286,14 +300,14 @@ async function cancelPublish() {
   if (!canCancelPublish.value) return
   publishing.value = true
   try {
-    await $fetch(`/api/v1/company-weekly-summaries/${encodeURIComponent(props.periodKey)}:cancel-publish`, {
+    await $fetch(moduleUrl(`/api/v1/company-weekly-summaries/${encodeURIComponent(props.periodKey)}:cancel-publish`), {
       method: 'POST'
     })
     toast.add({ title: '发布已取消，项目周报已解冻并恢复为汇总草稿', color: 'success' })
     await load()
   } catch (error: unknown) {
     toast.add({
-      title: (error as { data?: { message?: string } })?.data?.message || '当前发布阶段已不可取消',
+      title: weeklyReportingErrorMessage(error, '当前发布阶段已不可取消'),
       color: 'error'
     })
   } finally {
@@ -306,7 +320,7 @@ async function openCorrection() {
   openingCorrection.value = true
   try {
     const response = await $fetch<{ code: number, data: SummaryProjection }>(
-      `/api/v1/company-weekly-summaries/${encodeURIComponent(props.periodKey)}:open-correction`,
+      moduleUrl(`/api/v1/company-weekly-summaries/${encodeURIComponent(props.periodKey)}:open-correction`),
       {
         method: 'POST',
         body: { reason: correctionReason.value.trim() }
@@ -316,7 +330,7 @@ async function openCorrection() {
     toast.add({ title: '已创建公司项目周报汇总更正草稿', color: 'success' })
   } catch (error: unknown) {
     toast.add({
-      title: (error as { data?: { message?: string } })?.data?.message || '创建更正草稿失败',
+      title: weeklyReportingErrorMessage(error, '创建更正草稿失败'),
       color: 'error'
     })
   } finally {
@@ -334,11 +348,11 @@ watch(
 </script>
 
 <template>
-  <div class="flex min-h-0 flex-1 flex-col">
-    <div class="border-b border-default px-5 py-4">
+  <div class="flex min-h-0 w-full min-w-0 flex-1 flex-col">
+    <div class="border-b border-default px-4 py-4 sm:px-5">
       <div class="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <div class="flex items-center gap-2">
+        <div class="min-w-0">
+          <div class="flex flex-wrap items-center gap-2">
             <h2 class="text-base font-semibold text-highlighted">
               {{ periodKey }} 公司项目周报汇总
             </h2>
@@ -350,7 +364,7 @@ watch(
             项目总监选择已审阅版本，发布后冻结项目周报并一并确认项目经理本人工时。
           </p>
         </div>
-        <div class="flex gap-2">
+        <div class="flex flex-wrap gap-2">
           <UButton
             icon="i-lucide-refresh-cw"
             color="neutral"
@@ -395,7 +409,7 @@ watch(
       </div>
     </div>
 
-    <div v-if="loading && !summary" class="space-y-3 p-5">
+    <div v-if="loading && !summary" class="space-y-3 p-4 sm:p-5">
       <USkeleton class="h-24 rounded-lg" />
       <USkeleton class="h-72 rounded-lg" />
     </div>
@@ -453,9 +467,9 @@ watch(
                 :class="item.eligible ? 'cursor-pointer' : 'bg-elevated/40'"
               >
                 <UCheckbox
-                  v-model="includedObligationIds"
-                  :value="item.obligationId"
+                  :model-value="includedObligationIds.includes(item.obligationId)"
                   :disabled="!isEditable || !item.eligible"
+                  @update:model-value="value => toggleObligation(item.obligationId, value === true)"
                 />
                 <span class="min-w-0 flex-1">
                   <span class="flex flex-wrap items-center gap-2">
@@ -563,8 +577,18 @@ watch(
                   </UBadge>
                 </div>
                 <p class="mt-1 text-xs text-muted">
-                  {{ version.publishedAt || version.createdAt }}
+                  {{ version.publishedAt ? '发布于' : '创建于' }} {{ summaryVersionTimeLabel(version) }}
                 </p>
+                <UButton
+                  v-if="codocsDocumentHref(version.codocsDocumentUuid, hosted)"
+                  :to="codocsDocumentHref(version.codocsDocumentUuid, hosted)!"
+                  icon="i-lucide-external-link"
+                  label="打开存档文档"
+                  color="primary"
+                  variant="link"
+                  size="xs"
+                  class="mt-1 px-0"
+                />
                 <p v-if="version.correctionReason" class="mt-1 text-xs text-muted">
                   更正：{{ version.correctionReason }}
                 </p>

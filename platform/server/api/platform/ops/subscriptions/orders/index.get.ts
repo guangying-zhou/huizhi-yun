@@ -25,6 +25,8 @@ interface OrderRow extends RowDataPacket {
   confirmed_by_uid: string | null
   confirmed_by_name: string | null
   confirmed_at: string | null
+  approval_reference: string | null
+  accepted_at: string | null
   notes: string | null
 }
 
@@ -82,10 +84,12 @@ export default defineEventHandler(async (event) => {
             confirmer.uid AS confirmed_by_uid,
             confirmer.display_name AS confirmed_by_name,
             pay.confirmed_at,
-            o.notes
+            ea.approval_reference, ec.accepted_at, o.notes
        FROM platform_orders o
        LEFT JOIN tenants t ON t.tenant_code = o.tenant_code
        LEFT JOIN platform_plans p ON p.plan_code = o.plan_code
+       LEFT JOIN enterprise_order_approvals ea ON ea.order_id=o.id AND ea.tenant_code=o.tenant_code
+       LEFT JOIN enterprise_order_acceptances ec ON ec.order_id=o.id AND ec.tenant_code=o.tenant_code
        LEFT JOIN platform_payments pay
          ON pay.id = (
            SELECT pay2.id
@@ -132,6 +136,8 @@ export default defineEventHandler(async (event) => {
       confirmedByUid: row.confirmed_by_uid,
       confirmedByName: row.confirmed_by_name,
       confirmedAt: row.confirmed_at,
+      approvalReference: row.approval_reference,
+      acceptedAt: row.accepted_at,
       notes: row.notes
     })),
     total: totalRow?.total || 0,

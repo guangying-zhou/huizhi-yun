@@ -27,6 +27,20 @@ test('product scope requires explicit product facts and fails closed for unknown
   }), false)
 })
 
+test('legacy product manager role scope parses as the manager relation, not equals:manager', () => {
+  const policy = payload()
+  const scope = policy.roleDefaultScopes[1]!
+  delete (scope as { scopePredicate?: string }).scopePredicate
+  Object.assign(scope, { scopeType: 'product', scopeValue: 'manager' })
+  const required = { appCode: 'aims', resourceCode: 'product_priorities', action: 'prioritize' }
+  const input = { payload: policy, uid: 'u1', required, object }
+  assert.equal(evaluatePolicyBundleScopedAuthorization(input).allowed, true)
+  assert.equal(evaluatePolicyBundleScopedAuthorization({ ...input, object: { ...object, productManagerUids: [] } }).allowed, false)
+  assert.equal(evaluatePolicyBundleScopedAuthorization({ ...input, object: { ...object, actorUid: 'u2' } }).allowed, false)
+  Object.assign(scope, { scopePredicate: 'equals', scopeValue: 'manager' })
+  assert.equal(evaluatePolicyBundleScopedAuthorization(input).allowed, false)
+})
+
 function payload() {
   return {
     subjects: [{ subjectType: 'user', subjectCode: 'subject-u1', externalRef: 'u1', status: 'active' }],

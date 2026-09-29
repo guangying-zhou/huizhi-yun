@@ -21,8 +21,9 @@ export type PermissionMenuItem = {
 export function usePlatformPermission() {
   const config = useRuntimeConfig()
   const pub = config.public as Record<string, unknown>
-  const appCode = String(pub.appCode || pub.appName || '')
-  const { loadAuthorization, getAuthorization, clearAuthorizationCache, loaded } = useAuthorization()
+  const { loadAuthorization, getAuthorization, clearAuthorizationCache, loaded, error, authorizationApp } = useAuthorization()
+  // In the Enterprise Host the snapshot belongs to the page's owning module.
+  const appCode = () => authorizationApp.value || String(pub.appCode || pub.appName || '')
   const capabilityState = createCapabilityState({
     authorization: () => getAuthorization(),
     resolver: (authorization: LegacyAuthorizationSnapshot | null | undefined): PlatformCapabilityMap => {
@@ -40,7 +41,7 @@ export function usePlatformPermission() {
 
       for (const [resourceCode, actions] of Object.entries(resources)) {
         for (const action of actions) {
-          capabilities[`permission:${appCode}:${resourceCode}:${action}`] = true
+          capabilities[`permission:${appCode()}:${resourceCode}:${action}`] = true
         }
       }
 
@@ -92,6 +93,8 @@ export function usePlatformPermission() {
     capabilities: capabilityState.capabilities,
     filterMenus,
     clearAuthorizationCache,
-    loaded
+    loaded,
+    /** Snapshot load failure (dependency outage or unexpected response); permissions fail closed. */
+    error
   }
 }

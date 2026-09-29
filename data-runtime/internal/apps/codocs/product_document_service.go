@@ -36,6 +36,10 @@ func (a *Adapter) productDocumentServiceContent(ctx context.Context, uuid string
 	if err != nil {
 		return nil, err
 	}
+	// Snapshot-backed (v2) documents keep only a derived mirror at oss_path.
+	if err := refuseSnapshotV2Document(ctx, a.db, uuid); err != nil {
+		return nil, err
+	}
 	path := strings.TrimSpace(firstTextValue(document, "oss_path"))
 	if path == "" {
 		return nil, httperror.New(http.StatusNotFound, "product_document_content_missing", "product document content is unavailable")
@@ -59,6 +63,12 @@ func (a *Adapter) authorizeProductDocumentService(ctx context.Context, uuid stri
 	sourceApp := "aims"
 	if operation == assetsProductDocumentReadOperation && action == "metadata:read" {
 		sourceApp = "assets"
+		// Only this fixed Assets metadata contract permits the physical Host.
+		// The Codocs BFF authenticates the source; Runtime verifies the
+		// target-signed delegation and the exact source client below.
+		if firstTextValue(body, integrationoperation.TrustedServiceCommandSourceAppKey) == "enterprise" {
+			sourceApp = "enterprise"
+		}
 	}
 	_, _, err := scopedDocumentServiceCommand(body, uuid, query, documentServiceContract{SourceApp: sourceApp, ContextField: "productCode", Capability: aimsProductDocumentReadCapability, Operation: operation, Schema: operation, Action: action})
 	if err != nil {

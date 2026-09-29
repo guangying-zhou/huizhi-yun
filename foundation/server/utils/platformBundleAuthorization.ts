@@ -62,6 +62,7 @@ export interface RuntimeScopedAuthorizationSnapshot {
   grants: FoundationScopedAuthorizationGrant[]
   actionPolicy?: ResourceActionPolicy
   decision?: FoundationScopedAuthorizationDecision
+  authorizationExpiresAt?: number
 }
 
 export interface RuntimeInstanceConflictPrincipal {

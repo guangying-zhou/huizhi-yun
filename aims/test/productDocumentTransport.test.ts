@@ -48,7 +48,15 @@ test('product creation transport binds exact URL, scope and distinct source/targ
     assert.equal(h.calls[1].signature.targetDeploymentCode, 'CODOCS')
     assert.equal(h.calls[1].signature.envelope.command.actorUid, 'original-user')
     assert.equal(h.calls[2].url, 'https://codocs.test/api/v1/service/product-documents/create')
-    assert.equal(h.calls[2].options.headers['x-hzy-deployment'], 'CODOCS')
+    // Request-bound calls forward the trusted target route as a header; scheduled
+    // calls carry the target deployment separately and serviceAppFetch adds it.
+    if (scheduled) {
+      assert.equal(h.calls[2].options.scheduledTargetDeployment, 'CODOCS')
+      assert.equal(h.calls[2].options.headers['x-hzy-deployment'], undefined)
+    } else {
+      assert.equal(h.calls[2].options.headers['x-hzy-deployment'], 'CODOCS')
+      assert.equal(h.calls[2].options.scheduledTargetDeployment, undefined)
+    }
     assert.equal(h.calls[2].options.headers['idempotency-key'], 'original-key')
   }
 })

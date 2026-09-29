@@ -1,14 +1,28 @@
 <script setup lang="ts">
-import { managedAssetCategoryDictionaryCodes } from '~~/shared/assetCategoryDefaults'
-import type { AssetDictionaryDefinition } from '~~/shared/assetsDictionaries'
+import CommonEmptyState from '../../../../foundation/app/components/common/EmptyState.vue'
+import { managedAssetCategoryDictionaryCodes } from '../../../shared/assetCategoryDefaults'
+import type { AssetDictionaryDefinition } from '../../../shared/assetsDictionaries'
+import { useAssetsModule } from '../../../layer/useAssetsModule'
+
+definePageMeta({ hostContentInset: false })
 
 usePageTitle('字典管理')
 
 const editOpen = ref(false)
 const selectedDictionary = ref<AssetDictionaryDefinition | null>(null)
 
-const { dictionaries, loadDictionaries } = useAssetDictionaries()
-await loadDictionaries()
+const { hosted } = useAssetsModule()
+const { dictionaries, loadDictionaries } = useAssetDictionaries('asset-items')
+const loading = ref(false)
+async function refreshDictionaries(force = false) {
+  loading.value = true
+  try {
+    await loadDictionaries(force)
+  } finally {
+    loading.value = false
+  }
+}
+await refreshDictionaries()
 
 const items = computed<AssetDictionaryDefinition[]>(() => Object.values(dictionaries.value)
   .filter(item => !managedAssetCategoryDictionaryCodes.includes(item.code)))
@@ -26,26 +40,34 @@ const rows = computed(() => items.value.map(item => ({
 })))
 
 const handleRefresh = async () => {
-  await loadDictionaries(true)
+  await refreshDictionaries(true)
 }
 const { setRefresh, clearRefresh } = usePageActions()
 onMounted(() => setRefresh(handleRefresh))
 onBeforeUnmount(clearRefresh)
 
 const handleRowSelect = (_event: Event, row: { original: AssetDictionaryDefinition & { option_count: number } }) => {
-  selectedDictionary.value = row.original
-  editOpen.value = true
+  if (!hosted) {
+    selectedDictionary.value = row.original
+    editOpen.value = true
+  }
 }
 
 const handleUpdated = async () => {
-  await loadDictionaries(true)
+  await refreshDictionaries(true)
 }
 </script>
 
 <template>
   <UDashboardPanel id="admin-dictionaries" grow>
     <template #body>
-      <div class="p-4 space-y-4">
+      <div class="space-y-4 p-4 sm:p-6">
+        <ContentPageHeader
+          :hosted="hosted"
+          title="资产字典"
+          description="查看当前企业资产字典及其选项数量。"
+          breadcrumb="控制台 / 业务配置"
+        />
         <UCard>
           <template #header>
             <div class="flex items-center justify-between gap-3">
@@ -56,13 +78,23 @@ const handleUpdated = async () => {
             </div>
           </template>
 
-          <UTable :data="rows" :columns="columns" @select="handleRowSelect" />
+          <UTable
+            :data="rows"
+            :columns="columns"
+            :loading="loading"
+            @select="handleRowSelect"
+          >
+            <template #empty>
+              <CommonEmptyState title="暂无记录" description="当前范围内没有可显示的记录。" />
+            </template>
+          </UTable>
         </UCard>
       </div>
     </template>
   </UDashboardPanel>
 
   <AssetsDictionaryEditModal
+    v-if="!hosted"
     :open="editOpen"
     :dictionary="selectedDictionary"
     @update:open="editOpen = $event"

@@ -55,6 +55,8 @@
 </template>
 
 <script setup lang="ts">
+import { createCreationAttempt } from '../../../layer/creationAttempt.mjs'
+import { useCodocsModule } from '../../../layer/useCodocsModule'
 interface ApiErrorLike {
   data?: {
     message?: string
@@ -79,6 +81,8 @@ const isOpen = computed({
 })
 
 const toast = useToast()
+const { moduleUrl, cacheKey } = useCodocsModule()
+const sealAttempt = createCreationAttempt()
 const submitting = ref(false)
 const selectedSealTypes = ref<Array<'official' | 'legal' | 'finance' | 'contract'>>([])
 const pageCountInput = ref('')
@@ -137,14 +141,23 @@ const handleConfirm = async () => {
 
   submitting.value = true
   try {
-    await $fetch(`/api/reviews/${props.reviewId}/seal`, {
+    const payload = {
+      reviewId: props.reviewId,
+      sealTypes: [...selectedSealTypes.value].sort(),
+      pageCount,
+      remark: remark.value.trim() || null
+    }
+    const attemptKey = sealAttempt.keyFor(cacheKey(`review-seal:${props.reviewId}`), payload)
+    await $fetch(moduleUrl(`/api/reviews/${props.reviewId}/seal`), {
       method: 'POST',
+      headers: { 'Idempotency-Key': attemptKey },
       body: {
-        sealTypes: selectedSealTypes.value,
-        pageCount,
-        remark: remark.value || null
+        sealTypes: payload.sealTypes,
+        pageCount: payload.pageCount,
+        remark: payload.remark
       }
     })
+    sealAttempt.complete(attemptKey)
 
     toast.add({
       title: '盖章已确认',

@@ -25,7 +25,14 @@ type ProductAdoptionPage struct {
 // Internal reader only: callers must verify product access and derive both
 // object scopes for the delegated user before invoking this function.
 // One SELECT supplies both totals and details from the same database snapshot.
-func readProductAdoption(ctx context.Context, db *sql.DB, productCode string, deliveryScope, environmentScope url.Values, page, pageSize int) (ProductAdoptionPage, error) {
+// adoptionRunner lets the legacy pool and the unified snapshot transaction share
+// one query; the unified schema exposes the same table names as compatibility
+// views, so no predicate or table name changes between the two paths.
+type adoptionRunner interface {
+	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
+}
+
+func readProductAdoption(ctx context.Context, db adoptionRunner, productCode string, deliveryScope, environmentScope url.Values, page, pageSize int) (ProductAdoptionPage, error) {
 	result := ProductAdoptionPage{}
 	if productCode == "" || strings.TrimSpace(productCode) != productCode || !utf8.ValidString(productCode) || utf8.RuneCountInString(productCode) > 100 || strings.ContainsRune(productCode, 0) {
 		return result, httperror.New(http.StatusBadRequest, "product_adoption_product_invalid", "A valid product code is required")

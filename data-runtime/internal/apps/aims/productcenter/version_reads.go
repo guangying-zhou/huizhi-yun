@@ -54,6 +54,24 @@ func ListProductCenterVersions(ctx context.Context, db *sql.DB, code, uid string
 		return out, err
 	}
 	defer tx.Rollback()
+	out, err = ListProductCenterVersionsInTransaction(ctx, tx, code, uid, permit, q)
+	if err != nil {
+		return out, err
+	}
+	return out, tx.Commit()
+}
+
+// ListProductCenterVersionsInTransaction keeps authorization and reads inside the caller's
+// generation-fenced transaction. The caller owns commit and rollback.
+func ListProductCenterVersionsInTransaction(ctx context.Context, tx *sql.Tx, code, uid string, permit AuthorizationPermit, q ProductVersionPageQuery) (ProductVersionPage, error) {
+	var out ProductVersionPage
+	if err := ValidateProductVersionPageQuery(q); err != nil {
+		return out, err
+	}
+	if tx == nil {
+		return out, invalid("product_command_configuration", "缺少产品读取事务")
+	}
+	var err error
 	if err = AuthorizeWorkspaceTransaction(ctx, tx, code, uid, "product_versions", "view", permit); err != nil {
 		return out, err
 	}
@@ -89,5 +107,5 @@ func ListProductCenterVersions(ctx context.Context, db *sql.DB, code, uid string
 		return out, err
 	}
 	out.Page, out.PageSize, out.WorkspaceRevision = q.Page, q.PageSize, permit.Facts.Revision
-	return out, tx.Commit()
+	return out, nil
 }

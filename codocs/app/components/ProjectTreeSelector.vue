@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { Project } from '~/types/account'
+import type { Project } from '../types/account'
 
 const props = defineProps<{
   node: Project
@@ -68,7 +68,7 @@ const select = () => {
       <div v-else class="w-4" />
       <UIcon
         :name="isGroup ? 'i-lucide-folder-tree' : 'i-lucide-folder-kanban'"
-        :class="[isGroup ? 'text-primary' : 'text-amber-500', 'w-3.5 h-3.5 shrink-0']"
+        :class="[isGroup ? 'text-primary' : 'text-warning', 'w-3.5 h-3.5 shrink-0']"
       />
       <span class="truncate">{{ node.name }}</span>
       <span v-if="isGroup" class="ml-auto text-[10px] text-muted uppercase tracking-wide shrink-0">组</span>

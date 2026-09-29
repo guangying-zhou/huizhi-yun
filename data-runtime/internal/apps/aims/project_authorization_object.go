@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"strings"
 
+	pc "github.com/huizhi-yun/data-runtime/internal/apps/aims/productcenter"
 	"github.com/huizhi-yun/data-runtime/internal/httperror"
 )
 
@@ -23,10 +24,25 @@ func (a *Adapter) projectAuthorizationObject(ctx context.Context, rawProjectID s
 		return nil, err
 	}
 
+	return LoadProjectAuthorizationObject(ctx, a.DB(), projectID)
+}
+
+// LoadProjectAuthorizationObject shares the owning-domain facts with a guarded
+// Runtime transaction. Callers authorize the resulting object before disclosing it.
+type ProjectAuthorizationQuery interface {
+	pc.AuthorizationQuery
+	QueryContext(context.Context, string, ...any) (*sql.Rows, error)
+}
+
+func LoadProjectAuthorizationObject(ctx context.Context, q ProjectAuthorizationQuery, projectID int64) (map[string]any, error) {
+	if projectID <= 0 {
+		return nil, httperror.New(http.StatusBadRequest, "project_id_invalid", "project ID is invalid")
+	}
+	var err error
 	var projectCode string
 	var deptCode, leaderUID sql.NullString
 	var createdBy string
-	err = a.DB().QueryRowContext(ctx, `
+	err = q.QueryRowContext(ctx, `
 		SELECT project_code, dept_code, leader_uid, created_by
 		FROM aims_projects
 		WHERE id = ?
@@ -39,7 +55,7 @@ func (a *Adapter) projectAuthorizationObject(ctx context.Context, rawProjectID s
 		return nil, err
 	}
 
-	rows, err := a.DB().QueryContext(ctx, `
+	rows, err := q.QueryContext(ctx, `
 		SELECT uid, role, status
 		FROM aims_project_members
 		WHERE project_id = ?

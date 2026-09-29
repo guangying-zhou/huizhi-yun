@@ -71,7 +71,7 @@ const select = () => {
       <div v-else class="w-4" />
       <UIcon
         :name="isCommittee ? 'i-lucide-users' : (hasChildren ? 'i-lucide-building-2' : 'i-lucide-building')"
-        :class="[isCommittee ? 'text-indigo-500' : 'text-amber-500', 'w-3.5 h-3.5 shrink-0']"
+        :class="[isCommittee ? 'text-info' : 'text-warning', 'w-3.5 h-3.5 shrink-0']"
       />
       <span class="truncate">{{ node.name }}</span>
     </div>

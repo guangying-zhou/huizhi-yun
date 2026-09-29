@@ -271,6 +271,19 @@ function responseStatusCode(error: unknown) {
   return Number(candidate?.statusCode || candidate?.status || candidate?.response?.status || 0)
 }
 
+// A source 401/403/404 reaches the user as "restricted", indistinguishable from
+// missing permission; log the cause for operators, never the subject.
+function sourceRejected(input: { sourceAppCode: string }, error: unknown, stage: 'verify' | 'finalize') {
+  const causeStatus = responseStatusCode(error)
+  if (![401, 403, 404].includes(causeStatus)) return false
+  console.warn('[NotificationDetail] source verifier rejected; mapped to restricted', {
+    sourceAppCode: input.sourceAppCode,
+    stage,
+    causeStatus
+  })
+  return true
+}
+
 function policyError(code: NotificationDetailAuthorizationPolicyCode) {
   return new NotificationDetailAuthorizationPolicyError(code)
 }
@@ -297,7 +310,7 @@ export async function authorizeNotificationDetail<TContext>(
   try {
     response = await verifier(input)
   } catch (error) {
-    if ([401, 403, 404].includes(responseStatusCode(error))) {
+    if (sourceRejected(input, error, 'verify')) {
       throw policyError('notification_detail_restricted')
     }
     throw policyError('notification_detail_unavailable')
@@ -378,7 +391,7 @@ export async function authorizeNotificationDetail<TContext>(
     }
   } catch (error) {
     if (error instanceof NotificationDetailAuthorizationPolicyError) throw error
-    if ([401, 403, 404].includes(responseStatusCode(error))) {
+    if (sourceRejected(input, error, 'finalize')) {
       throw policyError('notification_detail_restricted')
     }
     throw policyError('notification_detail_unavailable')

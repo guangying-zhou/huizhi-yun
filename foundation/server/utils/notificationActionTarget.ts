@@ -8,7 +8,18 @@ import { getConsoleRuntimeConfig } from './consoleRuntime.js'
 import { resolveHzyDevApplications } from './devApplications.js'
 import { loadHzyLocalDevRuntimeMode } from './localDevRuntime.js'
 
-export async function loadNotificationActionTargetCatalog(event: H3Event): Promise<NotificationActionTargetCatalog | null> {
+export interface NotificationActionTargetCatalogOptions {
+  /**
+   * Receives the signed-catalog load failure before the local-dev fallback is
+   * considered, so callers can log a fixed reason instead of seeing only null.
+   */
+  onBundleError?: (error: unknown) => void
+}
+
+export async function loadNotificationActionTargetCatalog(
+  event: H3Event,
+  options: NotificationActionTargetCatalogOptions = {}
+): Promise<NotificationActionTargetCatalog | null> {
   try {
     const runtime = await getConsoleRuntimeConfig({ event, allowFallback: false })
     const applications = (runtime.applications || []).filter(app => (
@@ -21,8 +32,9 @@ export async function loadNotificationActionTargetCatalog(event: H3Event): Promi
         source: 'policy_bundle'
       }
     }
-  } catch {
+  } catch (error) {
     // Local development is the only permitted non-bundle fallback.
+    options.onBundleError?.(error)
   }
 
   const localDev = loadHzyLocalDevRuntimeMode(event)

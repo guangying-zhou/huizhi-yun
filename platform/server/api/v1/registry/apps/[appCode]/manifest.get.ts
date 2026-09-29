@@ -1,30 +1,14 @@
-import type { RowDataPacket } from 'mysql2/promise'
 import { requireString } from '~~/server/utils/api'
 import { queryRow } from '~~/server/utils/db'
 import { contractOk } from '~~/server/utils/controlPlaneV1'
 import { findEffectiveManifestByAppCode, parseStoredJson } from '~~/server/utils/platform'
+import { requireTenantManifestReadAccess } from '~~/server/utils/enterpriseManifestAccess'
 
 export default defineEventHandler(async (event) => {
   const appCode = requireString(getRouterParam(event, 'appCode'), 'appCode')
   const tenantCode = requireString(getQuery(event).tenantCode, 'tenantCode')
 
-  const subscription = await queryRow<RowDataPacket>(
-    `SELECT id
-     FROM subscriptions
-     WHERE tenant_code = ?
-       AND app_code = ?
-       AND status = 'active'
-     LIMIT 1`,
-    [tenantCode, appCode]
-  )
-
-  if (!subscription) {
-    throw createError({
-      statusCode: 404,
-      statusMessage: 'Not Found',
-      message: `active subscription not found: tenantCode=${tenantCode}, appCode=${appCode}`
-    })
-  }
+  await requireTenantManifestReadAccess(queryRow, tenantCode, appCode)
 
   const manifest = await findEffectiveManifestByAppCode(appCode)
   if (!manifest) {

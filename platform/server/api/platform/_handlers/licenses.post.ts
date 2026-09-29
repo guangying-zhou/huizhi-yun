@@ -3,7 +3,7 @@ import { queryRow, queryRows, withTransaction } from '~~/server/utils/db'
 import { normalizeNullableString, ok, requireString } from '~~/server/utils/api'
 import { buildLicensePayload, buildSignedLicenseToken, hashLicensePayload, normalizeLicenseCapabilities } from '~~/server/utils/licenseArtifacts'
 import { CONSOLE_APP_CODE } from '~~/server/utils/consoleApp'
-import { ensureConsoleVaultMasterKey, fingerprintConsoleVaultMasterKey } from '~~/server/utils/deploymentBootstrapSecrets'
+import { consoleVaultLicenseMetadata, resolveConsoleVaultMasterKeyForIssuance } from '~~/server/utils/deploymentBootstrapSecrets'
 
 interface LicenseRow extends RowDataPacket {
   id: number
@@ -99,8 +99,8 @@ export default defineEventHandler(async (event) => {
   }
 
   const appCode = String(deployment.app_code)
-  const consoleVaultMasterKey = appCode === CONSOLE_APP_CODE
-    ? await ensureConsoleVaultMasterKey({
+  const consoleVaultCustody = appCode === CONSOLE_APP_CODE
+    ? await resolveConsoleVaultMasterKeyForIssuance({
         deploymentId,
         tenantCode,
         appCode
@@ -118,13 +118,7 @@ export default defineEventHandler(async (event) => {
     expiresAt,
     graceUntil,
     capabilities: capabilityPayload,
-    vault: consoleVaultMasterKey
-      ? {
-          masterKeyRequired: true,
-          masterKeyFingerprint: fingerprintConsoleVaultMasterKey(consoleVaultMasterKey),
-          algorithm: 'aes-256-gcm'
-        }
-      : null
+    vault: consoleVaultCustody ? consoleVaultLicenseMetadata(consoleVaultCustody) : null
   })
   const payloadHash = hashLicensePayload(licensePayload)
   const signed = await buildSignedLicenseToken(licensePayload)

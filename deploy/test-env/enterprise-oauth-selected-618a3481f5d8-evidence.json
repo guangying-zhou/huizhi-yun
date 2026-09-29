@@ -1,0 +1,45 @@
+{
+  "schema": "enterprise-oauth-live.v1",
+  "verifiedAt": "2026-09-13T20:20:07.899Z",
+  "tenant": "C000001",
+  "deployment": "C000001-test-enterprise",
+  "audience": "data-runtime",
+  "registrySha256": "204800c68c34fb7df5b582307a76fbd55ecd2410ddeed2b847a0a1aafcc81907",
+  "results": [
+    {
+      "scope": "assets:admin:admin",
+      "verifiedAt": "2026-09-13T20:20:03.720Z",
+      "oauthIssued": true,
+      "tokenVerified": true,
+      "cfRayPresent": true,
+      "testGatewayMarker": true
+    },
+    {
+      "scope": "assets:product:edit",
+      "verifiedAt": "2026-09-13T20:20:04.475Z",
+      "oauthIssued": true,
+      "tokenVerified": true,
+      "cfRayPresent": true,
+      "testGatewayMarker": true
+    }
+  ],
+  "negatives": [
+    {
+      "scope": "aims:products:view",
+      "audience": "tenant-runtime",
+      "rejected": true,
+      "status": 400
+    },
+    {
+      "scope": "aims:unregistered:probe",
+      "audience": "data-runtime",
+      "rejected": true,
+      "status": 400
+    }
+  ],
+  "actualCombinedScopes": [],
+  "combinationReason": "Foundation callEnterpriseRuntime uses scope: route.capability; no combined-scope calls",
+  "configurationMutated": false,
+  "localSigning": false,
+  "browserAcceptance": false
+}

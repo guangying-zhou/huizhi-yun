@@ -1,7 +1,9 @@
+import { optionalReadPagination } from '@hzy/foundation/shared/utils/optionalReadPagination'
 import assetsProductDocumentMetadataService from '~~/server/utils/assetsProductDocumentMetadataService'
 import productDocumentCreateService from '../utils/productDocumentCreateService'
 import productDocumentContentService from '../utils/productDocumentContentService'
 import productDocumentSearchService from '../utils/productDocumentSearchService'
+import { projectDocumentAccessService } from '../utils/projectDocumentAccessService'
 import { createError, getQuery, getRequestURL, readBody, type H3Event } from 'h3'
 import { requireConsoleAuthContext } from '@hzy/foundation/server/utils/consoleOidc'
 import { resolveConsoleAuthWithSessionBridge } from '@hzy/foundation/server/utils/consoleSessionBridge'
@@ -56,6 +58,7 @@ export default defineEventHandler(async (event) => {
 
   const method = normalizeMethod(event.node.req.method)
   await ensureConsoleAuthContext(event)
+  if (apiPath === '/api/v1/service/project-document-access/execute') return await projectDocumentAccessService(event)
   const assetsDocumentMatch = /^\/api\/v1\/service\/assets-product-documents\/([^/]+)\/metadata$/.exec(apiPath)
   if (assetsDocumentMatch) {
     if (method !== 'POST') throw createError({ statusCode: 405, message: 'POST required' })
@@ -91,6 +94,8 @@ export default defineEventHandler(async (event) => {
       : isFolderListRoute(apiPath, method)
         ? await folderReadRuntimeQuery(event)
         : query
+    // 精确快照引用（对象 key/version）只提供给受信的服务端调用方，浏览器不能经转发路径索取。
+    delete (runtimeQuery as Record<string, unknown>).include_snapshot_ref
     const rawBody = method === 'GET' ? undefined : await readBody(event)
     const requestBody = objectBody(rawBody)
     const trustedBody = apiPath === '/api/v1/service/ops-knowledge/link'
@@ -180,6 +185,13 @@ async function documentReadRuntimeQuery(event: H3Event) {
   await requirePermission(event, 'documents', 'view', '缺少文档查看权限')
 
   const input = getQuery(event) as Record<string, unknown>
+  if (getRequestURL(event).pathname.endsWith('/documents/trash')) {
+    try {
+      optionalReadPagination(input)
+    } catch {
+      throw createError({ statusCode: 400, message: '分页参数无效' })
+    }
+  }
   const docType = String(input.type || '').trim()
   const deptCode = String(input.dept_code || input.deptCode || '').trim()
   if (docType === 'department' && !deptCode) {

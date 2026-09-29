@@ -13,4 +13,19 @@ describe('document load failure write guard', () => {
     assert.match(page, /if \(!import\.meta\.client \|\| !documentId\.value \|\| !hasLoadedDocument\.value \|\| !isPageReady\.value\) return/)
     assert.match(page, /const handleEditorReady = \(\) => \{[\s\S]*?if \(!hasLoadedDocument\.value\) return[\s\S]*?isPageReady\.value = true/)
   })
+
+  test('load failure shows a retry state and never a collaboration banner or placeholder shell', () => {
+    assert.match(page, /documentLoadFailureMessage\.value = documentLoadErrorMessage\(/)
+    assert.match(page, /v-else-if="initialLoadPending"/)
+    assert.match(page, /initialLoadPending\.value = false/)
+    assert.match(page, /shouldLoadFromCollaboration = computed\(\(\) => supportsCollaboration\.value && !documentLoadFailure\.value/)
+    assert.match(page, /shouldShowCollaborationStatusBar = computed\(\(\) => !isStaticReadonlyDoc\.value && !documentLoadFailure\.value/)
+    assert.match(page, /label="重试"/)
+  })
+
+  test('company/knowledge/product documents never join collaboration', () => {
+    assert.match(page, /isStaticReadonlyDoc = computed\(\(\) => \['company', 'knowledge', 'product'\]\.includes\(docState\.value\.doc_type\)\)/)
+    assert.match(page, /&& !isRepositorySyncDoc\.value && !isStaticReadonlyDoc\.value/)
+    assert.match(page, /!isStaticReadonlyDoc \? '协作未连接' : '只读'/)
+  })
 })

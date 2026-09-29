@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"net/http"
 	"net/url"
+	"sort"
 	"strings"
 
 	"github.com/huizhi-yun/data-runtime/internal/httperror"
@@ -21,6 +22,11 @@ func (a *Adapter) collaborationContext(ctx context.Context, query url.Values) (m
 	}
 	if uuid == "" {
 		return nil, httperror.New(http.StatusBadRequest, "invalid_document", "Document uuid is required")
+	}
+	// A v2 document has no current .yjs pair; opening a session would resume
+	// stale collaboration state (stage B connects Collab to v2).
+	if err := refuseSnapshotV2Document(ctx, a.db, uuid); err != nil {
+		return nil, err
 	}
 
 	row := a.db.QueryRowContext(ctx, `
@@ -94,6 +100,27 @@ func (a *Adapter) collabDocs(ctx context.Context, query url.Values) (map[string]
 		return nil, httperror.New(http.StatusUnauthorized, "current_user_required", "Current user is required")
 	}
 
+	page, pageSize, paged, err := trashPagination(query)
+	if err != nil {
+		return nil, err
+	}
+	sharedTab := query.Get("sharedTab")
+	if values, ok := query["sharedTab"]; ok && (len(values) != 1 || (sharedTab != "received" && sharedTab != "sent") || firstNonEmpty(query.Get("category"), "shared") != "shared") {
+		return nil, httperror.New(400, "collab_query_invalid", "Invalid shared tab")
+	}
+	// Relation union and scope predicates are evaluated on the complete owning
+	// fact set before count/paging. Multiple relations cannot be SQL row-paged.
+	conn := documentTrashQueryer(a.db)
+	var tx *sql.Tx
+	if paged {
+		tx, err = a.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true, Isolation: sql.LevelRepeatableRead})
+		if err != nil {
+			return nil, err
+		}
+		defer tx.Rollback()
+		conn = tx
+	}
+
 	category := firstNonEmpty(query.Get("category"), "shared")
 	scope := firstNonEmpty(query.Get("scope"), "all")
 	keyword := strings.ToLower(strings.TrimSpace(query.Get("keyword")))
@@ -125,7 +152,11 @@ func (a *Adapter) collabDocs(ctx context.Context, query url.Values) (map[string]
 		args = append(args, ownerUID)
 	}
 
-	rows, err := a.db.QueryContext(ctx, `
+	orderSQL := " ORDER BY d.updated_at DESC"
+	if paged {
+		orderSQL += ", d.id DESC, dr.id ASC"
+	}
+	rows, err := conn.QueryContext(ctx, `
 		SELECT d.id AS document_id, d.uuid AS document_uuid, d.title, d.doc_type,
 		       d.oss_path, d.owner_uid, d.dept_code, d.readonly_flag, d.status,
 		       d.publish_info, d.updated_at, dr.relation_type, dr.source_type,
@@ -148,7 +179,7 @@ func (a *Adapter) collabDocs(ctx context.Context, query url.Values) (map[string]
 		LEFT JOIN document_publish_requests pr
 		  ON dr.source_type = 'publish_request' AND pr.id = CAST(dr.source_id AS UNSIGNED)
 		`+where+`
-		ORDER BY d.updated_at DESC`, args...)
+		`+orderSQL, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -175,7 +206,11 @@ func (a *Adapter) collabDocs(ctx context.Context, query url.Values) (map[string]
 			adminWhere += " AND d.owner_uid = ?"
 			adminArgs = append(adminArgs, ownerUID)
 		}
-		adminRows, adminErr := a.db.QueryContext(ctx, `
+		adminOrder := " ORDER BY d.updated_at DESC"
+		if paged {
+			adminOrder += ", d.id DESC, pr.id ASC"
+		}
+		adminRows, adminErr := conn.QueryContext(ctx, `
 			SELECT d.id AS document_id, d.uuid AS document_uuid, d.title, d.doc_type,
 			       d.oss_path, d.owner_uid, d.dept_code, d.readonly_flag, d.status,
 			       d.publish_info, d.updated_at, 'outside_seal_handler' AS relation_type,
@@ -187,7 +222,7 @@ func (a *Adapter) collabDocs(ctx context.Context, query url.Values) (map[string]
 			  FROM document_publish_requests pr
 			  INNER JOIN documents d ON d.uuid=pr.published_document_uuid AND d.status=2
 			  `+adminWhere+`
-			  ORDER BY d.updated_at DESC`, adminArgs...)
+			  `+adminOrder, adminArgs...)
 		if adminErr != nil {
 			return nil, adminErr
 		}
@@ -265,12 +300,21 @@ func (a *Adapter) collabDocs(ctx context.Context, query url.Values) (map[string]
 	items := make([]map[string]any, 0, len(order))
 	for _, uuid := range order {
 		item := grouped[uuid]
-		if includeCollabDocScope(item, scope) {
+		if includeCollabDocScope(item, scope) && includeCollabSharedTab(item, sharedTab) {
 			items = append(items, item)
 		}
 	}
 
-	return map[string]any{"items": items, "total": len(items)}, nil
+	if !paged {
+		return map[string]any{"items": items, "total": len(items)}, nil
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+	return pageCollabDocs(items, page, pageSize), nil
 }
 
 func nullableMapValue(value any) any {
@@ -359,4 +403,52 @@ func publishExecutionRelationTodo(relationType string, executionStatus string) b
 	default:
 		return false
 	}
+}
+
+func includeCollabSharedTab(item map[string]any, tab string) bool {
+	relations := stringListValue(item["relationTypes"])
+	switch tab {
+	case "received":
+		return stringInList(relations, "shared_with_me") || stringInList(relations, "shared_to_me")
+	case "sent":
+		return stringInList(relations, "shared_by_me")
+	}
+	return true
+}
+func pageCollabDocs(items []map[string]any, page, size int) map[string]any {
+	sort.SliceStable(items, func(i, j int) bool {
+		left, right := stringValue(items[i]["updatedAt"]), stringValue(items[j]["updatedAt"])
+		if left != right {
+			return left > right
+		}
+		return stringValue(items[i]["uuid"]) > stringValue(items[j]["uuid"])
+	})
+	owners, depts := map[string]bool{}, map[string]bool{}
+	for _, item := range items {
+		if uid := stringValue(item["ownerUid"]); uid != "" {
+			owners[uid] = true
+		}
+		if code := stringValue(item["deptCode"]); code != "" {
+			depts[code] = true
+		}
+	}
+	ownerUids, deptCodes := []string{}, []string{}
+	for uid := range owners {
+		ownerUids = append(ownerUids, uid)
+	}
+	for code := range depts {
+		deptCodes = append(deptCodes, code)
+	}
+	sort.Strings(ownerUids)
+	sort.Strings(deptCodes)
+	total := len(items)
+	start := (page - 1) * size
+	if start > total {
+		start = total
+	}
+	end := start + size
+	if end > total {
+		end = total
+	}
+	return map[string]any{"items": items[start:end], "total": total, "page": page, "pageSize": size, "ownerUids": ownerUids, "deptCodes": deptCodes}
 }

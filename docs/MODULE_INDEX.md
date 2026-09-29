@@ -3,6 +3,8 @@
 This workspace is a single Git monorepo. Use this index to choose the right module, command
 and validation scope before editing.
 
+The accepted consolidation target and phased TODO are in [ADR-018](./ADR-018-Unified-Enterprise-Application-and-Data.md) and the [implementation plan](./Unified-Enterprise-Implementation-Plan.md). The module table below describes the existing layout, not a completed migration.
+
 ## Workspace Notes
 
 - `account/` is listed for orientation, but is excluded by default.

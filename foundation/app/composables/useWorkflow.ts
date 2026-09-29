@@ -10,8 +10,10 @@ import type {
   WorkflowInitiatedItem,
   WorkflowPagedResponse
 } from '../types/workflow'
+import { sharedApiPath } from '../utils/sharedApiPath'
 
-const PROXY_BASE = '/api/workflow-proxy'
+// The Enterprise Host serves the same proxy under its shared API base.
+const proxyBase = () => sharedApiPath('/api/workflow-proxy')
 
 interface ApiResponse<T> {
   code: number
@@ -23,7 +25,7 @@ interface ApiResponse<T> {
  * 查询待办任务
  */
 export async function fetchPendingTasks(params?: { app_code?: string, page?: number, page_size?: number }) {
-  return $fetch<ApiResponse<WorkflowPagedResponse<WorkflowTaskItem>>>(`${PROXY_BASE}/tasks/pending`, {
+  return $fetch<ApiResponse<WorkflowPagedResponse<WorkflowTaskItem>>>(`${proxyBase()}/tasks/pending`, {
     params
   })
 }
@@ -32,7 +34,7 @@ export async function fetchPendingTasks(params?: { app_code?: string, page?: num
  * 查询已办任务
  */
 export async function fetchDoneTasks(params?: { app_code?: string, page?: number, page_size?: number }) {
-  return $fetch<ApiResponse<WorkflowPagedResponse<WorkflowTaskItem>>>(`${PROXY_BASE}/tasks/done`, {
+  return $fetch<ApiResponse<WorkflowPagedResponse<WorkflowTaskItem>>>(`${proxyBase()}/tasks/done`, {
     params
   })
 }
@@ -41,7 +43,7 @@ export async function fetchDoneTasks(params?: { app_code?: string, page?: number
  * 查询我发起的
  */
 export async function fetchInitiatedTasks(params?: { app_code?: string, status?: string, page?: number, page_size?: number }) {
-  return $fetch<ApiResponse<WorkflowPagedResponse<WorkflowInitiatedItem>>>(`${PROXY_BASE}/tasks/initiated`, {
+  return $fetch<ApiResponse<WorkflowPagedResponse<WorkflowInitiatedItem>>>(`${proxyBase()}/tasks/initiated`, {
     params
   })
 }
@@ -50,14 +52,14 @@ export async function fetchInitiatedTasks(params?: { app_code?: string, status?:
  * 查询任务详情（含 capabilities 和 business_view）
  */
 export async function fetchTaskDetail(taskId: number | string) {
-  return $fetch<ApiResponse<WorkflowTaskDetail>>(`${PROXY_BASE}/tasks/${taskId}`)
+  return $fetch<ApiResponse<WorkflowTaskDetail>>(`${proxyBase()}/tasks/${taskId}`)
 }
 
 /**
  * 查询实例详情（含 capabilities 和 business_view）
  */
 export async function fetchInstanceDetail(instanceId: number | string) {
-  return $fetch<ApiResponse<WorkflowInstanceDetail>>(`${PROXY_BASE}/instances/${instanceId}`)
+  return $fetch<ApiResponse<WorkflowInstanceDetail>>(`${proxyBase()}/instances/${instanceId}`)
 }
 
 /**
@@ -70,7 +72,7 @@ export async function fetchInstanceByBiz(params: {
   action_code: string
   include_history?: boolean
 }) {
-  return $fetch<ApiResponse<WorkflowByBizResult | null>>(`${PROXY_BASE}/instances/by-biz`, {
+  return $fetch<ApiResponse<WorkflowByBizResult | null>>(`${proxyBase()}/instances/by-biz`, {
     params: {
       ...params,
       include_history: params.include_history ? 'true' : undefined
@@ -91,7 +93,7 @@ export async function prepareInstance(body: {
   biz_context?: Record<string, unknown>
   form_data?: Record<string, unknown>
 }) {
-  return $fetch<ApiResponse<Record<string, unknown>>>(`${PROXY_BASE}/instances/prepare`, {
+  return $fetch<ApiResponse<Record<string, unknown>>>(`${proxyBase()}/instances/prepare`, {
     method: 'POST',
     body
   })
@@ -117,7 +119,7 @@ export async function createInstance(body: {
     status: string
     current_node: number
     mode?: 'created' | 'resubmitted'
-  }>>(`${PROXY_BASE}/instances`, {
+  }>>(`${proxyBase()}/instances`, {
     method: 'POST',
     body
   })
@@ -126,14 +128,15 @@ export async function createInstance(body: {
 /**
  * 审批通过
  */
-export async function approveTask(taskId: number | string, body?: { comment?: string, attachments?: unknown[] }) {
+export async function approveTask(taskId: number | string, body?: { comment?: string, attachments?: unknown[] }, idempotencyKey?: string) {
   return $fetch<ApiResponse<{
     task_id: number
     instance_id: number
     instance_status: string
     next_node: { name: string, assignees: Array<{ uid: string, name: string }> } | null
-  }>>(`${PROXY_BASE}/tasks/${taskId}/approve`, {
+  }>>(`${proxyBase()}/tasks/${taskId}/approve`, {
     method: 'POST',
+    ...(idempotencyKey ? { headers: { 'Idempotency-Key': idempotencyKey } } : {}),
     body: body || {}
   })
 }
@@ -141,13 +144,14 @@ export async function approveTask(taskId: number | string, body?: { comment?: st
 /**
  * 审批驳回
  */
-export async function rejectTask(taskId: number | string, body: { comment: string }) {
+export async function rejectTask(taskId: number | string, body: { comment: string }, idempotencyKey?: string) {
   return $fetch<ApiResponse<{
     task_id: number
     instance_id: number
     reject_strategy: string
-  }>>(`${PROXY_BASE}/tasks/${taskId}/reject`, {
+  }>>(`${proxyBase()}/tasks/${taskId}/reject`, {
     method: 'POST',
+    ...(idempotencyKey ? { headers: { 'Idempotency-Key': idempotencyKey } } : {}),
     body
   })
 }
@@ -180,7 +184,7 @@ export async function fetchInstanceHistoryByBiz(params: {
   resource_code: string
   biz_id: string
 }) {
-  return $fetch<ApiResponse<WorkflowHistoryItem[]>>(`${PROXY_BASE}/instances/by-biz-history`, {
+  return $fetch<ApiResponse<WorkflowHistoryItem[]>>(`${proxyBase()}/instances/by-biz-history`, {
     params
   })
 }

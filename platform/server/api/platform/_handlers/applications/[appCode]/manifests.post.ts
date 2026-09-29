@@ -15,7 +15,7 @@ export default defineEventHandler(async (event) => {
   const sourceEndpoint = normalizeNullableString(body.sourceEndpoint)
   const reviewComment = normalizeNullableString(body.reviewComment) || 'Approved via admin API'
 
-  const { manifest, release, roleMaterialization } = await registerAppManifest({
+  const { manifest, release, roleMaterialization, composition } = await registerAppManifest({
     appCode,
     releaseVersion: version,
     manifestJson: manifestJson as Record<string, unknown>,
@@ -38,6 +38,7 @@ export default defineEventHandler(async (event) => {
       releaseVersion: release.releaseVersion,
       status: release.status
     },
-    roleMaterialization
+    roleMaterialization,
+    ...(composition ? { composition } : {})
   })
 })

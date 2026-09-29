@@ -1,7 +1,7 @@
 import { getRequestUid } from '~~/server/utils/authIdentity'
 import { forwardAimsRuntimePost } from '~~/server/utils/aimsRuntimeForward'
 import { requirePermission } from '~~/server/utils/checkPermission'
-import { resolveProjectGovernanceRoleHolder } from '~~/server/utils/projectGovernanceRoleHolder'
+import { resolveProjectGovernanceRoleHolder } from '@hzy/foundation/server/utils/projectGovernanceRoleHolder'
 
 interface CompletionRequest {
   id: number

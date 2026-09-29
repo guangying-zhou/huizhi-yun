@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useAi } from '../../composables/useAi'
 /**
  * 编辑器 AI 侧边栏面板
  * 提供 AI 摘要生成功能，支持加载已保存的摘要
@@ -76,12 +77,12 @@ const handleSaveAbstract = async () => {
     <!-- AI 摘要 -->
     <div>
       <div class="flex items-center justify-between mb-2">
-        <h4 class="text-sm font-medium text-gray-700 dark:text-gray-300">
+        <h4 class="text-sm font-medium text-default">
           AI 摘要
         </h4>
       </div>
 
-      <p class="text-xs text-gray-500 dark:text-gray-400 mb-3">
+      <p class="text-xs text-muted mb-3">
         {{ readonly ? '只读模式下无法生成摘要' : '基于当前文档内容生成摘要' }}
       </p>
 
@@ -104,7 +105,7 @@ const handleSaveAbstract = async () => {
 
       <!-- 摘要结果 -->
       <div v-if="abstract" class="space-y-2">
-        <div class="bg-gray-50 dark:bg-gray-800 rounded-lg p-3 text-sm text-gray-700 dark:text-gray-300 leading-relaxed">
+        <div class="bg-default rounded-lg p-3 text-sm text-default leading-relaxed">
           {{ abstract }}
         </div>
         <div class="flex justify-end">
@@ -123,22 +124,22 @@ const handleSaveAbstract = async () => {
 
       <!-- 空状态 -->
       <div v-else-if="!loading" class="text-center py-6">
-        <UIcon name="i-lucide-sparkles" class="w-8 h-8 text-gray-300 dark:text-gray-600 mx-auto mb-2" />
-        <p class="text-xs text-gray-400 dark:text-gray-500">
+        <UIcon name="i-lucide-sparkles" class="w-8 h-8 text-dimmed mx-auto mb-2" />
+        <p class="text-xs text-dimmed">
           点击上方按钮生成摘要
         </p>
       </div>
     </div>
 
     <!-- 分隔线 -->
-    <hr class="border-gray-200 dark:border-gray-700">
+    <hr class="border-default">
 
     <!-- 使用提示 -->
     <div>
-      <h4 class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+      <h4 class="text-sm font-medium text-default mb-2">
         AI 助手
       </h4>
-      <div class="space-y-2 text-xs text-gray-500 dark:text-gray-400">
+      <div class="space-y-2 text-xs text-muted">
         <div class="flex items-start gap-2">
           <UIcon name="i-lucide-mouse-pointer-click" class="w-3.5 h-3.5 mt-0.5 shrink-0" />
           <span>选中文本后点击工具栏 AI 按钮使用润色、精简、扩展、翻译等功能</span>

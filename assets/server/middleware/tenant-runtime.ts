@@ -83,7 +83,7 @@ async function resolveAssetsRuntimeQuery(
   if (
     !context.currentUser
     || !rule
-    || !['dashboard', 'asset_items', 'ip_assets', 'assignments', 'alerts', 'offboarding_recoveries', 'products'].includes(rule.resource)
+    || !['dashboard', 'asset_items', 'ip_assets', 'assignments', 'alerts', 'offboarding_recoveries', 'products', 'admin'].includes(rule.resource)
     || rule.action === 'replay'
   ) return query
 

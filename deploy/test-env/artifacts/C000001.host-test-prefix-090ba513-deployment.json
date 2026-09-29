@@ -1,0 +1,24 @@
+{
+  "schemaVersion": "enterprise-test-prefix-build.v1",
+  "sourceCommit": "090ba513e82c8b41af6cffda1e366b62418d6ade",
+  "nodeVersion": "24.18.0",
+  "testPrefix": true,
+  "businessModuleSourceUnchanged": true,
+  "outputFiles": 374,
+  "outputBytes": 7648126,
+  "outputManifestSha256": "830955968150321f3388cd69a43fb7ce9427b469819956c3966fbd286034b0f0",
+  "serverEntrySha256": "f537d87593150d93af9f0e713b567e27d84eee8f4ccbdcc897b42824e6ac4a97",
+  "builtAt": "2026-09-14T15:41:02.434947+00:00",
+  "tenant": "C000001",
+  "environment": "test",
+  "worker": "hzy-test-enterprise",
+  "deployed": true,
+  "versionId": "afb6680a-f930-4c74-ae59-1e5025dc7783",
+  "trafficPercent": 100,
+  "previousVersionId": "2d71bea8-d845-4885-9089-0b6d84e3ae5b",
+  "publicAssetsStatus": {
+    "javascript": 200,
+    "stylesheet": 200
+  },
+  "authenticatedBusinessAcceptance": "pending SSO login"
+}

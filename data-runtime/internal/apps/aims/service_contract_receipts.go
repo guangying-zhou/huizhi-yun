@@ -23,7 +23,17 @@ func (a *Adapter) createProjectFromContractCommand(ctx context.Context, body map
 	if _, ok := body[integrationoperation.ServiceCommandEnvelopeKey]; !ok {
 		return a.createProjectFromContract(ctx, body)
 	}
-	return a.executeAimsServiceReceipt(ctx, body, contractActivationProjectOperation, contractActivationAimsCapability, func(ctx context.Context, tx *sql.Tx, command map[string]any) (map[string]any, string, string, error) {
+	if _, _, err := parseAimsServiceReceipt(body, contractActivationProjectOperation, contractActivationAimsCapability); err != nil {
+		return nil, err
+	}
+	return a.withContractReceiptTransaction(ctx, func(tx *sql.Tx, repository *integrationoperation.ReceiptRepository) (map[string]any, error) {
+		return a.CreateProjectFromContractCommandInTransaction(ctx, tx, repository, body)
+	})
+}
+
+// CreateProjectFromContractCommandInTransaction preserves the original receipt identity; success leaves commit to the caller.
+func (a *Adapter) CreateProjectFromContractCommandInTransaction(ctx context.Context, tx *sql.Tx, repository *integrationoperation.ReceiptRepository, body map[string]any) (map[string]any, error) {
+	return a.executeAimsServiceReceiptInTransaction(ctx, tx, repository, body, contractActivationProjectOperation, contractActivationAimsCapability, func(ctx context.Context, tx *sql.Tx, command map[string]any) (map[string]any, string, string, error) {
 		result, err := a.createProjectFromContractTx(ctx, tx, command)
 		if err != nil {
 			return nil, "", "", err
@@ -41,32 +51,64 @@ func (a *Adapter) syncPaymentMilestonesCommand(ctx context.Context, projectCode 
 	if _, ok := body[integrationoperation.ServiceCommandEnvelopeKey]; !ok {
 		return a.syncPaymentMilestones(ctx, projectCode, body)
 	}
-	return a.executeAimsServiceReceipt(ctx, body, contractActivationMilestoneOperation, contractActivationAimsCapability, func(ctx context.Context, tx *sql.Tx, command map[string]any) (map[string]any, string, string, error) {
-		commandProjectCode := firstBodyText(command, "projectCode", "project_code")
-		if commandProjectCode != strings.TrimSpace(projectCode) {
-			return nil, "", "", httperror.New(http.StatusConflict, "service_command_path_mismatch", "service command project does not match target path")
-		}
+	if _, _, err := parseAimsServiceReceipt(body, contractActivationMilestoneOperation, contractActivationAimsCapability, contractProjectPathValidator(projectCode)); err != nil {
+		return nil, err
+	}
+	return a.withContractReceiptTransaction(ctx, func(tx *sql.Tx, repository *integrationoperation.ReceiptRepository) (map[string]any, error) {
+		return a.SyncPaymentMilestonesCommandInTransaction(ctx, tx, repository, projectCode, body)
+	})
+}
+
+// SyncPaymentMilestonesCommandInTransaction shares the caller transaction and original path validation.
+func (a *Adapter) SyncPaymentMilestonesCommandInTransaction(ctx context.Context, tx *sql.Tx, repository *integrationoperation.ReceiptRepository, projectCode string, body map[string]any) (map[string]any, error) {
+	return a.executeAimsServiceReceiptInTransaction(ctx, tx, repository, body, contractActivationMilestoneOperation, contractActivationAimsCapability, func(ctx context.Context, tx *sql.Tx, command map[string]any) (map[string]any, string, string, error) {
 		result, err := a.syncPaymentMilestonesTx(ctx, tx, projectCode, command)
 		return result, "project_milestones", projectCode, err
-	})
+	}, contractProjectPathValidator(projectCode))
 }
 
 type contractActivationReceiptHandler func(context.Context, *sql.Tx, map[string]any) (map[string]any, string, string, error)
 
-func (a *Adapter) executeAimsServiceReceipt(ctx context.Context, body map[string]any, operationCode string, capability string, handler contractActivationReceiptHandler) (map[string]any, error) {
-	receiptInput, command, err := integrationoperation.ReceiptCommandFromBody(body, "aims", operationCode, capability)
-	if err != nil {
-		return nil, aimsContractActivationReceiptError(err)
+func (a *Adapter) executeAimsServiceReceipt(ctx context.Context, body map[string]any, operationCode, capability string, handler contractActivationReceiptHandler) (map[string]any, error) {
+	if _, _, err := parseAimsServiceReceipt(body, operationCode, capability); err != nil {
+		return nil, err
 	}
-	if receiptInput.TrustedContext.SourceApp != "altoc" {
-		return nil, httperror.New(http.StatusForbidden, "service_command_source_forbidden", "service command source must be altoc")
-	}
-	integrationoperation.CopyTrustedRuntimeCommandContext(command, body)
+	return a.withContractReceiptTransaction(ctx, func(tx *sql.Tx, repo *integrationoperation.ReceiptRepository) (map[string]any, error) {
+		return a.executeAimsServiceReceiptInTransaction(ctx, tx, repo, body, operationCode, capability, handler)
+	})
+}
+
+func (a *Adapter) withContractReceiptTransaction(ctx context.Context, apply func(*sql.Tx, *integrationoperation.ReceiptRepository) (map[string]any, error)) (map[string]any, error) {
 	repository, err := integrationoperation.NewReceiptRepository(a.DB())
 	if err != nil {
 		return nil, err
 	}
-	executed, err := repository.Execute(ctx, receiptInput, func(ctx context.Context, tx *sql.Tx, _ json.RawMessage) (integrationoperation.ReceiptBusinessResult, error) {
+	tx, err := a.DB().BeginTx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+	result, err := apply(tx, repository)
+	if err != nil {
+		return nil, err
+	}
+	if err = tx.Commit(); err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
+func (a *Adapter) executeAimsServiceReceiptInTransaction(ctx context.Context, tx *sql.Tx, repository *integrationoperation.ReceiptRepository, body map[string]any, operationCode string, capability string, handler contractActivationReceiptHandler, validate ...func(map[string]any) error) (out map[string]any, err error) {
+	if tx == nil || repository == nil {
+		return nil, httperror.New(503, "service_command_transaction_required", "Caller transaction and receipt repository required")
+	}
+
+	receiptInput, command, err := parseAimsServiceReceipt(body, operationCode, capability, validate...)
+	if err != nil {
+		return nil, err
+	}
+	integrationoperation.CopyTrustedRuntimeCommandContext(command, body)
+	executed, err := repository.ExecuteInTransaction(ctx, tx, receiptInput, func(ctx context.Context, tx *sql.Tx, _ json.RawMessage) (integrationoperation.ReceiptBusinessResult, error) {
 		result, targetType, targetCode, err := handler(ctx, tx, command)
 		if err != nil {
 			return integrationoperation.ReceiptBusinessResult{}, err
@@ -96,5 +138,30 @@ func aimsContractActivationReceiptError(err error) error {
 		return httperror.New(http.StatusConflict, "service_command_rejected", "service command receipt was rejected")
 	default:
 		return err
+	}
+}
+
+func parseAimsServiceReceipt(body map[string]any, operationCode, capability string, validate ...func(map[string]any) error) (integrationoperation.ReceiptCommandInput, map[string]any, error) {
+	receiptInput, command, err := integrationoperation.ReceiptCommandFromBody(body, "aims", operationCode, capability)
+	if err != nil {
+		return integrationoperation.ReceiptCommandInput{}, nil, aimsContractActivationReceiptError(err)
+	}
+	if receiptInput.TrustedContext.SourceApp != "altoc" {
+		return integrationoperation.ReceiptCommandInput{}, nil, httperror.New(http.StatusForbidden, "service_command_source_forbidden", "service command source must be altoc")
+	}
+	// Validate the frozen command/path even when an existing receipt skips mutation.
+	for _, check := range validate {
+		if err = check(command); err != nil {
+			return integrationoperation.ReceiptCommandInput{}, nil, err
+		}
+	}
+	return receiptInput, command, nil
+}
+func contractProjectPathValidator(projectCode string) func(map[string]any) error {
+	return func(command map[string]any) error {
+		if firstBodyText(command, "projectCode", "project_code") != strings.TrimSpace(projectCode) {
+			return httperror.New(http.StatusConflict, "service_command_path_mismatch", "service command project does not match target path")
+		}
+		return nil
 	}
 }

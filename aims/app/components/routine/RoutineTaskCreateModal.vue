@@ -1,7 +1,15 @@
 <script setup lang="ts">
+import { useAimsModule } from '../../../layer/useAimsModule'
 import type { Department } from '@hzy/foundation/app/types/account'
-import type { CreateWorkItemRequest, RoutineScope } from '~/types/aims'
+import type { CreateWorkItemRequest, RoutineScope } from '../../types/aims'
+import { useAccessibleDepartments } from '../../composables/useAccessibleDepartments'
+import { useProjectStore } from '../../stores/project'
+import { useWorkItemStore } from '../../stores/workItem'
+import { createCommandIntents } from '../../utils/commandIntent'
 
+// 同一份代码供独立应用与企业宿主使用：非宿主模式下 moduleUrl 原样返回路径。
+const { moduleUrl } = useAimsModule()
+const documentIntents = createCommandIntents()
 const props = defineProps<{
   open: boolean
   projectId: number
@@ -17,7 +25,13 @@ const workItemStore = useWorkItemStore()
 const toast = useToast()
 const { user: currentUserUid } = useAuth()
 const { users: accountUsers } = useAccountUsers()
-const { accessibleDepartments } = useAccessibleDepartments()
+const {
+  accessibleDepartments,
+  loading: departmentsLoading,
+  error: departmentsError,
+  errorMessage: departmentsErrorMessage,
+  refresh: refreshDepartments
+} = useAccessibleDepartments()
 
 const creating = ref(false)
 const touched = ref(false)
@@ -138,10 +152,13 @@ async function createRoutineTask() {
     let failedDocuments = 0
     for (const documentId of pendingDocIds.value) {
       try {
-        await $fetch(`/api/v1/work-items/${item.id}/documents`, {
+        const body = { documentId }
+        const intent = `document-link:${item.id}:${documentId}`
+        await $fetch(moduleUrl(`/api/v1/work-items/${item.id}/documents`), {
           method: 'POST',
-          body: { documentId }
+          body, headers: documentIntents.headers(intent, body), retry: 0
         })
+        documentIntents.complete(intent)
       } catch {
         failedDocuments++
       }
@@ -212,7 +229,19 @@ watch(() => props.open, (open) => {
             :error="errors.beneficiaryDeptCode"
             class="mt-4"
           >
-            <div class="max-h-52 overflow-y-auto rounded-lg border border-default bg-default p-2">
+            <UAlert
+              v-if="departmentsError"
+              :color="departmentsError === 'forbidden' ? 'warning' : 'error'"
+              variant="subtle"
+              icon="i-lucide-triangle-alert"
+              :title="departmentsError === 'forbidden' ? '无权读取可选部门' : '可选部门加载失败'"
+              :description="departmentsErrorMessage"
+              :actions="departmentsError === 'unavailable' ? [{ label: '重试', color: 'neutral', variant: 'outline', loading: departmentsLoading, onClick: refreshDepartments }] : undefined"
+            />
+            <div v-else class="max-h-52 overflow-y-auto rounded-lg border border-default bg-default p-2">
+              <p v-if="!departmentsLoading && routineDepartmentTree.length === 0" class="px-2 py-1 text-sm text-muted">
+                暂无可选部门
+              </p>
               <DeptTreeSelector
                 v-for="department in routineDepartmentTree"
                 :key="department.deptCode"

@@ -22,6 +22,7 @@ interface Props {
   folders: FolderItem[]
   currentFolderId: number | null
   docTitle?: string
+  loadPage?: (parentId: number | null, page: number) => Promise<{ items: FolderItem[], total: number, page: number, pageSize: number, parentChain: { id: number, name: string }[] }>
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -35,6 +36,44 @@ const emit = defineEmits<{
 
 // 选中的目标文件夹 ID
 const selectedFolderId = ref<number | null>(null)
+const browseParentId = ref<number | null>(null)
+const browsePage = ref(1)
+const browseFolders = ref<FolderItem[]>([])
+const browseTotal = ref(0)
+const browseChain = ref<{ id: number, name: string }[]>([])
+const browseLoading = ref(false)
+const browseError = ref('')
+let browseSequence = 0
+async function browse(parentId: number | null, page = 1) {
+  if (!props.loadPage) return
+  const request = ++browseSequence
+  browseParentId.value = parentId
+  browsePage.value = page
+  browseLoading.value = true
+  browseError.value = ''
+  try {
+    const result = await props.loadPage(parentId, page)
+    if (request !== browseSequence || !props.open) return
+    browseFolders.value = result.items
+    browseTotal.value = result.total
+    browseChain.value = result.parentChain
+  } catch {
+    if (request !== browseSequence || !props.open) return
+    browseFolders.value = []
+    browseTotal.value = 0
+    browseError.value = '目标目录加载失败，请重试'
+  } finally {
+    if (request === browseSequence) browseLoading.value = false
+  }
+}
+function browseFolder(folder: FolderItem) {
+  selectedFolderId.value = folder.id
+  void browse(folder.id)
+}
+function browseAncestor(id: number | null) {
+  selectedFolderId.value = id
+  void browse(id)
+}
 
 // 展开的文件夹集合
 const expandedIds = ref<Set<number>>(new Set())
@@ -43,11 +82,12 @@ const expandedIds = ref<Set<number>>(new Set())
 watch(() => props.open, (newVal) => {
   if (newVal) {
     selectedFolderId.value = null
+    if (props.loadPage) void browse(null)
     // 默认展开所有文件夹
     const allIds = new Set<number>()
     props.folders.forEach(f => allIds.add(f.id))
     expandedIds.value = allIds
-  }
+  } else ++browseSequence
 })
 
 // 构建文件夹树
@@ -134,9 +174,63 @@ const isDisabled = (folderId: number | null) => {
             <span v-if="isDisabled(null)" class="text-xs text-muted ml-auto">（当前位置）</span>
           </div>
 
-          <!-- 文件夹树 -->
+          <template v-if="loadPage">
+            <div class="flex flex-wrap gap-1 px-3 py-2 text-xs text-muted">
+              <UButton
+                size="xs"
+                color="neutral"
+                variant="ghost"
+                @click="browseAncestor(null)"
+              >
+                根目录
+              </UButton>
+              <UButton
+                v-for="part in browseChain"
+                :key="part.id"
+                size="xs"
+                color="neutral"
+                variant="ghost"
+                @click="browseAncestor(part.id)"
+              >
+                {{ part.name }}
+              </UButton>
+            </div>
+            <p v-if="browseLoading" class="px-3 py-2 text-xs text-muted">
+              正在加载目标目录…
+            </p>
+            <UAlert v-else-if="browseError" color="error" :title="browseError" />
+            <div v-else>
+              <UButton
+                v-for="folder in browseFolders"
+                :key="folder.id"
+                class="w-full justify-start"
+                color="neutral"
+                variant="ghost"
+                icon="i-lucide-folder"
+                @click="browseFolder(folder)"
+              >
+                {{ folder.name }}
+              </UButton>
+              <p v-if="browseFolders.length === 0" class="px-3 py-2 text-xs text-muted">
+                此级没有子目录
+              </p>
+              <div v-if="browseTotal > 20" class="px-3 py-2 text-xs text-muted" @click.stop>
+                <span>共 {{ browseTotal }} 个子目录</span>
+                <UPagination
+                  :page="browsePage"
+                  :total="browseTotal"
+                  :items-per-page="20"
+                  :sibling-count="0"
+                  show-edges
+                  @update:page="browse(browseParentId, $event)"
+                />
+              </div>
+            </div>
+          </template>
+          <!-- Legacy full tree remains for other folder namespaces. -->
           <MoveFolderTreeNode
             v-for="folder in folderTree"
+            v-else
             :key="folder.id"
             :folder="folder"
             :level="1"
@@ -155,7 +249,7 @@ const isDisabled = (folderId: number | null) => {
             </UButton>
             <UButton
               color="primary"
-              :disabled="selectedFolderId === null && isDisabled(null)"
+              :disabled="isDisabled(selectedFolderId) || Boolean(loadPage && (browseLoading || browseError))"
               @click="confirmMove"
             >
               确定移动

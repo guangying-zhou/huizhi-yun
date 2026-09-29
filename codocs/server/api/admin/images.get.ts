@@ -2,20 +2,9 @@
  * 扫描 OSS 图片并检测孤立图片。
  * 文档元数据通过 tenant-runtime 查询，不在 Codocs server 直连数据库。
  */
-import { callCodocsTenantRuntime } from '~~/server/utils/codocsRuntime'
-import { downloadDocument, getImageMetadata, listImages } from '~~/server/utils/oss'
+import { findImageOwnerDocument, readImageOwnerDocumentContent, type ImageOwnerDocument } from '~~/server/utils/adminImageDocuments'
+import { getImageMetadata, listImages } from '~~/server/utils/oss'
 import { requirePermission } from '~~/server/utils/checkPermission'
-
-interface RuntimePage<T> {
-  items?: T[]
-}
-
-interface DocumentRow {
-  uuid: string
-  title: string
-  doc_type: string
-  oss_path: string
-}
 
 const extractOwner = (path: string): string => {
   const match = path.match(/^codocs\/users\/([^/]+)\/images\//)
@@ -25,17 +14,6 @@ const extractOwner = (path: string): string => {
 const imagePreviewUrl = (baseURL: string, path: string) => {
   const normalizedBase = baseURL.endsWith('/') ? baseURL.slice(0, -1) : baseURL
   return `${normalizedBase}/api/admin/images/preview?path=${encodeURIComponent(path)}`
-}
-
-const findDocumentByOssPath = async (event: Parameters<typeof callCodocsTenantRuntime>[0], ossPath: string) => {
-  const page = await callCodocsTenantRuntime<RuntimePage<DocumentRow>>(event, '/v1/codocs/documents', {
-    query: {
-      oss_path: ossPath,
-      limit: 1
-    },
-    scope: 'codocs.read'
-  })
-  return page.items?.[0] || null
 }
 
 export default defineEventHandler(async (event) => {
@@ -51,11 +29,11 @@ export default defineEventHandler(async (event) => {
     return { ...img, docPath }
   }))
 
-  const docInfoMap = new Map<string, DocumentRow | null>()
+  const docInfoMap = new Map<string, ImageOwnerDocument | null>()
   const docPaths = [...new Set(imagesWithMeta.map(i => i.docPath).filter(Boolean))]
   for (const docPath of docPaths) {
     try {
-      docInfoMap.set(docPath, await findDocumentByOssPath(event, docPath))
+      docInfoMap.set(docPath, await findImageOwnerDocument(event, docPath))
     } catch (error) {
       console.warn(`[AdminImages] Failed to lookup document for ${docPath}:`, error)
       docInfoMap.set(docPath, null)
@@ -66,7 +44,8 @@ export default defineEventHandler(async (event) => {
   for (const [docPath, doc] of docInfoMap.entries()) {
     if (!doc) continue
     try {
-      docContentCache.set(docPath, await downloadDocument(docPath, doc.doc_type))
+      // v2 文档读精确快照；读不到则内容未知（null），不判为“未引用”。
+      docContentCache.set(docPath, await readImageOwnerDocumentContent(event, doc))
     } catch {
       docContentCache.set(docPath, null)
     }

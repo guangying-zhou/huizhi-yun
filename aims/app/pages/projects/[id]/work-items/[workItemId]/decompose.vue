@@ -10,13 +10,19 @@
  *
  * 详见 docs/Aims-Requirement-Decomposition-Design.md
  */
-import { useMarkdownOutline, type OutlineNode } from '~/composables/useMarkdownOutline'
+import { useAimsModule } from '../../../../../../layer/useAimsModule'
+import { useMarkdownOutline, type OutlineNode } from '../../../../../composables/useMarkdownOutline'
 import type {
   DecomposeMode as Mode,
   RequirementCategory,
   UiNode
-} from '~/types/decompose'
+} from '../../../../../types/decompose'
+import DecomposeRequirementRow from '../../../../../components/decompose/DecomposeRequirementRow.vue'
+import { createCommandIntents } from '../../../../../utils/commandIntent'
 
+// 同一份代码供独立应用与企业宿主使用：非宿主模式下 moduleUrl 原样返回路径。
+const { moduleUrl } = useAimsModule()
+const decomposeIntents = createCommandIntents()
 definePageMeta({
   layoutHeader: true,
   layoutHeaderTitle: '需求分解',
@@ -156,13 +162,20 @@ async function loadContext() {
   loadingContext.value = true
   try {
     const res = await $fetch<{ code: number, data: DecomposeContext }>(
-      `/api/v1/work-items/${workItemId.value}/decompose-context`
+      moduleUrl(`/api/v1/work-items/${workItemId.value}/decompose-context`)
     )
     context.value = res.data
     if (res.data.sourceDocumentCandidates.length > 0) {
       selectedDocUuid.value = res.data.sourceDocumentCandidates[0]!.codocsUuid
     }
   } catch (error: unknown) {
+    const response = error as { data?: { code?: string, data?: { code?: string }, error?: { code?: string } } }
+    if ([response.data?.code, response.data?.data?.code, response.data?.error?.code].includes('receipt_result_unavailable')) {
+      toast.add({ title: '该操作已提交，请刷新查看', color: 'warning' })
+      submitDialogOpen.value = false
+      await navigateTo(moduleUrl(`/projects/${projectId.value}/board/${workItemId.value}/execution`))
+      return
+    }
     const msg = (error as { data?: { message?: string } })?.data?.message || (error as Error).message
     toast.add({ title: '加载上下文失败', description: msg, color: 'error' })
   } finally {
@@ -176,7 +189,7 @@ async function loadDocumentContent() {
   loadingContent.value = true
   try {
     const res = await $fetch<DocContentResponse>(
-      `/api/v1/codocs/documents/${encodeURIComponent(selectedDocUuid.value)}/content`,
+      moduleUrl(`/api/v1/codocs/documents/${encodeURIComponent(selectedDocUuid.value)}/content`),
       {
         query: {
           projectId: projectId.value
@@ -486,10 +499,12 @@ async function doSubmit() {
       submitNote: submitForm.submitNote || undefined,
       items: serializedItems
     }
+    const intent = `decompose:${workItemId.value}`
     const res = await $fetch<{ code: number, data: { createdWorkItems: unknown[], sourceWorkItemStatus: string } }>(
-      `/api/v1/work-items/${workItemId.value}/decompose-submit`,
-      { method: 'POST', body: payload }
+      moduleUrl(`/api/v1/work-items/${workItemId.value}/decompose-submit`),
+      { method: 'POST', body: payload, headers: decomposeIntents.headers(intent, payload), retry: 0 }
     )
+    decomposeIntents.complete(intent)
     toast.add({
       title: '分解提交成功',
       description: `已生成 ${res.data.createdWorkItems.length} 条工作项，源工作项状态：${res.data.sourceWorkItemStatus}`,
@@ -497,7 +512,7 @@ async function doSubmit() {
     })
     submitDialogOpen.value = false
     // 跳回工作项详情页
-    navigateTo(`/projects/${projectId.value}/board/${workItemId.value}/execution`)
+    navigateTo(moduleUrl(`/projects/${projectId.value}/board/${workItemId.value}/execution`))
   } catch (error: unknown) {
     const msg = (error as { data?: { message?: string } })?.data?.message || (error as Error).message
     toast.add({ title: '提交失败', description: msg, color: 'error' })

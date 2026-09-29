@@ -3,6 +3,7 @@ package aims
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -13,6 +14,8 @@ import (
 )
 
 type timeEntryItem struct {
+	ReceiptID             string  `json:"receiptId,omitempty"`
+	Idempotent            *bool   `json:"idempotent,omitempty"`
 	ID                    int64   `json:"id"`
 	WorkItemID            *int64  `json:"workItemId"`
 	ProjectID             int64   `json:"projectId"`
@@ -48,10 +51,38 @@ func (a *Adapter) userTimeEntries(ctx context.Context, uid string, query url.Val
 		return nil, httperror.New(http.StatusForbidden, "forbidden_user_timesheet", "only current user's timesheet can be queried")
 	}
 
+	page, paged, err := timeEntryPagination(query)
+	if err != nil {
+		return nil, err
+	}
 	where := []string{"t.uid = ?", "t.weekly_report_id IS NULL"}
 	args := []any{uid}
 	appendTimeEntryDateRange(&where, &args, query)
 
+	if paged {
+		if projectID := query.Get("projectId"); projectID != "" {
+			where = append(where, "t.project_id=?")
+			args = append(args, projectID)
+		}
+		return a.listTimeEntriesPage(ctx, where, args, page)
+	}
+	return a.listTimeEntries(ctx, where, args)
+}
+
+func (a *Adapter) userVisibleTimeEntries(ctx context.Context, uid string, query url.Values) (map[string]any, error) {
+	uid = strings.TrimSpace(uid)
+	currentUser := strings.TrimSpace(query.Get("current_user"))
+	if uid == "" || currentUser == "" {
+		return nil, httperror.New(http.StatusUnauthorized, "missing_current_user", "current_user is required")
+	}
+	if uid != currentUser {
+		return nil, httperror.New(http.StatusForbidden, "forbidden_user_timesheet", "only current user's timesheet can be queried")
+	}
+	visibility, visibilityArgs := projectVisibilityWhere(query, "p", currentUser)
+	where := []string{"t.uid = ?", "t.weekly_report_id IS NULL", "EXISTS (SELECT 1 FROM aims_projects p WHERE p.id = t.project_id AND " + visibility + ")"}
+	args := []any{uid}
+	args = append(args, visibilityArgs...)
+	appendTimeEntryDateRange(&where, &args, query)
 	return a.listTimeEntries(ctx, where, args)
 }
 
@@ -61,6 +92,10 @@ func (a *Adapter) projectTimeEntries(ctx context.Context, projectID string, quer
 		return nil, httperror.New(http.StatusBadRequest, "missing_project_id", "project id is required")
 	}
 
+	page, paged, err := timeEntryPagination(query)
+	if err != nil {
+		return nil, err
+	}
 	if currentUser := strings.TrimSpace(query.Get("current_user")); currentUser != "" {
 		if err := a.requireProjectTimesheetReadAccess(ctx, projectID, currentUser, query); err != nil {
 			return nil, err
@@ -75,7 +110,47 @@ func (a *Adapter) projectTimeEntries(ctx context.Context, projectID string, quer
 	}
 	appendTimeEntryDateRange(&where, &args, query)
 
+	if paged {
+		if currentUser := query.Get("current_user"); currentUser != "" && !currentUserIsProjectAdmin(query) {
+			visibility, visibilityArgs := projectVisibilityWhere(query, "p", currentUser)
+			where = append(where, "("+visibility+")")
+			args = append(args, visibilityArgs...)
+		}
+		return a.listTimeEntriesPage(ctx, where, args, page)
+	}
 	return a.listTimeEntries(ctx, where, args)
+}
+
+func (a *Adapter) projectTimeEntryDetail(ctx context.Context, rawProjectID string, rawEntryID string, query url.Values) (timeEntryItem, error) {
+	projectID, err := parseID(strings.TrimSpace(rawProjectID), "project_id")
+	if err != nil {
+		return timeEntryItem{}, err
+	}
+	entryID, err := parseID(strings.TrimSpace(rawEntryID), "time_entry_id")
+	if err != nil {
+		return timeEntryItem{}, err
+	}
+	currentUser := strings.TrimSpace(query.Get("current_user"))
+	if currentUser == "" {
+		return timeEntryItem{}, httperror.New(http.StatusUnauthorized, "missing_current_user", "current_user is required")
+	}
+	var boundProjectID int64
+	err = a.DB().QueryRowContext(ctx, `
+		SELECT project_id
+		FROM time_entries
+		WHERE id = ? AND weekly_report_id IS NULL
+		LIMIT 1
+	`, entryID).Scan(&boundProjectID)
+	if err == sql.ErrNoRows || boundProjectID != projectID {
+		return timeEntryItem{}, httperror.New(http.StatusNotFound, "record_not_found", "time entry not found")
+	}
+	if err != nil {
+		return timeEntryItem{}, err
+	}
+	if err = a.requireProjectTimesheetReadAccess(ctx, rawProjectID, currentUser, query); err != nil {
+		return timeEntryItem{}, err
+	}
+	return a.getTimeEntry(ctx, entryID)
 }
 
 func (a *Adapter) workItemTimeEntries(ctx context.Context, rawWorkItemID string, query url.Values) ([]timeEntryItem, error) {
@@ -107,7 +182,7 @@ func (a *Adapter) workItemTimeEntries(ctx context.Context, rawWorkItemID string,
 	return items, nil
 }
 
-func (a *Adapter) createProjectTimeEntry(ctx context.Context, projectID string, query url.Values, body map[string]any) (timeEntryItem, error) {
+func (a *Adapter) createProjectTimeEntryBody(ctx context.Context, projectID string, query url.Values, body map[string]any) (timeEntryItem, error) {
 	projectID = strings.TrimSpace(projectID)
 	if projectID == "" {
 		return timeEntryItem{}, httperror.New(http.StatusBadRequest, "missing_project_id", "project id is required")
@@ -141,7 +216,7 @@ func (a *Adapter) createProjectTimeEntry(ctx context.Context, projectID string, 
 		descriptionValue = description
 	}
 
-	result, err := a.DB().ExecContext(ctx, `
+	result, err := a.timeEntryDB(ctx).ExecContext(ctx, `
 		INSERT INTO time_entries (project_id, work_item_id, uid, entry_date, hours, description)
 		VALUES (?, NULL, ?, ?, ?, ?)
 	`, projectID, uid, entryDate, hours, descriptionValue)
@@ -156,6 +231,12 @@ func (a *Adapter) createProjectTimeEntry(ctx context.Context, projectID string, 
 }
 
 func (a *Adapter) createWorkItemTimeEntry(ctx context.Context, workItemID string, query url.Values, body map[string]any) (timeEntryItem, error) {
+	return enterpriseWorkItemTimeEntryWrite(a, ctx, workItemID, "", query, func(ctx context.Context) (timeEntryItem, error) {
+		return a.createWorkItemTimeEntryBody(ctx, workItemID, query, body)
+	}, timeEntryReceiptConfig[timeEntryItem]{Action: "work-item-create", Capability: "aims:work-item-time-entries:edit", Command: map[string]any{"workItemId": workItemID, "payload": body}, BizCode: timeEntryIDCode, Replay: func(ctx context.Context, code string) (timeEntryItem, error) { return timeEntryReplay(a, ctx, code) }, Decorate: decorateTimeEntry})
+}
+
+func (a *Adapter) createWorkItemTimeEntryBody(ctx context.Context, workItemID string, query url.Values, body map[string]any) (timeEntryItem, error) {
 	uid := currentUserFrom(query, body)
 	if uid == "" {
 		return timeEntryItem{}, httperror.New(http.StatusUnauthorized, "missing_current_user", "current_user is required")
@@ -188,7 +269,7 @@ func (a *Adapter) createWorkItemTimeEntry(ctx context.Context, workItemID string
 		descriptionValue = description
 	}
 
-	result, err := a.DB().ExecContext(ctx, `
+	result, err := a.timeEntryDB(ctx).ExecContext(ctx, `
 		INSERT INTO time_entries (project_id, work_item_id, uid, entry_date, hours, description)
 		VALUES (?, ?, ?, ?, ?, ?)
 	`, projectID, parsedWorkItemID, uid, entryDate, hours, descriptionValue)
@@ -203,6 +284,12 @@ func (a *Adapter) createWorkItemTimeEntry(ctx context.Context, workItemID string
 }
 
 func (a *Adapter) updateWorkItemTimeEntry(ctx context.Context, rawWorkItemID string, rawEntryID string, query url.Values, body map[string]any) (timeEntryItem, error) {
+	return enterpriseWorkItemTimeEntryWrite(a, ctx, rawWorkItemID, rawEntryID, query, func(ctx context.Context) (timeEntryItem, error) {
+		return a.updateWorkItemTimeEntryBody(ctx, rawWorkItemID, rawEntryID, query, body)
+	}, timeEntryReceiptConfig[timeEntryItem]{Action: "work-item-update", Capability: "aims:work-item-time-entries:edit", Command: map[string]any{"workItemId": rawWorkItemID, "entryId": rawEntryID, "payload": body}, BizCode: timeEntryIDCode, Replay: func(ctx context.Context, code string) (timeEntryItem, error) { return timeEntryReplay(a, ctx, code) }, Decorate: decorateTimeEntry})
+}
+
+func (a *Adapter) updateWorkItemTimeEntryBody(ctx context.Context, rawWorkItemID string, rawEntryID string, query url.Values, body map[string]any) (timeEntryItem, error) {
 	uid := currentUserFrom(query, body)
 	if uid == "" {
 		return timeEntryItem{}, httperror.New(http.StatusUnauthorized, "missing_current_user", "current_user is required")
@@ -256,7 +343,7 @@ func (a *Adapter) updateWorkItemTimeEntry(ctx context.Context, rawWorkItemID str
 	}
 
 	args = append(args, entryID, workItemID, projectID, uid)
-	if _, err := a.DB().ExecContext(ctx, `
+	if _, err := a.timeEntryDB(ctx).ExecContext(ctx, `
 		UPDATE time_entries
 		SET `+strings.Join(sets, ", ")+`
 		WHERE id = ?
@@ -271,6 +358,19 @@ func (a *Adapter) updateWorkItemTimeEntry(ctx context.Context, rawWorkItemID str
 }
 
 func (a *Adapter) deleteWorkItemTimeEntry(ctx context.Context, rawWorkItemID string, rawEntryID string, query url.Values) (map[string]any, error) {
+	result, err := enterpriseWorkItemTimeEntryWrite(a, ctx, rawWorkItemID, rawEntryID, query, func(ctx context.Context) (map[string]any, error) {
+		return a.deleteWorkItemTimeEntryBody(ctx, rawWorkItemID, rawEntryID, query)
+	}, timeEntryReceiptConfig[map[string]any]{Action: "work-item-delete", Capability: "aims:work-item-time-entries:edit", Command: map[string]any{"workItemId": rawWorkItemID, "entryId": rawEntryID}, BizCode: func(map[string]any) string { return rawWorkItemID }, Replay: func(context.Context, string) (map[string]any, error) {
+		return map[string]any{"id": rawEntryID, "deleted": true}, nil
+	}, Decorate: decorateTimeEntryDelete})
+	var missing httperror.Error
+	if errors.As(err, &missing) && missing.Status == 404 && validDeliverableReceiptIdentity(ctx) {
+		return a.replayDeletedWorkItemTimeEntry(ctx, rawWorkItemID, rawEntryID, query)
+	}
+	return result, err
+}
+
+func (a *Adapter) deleteWorkItemTimeEntryBody(ctx context.Context, rawWorkItemID string, rawEntryID string, query url.Values) (map[string]any, error) {
 	uid := strings.TrimSpace(query.Get("current_user"))
 	if uid == "" {
 		uid = strings.TrimSpace(query.Get("operator_uid"))
@@ -292,7 +392,7 @@ func (a *Adapter) deleteWorkItemTimeEntry(ctx context.Context, rawWorkItemID str
 		return nil, err
 	}
 
-	result, err := a.DB().ExecContext(ctx, `
+	result, err := a.timeEntryDB(ctx).ExecContext(ctx, `
 		DELETE FROM time_entries
 		WHERE id = ?
 		  AND work_item_id = ?
@@ -310,7 +410,7 @@ func (a *Adapter) deleteWorkItemTimeEntry(ctx context.Context, rawWorkItemID str
 	}, nil
 }
 
-func (a *Adapter) updateProjectTimeEntry(ctx context.Context, projectID string, entryID string, query url.Values, body map[string]any) (timeEntryItem, error) {
+func (a *Adapter) updateProjectTimeEntryBody(ctx context.Context, projectID string, entryID string, query url.Values, body map[string]any) (timeEntryItem, error) {
 	projectID = strings.TrimSpace(projectID)
 	entryID = strings.TrimSpace(entryID)
 	if projectID == "" || entryID == "" {
@@ -326,7 +426,7 @@ func (a *Adapter) updateProjectTimeEntry(ctx context.Context, projectID string, 
 	}
 
 	var ownerUID, reviewStatus string
-	err := a.DB().QueryRowContext(ctx, `
+	err := a.timeEntryDB(ctx).QueryRowContext(ctx, `
 		SELECT uid, review_status
 		FROM time_entries
 		WHERE id = ?
@@ -382,7 +482,7 @@ func (a *Adapter) updateProjectTimeEntry(ctx context.Context, projectID string, 
 	}
 
 	args = append(args, entryID, projectID, uid)
-	if _, err := a.DB().ExecContext(ctx, `
+	if _, err := a.timeEntryDB(ctx).ExecContext(ctx, `
 		UPDATE time_entries
 		SET `+strings.Join(sets, ", ")+`
 		WHERE id = ?
@@ -399,7 +499,7 @@ func (a *Adapter) updateProjectTimeEntry(ctx context.Context, projectID string, 
 	return a.getTimeEntry(ctx, id)
 }
 
-func (a *Adapter) deleteProjectTimeEntry(ctx context.Context, projectID string, entryID string, query url.Values) (map[string]any, error) {
+func (a *Adapter) deleteProjectTimeEntryBody(ctx context.Context, projectID string, entryID string, query url.Values) (map[string]any, error) {
 	projectID = strings.TrimSpace(projectID)
 	entryID = strings.TrimSpace(entryID)
 	if projectID == "" || entryID == "" {
@@ -418,7 +518,7 @@ func (a *Adapter) deleteProjectTimeEntry(ctx context.Context, projectID string, 
 	}
 
 	var ownerUID, reviewStatus string
-	err := a.DB().QueryRowContext(ctx, `
+	err := a.timeEntryDB(ctx).QueryRowContext(ctx, `
 		SELECT uid, review_status
 		FROM time_entries
 		WHERE id = ?
@@ -438,7 +538,7 @@ func (a *Adapter) deleteProjectTimeEntry(ctx context.Context, projectID string, 
 		return nil, httperror.New(http.StatusConflict, "time_entry_not_deletable", "only draft or returned time entries can be deleted")
 	}
 
-	result, err := a.DB().ExecContext(ctx, `
+	result, err := a.timeEntryDB(ctx).ExecContext(ctx, `
 		DELETE FROM time_entries
 		WHERE id = ?
 		  AND project_id = ?
@@ -477,7 +577,7 @@ func (a *Adapter) requireWorkItemTimeEntryOwner(
 	}
 
 	var ownerUID, reviewStatus string
-	err = a.DB().QueryRowContext(ctx, `
+	err = a.timeEntryDB(ctx).QueryRowContext(ctx, `
 		SELECT uid, review_status
 		FROM time_entries
 		WHERE id = ?
@@ -562,7 +662,7 @@ func (a *Adapter) listTimeEntries(ctx context.Context, where []string, args []an
 }
 
 func (a *Adapter) getTimeEntry(ctx context.Context, id int64) (timeEntryItem, error) {
-	rows, err := a.DB().QueryContext(ctx, `
+	rows, err := a.timeEntryDB(ctx).QueryContext(ctx, `
 		SELECT
 			t.id,
 			t.work_item_id,
@@ -692,12 +792,15 @@ func (a *Adapter) workItemProjectID(ctx context.Context, workItemID string) (str
 
 func (a *Adapter) requireProjectTimesheetAccess(ctx context.Context, projectID string, uid string, query url.Values) error {
 	if currentUserIsProjectAdmin(query) {
+		if _, scopedTx := ctx.Value(enterpriseTimeEntryTxKey{}).(*sql.Tx); scopedTx {
+			return nil // The owning project was locked and verified by the scoped wrapper.
+		}
 		return a.requireProjectExists(ctx, projectID)
 	}
 
 	var leaderUID sql.NullString
 	var memberRole sql.NullString
-	err := a.DB().QueryRowContext(ctx, `
+	err := a.timeEntryDB(ctx).QueryRowContext(ctx, `
 		SELECT p.leader_uid, m.role
 		FROM aims_projects p
 		LEFT JOIN aims_project_members m

@@ -1,5 +1,9 @@
 <script setup lang="ts">
-import type { ApiResponse } from '~/types'
+import { useAssetDictionaries } from '../../composables/useAssetDictionaries'
+import { useAssetsModule } from '../../../layer/useAssetsModule'
+import type { ApiResponse } from '../../types'
+
+const { moduleUrl } = useAssetsModule()
 
 const props = defineProps<{
   open: boolean
@@ -59,7 +63,7 @@ async function handleSubmit() {
   submitting.value = true
 
   try {
-    const response = await $fetch<ApiResponse<{ id: number }>>('/api/v1/technology-bases', {
+    const response = await $fetch<ApiResponse<{ id: number }>>(moduleUrl('/api/v1/technology-bases'), {
       method: 'POST',
       body: {
         base_code: state.base_code.trim() || null,
@@ -96,7 +100,7 @@ async function handleSubmit() {
 </script>
 
 <template>
-  <UModal
+  <USlideover
     v-model:open="isOpen"
     title="新增技术底座"
     description="登记基础平台、中台能力、共用模块和工具底座。"
@@ -176,5 +180,5 @@ async function handleSubmit() {
         </UButton>
       </div>
     </template>
-  </UModal>
+  </USlideover>
 </template>

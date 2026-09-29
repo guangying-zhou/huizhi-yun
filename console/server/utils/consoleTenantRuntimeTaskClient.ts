@@ -1,6 +1,7 @@
 import { createError, type H3Event } from 'h3'
 import { $fetch } from 'ofetch'
 import { maybeCallTenantRuntime } from '@hzy/foundation/server/utils/tenantRuntimeClient'
+import { resolveSelfHostedRuntimeDialEndpoint } from '@hzy/foundation/server/utils/selfHostedServiceTransport'
 
 function text(value: unknown) {
   return String(value || '').trim()
@@ -49,7 +50,8 @@ export async function callConsoleTenantRuntimeTask<T>(
   options: { method?: 'GET' | 'POST', body?: Record<string, unknown>, query?: Record<string, unknown> } = {}
 ) {
   const binding = taskRuntimeBinding()
-  return await $fetch<T>(`${binding.endpoint}${path}`, {
+  // Self-hosted: only the TCP dial moves to loopback (explicit Foundation mapping).
+  return await $fetch<T>(`${resolveSelfHostedRuntimeDialEndpoint(binding.endpoint)}${path}`, {
     method: options.method || 'GET',
     headers: {
       'authorization': `Bearer ${binding.token}`,

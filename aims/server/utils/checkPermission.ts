@@ -30,6 +30,17 @@ async function loadAuthorizationSnapshot(uid: string, event: H3Event) {
   return await loadAuthorizationSnapshotFromConsoleRuntime(uid, appCode, event)
 }
 
+// Only an authentication refusal of the snapshot request means "not allowed".
+// Any other failure is a Console authorization outage and must stay 503; it is
+// never disguised as the user lacking a permission (403).
+function authorizationFailure(scope: string, error: unknown): false {
+  const failure = error as { statusCode?: unknown, status?: unknown, message?: string }
+  const status = Number(failure?.statusCode ?? failure?.status)
+  if (status === 401 || status === 403) return false
+  console.error(`[${scope}] Authorization snapshot unavailable:`, failure?.message)
+  throw createError({ statusCode: 503, message: '授权服务暂不可用' })
+}
+
 export async function checkRole(event: H3Event, roleCode: string): Promise<boolean> {
   const uid = getRequestUid(event)
   if (!uid) return false
@@ -38,9 +49,7 @@ export async function checkRole(event: H3Event, roleCode: string): Promise<boole
     const snapshot = await loadAuthorizationSnapshot(uid, event)
     return Boolean(snapshot?.roles.includes(roleCode))
   } catch (error: unknown) {
-    const err = error as { message?: string }
-    console.error('[checkRole] Failed:', err.message)
-    return false
+    return authorizationFailure('checkRole', error)
   }
 }
 
@@ -80,9 +89,7 @@ export async function checkPermission(
       snapshot.actionPolicies?.[resource]
     )
   } catch (error: unknown) {
-    const err = error as { message?: string }
-    console.error('[checkPermission] Failed:', err.message)
-    return false
+    return authorizationFailure('checkPermission', error)
   }
 }
 

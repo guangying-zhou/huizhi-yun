@@ -1,0 +1,15 @@
+{
+  "schemaVersion": "test-data-disposition-authorization.v1",
+  "recordedAt": "2026-09-14T15:12:56.372510+00:00",
+  "tenant": "C000001",
+  "environment": "test",
+  "statement": "对，这是测试数据，放宽限制进行处理吧",
+  "scope": "Dispose of completed uncertain test activities with preserved originals and audit; continue test migration. Not a claim of verified successful execution.",
+  "retainedControls": [
+    "exact tenant/environment",
+    "no active activity disposition",
+    "original activity archive",
+    "source backup and data reconciliation",
+    "no production change"
+  ]
+}

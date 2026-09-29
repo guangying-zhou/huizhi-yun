@@ -271,6 +271,37 @@ contracts cover selected workflow callbacks and post-approval publication
 execution; OSS copying, import/export, and notification orchestration remain in
 the application BFF.
 
+## Enterprise Unified Cutover (profile mode)
+
+The ADR-018 cutover tools default to the fixed, reviewed C000001/test
+invocation. For another tenant/environment (e.g. the self-hosted production
+migration) each tool accepts `--profile <protected enterprise-cutover-profile.v1>`
+instead of `--config`. The profile is owner-only (0600), opened with
+`O_NOFOLLOW`, size-capped and strictly decoded; tools never print its DSN or
+password. Every write still needs `--apply` plus the exact reviewed hash, and
+activation still needs the Platform-signed drain approval verified against the
+pinned `platform.keyId` and Ed25519 `platform.publicKey`.
+
+```bash
+cd data-runtime
+go run ./cmd/hzy-enterprise-migrate --profile P --plan source.json                     # dry-run -> H0
+go run ./cmd/hzy-enterprise-test-cutover --profile P --source-plan source.json \
+  --source-review-hash H0 --output spec.json --phase install-fence --apply             # then --phase fence
+go run ./cmd/hzy-enterprise-test-cutover --profile P --source-plan source.json \
+  --source-review-hash H0 --output final.json --phase prepare-final --apply            # -> H1
+go run ./cmd/hzy-enterprise-migrate --profile P --plan final.json --apply --review-hash H1
+go run ./cmd/hzy-enterprise-compatibility-rehearsal --profile P --binding-candidate runtime-candidate.json \
+  --migration-plan final.json --artifact views.json                                     # -> HV; then --apply --review-hash HV
+go run ./cmd/hzy-enterprise-drain --profile P --fence-plan source.json --final-plan final.json \
+  --approval approval.json [--mode activate --apply --review-hash H1]
+go run ./cmd/hzy-enterprise-add-altoc --profile P --config runtime.json --plan evidence.json \
+  --work-item-deletion-evidence [--mode apply --review-hash <plan hash> --receipt r.json]
+go run ./cmd/hzy-enterprise-verify-views --profile P --config runtime.json
+```
+
+Profile schema, guardrails and least-privilege grants: `../docs/Unified-Enterprise-Cutover-Protocol.md` §9.
+Isolated verification: `node scripts/test-enterprise-cutover-profile-mysql.mjs`.
+
 ## Run Locally
 
 ```bash

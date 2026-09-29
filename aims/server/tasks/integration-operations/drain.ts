@@ -5,8 +5,9 @@ export default defineTask({
     name: 'integration-operations:drain',
     description: '按租户预算领取并派发 Aims 跨应用可靠操作'
   },
-  async run() {
+  async run({ context }) {
     const result = await drainIntegrationOperations({
+      taskContext: context,
       maxClaims: 20,
       maxWallTimeMs: 45_000
     })

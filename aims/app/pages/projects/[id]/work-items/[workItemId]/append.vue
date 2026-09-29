@@ -1,4 +1,8 @@
 <script setup lang="ts">
+import { useAimsModule } from '../../../../../../layer/useAimsModule'
+
+// 同一份代码供独立应用与企业宿主使用：非宿主模式下 moduleUrl 原样返回路径。
+const { moduleUrl } = useAimsModule()
 definePageMeta({
   layoutHeader: true,
   layoutHeaderTitle: '追加任务',
@@ -10,7 +14,7 @@ const projectId = computed(() => Number(route.params.id))
 const workItemId = computed(() => Number(route.params.workItemId))
 
 onMounted(() => {
-  navigateTo(`/projects/${projectId.value}/work-items/${workItemId.value}/breakdown`, { replace: true })
+  navigateTo(moduleUrl(`/projects/${projectId.value}/work-items/${workItemId.value}/breakdown`), { replace: true })
 })
 </script>
 

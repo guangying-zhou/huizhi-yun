@@ -1,0 +1,38 @@
+[Unit]
+Description=HZY self-hosted enterprise node-server
+After=network-online.target mysqld.service hzy-data-runtime.service
+Wants=network-online.target
+Requires=hzy-data-runtime.service
+StartLimitIntervalSec=120
+StartLimitBurst=6
+
+[Service]
+Type=simple
+User=hzy-enterprise
+Group=hzy-enterprise
+WorkingDirectory=/home/hzy/apps/enterprise/current
+EnvironmentFile=/etc/hzy/enterprise.env
+ExecStartPre=/usr/local/bin/node /home/hzy/tools/verify.mjs --dir /home/hzy/apps/enterprise/current --app enterprise
+ExecStart=/usr/local/bin/node /home/hzy/apps/enterprise/current/.output/server/index.mjs
+ExecStartPost=/usr/local/bin/node /home/hzy/tools/health.mjs --app enterprise
+Restart=on-failure
+RestartSec=5
+TimeoutStartSec=45
+TimeoutStopSec=30
+KillSignal=SIGTERM
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=hzy-enterprise
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+UMask=0077
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target

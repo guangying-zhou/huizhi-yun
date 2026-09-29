@@ -1,5 +1,33 @@
 # Control Plane API 契约 v1
 
+2026-09-21 已发布至开发 Platform `hzy.wiztek.cn`（生产未部署，本机消费者未切换）：现有正式
+`GET /api/platform/internal/console/tenants/{tenantCode}/bundle` 与
+`GET /api/v1/runtime/deployments/{deploymentCode}/bundle` 可显式请求
+`format=hzy-policy-envelope.v1`，鉴权不变；响应 data 为完整 Ed25519 信封。
+该格式禁止 version/bundleVersion 历史选择和旧 304，不回退旧 active 行，最长
+续签 5 分钟且受原到期限制。详情与验证限制见
+[策略信封合同](./Console-Enterprise-Policy-Verification-Contract.md#11-获准开发-platform-最小发布2026-09-21)。
+
+2026-09-22 R1 Console 稳态服务身份（2026-09-23 已发布至开发 Platform `hzy.wiztek.cn`，含迁移；生产未部署。回执 `deploy/test-env/artifacts/C000001.platform-console-service-key-deployment.json`）：
+- `POST /api/platform/internal/console/tenants/{tenantCode}/service-keys`，Platform 内部凭据鉴权。body 恰为
+  `{environment, deploymentCode, publicKey}`（原始 Ed25519 公钥 base64url 43 字符）；只接受 active Console 部署，
+  否则 `403 policy_deployment_inactive`。返回 `{deploymentCode, kid, notAfter}`；同一公钥重复登记只延长 `notAfter`。
+  `400 console_service_key_invalid`、`409 console_service_key_revoked`（已撤销的 `kid` 不能恢复）、
+  `503 console_service_key_not_migrated|console_service_key_unavailable`。需要迁移
+  `platform/docs/sql/migrations/20260923-console-service-keys.sql`。
+- `format=hzy-policy-envelope.v1` 正文在该部署有未过期公钥时带可选 `serviceKeys`，否则不变。
+
+2026-09-22 阶段 C（代码已实现，未部署）：
+- 同两个端点新增 `format=hzy-policy-revision.v1` 轻量修订查询，鉴权不变。`data` 为
+  `{tenant, environment, deployment, bundleVersion, policyRevision, payloadHash, status, policyExpiresAt}`，
+  不签名，也不返回正文。
+- 租户 `suspended/disabled` 时签发当前修订的 `suspended/revoked` 信封，不再返回 503。
+- 两种格式的拒绝码：部署不存在或当前策略缺失、撤销、许可到期返回 `409 policy_envelope_current_missing`；
+  部署停用返回 `403 policy_deployment_inactive`。数据完整性问题、签名失败或配置缺失返回
+  `503 policy_envelope_current_unavailable`。
+- 签发有效期读取 `HZY_PLATFORM_POLICY_ENVELOPE_MAX_AGE_MS`，默认仍为 5 分钟；authz-core 放宽生产上限之前，
+  超过 5 分钟的生产信封签发前就会被拒绝。
+
 状态：Draft  
 日期：2026-04-27  
 定位：目标设计，作为 `Huizhi-yun-Platform-Target-Architecture.md` 与 `Identity-Plane-Design.md` 的配套文档

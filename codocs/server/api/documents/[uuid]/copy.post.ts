@@ -19,6 +19,7 @@ interface DocumentCopySourceRow {
   status: number
   readonly_flag: number
   publish_info: string | null
+  snapshot_generation?: number
   sharePermission?: 'read' | 'write' | null
 }
 
@@ -53,6 +54,8 @@ export default defineEventHandler(async (event) => {
 
   try {
     const doc = await getCodocsDocumentMetadata(event, uuid, { actorUid: uid }) as DocumentCopySourceRow
+    // v2 文档的 oss_path 只是派生镜像：复制前失败关闭，不读旧镜像。
+    assertLegacyBodyDocument(doc)
 
     if (isPublishedDepartmentDocument(doc)) {
       await requireDepartmentWriteAccess(event, uid, String(doc.dept_code))

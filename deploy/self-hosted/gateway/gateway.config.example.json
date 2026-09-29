@@ -1,0 +1,62 @@
+{
+  "_notice": "示例配置：所有值均为占位符。复制到 /etc/hzy-gateway/gateway.json，chmod 600，属主为运行网关的用户。REPLACE_* 占位符会被启动校验拒绝。",
+  "schemaVersion": 1,
+  "site": {
+    "publicHost": "replace-public-host.example.invalid",
+    "tenantCode": "REPLACE_TENANT_CODE",
+    "environment": "REPLACE_ENVIRONMENT_CODE",
+    "tenantDomainSuffix": "huizhi.yun"
+  },
+  "platform": {
+    "origin": "https://replace-platform-host.example.invalid",
+    "registryResolvePath": "/api/platform/internal/tenant-gateway/resolve"
+  },
+  "runtime": {
+    "endpoint": "https://replace-runtime-canonical-host.example.invalid",
+    "runtimeCode": "REPLACE_RUNTIME_CODE"
+  },
+  "apps": {
+    "console": { "origin": "http://127.0.0.1:31001", "deploymentCode": "REPLACE_CONSOLE_DEPLOYMENT" },
+    "enterprise": { "origin": "http://127.0.0.1:31002", "deploymentCode": "REPLACE_ENTERPRISE_DEPLOYMENT" },
+    "workflow": { "origin": "http://127.0.0.1:31003", "deploymentCode": "REPLACE_WORKFLOW_DEPLOYMENT" },
+    "aims": { "origin": "http://127.0.0.1:31004", "deploymentCode": "REPLACE_AIMS_DEPLOYMENT" },
+    "codocs": { "origin": "http://127.0.0.1:31005", "deploymentCode": "REPLACE_CODOCS_DEPLOYMENT" },
+    "collab": { "origin": "http://127.0.0.1:31007", "deploymentCode": "REPLACE_TENANT_CODE-collab" }
+  },
+  "enterprise": {
+    "pilot": true,
+    "authPilot": false
+  },
+  "listeners": {
+    "ingress": { "host": "127.0.0.1", "port": 8780 },
+    "health": { "host": "127.0.0.1", "port": 8781 }
+  },
+  "limits": {
+    "maxRequestBodyBytes": 104857600,
+    "maxHeaderBytes": 16384,
+    "requestTimeoutMs": 300000,
+    "maxWebSockets": 512,
+    "webSocketIdleTimeoutMs": 300000,
+    "platformTimeoutMs": 15000
+  },
+  "scheduler": {
+    "drain": {
+      "enabled": true,
+      "apps": ["console", "workflow", "aims"],
+      "maxWakes": 16,
+      "concurrency": 4,
+      "maxWallTimeMs": 45000,
+      "requestTimeoutMs": 30000
+    },
+    "policySync": {
+      "enabled": true,
+      "intervalMinutes": 1,
+      "consoleTimeoutMs": 35000
+    },
+    "alertAfterConsecutiveFailures": 3
+  },
+  "secrets": {
+    "gatewayInternalToken": "REPLACE_WITH_GATEWAY_INTERNAL_TOKEN_SHARED_WITH_LOCAL_APPS",
+    "platformRegistryToken": "REPLACE_WITH_PLATFORM_TENANT_GATEWAY_REGISTRY_TOKEN"
+  }
+}

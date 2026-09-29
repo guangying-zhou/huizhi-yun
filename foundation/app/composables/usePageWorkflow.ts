@@ -60,6 +60,13 @@ const _activeInstance = ref<{ actionCode: string, status: string } | null>(null)
 const _handledStatusMap = ref<Map<string, string>>(new Map())
 
 /**
+ * 业务对象内容修订号：页面在重新读取业务对象（如记录工时、成果变化后）时
+ * 调用 notifyBizChanged() 递增，审批/完成确认面板据此重新读取就绪状态，
+ * 不必整页刷新。只作“需要重读”的信号，不携带任何业务数据或授权结论。
+ */
+const _bizRevision = ref(0)
+
+/**
  * 读取当前页面的流程配置（供 LayoutSidebar 使用）
  */
 export function usePageWorkflowState() {
@@ -67,6 +74,10 @@ export function usePageWorkflowState() {
     void _configVersion.value
     return _config.value
   })
+
+  /** 当前页面声明的业务对象 ID 与内容修订号（见 notifyBizChanged） */
+  const bizId = computed(() => String(config.value?.bizId.value || ''))
+  const bizRevision = computed(() => _bizRevision.value)
 
   /** 当前可用动作列表 */
   const actions = computed(() => {
@@ -203,6 +214,8 @@ export function usePageWorkflowState() {
   }
 
   return {
+    bizId,
+    bizRevision,
     hasPageWorkflow,
     isInitializing,
     loadingTitle,
@@ -306,5 +319,10 @@ export function usePageWorkflow(options: {
     return !!inst && inst.status !== 'rejected'
   })
 
-  return { isReadonly }
+  /** 页面重新读取业务对象后调用；仅当前注册的页面可递增修订号。 */
+  function notifyBizChanged() {
+    if (_config.value === config) _bizRevision.value++
+  }
+
+  return { isReadonly, notifyBizChanged }
 }

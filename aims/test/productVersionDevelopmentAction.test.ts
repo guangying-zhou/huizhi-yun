@@ -4,7 +4,7 @@ import { test } from 'node:test'
 import vm from 'node:vm'
 import ts from 'typescript'
 
-const source = readFileSync(new URL('../app/components/products/VersionDevelopmentAction.vue', import.meta.url), 'utf8').match(/<script setup lang="ts">([\s\S]*?)<\/script>/)![1]!
+const source = readFileSync(new URL('../app/components/products/VersionDevelopmentAction.vue', import.meta.url), 'utf8').match(/<script setup lang="ts">([\s\S]*?)<\/script>/)![1]!.replace(/^import .*$/gm, '')
 const javascript = ts.transpileModule(`${source}\nglobalThis.action = { start, save, reason, open, error, canTransition };`, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.None } }).outputText
 
 function fixture() {
@@ -13,6 +13,8 @@ function fixture() {
   const events: [string, unknown][] = []
   let fail = false, allowConfirmation = true, keys = 0
   const context = vm.createContext({
+    // Standalone Aims: module-relative URLs are unchanged.
+    useAimsModule: () => ({ moduleUrl: (path: string) => path }),
     defineProps: () => props,
     defineEmits: () => (name: string, value: unknown) => { events.push([name, value]) },
     ref: (value: unknown) => ({ value }),

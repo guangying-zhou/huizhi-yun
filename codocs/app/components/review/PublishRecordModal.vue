@@ -6,7 +6,7 @@
           <UIcon name="i-lucide-loader-2" class="animate-spin text-2xl" />
         </div>
 
-        <div v-else-if="!record" class="text-center py-8 text-gray-500">
+        <div v-else-if="!record" class="text-center py-8 text-muted">
           暂无发布记录
         </div>
 
@@ -14,27 +14,27 @@
           <!-- 基本信息 -->
           <div class="space-y-2 text-sm">
             <div class="flex justify-between">
-              <span class="text-gray-500">源文档</span>
+              <span class="text-muted">源文档</span>
               <span class="font-medium">{{ record.source_title }}</span>
             </div>
             <div class="flex justify-between">
-              <span class="text-gray-500">审阅类型</span>
+              <span class="text-muted">审阅类型</span>
               <span>{{ record.review_type }}{{ record.sub_type ? ` / ${record.sub_type}` : '' }}</span>
             </div>
             <div class="flex justify-between">
-              <span class="text-gray-500">发起人</span>
+              <span class="text-muted">发起人</span>
               <span>{{ getInitiatorDisplayName(record) }}</span>
             </div>
             <div class="flex justify-between">
-              <span class="text-gray-500">提交时间</span>
+              <span class="text-muted">提交时间</span>
               <span>{{ formatDateTime(record.created_at) }}</span>
             </div>
             <div class="flex justify-between">
-              <span class="text-gray-500">归档时间</span>
+              <span class="text-muted">归档时间</span>
               <span>{{ formatDateTime(record.updated_at) }}</span>
             </div>
             <div v-if="record.execution_status" class="flex justify-between">
-              <span class="text-gray-500">执行状态</span>
+              <span class="text-muted">执行状态</span>
               <span>{{ getExecutionStatusLabel(record.execution_status) }}</span>
             </div>
           </div>
@@ -55,10 +55,10 @@
                 :key="index"
                 class="flex items-center gap-2 text-sm"
               >
-                <UIcon name="i-lucide-check-circle" class="text-green-500 shrink-0" />
+                <UIcon name="i-lucide-check-circle" class="text-success shrink-0" />
                 <span class="font-medium">{{ node.name }}</span>
-                <span class="text-gray-400">—</span>
-                <span class="text-gray-500">
+                <span class="text-dimmed">—</span>
+                <span class="text-muted">
                   {{ node.reviewers?.map(getUserDisplayName).join('、') }}
                 </span>
               </div>
@@ -76,14 +76,14 @@
                 <div v-for="(action, i) in record.actions" :key="i" class="text-sm flex items-start gap-2">
                   <UIcon
                     :name="action.action === 'approve' ? 'i-lucide-check' : action.action === 'reject' ? 'i-lucide-x' : 'i-lucide-bell'"
-                    :class="action.action === 'approve' ? 'text-green-500' : action.action === 'reject' ? 'text-red-500' : 'text-blue-500'"
+                    :class="action.action === 'approve' ? 'text-success' : action.action === 'reject' ? 'text-error' : 'text-info'"
                     class="shrink-0 mt-0.5"
                   />
                   <div>
                     <span class="font-medium">{{ getUserDisplayName(action.actor_uid) }}</span>
-                    <span class="text-gray-500 mx-1">{{ getActionLabel(action.action) }}</span>
-                    <span v-if="action.comment" class="text-gray-600">「{{ action.comment }}」</span>
-                    <div class="text-xs text-gray-400">
+                    <span class="text-muted mx-1">{{ getActionLabel(action.action) }}</span>
+                    <span v-if="action.comment" class="text-muted">「{{ action.comment }}」</span>
+                    <div class="text-xs text-dimmed">
                       {{ formatDateTime(action.created_at) }}
                     </div>
                   </div>
@@ -105,22 +105,22 @@
                   class="rounded-lg border border-default bg-elevated/40 p-3 text-sm space-y-1"
                 >
                   <div class="flex justify-between gap-4">
-                    <span class="text-gray-500">盖章人</span>
+                    <span class="text-muted">盖章人</span>
                     <span class="font-medium">{{ getUserDisplayName(item.operator_uid) }}</span>
                   </div>
                   <div class="flex justify-between gap-4">
-                    <span class="text-gray-500">盖章类型</span>
+                    <span class="text-muted">盖章类型</span>
                     <span>{{ item.seal_types.map(getSealTypeLabel).join('、') }}</span>
                   </div>
                   <div class="flex justify-between gap-4">
-                    <span class="text-gray-500">文档页数</span>
+                    <span class="text-muted">文档页数</span>
                     <span>{{ item.page_count }}</span>
                   </div>
                   <div class="flex justify-between gap-4">
-                    <span class="text-gray-500">确认时间</span>
+                    <span class="text-muted">确认时间</span>
                     <span>{{ formatDateTime(item.confirmed_at) }}</span>
                   </div>
-                  <div v-if="item.remark" class="text-gray-600">
+                  <div v-if="item.remark" class="text-muted">
                     备注：{{ item.remark }}
                   </div>
                 </div>
@@ -141,42 +141,42 @@
                   class="rounded-lg border border-default bg-elevated/40 p-3 text-sm space-y-1"
                 >
                   <div class="flex justify-between gap-4">
-                    <span class="text-gray-500">发送人</span>
+                    <span class="text-muted">发送人</span>
                     <span class="font-medium">{{ getUserDisplayName(item.sender_uid) }}</span>
                   </div>
                   <div class="flex justify-between gap-4">
-                    <span class="text-gray-500">接收人</span>
+                    <span class="text-muted">接收人</span>
                     <span>{{ item.receiver_name }}</span>
                   </div>
                   <div class="flex justify-between gap-4">
-                    <span class="text-gray-500">联系电话</span>
+                    <span class="text-muted">联系电话</span>
                     <span>{{ item.receiver_phone }}</span>
                   </div>
                   <div class="flex justify-between gap-4">
-                    <span class="text-gray-500">发送途径</span>
+                    <span class="text-muted">发送途径</span>
                     <span>{{ getSendChannelLabel(item.channel) }}</span>
                   </div>
                   <div v-if="item.sent_date" class="flex justify-between gap-4">
-                    <span class="text-gray-500">发送日期</span>
+                    <span class="text-muted">发送日期</span>
                     <span>{{ formatDateOnly(item.sent_date) }}</span>
                   </div>
                   <div v-if="item.receive_date" class="flex justify-between gap-4">
-                    <span class="text-gray-500">接收日期</span>
+                    <span class="text-muted">接收日期</span>
                     <span>{{ formatDateOnly(item.receive_date) }}</span>
                   </div>
                   <div v-if="item.target_account" class="flex justify-between gap-4">
-                    <span class="text-gray-500">对方账号</span>
+                    <span class="text-muted">对方账号</span>
                     <span>{{ item.target_account }}</span>
                   </div>
                   <div class="flex justify-between gap-4">
-                    <span class="text-gray-500">确认时间</span>
+                    <span class="text-muted">确认时间</span>
                     <span>{{ formatDateTime(item.confirmed_at) }}</span>
                   </div>
                   <div v-if="item.received_confirmed_at" class="flex justify-between gap-4">
-                    <span class="text-gray-500">接收确认时间</span>
+                    <span class="text-muted">接收确认时间</span>
                     <span>{{ formatDateTime(item.received_confirmed_at) }}</span>
                   </div>
-                  <div v-if="item.remark" class="text-gray-600">
+                  <div v-if="item.remark" class="text-muted">
                     备注：{{ item.remark }}
                   </div>
                 </div>
@@ -198,6 +198,8 @@
 </template>
 
 <script setup lang="ts">
+import { useCodocsModule } from '../../../layer/useCodocsModule'
+
 interface ReviewFlowNode {
   name: string
   reviewers?: string[]
@@ -270,14 +272,15 @@ const isOpen = computed({
   set: value => emit('update:open', value)
 })
 
-const accountStore = useAccountStore()
+const { hosted, moduleUrl } = useCodocsModule()
+const userNames = ref<Record<string, string>>({})
 const loading = ref(false)
 const record = ref<PublishRecord | null>(null)
 
 const getUserDisplayName = (uid?: string | null) => {
   const normalized = String(uid || '').trim()
   if (!normalized) return ''
-  return accountStore.getUserByUid(normalized)?.realName || normalized
+  return userNames.value[normalized] || normalized
 }
 
 const loadUserProfiles = async (data: PublishRecord) => {
@@ -290,7 +293,15 @@ const loadUserProfiles = async (data: PublishRecord) => {
   data.send_records?.forEach(item => item.sender_uid && uidSet.add(item.sender_uid))
 
   if (uidSet.size > 0) {
-    await accountStore.fetchUsersBatch(Array.from(uidSet))
+    try {
+      const response = await $fetch<{ data?: Array<{ uid: string, realName?: string, real_name?: string }> }>(
+        hosted ? sharedApiPath('/api/directory/users/batch') : '/api/account/users/batch',
+        { method: 'POST', body: { uids: Array.from(uidSet) } }
+      )
+      userNames.value = Object.fromEntries((response.data || []).map(user => [user.uid, user.realName || user.real_name || user.uid]))
+    } catch {
+      // The record remains readable with stable UIDs when directory lookup fails.
+    }
   }
 }
 
@@ -300,7 +311,7 @@ const loadRecord = async () => {
     record.value = null
 
     if (props.ossPath) {
-      const res = await $fetch<PublishRecordResponse>('/api/reviews/by-oss-path', {
+      const res = await $fetch<PublishRecordResponse>(moduleUrl('/api/reviews/by-oss-path'), {
         params: { path: props.ossPath }
       })
       if (res.data) {
@@ -311,7 +322,7 @@ const loadRecord = async () => {
     }
 
     if (props.documentUuid) {
-      const res = await $fetch<PublishRecordResponse>(`/api/reviews/by-document/${props.documentUuid}`)
+      const res = await $fetch<PublishRecordResponse>(moduleUrl(`/api/reviews/by-document/${props.documentUuid}`))
       record.value = res.data
       if (res.data) {
         await loadUserProfiles(res.data)

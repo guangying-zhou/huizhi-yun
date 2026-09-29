@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import { useAimsModule } from '../../../layer/useAimsModule'
+
+const { moduleUrl } = useAimsModule()
 const props = defineProps<{ productCode: string, workspaceRevision: number, request: { biz_id: string, revision: number, title: string } }>()
 const emit = defineEmits<{ saved: [], cancel: [] }>()
 const note = ref(''), evidenceDate = ref('')
@@ -20,7 +23,7 @@ async function save() {
   if (retry?.payload !== payload) retry = { payload, key: crypto.randomUUID() }
   busy.value = true
   try {
-    const response = await $fetch<{ code: number }>(`/api/v1/products/${encodeURIComponent(props.productCode)}/requests/${props.request.biz_id}/sources`, { method: 'POST', body, headers: { 'Idempotency-Key': retry.key } })
+    const response = await $fetch<{ code: number }>(moduleUrl(`/api/v1/products/${encodeURIComponent(props.productCode)}/requests/${props.request.biz_id}/sources`), { method: 'POST', body, headers: { 'Idempotency-Key': retry.key } })
     if (response.code !== 0) throw new Error('证据保存结果不完整，请重试')
     emit('saved')
   } catch (cause) {

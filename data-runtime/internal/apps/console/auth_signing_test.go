@@ -37,12 +37,20 @@ func TestSignOIDCTokenKeepsPrivateKeyInRuntimeAndPinsTenant(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer database.Close()
+	// Issuance is authorized from the live session before any key is touched.
+	mock.ExpectQuery(`(?s)SELECT ls.uid.*FROM local_sessions ls`).
+		WithArgs("sha256_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa").
+		WillReturnRows(sqlmock.NewRows([]string{"uid"}).AddRow("u1001"))
+	mock.ExpectQuery(`(?s)SELECT client_id FROM auth_clients`).WithArgs("aims").
+		WillReturnRows(sqlmock.NewRows([]string{"client_id"}).AddRow("aims"))
 	mock.ExpectQuery(`(?s)SELECT id,kid,alg,use_type,public_jwk_json,private_key_ref.*FROM auth_signing_keys`).
 		WillReturnRows(sqlmock.NewRows([]string{
 			"id", "kid", "alg", "use_type", "public_jwk_json", "private_key_ref",
 		}).AddRow(7, kid, "EdDSA", "sig", string(publicJSON), "env:TEST_TENANT_RUNTIME_OIDC_PRIVATE_JWK"))
 
 	adapter := NewWithDB(config.ConsoleConfig{}, "tenant-a", database)
+	adapter.SetOIDCSigningIssuerSource(func() string { return "https://console.example.test" })
+	adapter.SetOIDCSigningDeploymentBindings("runtime-test", map[string]string{"aims": "tenant-a-aims"})
 	result, err := adapter.SignOIDCToken(context.Background(), map[string]any{
 		"ttlSeconds": 300,
 		"claims": map[string]any{
@@ -64,6 +72,9 @@ func TestSignOIDCTokenKeepsPrivateKeyInRuntimeAndPinsTenant(t *testing.T) {
 		t.Fatalf("signed token is invalid: %v", err)
 	}
 	claims := parsed.Claims.(jwt.MapClaims)
+	if claims["iss"] != "https://console.example.test" {
+		t.Fatalf("issuer claim = %v, want Runtime trust", claims["iss"])
+	}
 	if claims["tenant"] != "tenant-a" {
 		t.Fatalf("tenant claim = %v, want tenant-a", claims["tenant"])
 	}
@@ -77,6 +88,7 @@ func TestSignOIDCTokenKeepsPrivateKeyInRuntimeAndPinsTenant(t *testing.T) {
 
 func TestOIDCSigningRejectsUnapprovedClaims(t *testing.T) {
 	adapter := NewWithDB(config.ConsoleConfig{}, "tenant-a", nil)
+	adapter.SetOIDCSigningIssuerSource(func() string { return "https://console.example.test" })
 	_, err := adapter.normalizeOIDCSigningClaims(map[string]any{
 		"iss": "https://console.example.test", "sub": "user:u1001", "aud": "aims",
 		"sid":       "sha256_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
@@ -90,6 +102,7 @@ func TestOIDCSigningRejectsUnapprovedClaims(t *testing.T) {
 
 func TestOIDCSigningRejectsUnapprovedNestedHZYClaims(t *testing.T) {
 	adapter := NewWithDB(config.ConsoleConfig{}, "tenant-a", nil)
+	adapter.SetOIDCSigningIssuerSource(func() string { return "https://console.example.test" })
 	baseUser := map[string]any{
 		"iss": "https://console.example.test", "sub": "user:u1001", "aud": "aims",
 		"deployment": "tenant-a-aims",
@@ -126,6 +139,7 @@ func TestOIDCSigningRejectsUnapprovedNestedHZYClaims(t *testing.T) {
 
 func TestOIDCSigningPinsTenantAndRequiresDeploymentAndIdentityConsistency(t *testing.T) {
 	adapter := NewWithDB(config.ConsoleConfig{}, "tenant-a", nil)
+	adapter.SetOIDCSigningIssuerSource(func() string { return "https://console.example.test" })
 	valid := map[string]any{
 		"iss": "https://console.example.test", "sub": "user:u1001", "aud": "aims",
 		"tenant": "forged", "deployment": "tenant-a-aims",
@@ -243,11 +257,12 @@ func TestVerifyOIDCServiceTokenStateRequiresCurrentCredentialAndAllGrants(t *tes
 	}
 	defer database.Close()
 	adapter := NewWithDB(config.ConsoleConfig{}, "tenant-a", database)
+	adapter.SetOIDCSigningIssuerSource(func() string { return "https://console.example.test" })
 	mock.ExpectQuery(`(?s)SELECT sc.id,sc.status,sc.current_credential_id,scc.status,scc.expires_at`).
 		WithArgs(11, "console.runtime").
 		WillReturnRows(sqlmock.NewRows([]string{
-			"id", "status", "current_credential_id", "credential_status", "expires_at",
-		}).AddRow(5, "active", 11, "active", nil))
+			"id", "status", "current_credential_id", "credential_status", "expires_at", "client_code", "client_name", "client_type", "app_code",
+		}).AddRow(5, "active", 11, "active", nil, "console.runtime", "Console Runtime", "runtime", "console"))
 	mock.ExpectQuery(`(?s)SELECT resource_code,action.*FROM service_client_grants`).
 		WithArgs(uint64(5)).
 		WillReturnRows(sqlmock.NewRows([]string{"resource_code", "action"}).
@@ -266,5 +281,63 @@ func TestVerifyOIDCServiceTokenStateRequiresCurrentCredentialAndAllGrants(t *tes
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestVerifyOIDCServiceTokenStateNullCurrentCredentialFailsClosed(t *testing.T) {
+	database, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer database.Close()
+	adapter := NewWithDB(config.ConsoleConfig{}, "tenant-a", database)
+	mock.ExpectQuery(`(?s)SELECT sc.id,sc.status,sc.current_credential_id,scc.status,scc.expires_at`).
+		WithArgs(11, "workflow.maintenance.incident-1").
+		WillReturnRows(sqlmock.NewRows([]string{"id", "status", "current_credential_id", "credential_status", "expires_at", "client_code", "client_name", "client_type", "app_code"}).
+			AddRow(5, "disabled", nil, "revoked", nil, "workflow.maintenance", "Workflow maintenance", "supporting_service", "workflow"))
+	state, err := adapter.VerifyOIDCServiceTokenState(context.Background(), map[string]any{
+		"clientId": "workflow.maintenance.incident-1", "credentialId": 11,
+		"scope": workflowRecoveryScope,
+	})
+	if err != nil || state["active"] != false || state["reason"] != "credential_inactive" {
+		t.Fatalf("NULL current credential state = %#v, %v", state, err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestVerifyOIDCServiceTokenStateForAudienceUsesIssuanceMapping(t *testing.T) {
+	for _, tc := range []struct {
+		name, audience, resource, action, policy, scope, code string
+	}{
+		{"semantic prefixed grant", "data-runtime", "data-runtime:altoc:customers", "view", `{"audience":"data-runtime","semanticScope":"altoc:customers:view"}`, "altoc:customers:view", ""},
+		{"cross audience denied", "tenant-runtime", "data-runtime:altoc:customers", "view", `{"audience":"data-runtime","semanticScope":"altoc:customers:view"}`, "altoc:customers:view", "insufficient_scope"},
+		{"legacy literal denied", "data-runtime", "altoc:customers", "view", `{"source":"legacy"}`, "altoc:customers:view", "insufficient_scope"},
+		{"enterprise capability preserved", "data-runtime", "aims:projects", "read", `{"audience":"data-runtime","semanticScope":"aims:projects:read"}`, "aims:projects:read", ""},
+		{"enterprise cannot fall back", "data-runtime", "aims:projects", "read", `{"audience":"console","semanticScope":"aims:projects:read"}`, "aims:projects:read", "insufficient_scope"},
+		{"missing verified audience", "", "aims:projects", "read", `{"audience":"data-runtime","semanticScope":"aims:projects:read"}`, "aims:projects:read", "service_grant_audience_invalid"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			database, mock, err := sqlmock.New()
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer database.Close()
+			adapter := NewWithDB(config.ConsoleConfig{}, "tenant-a", database)
+			mock.ExpectQuery(`(?s)SELECT sc.id,sc.status,sc.current_credential_id,scc.status,scc.expires_at`).WithArgs(11, "enterprise.runtime").WillReturnRows(sqlmock.NewRows([]string{"id", "status", "current_credential_id", "credential_status", "expires_at", "client_code", "client_name", "client_type", "app_code"}).AddRow(5, "active", 11, "active", nil, "enterprise.runtime", "Enterprise Runtime", "runtime", "enterprise"))
+			mock.ExpectQuery(`SELECT resource_code,action,scope_json FROM service_client_grants`).WithArgs(uint64(5)).WillReturnRows(sqlmock.NewRows([]string{"resource_code", "action", "scope_json"}).AddRow(tc.resource, tc.action, tc.policy))
+			state, err := adapter.VerifyOIDCServiceTokenStateForAudience(context.Background(), map[string]any{"clientId": "enterprise.runtime", "credentialId": 11, "scope": tc.scope, "audience": "untrusted-body-value"}, tc.audience)
+			if tc.code != "" {
+				if err != nil || state["active"] != false || state["reason"] != tc.code {
+					t.Fatalf("state=%v error=%v, want inactive %s", state, err, tc.code)
+				}
+			} else if err != nil || state["active"] != true || len(state) != 1 {
+				t.Fatalf("state=%v error=%v", state, err)
+			}
+			if err := mock.ExpectationsWereMet(); err != nil {
+				t.Fatal(err)
+			}
+		})
 	}
 }

@@ -35,8 +35,8 @@
     {
       "code": "product",
       "name": "产品目录服务",
-      "description": "服务能力 assets:product:read：读取有界产品主档目录及变更水位；调用方由 Console 精确 service grant 授权",
-      "actions": ["read"],
+      "description": "服务能力 assets:product:read/edit：读取或维护有界产品主档；调用方由 Console 精确 service grant 授权",
+      "actions": ["read", "edit"],
       "sortOrder": 14
     },
     {
@@ -143,6 +143,13 @@
       "description": "诊断并受控重放 Assets 发起的跨应用可靠操作",
       "actions": ["view", "replay"],
       "sortOrder": 95
+    },
+    {
+      "code": "notifications-due",
+      "name": "到期通知检查点服务",
+      "description": "统一调度路径按 generation 扫描到期与离职未回收条件并保存通知检查点的精确服务能力，不授予普通用户角色",
+      "actions": ["execute"],
+      "sortOrder": 96
     },
     {
       "code": "admin",

@@ -134,6 +134,13 @@ func (a *Adapter) getProjectWeeklyReportPeriod(
 	periodKey string,
 	query url.Values,
 ) (map[string]any, error) {
+	page, paged, pageErr := timeEntryPagination(query)
+	if pageErr != nil {
+		return nil, pageErr
+	}
+	if paged {
+		return a.projectWeeklyReportPeriodPage(ctx, rawProjectID, periodKey, query, page)
+	}
 	year, week, err := parseISOPeriodKey(periodKey)
 	if err != nil {
 		return nil, err
@@ -250,6 +257,12 @@ func (a *Adapter) submitProjectWeeklyReportPeriod(
 		return weeklyReportVersionResult{}, err
 	}
 	defer tx.Rollback()
+	if err := requireEnterpriseProjectWeeklyReportScopeTx(ctx, tx, actor, projectID); err != nil {
+		return weeklyReportVersionResult{}, err
+	}
+	if err := requireProjectWeeklyReportManagerWith(ctx, tx, rawProjectID, actor, query); err != nil {
+		return weeklyReportVersionResult{}, err
+	}
 
 	projection, err := lockWeeklyReportProjection(ctx, tx, projectID, year, week)
 	if err != nil {
@@ -619,6 +632,17 @@ func (a *Adapter) weeklyReportDirectorWorkbench(
 		return nil, httperror.New(http.StatusForbidden, "project_director_required", "current project director is required")
 	}
 	if _, _, err := parseISOPeriodKey(periodKey); err != nil {
+		return nil, err
+	}
+	// An empty list must not read as "period ready": the workbench joins
+	// obligations to their period, so a missing period would otherwise be
+	// indistinguishable from a generated period with no obligations. Answer
+	// the same 409 as week submit so the page offers period generation.
+	var periodID int64
+	if err := a.DB().QueryRowContext(ctx, `SELECT id FROM weekly_reporting_periods WHERE period_key = ?`, periodKey).Scan(&periodID); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, httperror.New(http.StatusConflict, "weekly_reporting_period_required", "weekly reporting period is required")
+		}
 		return nil, err
 	}
 	rows, err := a.DB().QueryContext(ctx, `

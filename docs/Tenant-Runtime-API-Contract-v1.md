@@ -4,11 +4,51 @@
 日期：2026-06-01  
 关联 ADR：[`ADR-016: Tenant Runtime 业务 API 架构`](./ADR-016-Tenant-Runtime-Business-API-Architecture.md)
 
+2026-09-21 可选策略合同：`GET/PUT /v1/console/verified-policy` 已有代码及隔离
+HTTP/MySQL 验证，默认关闭。复用 `console:policy-bundle:read|write`，严格 Console
+JWT、显式部署绑定及实时 grant/credential 检查；新持久表与旧 opaque 存储隔离。
+PUT `{envelope,expectedEtag}` 执行事务 CAS/防回退，相同内容重放不刷新接纳时间。
+GET 返回当前持久回执（可含过期/撤销策略），不代表授权通过；消费者必须复验
+签名、当前有效期和 active 状态。尚未启用 Enterprise source 或目标环境切换。
+Console GET 首次缺行返回 `404 policy_snapshot_missing`；缺表/配置/损坏为 503，
+不能把任意 404/503 当作空水位。Enterprise 读口缺行仍为 503。Console 显式新后端
+已按此接线，未切换运行环境，详见同一合同第 9 节。
+完整字段、配置、兼容及错误码见 [策略验证合同](./Console-Enterprise-Policy-Verification-Contract.md#7-runtime-持久化与接口批次代码验证完成环境未启用)。
+
+2026-09-25 可选 P1：`POST /v1/console/auth/service-tokens/exchange` 仅接受 `console.runtime` 的完整服务 JWT 和新 `console:service-token:exchange` 精确 scope，拒绝 key assertion/bootstrap 及请求体自选来源、租户、部署。仅用于携带 secret 的 `client_credentials`；Runtime 在同一事务检查客户端当前密钥、grant 和来源部署，比较 Console 已验证策略摘要与本地存储的 version/hash，签名并写成功审计，提交后才返回令牌。摘要不作为授权事实。默认关闭；无密钥 Gateway 路径保留现有合同。
+
+2026-09-22 Console 稳态服务身份（R1）：`POST /v1/console/auth/service-tokens/issue` 除 Platform 启动令牌外，
+还接受 Console 部署密钥断言（`typ: hzy-console-assertion+jwt`）。只在该路由生效；Runtime 要求
+Console 部署的已验证信封为 `valid/grace`、公钥在信封 `serviceKeys` 中，并一次性消费 `jti`
+（可选表 `console_service_assertion_replay`）。错误码 `console_assertion_invalid`（401）、
+`console_assertion_replayed`（401）、`console_assertion_policy_inactive`（403）、
+`console_assertion_not_migrated`（503）。详见策略验证合同 §15。
+
+2026-09-22 续签状态（阶段 B，需先执行 `Console-SQL-Migration-verified-policy-renewal-state.sql`）：
+`PUT /v1/console/verified-policy/renewal` 请求体为 `{state,expectedEtag}`，`state` 取
+`ok|platform_unavailable|refused|invalid`（`refused/invalid` 对同一 ETag 粘性，只有接纳新信封才重置），要求精确 capability `console:policy-bundle:write` 和 Console 来源；
+`expectedEtag` 必须等于当前快照，否则返回 409；没有快照返回 `404 policy_snapshot_missing`；
+表未迁移返回 `503 policy_renewal_not_migrated`。尝试时间由 Runtime 取，只会向后推进，
+不接受调用方传入。成功写入信封会自动把状态置为 `ok`。
+`GET /v1/console/verified-policy` 和 `GET /v1/enterprise/console-policy` 的 `data` 新增
+`renewal: {state, attemptedAt} | null`；未迁移或没有状态时为 null。续签状态不属于签名回执，
+也不单独构成授权结论。判定规则见 docs/Console-Enterprise-Policy-Verification-Contract.md 第 14 节。
+
+后续只读候选 `GET /v1/enterprise/console-policy` 已注册，默认额外关闭。
+要求 Enterprise 自身精确读 grant 与部署、Console 存储部署显式绑定、签名覆盖
+两个部署及当前有效 active 状态；不开放写入。Host gate 接线但未启用，见上述合同 §8。
+
 ## 1. 目标
 
 本文定义 `tenant-runtime` 第一版业务 API 合同规范，用于约束 Platform 之外的业务应用从 Nuxt server 直连数据库迁移到客户侧 runtime 的接口形态。
 
 `tenant-runtime` 是业务 API runtime，不是 SQL over REST 代理。所有应用 adapter 只能暴露稳定业务接口，不暴露表名、SQL、数据库连接信息或通用查询能力。
+
+### Enterprise Host 用户委托服务能力（能力收敛候选；环境切换另批）
+
+仅 `enterprise.runtime` 调用已登记的 `/v1/enterprise/<domain>/**` 用户委托业务路由时，Runtime 从路由的受信 `LogicalTarget` 推导服务能力：`aims:enterprise-host:execute`、`assets:enterprise-host:execute`、`codocs:enterprise-host:execute`、`altoc:enterprise-host:execute`、`console:enterprise-host:execute`。`domain` 必须与路由目标一致；不能由浏览器参数或请求头选择。Host Foundation 操作表限定每条 METHOD/path，服务令牌仍需正确 audience、来源 `enterprise.runtime`、当前 ACTIVE grant、租户/部署和有效期。物理 grant 的 audience 前缀与 `semanticScope` 按 Console 签发合同映射，不成为业务能力名称的一部分。
+
+域能力只授权进入该域的固定 Host 通道，不授予具体业务操作。每条路由仍校验签名 actor、≤15 秒 permit 的人员 resource/action/mode、对象关系、数据范围、当前 credential/grant 与幂等规则；B 类双 permit 和管理动作不得由域能力替代。模块 manifest 保留这条 Host 通道的人员权限事实，不为这五个服务能力增设资源；其它独立服务和调度能力按自身合同保留。scheduler/worker、cutover/control、独立 `/api/v1/service/**`、其它服务客户端及其 Runtime 路由不适用，继续使用各自的精确 scope。C000001 v2.27/v2.28 的 grant 写入与二进制切换不由本合同修改自动触发。
 
 ## 2. 基础约定
 
@@ -76,6 +116,8 @@ Aims 项目治理首期使用业务命令端点，不向新版本/审阅表暴�
 | `POST` | `/v1/aims/weekly-reporting-periods/{periodKey}:generate` | `periodKey=YYYY-Www`；仅当前项目总监或配置管理员；rollout disabled 时失败关闭，截止后冻结义务 |
 
 这些浏览器/BFF 路径仍由 Aims tenant-runtime token 保护。`current_user` 与项目治理权限标志必须由已验证 BFF 会话重建；客户端同名 query 参数一律删除。
+
+Enterprise Host 另以委托路由 `POST /v1/enterprise/aims/weekly-reporting-settings:view|update` 进入同一设置 handler（固定 GET/PUT，`aims:enterprise-host:execute`）：人员许可必须为 `weekly-reporting-settings/configure`，只放行 Host 注入的 `current_user_can_configure_weekly_reports`，拒绝范围键、对象/项目/周期 ID 与调用方 actor，`update` 另需 `Idempotency-Key`。
 
 ### 2.3 HTTP 方法
 
@@ -613,3 +655,41 @@ Replay 在同一事务产生 `cancelled` closure；`RecordSuccessWithMutation` �
 - 不在错误响应中返回 SQL、secret、token。
 - 不让一个 app adapter 直接跨库 join 另一个 app 的表。
 - 不把 Console vault/OIDC 启动闭环迁入第一阶段 runtime。
+
+
+### ADR-018 AA-04：既有Aims审批回调的统一事务模式
+
+`POST /v1/aims/service/workflow/callback` 保持既有请求/响应，只有Runtime服务器配置 `enterprise.enableMilestoneReceivable=true` 且子类型为 `milestones/milestone_completion` 才分流。false继续旧adapter；true但Enterprise关闭或服务缺失返回503。协调模式重验严格Aims服务JWT、当前租户及legacy Aims deployment、`sub/client=aims.runtime`、当前credential/grant和精确 `altoc:receivable:mark-billable`；原 `aims.write` 入口要求仍保留。仅允许固定Runtime audience的组合token，不转发Workflow或Altoc audience token。
+
+审批事实仍从已认证Workflow→Aims BFF边界进入，浏览器不能提交可信授权。Aims审批、Altoc可开票变更、目标receipt、源ACK在同一Registry双域事务内提交，成功提交后响应operationStatus为succeeded；同键重放保留历史身份。详细开关、调用方及验证范围见[AA-04专项](./Unified-Enterprise-Altoc-Aims-Expansion.md)。此模式尚未在线上启用。
+
+### ADR-018 Altoc G1：基础只读操作（代码已登记，环境未启用）
+
+Enterprise 开启且 Altoc Read=`unified` 时，固定开放以下 POST 读操作，返回 `{code,message,data}`；不是业务写接口：
+
+| 路径 | 精确 capability |
+| --- | --- |
+| `/v1/enterprise/altoc/customers:list`、`/v1/enterprise/altoc/customers:view` | `altoc:customer:view` |
+| `/v1/enterprise/altoc/contracts:list`、`/v1/enterprise/altoc/contracts:view` | `altoc:contract:view` |
+| `/v1/enterprise/altoc/receivable-plans:list`、`/v1/enterprise/altoc/receivable-plans:view` | `altoc:receivable:view` |
+
+严格 Enterprise service JWT：Console issuer/JWKS、有效期、Runtime audience/target、source=enterprise、client/sub=enterprise.runtime、当前 credential 与精确 grant、可信 tenant 与 Host deployment 绑定。签名 actor 必须为用户，purpose 为空。缺 cap/错 audience/错 source 等服务身份错误返回403；依赖不可用503。
+
+JSON 仅接收 `id`、`query`、`authorization`，不接受 URL query 或未知字段。query 为 `page/pageSize/search/status/customerId/contractId`，按资源约束；详情拒绝筛选。authorization 包含 `actorUid/tenant/deployment/resource/action/operation/objectId/query/allowed/scope/bundleVersion/bundleHash/policyRevision/expiresAt`；action 固定view、operation 为list/view、其身份/对象/query 必须与可信上下文及输入相等，过期或超过当前15秒拒绝。scope 为 `{access,departmentCodes}`，保留 Altoc owning reader 的 all/self/dept/self_dept 语义。受信 BFF 必须从当前 Console 人员授权构建 permit，不得转发浏览器许可。
+
+Registry 从本机配置绑定 schemaVersion/generation，Repeatable Read 事务先核对持久 tenant/environment/runtimeDeployment/schema/generation 栅栏。动态范围按当前 owner/dept/催收关系评估，COUNT 与分页 SELECT 同 WHERE/snapshot。仅七张受控 Altoc 表的字段白名单；合同子项须通过父对象范围，不读取 Finance 或其他应用，不返回跨权限关联名称、原始错误、文件或服务状态，不产生 receipt/outbox。
+
+Altoc G1许可传输补充（Host消费候选）：在签名actor之外，要求 `X-HZY-Enterprise-Altoc-Permit-Signature`，复用项目文档的Bearer-key HMAC/SHA-256与base64url机制。固定domain tag及METHOD/RequestURI绑定全部许可字段、scope与规范化query；input.id/query另与许可全等，缺失或篡改403，验签在业务SQL之前。既有项目文档签名格式不变。共享现时credential/grant校验按已验证audience复用签发映射，权限拒绝返回403、依赖故障返回503；本批不扩大seed/grant口径。
+
+### Altoc G2 基础只读 Runtime 路由（代码候选）
+
+仅 POST `/v1/enterprise/altoc/leads:list|view`、`opportunities:list|view`、`quotations:list|view`，精确能力分别 `altoc:lead:view`、`altoc:opportunity:view`、`altoc:quotation:view`；list/view 共用对应资源 view，不能用 G1 三资源能力替代。复用 Enterprise 当前 service credential/grant、受信 actor 委托与 G1 独立 HMAC 验签；permit 同时绑定 resource/operation/objectId/query/策略/身份/期限（15秒上限）。G2 query 固定 page/pageSize/search/status/customerId/opportunityId；全部纳入签名有序序列，G1 query 与签名序列不变。
+
+独立五表 SalesReadService 只 resolve Altoc Read，Registry 持久栅栏先于同 snapshot 的主档、COUNT/分页、报价子项读取。当前自身 owner/dept 范围；商机列表默认管线（legacy 无列保持原规则），详情不加管线筛选；报价 view 不授所关联客户/商机 view。缺 G2 表映射时仅 G2 读未就绪503，不回退旧库。无联系人/活动/动态关联主档名、Finance/Codocs/Aims/Workflow读取或业务写。三条环境 grant 安装与 Host 接入/登录验收另行执行，路由代码不表示环境已启用。
+
+
+### P4b 待办显式分页（2026-09-27）
+
+`GET /v1/console/notifications/todos` 可选 `page/pageSize`（1起、page≤1000000、size≤100，默认1/20），与 cursor/limit 混用拒绝400。无参数保留 `{items,nextCursor}`；分页 data 为 `{items,total,page,pageSize,kindCounts,totalPending}`。完整当前 uid 的 pending projection、当前 notification、未过期及 category/source 先过滤；kindCounts/totalPending 覆盖该完整集合，独立于 todoKind 和当前页，选中 kind 的 count 即 total。RepeatableRead 只读事务冻结一次 UTC_TIMESTAMP，聚合与页读取使用相同 WHERE/时间/snapshot，`updated_at DESC,id DESC`。列表仅静态标签/状态元数据，打开仍实时执行来源对象授权后才能标记已读/导航。
+
+`GET /v1/workflow/tasks/pending` 保留旧 `page_size`/无参数 data `{items,total}`；显式 `page/pageSize` 返回 `{items,total,page,pageSize}`，page≤1000000、size≤100，拒绝与 page_size 混用。新增 resource_code/action_code/exclude_initiator=true 为收窄过滤，排除 UID 只能从受信 current_user 派生。Host 固定 app_code=aims/resource_code=tasks/action_code=complete/exclude_initiator=true。既有服务 audience/scope、tenant/deployment、签名 actor 和 Workflow 人员权限 gate 保留；分配本人、task pending、instance running 与精确业务键/非本人发起条件在同 WHERE/RepeatableRead 的 COUNT 和页读取中执行。精确业务键及发起人比较使用 BINARY 保持旧 JS 大小写/尾空格语义；稳定 `created_at DESC,id DESC`。BFF 不做页后过滤，范围或元数据矛盾返回502，不披露不一致数据。

@@ -113,7 +113,7 @@ const stats = computed(() => {
         <!-- Diff 内容 -->
         <div class="border border-default rounded-lg overflow-hidden max-h-[60vh] overflow-y-auto">
           <table class="w-full text-xs font-mono">
-            <thead class="sticky top-0 bg-gray-100 dark:bg-gray-800 text-muted z-10">
+            <thead class="sticky top-0 bg-muted text-muted z-10">
               <tr>
                 <th class="w-10 text-center px-2 py-1.5 border-r border-default font-medium">
                   当前

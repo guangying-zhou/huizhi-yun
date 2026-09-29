@@ -124,7 +124,7 @@ func (a *Adapter) workItemDetailItem(ctx context.Context, workItemID int64) (map
 	var (
 		id                 int64
 		projectID          int64
-		milestoneID        int64
+		milestoneID        sql.NullInt64
 		itemNumber         int64
 		itemKey            string
 		itemType           string
@@ -182,7 +182,7 @@ func (a *Adapter) workItemDetailItem(ctx context.Context, workItemID int64) (map
 	return map[string]any{
 		"id":                 id,
 		"projectId":          projectID,
-		"milestoneId":        milestoneID,
+		"milestoneId":        nullableInt64(milestoneID),
 		"itemNumber":         itemNumber,
 		"itemKey":            itemKey,
 		"type":               itemType,

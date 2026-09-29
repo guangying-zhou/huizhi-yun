@@ -1,0 +1,20 @@
+# Install as /etc/systemd/system/hzy-tenant-gateway.service.d/release.conf.
+# Overrides the existing Gateway unit without editing deploy/self-hosted/gateway/.
+[Unit]
+After=network-online.target tailscaled.service mysqld.service hzy-data-runtime.service hzy-console.service hzy-enterprise.service hzy-workflow.service hzy-aims.service hzy-codocs.service hzy-platform.service
+Requires=hzy-data-runtime.service
+Wants=hzy-console.service hzy-enterprise.service hzy-workflow.service hzy-aims.service hzy-codocs.service hzy-platform.service
+
+[Service]
+WorkingDirectory=/home/hzy/apps/gateway/current
+EnvironmentFile=/etc/hzy/gateway.env
+ExecStartPre=/usr/local/bin/node /home/hzy/tools/verify.mjs --dir /home/hzy/apps/gateway/current --app gateway
+ExecStart=
+ExecStart=/usr/local/bin/node /home/hzy/apps/gateway/current/deploy/self-hosted/gateway/server.mjs --config /etc/hzy-gateway/gateway.json
+ExecStartPost=/usr/local/bin/node /home/hzy/tools/health.mjs --app gateway
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=hzy-gateway
+ProtectHome=read-only
+ReadOnlyPaths=
+ReadOnlyPaths=/home/hzy /etc/hzy-gateway

@@ -1,5 +1,8 @@
 <script setup lang="ts">
+import { useAimsModule } from '../../../layer/useAimsModule'
+
 const props = defineProps<{ productCode: string, versionId: string, scopeId: number, isPublic: boolean, workspaceRevision: number, versionRevision: number, scopeRevision: number, disabled?: boolean }>()
+const { moduleUrl } = useAimsModule()
 const emit = defineEmits<{ saved: [], busy: [value: boolean] }>()
 const open = ref(false), busy = ref(false), reason = ref(''), error = ref('')
 let retry: { body: string, key: string } | undefined
@@ -11,7 +14,7 @@ async function save() {
   const body = JSON.stringify({ isPublic: !props.isPublic, expectedRevision: props.workspaceRevision, expectedVersionRevision: props.versionRevision, expectedScopeRevision: props.scopeRevision, reason: reason.value })
   const expected = JSON.parse(body)
   const scopeID = props.scopeId, versionID = Number(props.versionId)
-  const url = `/api/v1/products/${encodeURIComponent(props.productCode)}/versions/${encodeURIComponent(props.versionId)}/features/${props.scopeId}/visibility`
+  const url = moduleUrl(`/api/v1/products/${encodeURIComponent(props.productCode)}/versions/${encodeURIComponent(props.versionId)}/features/${props.scopeId}/visibility`)
   let succeeded = false
   try {
     if (!await confirm({ title: props.isPublic ? '设为内部范围' : '公开版本范围', message: '公开设置会更新产品台账和关联反馈中的版本信息。确认保存？' })) return

@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs'
 import { describe, test } from 'node:test'
 import {
   NotificationDeliveryError,
+  hzy0InAppOnlyNotifications,
   orchestrateNotificationDelivery,
   resolveExternalRecipients,
   validateNotificationIdempotencyKey,
@@ -41,6 +42,12 @@ function dependencies(input: {
 }
 
 describe('dual-channel notification orchestrator', () => {
+  test('hzy0 in-app mode needs both trusted runner values', () => {
+    assert.equal(hzy0InAppOnlyNotifications({ HZY0_LOCAL_ENTERPRISE: 'true', HZY0_NOTIFICATIONS_IN_APP_ONLY: 'true' }), true)
+    assert.equal(hzy0InAppOnlyNotifications({ HZY0_LOCAL_ENTERPRISE: 'true' }), false)
+    assert.equal(hzy0InAppOnlyNotifications({ HZY0_NOTIFICATIONS_IN_APP_ONLY: 'true' }), false)
+    assert.equal(hzy0InAppOnlyNotifications({ HZY0_LOCAL_ENTERPRISE: 'TRUE', HZY0_NOTIFICATIONS_IN_APP_ONLY: 'true' }), false)
+  })
   test('applies the test redirect only to WeCom and preserves a frozen DingTalk recipient', () => {
     assert.equal(
       resolveExternalRecipients({ channel: 'wecom', externalRecipients: 'wecom-user' }, 'test-recipient'),
@@ -94,6 +101,29 @@ describe('dual-channel notification orchestrator', () => {
     assert.deepEqual(result.recipients, ['user-a', 'user-b'])
     assert.equal(result.inApp.status, 'fulfilled')
     assert.equal(result.external.status, 'fulfilled')
+  })
+
+  test('hzy0 in-app mode publishes once and never calls the external connector', async () => {
+    for (const channel of ['wecom', 'dingtalk'] as const) {
+      const published: PublishNotificationInput[] = []
+      let externalCalls = 0
+      const result = await orchestrateNotificationDelivery(params({ channel }), dependencies({
+        publish: async (input) => {
+          published.push(input)
+          return { notificationId: 'notif-local' }
+        },
+        external: async () => {
+          externalCalls++
+          throw new Error('external delivery must not run')
+        }
+      }), { inAppOnly: true })
+
+      assert.equal(published.length, 1)
+      assert.deepEqual(published[0]?.channels, ['in_app'])
+      assert.equal(externalCalls, 0)
+      assert.deepEqual(result.externalRecipients, [])
+      assert.deepEqual(result.external, { status: 'skipped', reason: 'in_app_only' })
+    }
   })
 
   test('does not attempt external delivery when the durable in-app publish fails', async () => {

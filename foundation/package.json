@@ -6,13 +6,14 @@
   "scripts": {
     "lint": "eslint .",
     "postinstall": "nuxt prepare",
-    "test": "tsx --test \"test/**/*.test.ts\"",
+    "test": "tsx --test \"test/**/*.test.ts\" && node --test test/*.test.mjs",
     "typecheck": "nuxt typecheck"
   },
   "main": "./nuxt.config.ts",
   "exports": {
     ".": "./nuxt.config.ts",
     "./server/utils/*": "./server/utils/*.ts",
+    "./server/api/*": "./server/api/*.ts",
     "./shared/utils/*": "./shared/utils/*.ts",
     "./app/types/*": "./app/types/*.ts",
     "./app/stores/*": "./app/stores/*.ts",

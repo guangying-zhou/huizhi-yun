@@ -26,7 +26,15 @@ func okWithMessage(data any, message string) map[string]any {
 }
 
 func (a *Adapter) queryMaps(ctx context.Context, query string, args ...any) ([]map[string]any, error) {
-	rows, err := a.DB().QueryContext(ctx, query, args...)
+	return queryMaps(ctx, a.DB(), query, args...)
+}
+
+type queryMapRunner interface {
+	QueryContext(context.Context, string, ...any) (*sql.Rows, error)
+}
+
+func queryMaps(ctx context.Context, runner queryMapRunner, query string, args ...any) ([]map[string]any, error) {
+	rows, err := runner.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -389,6 +397,31 @@ func jsonOrNil(value any) any {
 	}
 }
 
+// contractJSONOrNil is jsonOrNil for columns whose shape is an executable
+// cutover contract (internal/jsoncontract). An absent or blank value stays NULL;
+// anything else must satisfy the contract or the write is refused with 400, so
+// no row is stored that the unified-enterprise gate would later block.
+func contractJSONOrNil(body map[string]any, field string, valid func([]byte) bool) (any, error) {
+	value := jsonOrNil(body[field])
+	if value == nil {
+		if body[field] != nil {
+			if _, isText := body[field].(string); !isText {
+				return nil, invalidContractJSON(field)
+			}
+		}
+		return nil, nil
+	}
+	text, _ := value.(string)
+	if !valid([]byte(text)) {
+		return nil, invalidContractJSON(field)
+	}
+	return text, nil
+}
+
+func invalidContractJSON(field string) error {
+	return httperror.New(http.StatusBadRequest, "invalid_"+field, field+" has an invalid shape")
+}
+
 func mapField(body map[string]any, key string) map[string]any {
 	value, ok := body[key].(map[string]any)
 	if !ok || value == nil {
@@ -500,6 +533,11 @@ func splitDelimitedText(text string) []string {
 	return cleanStringList(result)
 }
 
+// parseJSONList is a read-side normalizer and deliberately still returns an
+// empty list for an unparsable value instead of failing the whole read. It is
+// safe only because asset_items.tags is now contract-checked on write
+// (contractJSONOrNil) and by the unified-enterprise cutover gate; turning this
+// into an error would make one legacy bad row break list endpoints.
 func parseJSONList(value any) []any {
 	text := cleanAnyString(value)
 	if text == "" {

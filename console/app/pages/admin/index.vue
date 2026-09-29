@@ -17,6 +17,8 @@ type ActivationStatus = {
   lastCheckedAt: string | null
   lastHeartbeatAt: string | null
   lastError: string | null
+  policyValidity?: 'valid' | 'grace' | null
+  policyValidUntil?: string | null
 }
 
 type BundleRefreshState = {
@@ -88,6 +90,9 @@ const bundleCardValue = computed(() => {
 })
 
 const bundleCardTone = computed(() => {
+  if (policyOutageGrace.value) {
+    return 'text-warning'
+  }
   if (bundleRefreshState.value.error || activationStatusError.value || activationStatus.value?.lastError) {
     return 'text-error'
   }
@@ -103,7 +108,12 @@ const bundleCardTone = computed(() => {
   return 'text-primary'
 })
 
+const policyOutageGrace = computed(() => activationStatus.value?.policyValidity === 'grace')
+
 const bundleCardDescription = computed(() => {
+  if (policyOutageGrace.value) {
+    return '故障宽限中'
+  }
   if (bundleRefreshState.value.error || activationStatusError.value || activationStatus.value?.lastError) {
     return bundleRefreshState.value.error || activationStatusError.value || activationStatus.value?.lastError || '检测失败'
   }
@@ -163,6 +173,14 @@ const bootstrapSteps = [
 <template>
   <UDashboardPanel id="admin-home" :ui="homeDashboardPanelUi">
     <template #body>
+      <UAlert
+        v-if="policyOutageGrace"
+        color="warning"
+        variant="soft"
+        icon="i-lucide-cloud-off"
+        title="策略处于故障宽限"
+        :description="`暂时连不上 Platform，正在使用最后一份有效策略，最迟到 ${formatDateTime(activationStatus?.policyValidUntil)}。在此期间 Platform 上的授权变更不会生效；恢复连接后自动续签。`"
+      />
       <div class="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
         <UCard
           v-for="item in summaryCards"

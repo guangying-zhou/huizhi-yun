@@ -126,6 +126,7 @@ func TestUpdateDocumentShareCommitsShareAndRelationTogether(t *testing.T) {
 		WithArgs("17", shareDocumentID).
 		WillReturnRows(sqlmock.NewRows([]string{"shared_to_uid"}).AddRow(shareTargetUID))
 	expectShareRelationUpsert(mock, "write").WillReturnResult(sqlmock.NewResult(1, 1))
+	expectCollaborationInvalidated(mock)
 	mock.ExpectCommit()
 
 	result, err := adapter.updateDocumentShare(context.Background(), shareDocumentUUID, "17", ownerShareBody("write"))
@@ -184,6 +185,7 @@ func TestDeleteDocumentShareCommitsShareDeleteAndRelationRevocationTogether(t *t
 	mock.ExpectExec("UPDATE document_relations SET status = 0, updated_at = NOW\\(\\) WHERE source_type = \\? AND source_id = \\?").
 		WithArgs("document_share", "17").
 		WillReturnResult(sqlmock.NewResult(0, 1))
+	expectCollaborationInvalidated(mock)
 	mock.ExpectCommit()
 
 	result, err := adapter.deleteDocumentShare(context.Background(), shareDocumentUUID, "17", ownerShareBody("read"))
@@ -224,3 +226,11 @@ func TestDeleteDocumentShareRollsBackWhenRelationRevocationFails(t *testing.T) {
 		t.Fatalf("share delete must roll back so stale relation cannot retain access: %v", err)
 	}
 }
+
+// expectCollaborationInvalidated scripts the v2 collaboration invalidation that
+// every share change performs (document_snapshot_guard / collaboration_session).
+func expectCollaborationInvalidated(mock sqlmock.Sqlmock) {
+	mock.ExpectExec(`UPDATE document_snapshot_heads SET collaboration_epoch = collaboration_epoch \+ 1 WHERE document_uuid = \?`).WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectExec(`UPDATE document_collaboration_sessions SET status = 'revoked' WHERE document_uuid = \? AND status = 'active'`).WillReturnResult(sqlmock.NewResult(0, 0))
+}
+

@@ -2,7 +2,6 @@ package aims
 
 import (
 	"context"
-	"database/sql"
 	"net/http"
 	"net/url"
 
@@ -59,22 +58,7 @@ func (a *Adapter) handleProductHandoffRuntime(ctx context.Context, method, path 
 				return nil, operation, true, err
 			}
 		}
-		var projectID int64
-		target := productcenter.PlanningHandoffTarget{
-			AuthorizeProject: func(ctx context.Context, tx *sql.Tx) (int64, error) {
-				if input.PlannedVersionID > 0 {
-					if err := productcenter.AuthorizeWorkspaceTransaction(ctx, tx, code, uid, "product_versions", "view", versionPermit); err != nil {
-						return 0, err
-					}
-				}
-				var err error
-				projectID, err = authorizeProductHandoffProjectTx(ctx, tx, input.ProjectCode, uid, projectPermit)
-				return projectID, err
-			},
-			ResolveRequirement: func(ctx context.Context, tx *sql.Tx) (int64, error) {
-				return a.resolveProductHandoffRequirementTx(ctx, tx, code, uid, projectID, input)
-			},
-		}
+		target := ProductPlanningHandoffTarget(code, uid, input, versionPermit, projectPermit)
 		key, _ := body["idempotency_key"].(string)
 		result, err := productcenter.HandoffPlanningItem(ctx, a.DB(), productcenter.CommandIdentity{ProductCode: code, ActorUID: uid, Action: "product_priorities:handoff", IdempotencyKey: key}, planningPermit, requestPermit, input, target)
 		return result, operation, true, productRuntimeError(err)

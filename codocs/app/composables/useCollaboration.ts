@@ -8,6 +8,9 @@ import { ref, computed, onUnmounted, toValue } from 'vue'
 import * as Y from 'yjs'
 import type { MaybeRefOrGetter } from 'vue'
 import { HocuspocusCollaborationProvider } from '../utils/hocuspocus-provider'
+import { collaborationCloseKind } from '../../layer/departmentCollaboration.mjs'
+
+type CollaborationCloseKind = 'revoked' | 'closed'
 
 export interface CollaborationUser {
   id: string
@@ -25,6 +28,8 @@ export interface UseCollaborationOptions {
   wsUrl?: MaybeRefOrGetter<string>
   /** 用户认证 Token */
   token?: MaybeRefOrGetter<string>
+  /** 由宿主提供连接 token（如 Enterprise 的 v2 一次性票据）；提供时不调用 /api/collaboration/token */
+  resolveToken?: (documentName: string) => Promise<string>
   /** 当前用户信息 */
   user?: MaybeRefOrGetter<{
     id: string
@@ -90,6 +95,8 @@ export function useCollaboration(options: UseCollaborationOptions) {
   const scope = ref<'read-write' | 'readonly' | null>(null)
   const error = ref<Error | null>(null)
   const collaborators = ref<CollaborationUser[]>([])
+  // 4403 close: this user was removed from the session, or the room was closed.
+  const closeKind = ref<CollaborationCloseKind | null>(null)
 
   // Y.js 文档
   const ydoc = new Y.Doc()
@@ -125,6 +132,11 @@ export function useCollaboration(options: UseCollaborationOptions) {
     if (explicitToken) {
       return explicitToken
     }
+    if (options.resolveToken) {
+      const hostToken = String(await options.resolveToken(currentDocumentName) || '').trim()
+      if (!hostToken) throw new Error('协同认证令牌获取失败')
+      return hostToken
+    }
 
     const query: Record<string, string> = {
       documentName: currentDocumentName
@@ -150,6 +162,7 @@ export function useCollaboration(options: UseCollaborationOptions) {
 
     isConnecting.value = true
     error.value = null
+    closeKind.value = null
 
     if (provider) {
       if (provider.documentName === currentDocumentName) {
@@ -163,14 +176,18 @@ export function useCollaboration(options: UseCollaborationOptions) {
     scope.value = null
 
     try {
-      const currentToken = await resolveToken(currentDocumentName)
+      // A Host v2 admission ticket is single-use. Resolve it for each socket,
+      // including automatic reconnects, rather than at provider creation.
+      const providerToken = options.resolveToken && !String(toValue(token) || '').trim()
+        ? () => resolveToken(currentDocumentName)
+        : await resolveToken(currentDocumentName)
 
       // 创建 Hocuspocus Provider
       provider = new HocuspocusCollaborationProvider({
         url: currentWsUrl,
         documentName: currentDocumentName,
         document: ydoc,
-        token: currentToken,
+        token: providerToken,
         params: {
           app: 'codocs',
           doc: currentDocumentName.replace(/^doc:/, ''),
@@ -218,7 +235,18 @@ export function useCollaboration(options: UseCollaborationOptions) {
         error.value = new Error('协同连接异常')
       })
 
-      provider.on('connection-close', () => {
+      provider.on('connection-close', (event) => {
+        const kind = collaborationCloseKind(event)
+        if (kind) {
+          // Access withdrawn: stop for good. Reconnecting would only mint another ticket
+          // that Runtime refuses. Deferred so the provider finishes its own close first.
+          closeKind.value = kind
+          const closing = provider
+          queueMicrotask(() => {
+            if (provider === closing) disconnect()
+          })
+          return
+        }
         if (!provider?.isAuthenticated) {
           error.value = error.value || new Error('协同连接已断开')
         }
@@ -309,6 +337,7 @@ export function useCollaboration(options: UseCollaborationOptions) {
     scope,
     error,
     collaborators,
+    closeKind,
     currentUser,
     documentName,
 

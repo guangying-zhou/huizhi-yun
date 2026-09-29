@@ -1,17 +1,20 @@
 <script setup lang="ts">
+import { useAimsModule } from '../../../layer/useAimsModule'
+import { hasDuplicateDeliverableName } from '../../utils/deliverableName'
+import { createCommandIntents } from '../../utils/commandIntent'
 /**
  * 目标编辑弹窗 — 用于看板「目标规划」列卡片编辑
  *
  * 编辑内容：标题/描述/里程碑/控制工时/评审级别/起止日期 + 成果要求列表
  * 支持：目标信息完备后，一键任务分配（目标 planning -> todo）并跳转 breakdown 页面
  */
-import type { WorkItem } from '~/types/aims'
+import type { WorkItem } from '../../types/aims'
 import {
   reviewLevelOptions,
   deliverableTypeOptions,
   deliverableTypeLabel,
   deliverableTypeIcon
-} from '~/config/work-item'
+} from '../../config/work-item'
 
 interface DeliverableItem {
   id: number
@@ -28,6 +31,9 @@ interface Milestone {
   id: number
   name: string
 }
+
+// 同一份代码供独立应用与企业宿主使用：非宿主模式下 moduleUrl 原样返回路径。
+const { moduleUrl, hosted } = useAimsModule()
 
 const props = defineProps<{
   open: boolean
@@ -57,6 +63,8 @@ const deliverables = ref<DeliverableItem[]>([])
 const loading = ref(false)
 const saving = ref(false)
 const assigning = ref(false)
+let hostedEditRetry: { payload: string, key: string } | undefined
+const deliverableIntents = createCommandIntents()
 
 // 新增/编辑成果要求行
 const showAddDeliverable = ref(false)
@@ -78,7 +86,7 @@ const editDeliverableForm = reactive({
 async function loadDeliverables(workItemId: number) {
   try {
     const res = await $fetch<{ code: number, data: DeliverableItem[] }>(
-      '/api/v1/deliverables',
+      moduleUrl('/api/v1/deliverables'),
       { params: { entity_type: 'work_item', entity_id: workItemId } }
     )
     if (res.code === 0) {
@@ -112,6 +120,7 @@ watch(
       await openModal(props.workItem)
     } else if (!open) {
       // 重置
+      deliverableIntents.clear()
       showAddDeliverable.value = false
       editingDeliverableId.value = null
       newDeliverableName.value = ''
@@ -132,6 +141,7 @@ function startEdit(d: DeliverableItem) {
 }
 
 function cancelEdit() {
+	if (editingDeliverableId.value) deliverableIntents.abandon(`update:${editingDeliverableId.value}`)
   editingDeliverableId.value = null
 }
 
@@ -145,15 +155,19 @@ async function saveEditDeliverable(id: number) {
     return
   }
   try {
-    await $fetch(`/api/v1/deliverables/${id}`, {
+    const body = {
+      name: editDeliverableForm.name.trim(),
+      description: editDeliverableForm.description.trim() || null,
+      acceptanceCriteria: editDeliverableForm.acceptanceCriteria.trim() || null,
+      deliverableType: editDeliverableForm.deliverableType
+    }
+    await $fetch(moduleUrl(`/api/v1/deliverables/${id}`), {
       method: 'PUT',
-      body: {
-        name: editDeliverableForm.name.trim(),
-        description: editDeliverableForm.description.trim() || null,
-        acceptanceCriteria: editDeliverableForm.acceptanceCriteria.trim() || null,
-        deliverableType: editDeliverableForm.deliverableType
-      }
+      body,
+      headers: deliverableIntents.headers(`update:${id}`, body),
+      retry: 0
     })
+    deliverableIntents.complete(`update:${id}`)
     editingDeliverableId.value = null
     if (props.workItem) await loadDeliverables(props.workItem.id)
   } catch (err: unknown) {
@@ -171,21 +185,21 @@ async function addDeliverable() {
   }
   addingDeliverable.value = true
   try {
-    await $fetch('/api/v1/deliverables/batch', {
+    const body = { items: [{
+      entityType: 'work_item', entityId: props.workItem.id,
+      name: newDeliverableName.value.trim(),
+      description: newDeliverableDescription.value.trim() || null,
+      acceptanceCriteria: newDeliverableCriteria.value.trim() || null,
+      deliverableType: newDeliverableType.value,
+      required: true, projectId: props.workItem.projectId
+    }] }
+    await $fetch(moduleUrl('/api/v1/deliverables/batch'), {
       method: 'POST',
-      body: {
-        items: [{
-          entityType: 'work_item',
-          entityId: props.workItem.id,
-          name: newDeliverableName.value.trim(),
-          description: newDeliverableDescription.value.trim() || null,
-          acceptanceCriteria: newDeliverableCriteria.value.trim() || null,
-          deliverableType: newDeliverableType.value,
-          required: true,
-          projectId: props.workItem.projectId
-        }]
-      }
+      body,
+      headers: deliverableIntents.headers('batch-create', body),
+      retry: 0
     })
+    deliverableIntents.complete('batch-create')
     newDeliverableName.value = ''
     newDeliverableCriteria.value = ''
     newDeliverableDescription.value = ''
@@ -205,9 +219,10 @@ async function removeDeliverable(d: DeliverableItem) {
     title: '删除成果要求',
     message: `确定删除成果要求「${d.name}」？删除后不可恢复。`,
     tone: 'danger'
-  }))) return
+  }))) { deliverableIntents.abandon(`delete:${d.id}`); return }
   try {
-    await $fetch(`/api/v1/deliverables/${d.id}`, { method: 'DELETE' })
+    await $fetch(moduleUrl(`/api/v1/deliverables/${d.id}`), { method: 'DELETE', headers: deliverableIntents.headers(`delete:${d.id}`), retry: 0 })
+    deliverableIntents.complete(`delete:${d.id}`)
     if (props.workItem) await loadDeliverables(props.workItem.id)
   } catch (err: unknown) {
     const msg = (err as { data?: { message?: string } })?.data?.message || '删除失败'
@@ -250,15 +265,14 @@ const canAssign = computed(() =>
 )
 
 function buildUpdatePayload() {
-  return {
+  const basic = {
     title: form.title.trim(),
     description: form.description.trim() || null,
-    milestoneId: form.milestoneId,
     estimatedHours: form.estimatedHours ? Number(form.estimatedHours) : null,
-    reviewLevel: form.reviewLevel,
     startDate: form.startDate || null,
     dueDate: form.dueDate || null
   }
+  return hosted ? basic : { ...basic, milestoneId: form.milestoneId, reviewLevel: form.reviewLevel }
 }
 
 async function handleSave() {
@@ -269,10 +283,23 @@ async function handleSave() {
   if (!props.workItem) return
   saving.value = true
   try {
-    await $fetch(`/api/v1/work-items/${props.workItem.id}`, {
+    const body = buildUpdatePayload()
+    let headers: Record<string, string> | undefined
+    if (hosted) {
+      const detail = await $fetch<{ code: number, data: { id: number, editSnapshot: { project_id: number }, editVersion: string } }>(moduleUrl(`/api/v1/work-items/${props.workItem.id}`))
+      if (detail.code !== 0 || detail.data?.id !== props.workItem.id || Number(detail.data.editSnapshot?.project_id) !== props.workItem.projectId || !/^[a-f0-9]{64}$/i.test(detail.data.editVersion)) throw new Error('工作目标版本信息不完整')
+      Object.assign(body, { projectId: props.workItem.projectId, expectedVersion: detail.data.editVersion })
+      const payload = JSON.stringify(body)
+      if (hostedEditRetry?.payload !== payload) hostedEditRetry = { payload, key: crypto.randomUUID() }
+      headers = { 'Idempotency-Key': hostedEditRetry.key }
+    }
+    await $fetch(moduleUrl(`/api/v1/work-items/${props.workItem.id}`), {
       method: 'PUT',
-      body: buildUpdatePayload()
+      body,
+      headers,
+      retry: 0
     })
+    hostedEditRetry = undefined
     toast.add({ title: '已保存', color: 'success', icon: 'i-lucide-check' })
     emit('saved')
     emit('update:open', false)
@@ -297,7 +324,7 @@ async function handleAssign() {
 
   assigning.value = true
   try {
-    await $fetch(`/api/v1/work-items/${props.workItem.id}`, {
+    await $fetch(moduleUrl(`/api/v1/work-items/${props.workItem.id}`), {
       method: 'PUT',
       body: {
         ...buildUpdatePayload(),
@@ -307,7 +334,7 @@ async function handleAssign() {
     toast.add({ title: '任务分配已开始', color: 'success', icon: 'i-lucide-list-checks' })
     emit('saved')
     emit('update:open', false)
-    await navigateTo(`/projects/${props.workItem.projectId}/work-items/${props.workItem.id}/breakdown`)
+    await navigateTo(moduleUrl(`/projects/${props.workItem.projectId}/work-items/${props.workItem.id}/breakdown`))
   } catch (err: unknown) {
     const msg = (err as { data?: { message?: string } })?.data?.message || '任务分配失败'
     toast.add({ title: msg, color: 'error' })
@@ -322,9 +349,9 @@ const milestoneItems = computed(() =>
 </script>
 
 <template>
-  <UModal
+  <USlideover
     :open="open"
-    :ui="{ content: 'sm:max-w-4xl' }"
+    :ui="{ content: 'w-full sm:max-w-2xl' }"
     @update:open="$emit('update:open', $event)"
   >
     <template #header>
@@ -356,6 +383,7 @@ const milestoneItems = computed(() =>
           >
             <USelect
               v-model="form.milestoneId"
+              :disabled="hosted"
               :items="milestoneItems"
               value-key="value"
               label-key="label"
@@ -387,6 +415,7 @@ const milestoneItems = computed(() =>
           <UFormField label="评审级别">
             <USelect
               v-model="form.reviewLevel"
+              :disabled="hosted"
               :items="reviewLevelOptions"
               value-key="value"
               label-key="label"
@@ -456,7 +485,7 @@ const milestoneItems = computed(() =>
                 variant="ghost"
                 color="neutral"
                 label="取消"
-                @click="showAddDeliverable = false; newDeliverableName = ''; newDeliverableCriteria = ''; newDeliverableDescription = ''; newDeliverableType = 'document'"
+                @click="deliverableIntents.abandon('batch-create'); showAddDeliverable = false; newDeliverableName = ''; newDeliverableCriteria = ''; newDeliverableDescription = ''; newDeliverableType = 'document'"
               />
               <UButton
                 size="xs"
@@ -566,7 +595,7 @@ const milestoneItems = computed(() =>
     <template #footer>
       <div class="flex justify-end gap-2">
         <UButton
-          v-if="canAssign"
+          v-if="canAssign && !hosted"
           label="任务分配"
           color="info"
           variant="soft"
@@ -589,5 +618,5 @@ const milestoneItems = computed(() =>
         />
       </div>
     </template>
-  </UModal>
+  </USlideover>
 </template>

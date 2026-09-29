@@ -1,5 +1,11 @@
 <script setup lang="ts">
-import type { ApiResponse, ListPayload, ProductAssetItem, SummaryMetric, TechnologyBaseItem } from '~/types'
+import { useAssetLabels } from '../../composables/useAssetLabels'
+import { useAssetDictionaries } from '../../composables/useAssetDictionaries'
+import AssetsSummaryMetricGrid from './SummaryMetricGrid.vue'
+import AssetsProductAssetCreateModal from './ProductAssetCreateModal.vue'
+import AssetsTechnologyBaseCreateModal from './TechnologyBaseCreateModal.vue'
+import { useAssetsModule } from '../../../layer/useAssetsModule'
+import type { ApiResponse, ListPayload, ProductAssetItem, SummaryMetric, TechnologyBaseItem } from '../../types'
 import type { DropdownMenuItem, TableColumn } from '@nuxt/ui'
 import type { Column } from '@tanstack/vue-table'
 import { h, resolveComponent } from 'vue'
@@ -8,7 +14,9 @@ import {
   preferDictionaryOptions,
   productLifecycleStatusOptions,
   productLineFallbackOptions
-} from '~/utils/productAssets'
+} from '../../utils/productAssets'
+
+const { moduleUrl, cacheKey, hosted } = useAssetsModule()
 
 usePageTitle('产品资产')
 
@@ -33,24 +41,31 @@ const { loadDictionaries, getOptions } = useAssetDictionaries()
 const { getLabel } = useAssetLabels()
 await loadDictionaries()
 
+const savedListState = useState(cacheKey('product-list-state'), () => ({ page: 1, search: '', category: 'all', status: 'all', sort: [{ id: 'code', desc: false }] }))
+const route = useRoute()
 const createProductOpen = ref(false)
 const createBaseOpen = ref(false)
-const productPage = ref(1)
+const productPage = ref(savedListState.value.page)
 const productPageSize = 20
-const { search, debounced: debouncedSearch, flush } = useDebouncedSearch({ onChange: () => {
+const { search, debounced: debouncedSearch, flush } = useDebouncedSearch({ initial: savedListState.value.search, onChange: () => {
   productPage.value = 1
 } })
 const activeTab = ref<AssetListTab>('product')
-const selectedProductCategory = ref('all')
-const selectedProductStatus = ref('all')
+const selectedProductCategory = ref(savedListState.value.category)
+const selectedProductStatus = ref(savedListState.value.status)
 const selectedBaseCategory = ref('all')
 const selectedBaseStatus = ref('all')
-const productSorting = ref([{ id: 'code', desc: false }])
+const productSorting = ref(savedListState.value.sort)
 const baseSorting = ref([{ id: 'code', desc: false }])
 
 watch([selectedProductCategory, selectedProductStatus, productSorting], () => {
   productPage.value = 1
 }, { deep: true, flush: 'sync' })
+
+// Snapshot only when leaving: filter watchers must not reset the restored page.
+onBeforeUnmount(() => {
+  savedListState.value = { page: productPage.value, search: search.value, category: selectedProductCategory.value, status: selectedProductStatus.value, sort: productSorting.value }
+})
 
 const productQuery = computed(() => ({
   search: debouncedSearch.value.trim() || undefined,
@@ -62,13 +77,15 @@ const productQuery = computed(() => ({
   sortOrder: productSorting.value[0]?.desc ? 'desc' : 'asc'
 }))
 
-const baseQuery = computed(() => ({
-  search: debouncedSearch.value.trim() || undefined
-}))
-
 const [{ data: productResponse, refresh: refreshProducts, status: productStatus, error: productError }, { data: baseResponse, refresh: refreshBases, status: baseStatus, error: baseError }] = await Promise.all([
-  useFetch<ApiResponse<ListPayload<ProductAssetItem>>>('/api/v1/products', { query: productQuery }),
-  useFetch<ApiResponse<ListPayload<TechnologyBaseItem>>>('/api/v1/technology-bases', { query: baseQuery })
+  useFetch<ApiResponse<ListPayload<ProductAssetItem>>>(moduleUrl('/api/v1/products'), { key: cacheKey('products'), query: productQuery }),
+  // The Host has a purpose-specific, scope-checked candidate projection.  It
+  // is intentionally distinct from the standalone technology-base catalogue:
+  // only fields needed to read/link a product base cross this boundary.
+  useFetch<ApiResponse<ListPayload<TechnologyBaseItem>>>(moduleUrl(hosted ? '/api/v1/products/link-candidates/bases' : '/api/v1/technology-bases'), {
+    key: cacheKey('technology-bases'),
+    ...(hosted ? {} : { query: computed(() => ({ search: debouncedSearch.value.trim() || undefined })) })
+  })
 ])
 
 const loading = computed(() => activeTab.value === 'product' ? productStatus.value === 'pending' : baseStatus.value === 'pending')
@@ -206,7 +223,8 @@ const baseRows = computed<ProductAssetDisplayItem[]>(() => baseItems.value
     raw: item
   }))
   .filter(item => selectedBaseCategory.value === 'all' || item.category_value === selectedBaseCategory.value)
-  .filter(item => selectedBaseStatus.value === 'all' || item.status_value === selectedBaseStatus.value))
+  .filter(item => selectedBaseStatus.value === 'all' || item.status_value === selectedBaseStatus.value)
+  .filter(item => !hosted || !debouncedSearch.value.trim() || [item.code, item.name, item.domain].some(value => value.toLowerCase().includes(debouncedSearch.value.trim().toLowerCase()))))
 
 const displayItems = computed(() => activeTab.value === 'product' ? productRows.value : baseRows.value)
 
@@ -250,15 +268,21 @@ const columns = computed<TableColumn<ProductAssetDisplayItem>[]>(() => {
 })
 
 const createItems = computed<DropdownMenuItem[]>(() => ([
+  ...(hosted ? [{ label: '产品线管理', icon: 'i-lucide-settings-2', onSelect: () => navigateTo(moduleUrl('/admin/asset-categories')) }] : []),
   {
     label: '新增产品主档',
     icon: 'i-lucide-package-2',
     onSelect: () => {
-      createProductOpen.value = true
+      if (hosted) {
+        void navigateTo({ path: moduleUrl('/products/new'), query: { returnTo: route.fullPath } })
+      } else {
+        createProductOpen.value = true
+      }
     }
   },
   {
-    label: '新增技术底座',
+    label: hosted ? '新增技术底座（待迁移）' : '新增技术底座',
+    disabled: hosted,
     icon: 'i-lucide-blocks',
     onSelect: () => {
       createBaseOpen.value = true
@@ -268,11 +292,13 @@ const createItems = computed<DropdownMenuItem[]>(() => ([
 
 const handleRowSelect = (_event: Event, row: { original: { item_type: 'product' | 'technology_base', id: number } }) => {
   if (row.original.item_type === 'product') {
-    navigateTo(`/products/${row.original.id}`)
+    navigateTo(moduleUrl(`/products/${row.original.id}`))
     return
   }
 
-  navigateTo(`/technology-bases/${row.original.id}`)
+  // The composed Host currently exposes the scoped list/link projection only;
+  // the standalone detail BFF is deliberately not registered yet.
+  if (!hosted) navigateTo(moduleUrl(`/technology-bases/${row.original.id}`))
 }
 
 const handleRefresh = async () => {
@@ -284,19 +310,33 @@ onBeforeUnmount(clearRefresh)
 
 const handleProductCreated = async (id: number) => {
   await handleRefresh()
-  navigateTo(`/products/${id}`)
+  navigateTo(moduleUrl(`/products/${id}`))
 }
 
 const handleBaseCreated = async (id: number) => {
   await handleRefresh()
-  navigateTo(`/technology-bases/${id}`)
+  navigateTo(moduleUrl(`/technology-bases/${id}`))
 }
 </script>
 
 <template>
   <UDashboardPanel id="product-assets" grow>
     <template #body>
-      <div class="p-4 space-y-4">
+      <div class="space-y-4 p-4 sm:p-6">
+        <ContentPageHeader
+          :hosted="hosted"
+          title="全部产品"
+          description="查看产品目录、产品资产与关联资源。"
+          breadcrumb="产品 / 产品目录"
+        >
+          <template #actions>
+            <UDropdownMenu :items="createItems" :content="{ align: 'end' }">
+              <UButton icon="i-lucide-plus" color="primary">
+                新增资产
+              </UButton>
+            </UDropdownMenu>
+          </template>
+        </ContentPageHeader>
         <AssetsSummaryMetricGrid v-if="!productError && !baseError" :metrics="metrics" />
 
         <UTabs
@@ -311,7 +351,7 @@ const handleBaseCreated = async (id: number) => {
           }"
         >
           <template #list-trailing>
-            <div class="ml-auto shrink-0">
+            <div v-if="!hosted" class="ml-auto shrink-0">
               <UDropdownMenu :items="createItems" :content="{ align: 'end' }">
                 <UButton icon="i-lucide-plus" color="primary">
                   新增资产
@@ -331,8 +371,8 @@ const handleBaseCreated = async (id: number) => {
             </div>
           </template>
 
-          <div class="mb-4 space-y-3">
-            <div class="grid gap-3 lg:grid-cols-[minmax(0,14rem)_minmax(0,14rem)_minmax(0,1fr)]">
+          <div class="mb-4 space-y-3" style="container-type: inline-size">
+            <div class="product-asset-filters">
               <USelect
                 id="product-asset-category-filter"
                 v-model="activeCategory"
@@ -399,14 +439,35 @@ const handleBaseCreated = async (id: number) => {
   </UDashboardPanel>
 
   <AssetsProductAssetCreateModal
+    v-if="!hosted"
     :open="createProductOpen"
     @update:open="createProductOpen = $event"
     @created="handleProductCreated"
   />
 
   <AssetsTechnologyBaseCreateModal
+    v-if="!hosted"
     :open="createBaseOpen"
     @update:open="createBaseOpen = $event"
     @created="handleBaseCreated"
   />
 </template>
+
+<style scoped>
+.product-asset-filters {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0.75rem;
+}
+
+.product-asset-filters > * {
+  min-width: 0;
+  width: 100%;
+}
+
+@container (min-width: 40rem) {
+  .product-asset-filters {
+    grid-template-columns: minmax(0, 14rem) minmax(0, 14rem) minmax(0, 1fr);
+  }
+}
+</style>

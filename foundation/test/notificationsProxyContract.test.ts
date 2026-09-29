@@ -113,7 +113,10 @@ test('Foundation exposes the complete user notifications proxy surface', () => {
     assert.match(content, /fetchConsoleNotificationsForUser\(event,/)
     assert.ok(content.includes(route.consolePath), `${route.file} must forward to ${route.consolePath}`)
     if (route.method === 'POST') assert.match(content, /method:\s*'POST'/)
-    if (route.forwardsQuery) assert.match(content, /query:\s*getQuery\(event\)/)
+    if (route.forwardsQuery) {
+      assert.match(content, /query:\s*validatedQuery\(event\)/)
+      assert.match(content, /notificationReadQuery\(getQuery\(event\)\)/)
+    }
     if (route.requiresCredentialsExplicitly) {
       const guardIndex = content.indexOf('requireConsoleNotificationsUserCredentials(event)')
       const fetchIndex = content.indexOf('fetchConsoleNotificationsForUser(event,')
@@ -147,7 +150,7 @@ test('shared notification center opens authorized details in a modal before busi
   assert.match(content, /const detail = await loadDetail\(item\.notificationId\)/)
   assert.match(content, /await markRead\(item\.notificationId\)/)
   assert.match(content, /<UModal\b/)
-  assert.match(content, /resolveNotificationActionUrl\(selectedDetail\.value, apps\.value, window\.location\.origin\)/)
+  assert.match(content, /resolveNotificationActionUrl\(selectedDetail\.value, apps\.value, window\.location\.origin, hostNotificationTarget\(\)\)/)
   assert.match(content, /前往处理/)
   assert.doesNotMatch(content, /resolveNotificationDetailPageUrl\(/)
   assert.doesNotMatch(content, /navigateTo\(detailPageUrl/)
@@ -192,7 +195,6 @@ test('notifications proxy accepts only verified user credentials', () => {
     consoleAuth: { authenticated: true, tokenUse: 'legacy_session', subjectType: 'user' }
   })))
 })
-
 
 test('user notification reads use the shared Console binding with filters and verified credentials', () => {
   const content = source('server/utils/notifications.ts')

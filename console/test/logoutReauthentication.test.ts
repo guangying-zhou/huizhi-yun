@@ -51,15 +51,22 @@ test('upstream forces credentials only for explicit reauthentication or a confir
     { query: {}, marker: true, blocked: true }
   ]) {
     const exports: { startUpstreamOidcLogin?: (event: object) => Promise<string> } = {}
-    runInNewContext(functions('../server/utils/upstreamOidc.ts', ['startUpstreamOidcLogin']), {
+    runInNewContext(functions('../server/utils/upstreamOidc.ts', ['startUpstreamOidcLogin', 'consoleLoginUrl']), {
       exports, URL, URLSearchParams, getQuery: () => sample.query,
       resolveConfig: async () => ({ authorizationEndpoint: 'https://idp.test/authorize', clientId: 'console', redirectUri: 'https://tenant.test/callback', scope: 'openid' }),
       requireUsableConfig: () => {}, sanitizeRedirect: () => '/aims/', getTargetApp: () => 'aims',
       hasConsoleLogoutMarker: () => sample.marker, randomToken: () => 'random', getCookieOptions: () => ({}),
-      setCookie: () => {}, cookies: {}, createPkceChallenge: () => 'challenge', sendRedirect: (_: unknown, url: string) => url
+      setCookie: () => {}, cookies: {}, createPkceChallenge: () => 'challenge', sendRedirect: (_: unknown, url: string) => url,
+      // Console mounted under a prefix, as on hzy0.
+      resolveCurrentAppUrl: (_: unknown, path: string) => `https://tenant.test/console${path}`
     })
     const target = new URL(await exports.startUpstreamOidcLogin!({}), 'https://tenant.test')
-    if (sample.blocked) { assert.equal(target.pathname, '/login'); continue }
+    if (sample.blocked) {
+      assert.equal(target.pathname, '/console/login')
+      assert.equal(target.searchParams.get('logged_out'), '1')
+      assert.equal(target.searchParams.get('redirect'), '/aims/')
+      continue
+    }
     assert.equal(target.hostname, 'idp.test')
     assert.equal(target.searchParams.get('prompt'), sample.forced ? 'login' : null)
     assert.equal(target.searchParams.get('max_age'), sample.forced ? '0' : null)

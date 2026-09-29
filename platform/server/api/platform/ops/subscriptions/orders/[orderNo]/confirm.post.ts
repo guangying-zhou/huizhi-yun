@@ -1,6 +1,9 @@
+import { requireEnterpriseEntitlementStateAccess } from '~~/server/utils/enterpriseEntitlementStateAccess'
+import { buildOpsAuthorizationSnapshot } from '~~/server/utils/platformOpsRbac'
 import type { ResultSetHeader, RowDataPacket } from 'mysql2/promise'
 import { normalizeNullableString, ok, requireString } from '~~/server/utils/api'
-import { withTransaction } from '~~/server/utils/db'
+import { withTransaction, queryRow } from '~~/server/utils/db'
+import { confirmEnterpriseOrderPayment } from '~~/server/utils/enterpriseOrderFulfillment'
 import {
   activateTenantPlanSubscription,
   buildTenantPlanPaymentNo,
@@ -44,6 +47,19 @@ export default defineEventHandler(async (event) => {
       statusMessage: 'Bad Request',
       message: 'orderNo is required'
     })
+  }
+
+  const qualificationOrder = await queryRow<RowDataPacket & { id: number, tenant_code: string, plan_code: string }>('SELECT id, tenant_code, plan_code FROM platform_orders WHERE order_no = ? LIMIT 1', [orderNo])
+  if (qualificationOrder?.plan_code === 'enterprise-full') {
+    const actorUid = await requireEnterpriseEntitlementStateAccess({ platformAccessScope: event.context.platformAccessScope, platformUid: event.context.platformUid }, buildOpsAuthorizationSnapshot)
+    if (event.context.platformAccessScope !== 'ops' || !actorUid) throw createError({ statusCode: 403, message: 'Authenticated Platform operator required' })
+    try {
+      return ok(await confirmEnterpriseOrderPayment({ tenantCode: qualificationOrder.tenant_code, orderId: Number(qualificationOrder.id), actorUid, accountId, bankTransactionNo: normalizeNullableString(body.bankTransactionNo) || '', paidAt: normalizeNullableString(body.paidAt) || new Date().toISOString() }))
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : ''
+      if (reason.startsWith('enterprise_order_') || reason.startsWith('invalid_') || reason === 'strict_utc_required') throw createError({ statusCode: 409, message: reason })
+      throw createError({ statusCode: 503, message: 'Enterprise order confirmation unavailable' })
+    }
   }
 
   const result = await withTransaction(async (tx) => {

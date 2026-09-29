@@ -8,6 +8,7 @@ import {
   parsePolicyBundlePayload
 } from '~~/server/utils/policyBundle'
 import { normalizeDeploymentEnvironment } from '~~/server/utils/tenantDeploymentSettings'
+import { currentPolicyEnvelope, currentPolicyRevision, policyDeploymentRefusal } from '~~/server/utils/currentPolicyEnvelope'
 
 interface ConsoleDeploymentRow extends RowDataPacket {
   id: number
@@ -24,8 +25,10 @@ async function findConsoleDeployment(input: {
   tenantCode: string
   environment: string
   deploymentCode?: string | null
+  signedPolicy?: boolean
 }) {
   const deploymentCode = normalizeNullableString(input.deploymentCode)
+  const signedPolicy = input.signedPolicy === true
   const deployment = await queryRow<ConsoleDeploymentRow>(
     `SELECT id, tenant_code, app_code, deployment_code, deployment_name,
             deployment_mode, environment, status
@@ -42,6 +45,7 @@ async function findConsoleDeployment(input: {
   )
 
   if (!deployment) {
+    if (signedPolicy) throw policyDeploymentRefusal('missing')
     throw createError({
       statusCode: 404,
       statusMessage: 'Not Found',
@@ -50,6 +54,7 @@ async function findConsoleDeployment(input: {
   }
 
   if (deployment.status !== 'active') {
+    if (signedPolicy) throw policyDeploymentRefusal('inactive')
     throw createError({
       statusCode: 409,
       statusMessage: 'Conflict',
@@ -64,11 +69,19 @@ export default defineEventHandler(async (event) => {
   const tenantCode = requireString(getRouterParam(event, 'tenantCode'), 'tenantCode')
   const query = getQuery(event)
   const environment = normalizeDeploymentEnvironment(query.environment)
+  const signedPolicy = query.format === 'hzy-policy-envelope.v1' || query.format === 'hzy-policy-revision.v1'
   const deployment = await findConsoleDeployment({
     tenantCode,
     environment,
-    deploymentCode: normalizeNullableString(query.deploymentCode || query.deployment_code)
+    deploymentCode: normalizeNullableString(query.deploymentCode || query.deployment_code),
+    signedPolicy
   })
+  if (signedPolicy) {
+    if (query.version || query.bundleVersion) throw createError({ statusCode: 400, message: 'Historical policy envelopes cannot be renewed' })
+    return ok(query.format === 'hzy-policy-revision.v1'
+      ? await currentPolicyRevision(event, deployment)
+      : await currentPolicyEnvelope(event, deployment))
+  }
   const bundle = await findOrGeneratePolicyBundleForDeployment({
     deploymentId: deployment.id,
     tenantCode: deployment.tenant_code,

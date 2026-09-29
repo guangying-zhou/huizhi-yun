@@ -28,6 +28,7 @@ const (
 )
 
 type Repository struct {
+	outboxTables *OutboxTables
 	db           *sql.DB
 	retryPolicy  RetryPolicy
 	randomUnit   func() float64

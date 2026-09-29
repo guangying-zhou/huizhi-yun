@@ -34,13 +34,27 @@ func ValidateFeatureDraft(input FeatureDraft) error {
 	return nil
 }
 func CreateProductFeature(ctx context.Context, db *sql.DB, identity CommandIdentity, permit AuthorizationPermit, input FeatureDraft) (CommandResult, error) {
+	return createProductFeature(ctx, identity, permit, input, func(authorize AuthorizeCommand, apply ApplyCommand) (CommandResult, error) {
+		return ExecuteCommand(ctx, db, identity, input, authorize, apply)
+	})
+}
+func CreateProductFeatureInTransaction(ctx context.Context, tx *sql.Tx, identity CommandIdentity, permit AuthorizationPermit, input FeatureDraft) (CommandResult, error) {
+	result, err := createProductFeature(ctx, identity, permit, input, func(authorize AuthorizeCommand, apply ApplyCommand) (CommandResult, error) {
+		return ExecuteCommandInTransaction(ctx, tx, identity, input, authorize, apply)
+	})
+	if err != nil && tx != nil {
+		_ = tx.Rollback()
+	}
+	return result, err
+}
+func createProductFeature(ctx context.Context, identity CommandIdentity, permit AuthorizationPermit, input FeatureDraft, execute func(AuthorizeCommand, ApplyCommand) (CommandResult, error)) (CommandResult, error) {
 	if identity.Action != "product_features:create" {
 		return CommandResult{}, invalid("product_command_identity_invalid", "功能创建命令不匹配")
 	}
 	if err := ValidateFeatureDraft(input); err != nil {
 		return CommandResult{}, err
 	}
-	return ExecuteCommand(ctx, db, identity, input, func(ctx context.Context, tx *sql.Tx) error {
+	return execute(func(ctx context.Context, tx *sql.Tx) error {
 		return AuthorizeWorkspaceTransaction(ctx, tx, identity.ProductCode, identity.ActorUID, "product_features", "edit", permit)
 	}, func(ctx context.Context, tx *sql.Tx) (any, error) {
 		root, err := loadWorkspace(ctx, tx, identity.ProductCode)

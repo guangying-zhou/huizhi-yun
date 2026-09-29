@@ -3,7 +3,7 @@ import { forwardAimsRuntimeGet, forwardAimsRuntimePost } from '~~/server/utils/a
 import { dispatchCompanyWeeklySummaryOperation } from '~~/server/utils/serviceTicketDeliveryOperation'
 import { requirePermission } from '~~/server/utils/checkPermission'
 import { resolveCompanyWeeklySummaryRecipients } from '~~/server/utils/companyWeeklySummaryRecipients'
-import { requireCurrentProjectGovernanceRoleHolder } from '~~/server/utils/projectGovernanceRoleHolder'
+import { requireCurrentProjectGovernanceRoleHolder } from '@hzy/foundation/server/utils/projectGovernanceRoleHolder'
 
 interface SummaryProjection {
   generated?: boolean

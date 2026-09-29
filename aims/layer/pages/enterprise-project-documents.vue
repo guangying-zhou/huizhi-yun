@@ -1,0 +1,9 @@
+<script setup lang="ts">
+import { useAimsModule } from '../useAimsModule'
+type Document = { id: number, title?: string, docCategory?: string, documentSource?: string, createdBy?: string, createdAt?: string }
+const route = useRoute(); const { moduleUrl } = useAimsModule(); const projectId = computed(() => String(route.params.id || ''))
+const items = ref<Document[]>([]); const loading = ref(true); const error = ref('')
+async function refresh() { loading.value = true; error.value = ''; try { const response = await $fetch<{code?:number,data?:{items?:Document[]}}>(moduleUrl(`/api/v1/projects/${projectId.value}/documents`)); if (response.code !== 0) throw Error('项目文档暂不可用'); items.value = response.data?.items || [] } catch (cause) { error.value = cause instanceof Error ? cause.message : '项目文档暂不可用' } finally { loading.value = false } }
+watch(projectId, refresh); onMounted(refresh)
+</script>
+<template><section class="space-y-5"><div><UButton :to="moduleUrl(`/projects/${projectId}`)" variant="link" color="neutral" icon="i-lucide-arrow-left">返回项目</UButton><h1 class="mt-1 text-2xl font-semibold text-highlighted">项目文档</h1><p class="mt-1 text-sm text-muted">文档内容仅经 Aims 正式代理和 Codocs 权限复核后打开。</p></div><UAlert v-if="error" color="error" title="无法读取文档" :description="error"/><UTable :data="items" :loading="loading" :columns="[{accessorKey:'title',header:'标题'},{accessorKey:'docCategory',header:'分类'},{accessorKey:'documentSource',header:'来源'},{accessorKey:'createdBy',header:'创建人'}]"><template #title-cell="{row}"><NuxtLink class="font-medium text-primary hover:underline" :to="moduleUrl(`/projects/${projectId}/documents/${row.original.id}`)">{{ row.original.title || `文档 #${row.original.id}` }}</NuxtLink></template><template #empty><CommonEmptyState icon="i-lucide-files" title="暂无项目文档" description="当前项目没有可访问文档。"/></template></UTable></section></template>

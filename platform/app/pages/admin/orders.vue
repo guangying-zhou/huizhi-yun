@@ -34,6 +34,8 @@ interface OrderItem {
   confirmedByUid: string | null
   confirmedByName: string | null
   confirmedAt: string | null
+  approvalReference: string | null
+  acceptedAt: string | null
   notes: string | null
 }
 
@@ -53,6 +55,27 @@ interface FetchLikeError {
 }
 
 const toast = useToast()
+const approvalOpen = ref(false)
+const approvalBusy = ref(false)
+const approvalRequestId = ref('')
+function openApproval() {
+  approvalRequestId.value = crypto.randomUUID()
+  approvalOpen.value = true
+}
+async function createApproval(value: Record<string, unknown>) {
+  approvalBusy.value = true
+  try {
+    await platformFetchJson('/api/platform/ops/subscriptions/orders/approved', { method: 'POST', body: { ...value, requestId: approvalRequestId.value } })
+    approvalOpen.value = false
+    toast.add({ title: '报价已批准，等待企业确认', color: 'success' })
+    await refresh()
+  } catch (caught) {
+    toast.add({ title: '创建失败', description: errorMessage(caught, '请核对批准内容后重试'), color: 'error'
+    })
+  } finally {
+    approvalBusy.value = false
+  }
+}
 
 const q = ref('')
 const status = ref('all')
@@ -205,7 +228,7 @@ async function submitConfirmOrder() {
     confirmOpen.value = false
     toast.add({
       title: '已确认到账',
-      description: `${order.orderNo} 已激活企业套餐。`,
+      description: order.planCode === 'enterprise-full' ? `${order.orderNo} 已记录到账，企业资格按批准期间处理；暂停或撤销状态不会自动恢复。` : `${order.orderNo} 已激活企业套餐。`,
       color: 'success'
     })
     await refresh()
@@ -223,12 +246,30 @@ async function submitConfirmOrder() {
 
 <template>
   <div>
+    <UModal
+      v-model:open="approvalOpen"
+      title="批准企业全量报价"
+      description="请核对批准依据与精确服务期间。"
+    >
+      <template #body>
+        <EnterpriseApprovedOrderForm
+          :key="approvalRequestId"
+          :busy="approvalBusy"
+          @submit="createApproval"
+        />
+      </template>
+    </UModal>
     <div class="page-h">
       <div>
         <h1>订单管理</h1>
-        <p>查看租户订阅订单。对公转账订单确认到账后，租户主订阅会按到账日期激活并进入30天试用期。</p>
+        <p>统一全量订单按批准的服务期间生效。先由企业确认报价，再核实实际到账；历史订单继续保留。</p>
       </div>
       <div class="page-h-actions">
+        <UButton
+          label="批准全量报价"
+          icon="i-lucide-plus"
+          @click="openApproval"
+        />
         <UButton
           color="neutral"
           variant="ghost"
@@ -367,15 +408,23 @@ async function submitConfirmOrder() {
 
         <template #actions-cell="{ row }">
           <UButton
+            v-if="row.original.status === 'paid' && row.original.planCode === 'enterprise-full'"
+            size="sm"
+            variant="soft"
+            label="技术开通"
+            :to="{ path: '/admin/enterprise-provisioning', query: { tenantCode: row.original.tenantCode } }"
+          />
+          <UButton
             v-if="row.original.status === 'pending' && row.original.paymentMethod === 'bank_transfer'"
             size="sm"
             color="primary"
             variant="soft"
             icon="i-lucide-badge-check"
             :loading="confirmingOrderNo === row.original.orderNo"
+            :disabled="Boolean(row.original.approvalReference && !row.original.acceptedAt)"
             @click="openConfirmOrder(row.original)"
           >
-            确认到账
+            {{ row.original.approvalReference && !row.original.acceptedAt ? '等待企业确认' : '确认到账' }}
           </UButton>
           <span
             v-else-if="row.original.status === 'paid'"
@@ -422,8 +471,8 @@ async function submitConfirmOrder() {
           <UAlert
             color="warning"
             variant="soft"
-            title="确认后将激活租户订阅"
-            :description="`订单 ${selectedOrder.orderNo} 将从到账日期开始计算30天试用期。`"
+            :title="selectedOrder.planCode === 'enterprise-full' ? '确认实际到账' : '确认后将激活租户订阅'"
+            :description="selectedOrder.planCode === 'enterprise-full' ? '按批准的服务期间更新企业资格，暂停或撤销状态不会自动恢复。' : `订单 ${selectedOrder.orderNo} 将从到账日期开始计算30天试用期。`"
           />
 
           <div class="rounded-lg border border-default bg-muted/30 p-4 text-sm">

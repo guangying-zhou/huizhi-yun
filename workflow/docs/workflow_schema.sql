@@ -178,16 +178,46 @@ CREATE TABLE `flow_actionable_outbox` (
     `next_state` ENUM('resolved','cancelled') NOT NULL,
     `recipients` JSON NOT NULL,
 	`prerequisite_notifications` JSON NOT NULL,
-    `delivery_status` ENUM('pending','delivered') NOT NULL DEFAULT 'pending',
+    `depends_on_notification_outbox_id` BIGINT UNSIGNED NULL,
+    `delivery_status` ENUM('pending','delivered','abandoned') NOT NULL DEFAULT 'pending',
     `attempt_count` INT UNSIGNED NOT NULL DEFAULT 0,
+    `version_no` BIGINT UNSIGNED NOT NULL DEFAULT 1,
     `last_attempt_at` DATETIME NULL,
     `delivered_at` DATETIME NULL,
+    `abandoned_at` DATETIME NULL,
+    `last_error_code` VARCHAR(100) NULL,
+    `last_http_status` SMALLINT UNSIGNED NULL,
     `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     INDEX `idx_actionable_outbox_delivery` (`delivery_status`, `id`),
     INDEX `idx_actionable_outbox_instance` (`instance_id`, `id`),
+    INDEX `idx_actionable_notification_dependency` (`depends_on_notification_outbox_id`),
     CONSTRAINT `fk_actionable_outbox_instance` FOREIGN KEY (`instance_id`) REFERENCES `flow_instances`(`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Workflow 到 Console 待办生命周期事务 outbox';
+
+DROP TABLE IF EXISTS `flow_notification_outbox`;
+CREATE TABLE `flow_notification_outbox` (
+    `id` BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    `instance_id` BIGINT UNSIGNED NOT NULL,
+    `action_id` BIGINT UNSIGNED NULL,
+    `actionable_key` VARCHAR(191) NOT NULL,
+    `idempotency_key` VARCHAR(191) NOT NULL,
+    `notification` JSON NOT NULL,
+    `delivery_status` ENUM('pending','delivered','abandoned') NOT NULL DEFAULT 'pending',
+    `attempt_count` INT UNSIGNED NOT NULL DEFAULT 0,
+    `version_no` BIGINT UNSIGNED NOT NULL DEFAULT 1,
+    `last_attempt_at` DATETIME NULL,
+    `delivered_at` DATETIME NULL,
+    `abandoned_at` DATETIME NULL,
+    `last_error_code` VARCHAR(100) NULL,
+    `last_http_status` SMALLINT UNSIGNED NULL,
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY `uk_notification_outbox_idempotency` (`idempotency_key`),
+    INDEX `idx_notification_outbox_delivery` (`delivery_status`, `id`),
+    INDEX `idx_notification_outbox_actionable` (`actionable_key`, `delivery_status`),
+    CONSTRAINT `fk_notification_outbox_instance` FOREIGN KEY (`instance_id`) REFERENCES `flow_instances`(`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Workflow 待办创建通知事务 outbox';
 
 -- -----------------------------------------------------------
 -- 7. 操作记录表
@@ -325,18 +355,45 @@ CREATE TABLE IF NOT EXISTS `flow_callback_logs` (
     `instance_id` BIGINT UNSIGNED NOT NULL COMMENT '流程实例ID',
     `callback_url` VARCHAR(500) NOT NULL COMMENT '回调地址',
     `event` VARCHAR(50) NOT NULL COMMENT '事件类型',
-    `status` ENUM('success', 'failed', 'pending') NOT NULL DEFAULT 'pending' COMMENT '回调状态',
+    `status` ENUM('success', 'failed', 'pending', 'abandoned') NOT NULL DEFAULT 'pending' COMMENT '回调状态',
     `attempts` INT NOT NULL DEFAULT 0 COMMENT '尝试次数',
+    `version_no` BIGINT UNSIGNED NOT NULL DEFAULT 1,
     `last_error` TEXT NULL COMMENT '最后一次错误信息',
     `payload` JSON NULL COMMENT '回调payload',
     `idempotency_key` VARCHAR(191) NOT NULL COMMENT '实例终态回调幂等键',
     `next_attempt_at` DATETIME NULL COMMENT '失败后的下次尝试时间',
+    `abandoned_at` DATETIME NULL,
+    `last_error_code` VARCHAR(100) NULL,
+    `last_http_status` SMALLINT UNSIGNED NULL,
     `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     INDEX `idx_instance` (`instance_id`),
     INDEX `idx_status` (`status`, `created_at`),
     UNIQUE KEY `uk_callback_idempotency` (`idempotency_key`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='流程回调日志';
+
+CREATE TABLE IF NOT EXISTS `flow_delivery_audit` (
+    `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    `delivery_kind` ENUM('notification','actionable','callback') NOT NULL,
+    `effect_id` BIGINT UNSIGNED NOT NULL,
+    `event_code` VARCHAR(64) NOT NULL,
+    `prior_status` VARCHAR(32) NOT NULL,
+    `next_status` VARCHAR(32) NOT NULL,
+    `prior_version_no` BIGINT UNSIGNED NOT NULL,
+    `next_version_no` BIGINT UNSIGNED NOT NULL,
+    `attempt_count` INT UNSIGNED NOT NULL,
+    `actor_code` VARCHAR(191) NOT NULL,
+    `reason_code` VARCHAR(100) NOT NULL,
+    `tenant_code` VARCHAR(100) NOT NULL,
+    `deployment_code` VARCHAR(100) NOT NULL,
+    `credential_id` BIGINT UNSIGNED NULL,
+    `request_id` VARCHAR(191) NULL,
+    `recovery_reason` VARCHAR(200) NULL,
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    KEY `idx_flow_delivery_audit_effect` (`delivery_kind`, `effect_id`, `id`),
+    KEY `idx_flow_delivery_audit_tenant` (`tenant_code`, `delivery_kind`, `created_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  COMMENT='Workflow 投递状态转换和受控恢复审计（不存正文、令牌或异常文本）';
 
 -- Finance 开票审批可靠命令的 Workflow 目标 Inbox。
 CREATE TABLE IF NOT EXISTS service_command_receipt (

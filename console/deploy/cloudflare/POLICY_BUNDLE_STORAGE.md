@@ -1,5 +1,11 @@
 # 持久授权包与独立同步
 
+2026-09-21 候选代码补充：Console 已增加 `verified-runtime` 后端，使用 Platform
+完整签名信封与 Runtime 独立 `verified_policy_snapshots`，不使用下述旧 HMAC。
+当前 renderer、本地 runner 和运行配置未切换，本文旧路径仍为现行运维记录；
+不能照搬下面的启用步骤到新后端。切换前提及隔离测试证据见
+[策略合同第 9 节](../../../docs/Console-Enterprise-Policy-Verification-Contract.md#9-同步与-console-消费者候选接线未切换运行环境)。
+
 ## 存储路径
 
 `Console 内存 → Foundation consolePolicyStore → Data Runtime → hzy_console.policy_bundle_snapshots`

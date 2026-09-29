@@ -1,0 +1,43 @@
+{
+  "method": "POST",
+  "target": "/v1/enterprise/aims/time-entry-reviews:list",
+  "token": "test-service-token",
+  "authorization": {
+    "actorUid": "person-a",
+    "tenant": "tenant-a",
+    "deployment": "enterprise-test",
+    "resource": "time-entry-reviews",
+    "action": "view",
+    "operation": "list",
+    "projectId": "12",
+    "expiresAt": 1800000010000,
+    "query": {
+      "periodKey": "2026-W39",
+      "page": "2",
+      "pageSize": "100"
+    },
+    "branches": [
+      {
+        "action": "submit",
+        "scope": {
+          "version": 1,
+          "project_codes": [
+            "P<&>中"
+          ],
+          "department_codes": [],
+          "department_tree_roots": [],
+          "masks": [
+            0,
+            65535
+          ]
+        },
+        "bundleVersion": "v1",
+        "bundleHash": "hash 中",
+        "policyRevision": 3,
+        "expiresAt": 1800000010000
+      }
+    ]
+  },
+  "canonical": "[\"hzy-enterprise-timesheet-review-permit.v1\",\"POST\",\"/v1/enterprise/aims/time-entry-reviews:list\",\"person-a\",\"tenant-a\",\"enterprise-test\",\"time-entry-reviews\",\"view\",\"list\",\"12\",1800000010000,\"2026-W39\",\"2\",\"100\",[[\"submit\",\"v1\",\"hash\\u2028中\",3,1800000010000,1,[\"P<&>中\"],[],[],[0,65535]]]]",
+  "signature": "DZnY3iLCpdzyTzRzY9NDjSHJchTl48U2T_G_re6jTyI"
+}

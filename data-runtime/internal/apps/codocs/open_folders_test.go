@@ -444,7 +444,7 @@ func TestCreatePrivateFolderStillRejectsParentOwnedByAnotherUser(t *testing.T) {
 	}
 }
 
-func TestGenericFolderDetailAndRemainingMutationsFailClosedBeforeStorage(t *testing.T) {
+func TestScopedFolderDetailAndMutationsRejectMissingActorBeforeStorage(t *testing.T) {
 	adapter := &Adapter{}
 	for _, check := range []struct {
 		name   string
@@ -460,12 +460,12 @@ func TestGenericFolderDetailAndRemainingMutationsFailClosedBeforeStorage(t *test
 			if err == nil {
 				t.Fatal("generic folder route must fail closed")
 			}
-			if operation != "codocs.folders.contract_required" {
-				t.Fatalf("operation = %q, want contract-required audit operation", operation)
+			if operation != "codocs.folders.scoped" {
+				t.Fatalf("operation = %q, want scoped folder audit operation", operation)
 			}
 			httpErr, ok := err.(httperror.Error)
-			if !ok || httpErr.Status != http.StatusServiceUnavailable || httpErr.Code != "folder_scope_contract_required" {
-				t.Fatalf("error = %#v, want 503 folder_scope_contract_required", err)
+			if !ok || httpErr.Status != http.StatusUnauthorized || httpErr.Code != "current_user_required" {
+				t.Fatalf("error = %#v, want 401 current_user_required", err)
 			}
 		})
 	}

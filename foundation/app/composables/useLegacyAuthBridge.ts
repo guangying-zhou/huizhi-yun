@@ -1,25 +1,23 @@
 import type { RouteLocationNormalized } from 'vue-router'
+import { isLoggedOutLoginRoute, isLoginRoutePath } from '../utils/loginRoute'
 
 type AuthQueryOptions = {
   appName?: string
   redirectUrl: string
 }
 
-function isLoggedOutRoute(to: RouteLocationNormalized) {
-  return to.path === '/login' && (to.query.logged_out === '1' || to.query.state === 'logged_out')
-}
-
 export function useLegacyAuthBridge() {
   const userProjectsCachePrefix = 'account:user-projects:'
   const config = useRuntimeConfig()
-  const { casEnable, casBaseUrl, appName, accountUrl } = (config.public || {}) as {
+  const pub = (config.public || {}) as Record<string, unknown>
+  const { casEnable, casBaseUrl, appName, accountUrl } = pub as {
     casEnable?: boolean
     casBaseUrl?: string
     appName?: string
     appCode?: string
     accountUrl?: string
   }
-  const appCode = String((config.public || {}).appCode || appName || '').trim()
+  const appCode = String(pub.appCode || appName || '').trim()
 
   const authState = useAuthState()
 
@@ -94,7 +92,7 @@ export function useLegacyAuthBridge() {
       return
     }
 
-    if (isLoggedOutRoute(to)) {
+    if (isLoggedOutLoginRoute(pub, to)) {
       clearLegacyAuthCookies()
       return
     }
@@ -104,7 +102,7 @@ export function useLegacyAuthBridge() {
     }
 
     const isAccountApp = String(appName || '').trim() === 'account'
-    if (isAccountApp && to.path === '/login') {
+    if (isAccountApp && isLoginRoutePath(pub, to.path)) {
       return
     }
 

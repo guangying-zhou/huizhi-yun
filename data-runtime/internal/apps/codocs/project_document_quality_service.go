@@ -191,6 +191,11 @@ func (a *Adapter) reviewProjectDocumentVersionContent(
 	if submissionNo == "" || (roleCode != "qa" && roleCode != "project_director") {
 		return nil, httperror.New(http.StatusForbidden, "document_review_grant_binding_invalid", "document review grant binding is invalid")
 	}
+	// The grant hands out (oss_path, oss_version_id). A v2 document's versions
+	// address snapshot objects and its oss_path is only a derived mirror.
+	if err := refuseSnapshotV2Document(ctx, a.db, uuid); err != nil {
+		return nil, err
+	}
 	var title, docType, contentSHA256 string
 	var ossPath, ossVersionID sql.NullString
 	var versionNum int

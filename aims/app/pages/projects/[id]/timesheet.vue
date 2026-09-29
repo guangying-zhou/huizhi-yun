@@ -1,4 +1,18 @@
 <script setup lang="ts">
+import CommonEmptyState from '../../../../../foundation/app/components/common/EmptyState.vue'
+import { useAimsModule } from '../../../../layer/useAimsModule'
+import { useTimeEntryPage, useTimeEntryReadPage } from '../../../composables/useTimeEntryPage'
+import { projectTimeWeekWindow, isTimeEntryReviewPage, type TimeEntryReviewPage } from '../../../utils/timeEntryPagination'
+import { useProjectStore } from '../../../stores/project'
+import { createCommandIntents } from '../../../utils/commandIntent'
+import { isTimeEntryReviewVersionConflict, timeEntryReviewErrorMessage } from '../../../utils/timeEntryReviewError'
+import { reviewStatusLabel as entryStatusLabel, reviewStatusColor as entryStatusColor, defaultTimesheetRange, type TimeEntryReviewStatus } from '../../../utils/timeEntryPresentation'
+import ProjectNavbar from '../../../components/project/ProjectNavbar.vue'
+
+// 同一份代码供独立应用与企业宿主使用：非宿主模式下 moduleUrl 原样返回路径。
+const { moduleUrl, hosted } = useAimsModule()
+const workTimeIntents = createCommandIntents()
+const reviewIntents = createCommandIntents()
 definePageMeta({
   layoutHeader: true,
   layoutHeaderTitle: '工时统计',
@@ -41,36 +55,25 @@ const canReviewTimesheet = computed(() =>
   permissionsLoaded.value
   && (hasPermission('timesheet', 'approve') || hasPermission('timesheet', 'submit'))
 )
+const canDecideTimesheet = computed(() => permissionsLoaded.value && hasPermission('timesheet', 'approve'))
 
 // 视图切换
 const activeView = ref<'project' | 'mine'>('project')
 
 // 日期范围
 const today = new Date()
-const startDate = ref(formatDate(today))
-const endDate = ref(formatDate(today))
-
-function getMonday(d: Date) {
-  const date = new Date(d)
-  const day = date.getDay()
-  const diff = date.getDate() - day + (day === 0 ? -6 : 1)
-  date.setDate(diff)
-  return formatDate(date)
-}
+const startDate = ref(projectTimeWeekWindow(today).todayDate)
+const endDate = ref(projectTimeWeekWindow(today).todayDate)
 
 function formatDate(d: Date) {
   return d.toISOString().slice(0, 10)
 }
 
-function normalizeDateOnly(value: string | null | undefined) {
-  if (!value) return ''
-  return value.slice(0, 10)
-}
-
+// 默认展示本周（与页头“本周工时”口径一致）；需要更长区间时可手动调整日期。
 function initializeDateRangeFromProject() {
-  const projectStart = normalizeDateOnly(projectStore.currentProject?.startDate)
-  startDate.value = projectStart || formatDate(today)
-  endDate.value = formatDate(today)
+  const range = defaultTimesheetRange(new Date(), reportingTimezone.value)
+  startDate.value = range.startDate
+  endDate.value = range.endDate
 }
 
 // 数据
@@ -87,6 +90,7 @@ interface TimeEntry {
   updatedAt?: string
   projectId?: number
   projectName?: string
+  reviewStatus: TimeEntryReviewStatus
 }
 
 interface ReviewTimeEntry {
@@ -124,18 +128,28 @@ interface RawTimeEntry {
   project_id?: number
   projectName?: string
   project_name?: string
+  reviewStatus?: string
+  review_status?: string
 }
 
 type ListPayload<T> = T[] | {
   items?: T[]
 }
 
-const entries = ref<TimeEntry[]>([])
-const loading = ref(false)
+const entryRead = useTimeEntryPage<RawTimeEntry>()
+const reportingTimezone = ref('Asia/Shanghai')
+const entries = computed(() => normalizeTimeEntries(entryRead.data.value?.items))
+const loading = entryRead.loading
+const entryTotal = computed(() => entryRead.data.value?.total || 0)
+const { page: entryPage, pageSize: entryPageSize } = useListPage({ pageSize: 20, syncUrl: false })
 const initialized = ref(false)
-const reviewAnchorDate = ref(formatDate(today))
-const reviewEntries = ref<ReviewTimeEntry[]>([])
-const reviewLoading = ref(false)
+const reviewAnchorDate = ref(projectTimeWeekWindow(today).todayDate)
+const reviewRead = useTimeEntryReadPage<TimeEntryReviewPage<ReviewTimeEntry>>((value, page, size): value is TimeEntryReviewPage<ReviewTimeEntry> => isTimeEntryReviewPage<ReviewTimeEntry>(value, page, size) && value.periodKey === reviewPeriodKey.value)
+const reviewEntries = computed(() => reviewRead.data.value?.items || [])
+const reviewLoading = reviewRead.loading
+const reviewTotal = computed(() => reviewRead.data.value?.total || 0)
+const reviewPendingTotal = computed(() => reviewRead.data.value?.statusCounts.submitted || 0)
+const { page: reviewPage, pageSize: reviewPageSize } = useListPage({ pageSize: 20, syncUrl: false })
 const reviewSubmitting = ref(false)
 const selectedReviewEntryIds = ref<number[]>([])
 const reviewModalOpen = ref(false)
@@ -152,6 +166,10 @@ function normalizeListPayload<T>(data: ListPayload<T> | null | undefined) {
   return []
 }
 
+function normalizeEntryStatus(value: string | undefined): TimeEntryReviewStatus {
+  return value === 'submitted' || value === 'approved' || value === 'returned' ? value : 'draft'
+}
+
 function normalizeTimeEntries(rawEntries: ListPayload<RawTimeEntry> | null | undefined): TimeEntry[] {
   return normalizeListPayload(rawEntries).map(entry => ({
     id: Number(entry.id),
@@ -165,7 +183,8 @@ function normalizeTimeEntries(rawEntries: ListPayload<RawTimeEntry> | null | und
     createdAt: entry.createdAt || entry.created_at,
     updatedAt: entry.updatedAt || entry.updated_at,
     projectId: entry.projectId ?? entry.project_id,
-    projectName: entry.projectName ?? entry.project_name
+    projectName: entry.projectName ?? entry.project_name,
+    reviewStatus: normalizeEntryStatus(entry.reviewStatus ?? entry.review_status)
   }))
 }
 
@@ -208,29 +227,15 @@ function reviewStatusColor(status: ReviewTimeEntry['reviewStatus']): 'warning' |
 }
 
 async function loadReviewQueue() {
+  selectedReviewEntryIds.value = []
   if (!canReviewTimesheet.value || !projectId.value) {
-    reviewEntries.value = []
-    selectedReviewEntryIds.value = []
+    reviewRead.clear()
     return
   }
-  reviewLoading.value = true
-  try {
-    const response = await $fetch<{ code: number, data: { items?: ReviewTimeEntry[] } }>(
-      `/api/v1/projects/${projectId.value}/time-entry-reviews?periodKey=${encodeURIComponent(reviewPeriodKey.value)}`
-    )
-    reviewEntries.value = response.data.items || []
-    selectedReviewEntryIds.value = selectedReviewEntryIds.value.filter(id =>
-      reviewEntries.value.some(entry => entry.id === id && entry.reviewStatus === 'submitted')
-    )
-  } catch (err: unknown) {
-    console.error('加载待审核工时失败', err)
-    reviewEntries.value = []
-    selectedReviewEntryIds.value = []
-    const message = (err as { data?: { message?: string } })?.data?.message || '待审核工时加载失败'
-    toast.add({ title: message, color: 'error' })
-  } finally {
-    reviewLoading.value = false
-  }
+  const data = await reviewRead.read(moduleUrl(`/api/v1/projects/${projectId.value}/time-entry-reviews`), {
+    periodKey: reviewPeriodKey.value, page: reviewPage.value, pageSize: reviewPageSize
+  })
+  if (data && !data.items.length && reviewPage.value > 1) reviewPage.value = Math.max(1, Math.ceil(data.total / reviewPageSize))
 }
 
 function toggleReviewEntry(id: number, selected: boolean | 'indeterminate') {
@@ -248,6 +253,7 @@ function toggleAllPendingReviews() {
 }
 
 function openReviewConfirmation(action: 'approve' | 'return') {
+  if (!canDecideTimesheet.value) return
   if (selectedReviewCount.value === 0) return
   reviewAction.value = action
   reviewReason.value = ''
@@ -255,6 +261,7 @@ function openReviewConfirmation(action: 'approve' | 'return') {
 }
 
 async function submitReviewDecision() {
+  if (!canDecideTimesheet.value) return
   if (selectedReviewCount.value === 0) return
   if (reviewAction.value === 'return' && !reviewReason.value.trim()) {
     toast.add({ title: '退回时必须填写原因', color: 'warning' })
@@ -262,15 +269,19 @@ async function submitReviewDecision() {
   }
   reviewSubmitting.value = true
   try {
-    const url = `/api/v1/projects/${projectId.value}/time-entry-reviews` as string
+    const url = moduleUrl(`/api/v1/projects/${projectId.value}/time-entry-reviews`) as string
+    const selected = reviewEntries.value.filter(entry => selectedReviewEntryIds.value.includes(entry.id) && entry.reviewStatus === 'submitted').sort((a, b) => a.id - b.id)
+    if (selected.length !== selectedReviewEntryIds.value.length) throw new Error('审核记录已变化，请重新加载')
+    const body = hosted
+      ? { action: reviewAction.value, entries: selected.map(entry => ({ id: entry.id, rowVersion: entry.rowVersion })), reason: reviewAction.value === 'return' ? reviewReason.value.trim() : '' }
+      : { action: reviewAction.value, entryIds: selectedReviewEntryIds.value, reason: reviewReason.value.trim() || undefined }
+    const intent = `review:${projectId.value}:${reviewAction.value}`
     await $fetch(url, {
       method: 'POST',
-      body: {
-        action: reviewAction.value,
-        entryIds: selectedReviewEntryIds.value,
-        reason: reviewReason.value.trim() || undefined
-      }
+      body,
+      ...(hosted ? { headers: reviewIntents.headers(intent, body), retry: 0 } : {})
     })
+    if (hosted) reviewIntents.complete(intent)
     toast.add({
       title: reviewAction.value === 'approve'
         ? `已确认 ${selectedReviewCount.value} 条工时`
@@ -282,66 +293,52 @@ async function submitReviewDecision() {
     await Promise.all([loadReviewQueue(), loadEntries()])
   } catch (err: unknown) {
     console.error('审核工时失败', err)
-    const message = (err as { data?: { message?: string } })?.data?.message || '工时审核失败'
+    const message = timeEntryReviewErrorMessage(err) || (err as { data?: { message?: string } })?.data?.message || '工时审核失败'
     toast.add({ title: message, color: 'error' })
+    if (isTimeEntryReviewVersionConflict(err)) {
+      reviewModalOpen.value = false
+      selectedReviewEntryIds.value = []
+      await Promise.allSettled([loadReviewQueue(), loadEntries()])
+    }
   } finally {
     reviewSubmitting.value = false
   }
 }
 
 async function loadEntries() {
-  loading.value = true
-  try {
-    if (activeView.value === 'project') {
-      const params = new URLSearchParams()
-      if (startDate.value) params.set('startDate', startDate.value)
-      if (endDate.value) params.set('endDate', endDate.value)
-      const { data } = await $fetch<{ code: number, data: ListPayload<RawTimeEntry> }>(
-        `/api/v1/projects/${projectId.value}/time-entries?${params.toString()}`
-      )
-      entries.value = normalizeTimeEntries(data)
-    } else {
-      const params = new URLSearchParams()
-      if (startDate.value) params.set('startDate', startDate.value)
-      if (endDate.value) params.set('endDate', endDate.value)
-      const { data } = await $fetch<{ code: number, data: ListPayload<RawTimeEntry> }>(
-        `/api/v1/users/${currentUid.value}/time-entries?${params.toString()}`
-      )
-      // 筛选当前项目
-      entries.value = normalizeTimeEntries(data).filter(e => e.projectId === projectId.value)
+  if (!currentUid.value || !projectId.value) {
+    entryRead.clear()
+    return
+  }
+  const path = activeView.value === 'project' ? moduleUrl(`/api/v1/projects/${projectId.value}/time-entries`) : moduleUrl(`/api/v1/users/${encodeURIComponent(currentUid.value)}/time-entries`)
+  const data = await entryRead.read(path, {
+    startDate: startDate.value || undefined, endDate: endDate.value || undefined,
+    projectId: activeView.value === 'mine' ? String(projectId.value) : undefined,
+    page: entryPage.value, pageSize: entryPageSize, ...projectTimeWeekWindow(new Date(), reportingTimezone.value)
+  })
+  if (data?.calendarTimezone && data.calendarTimezone !== reportingTimezone.value) {
+    const previousToday = projectTimeWeekWindow(new Date(), reportingTimezone.value).todayDate
+    const previousRange = defaultTimesheetRange(new Date(), reportingTimezone.value)
+    reportingTimezone.value = data.calendarTimezone
+    const currentRange = defaultTimesheetRange(new Date(), reportingTimezone.value)
+    if (startDate.value === previousRange.startDate && endDate.value === previousRange.endDate) {
+      startDate.value = currentRange.startDate
+      endDate.value = currentRange.endDate
     }
-  } catch (err) {
-    console.error('加载工时记录失败', err)
-    entries.value = []
-  } finally {
-    loading.value = false
+    const currentToday = projectTimeWeekWindow(new Date(), reportingTimezone.value).todayDate
+    if (reviewAnchorDate.value === previousToday) reviewAnchorDate.value = currentToday
+    await loadEntries()
+    return
+  }
+  if (data && !data.items.length && entryPage.value > 1) {
+    entryPage.value = Math.max(1, Math.ceil(data.total / entryPageSize))
   }
 }
 
-// 统计
-const totalHours = computed(() => {
-  return entries.value.reduce((sum, e) => sum + Number(e.hours), 0)
-})
-
-const todayHours = computed(() => {
-  const todayStr = formatDate(new Date())
-  return entries.value
-    .filter(e => e.entryDate?.slice(0, 10) === todayStr)
-    .reduce((sum, e) => sum + Number(e.hours), 0)
-})
-
-const weekHours = computed(() => {
-  const monday = getMonday(new Date())
-  const sundayDate = new Date()
-  sundayDate.setDate(sundayDate.getDate() + (7 - sundayDate.getDay()))
-  const sunday = formatDate(sundayDate)
-  return entries.value
-    .filter((e) => {
-      const d = e.entryDate?.slice(0, 10)
-      return d && d >= monday && d <= sunday
-    })
-    .reduce((sum, e) => sum + Number(e.hours), 0)
-})
+// Complete authorized/windowed aggregates, independent of the visible page.
+const totalHours = computed(() => entryRead.data.value?.summary.totalHours || 0)
+const todayHours = computed(() => entryRead.data.value?.summary.todayHours || 0)
+const weekHours = computed(() => entryRead.data.value?.summary.weekHours || 0)
 
 // 项目工时表格列
 const projectColumns = [
@@ -350,6 +347,7 @@ const projectColumns = [
   { accessorKey: 'itemTitle', header: '标题' },
   { accessorKey: 'uid', header: '记录人' },
   { accessorKey: 'hours', header: '工时(h)' },
+  { accessorKey: 'reviewStatus', header: '状态' },
   { accessorKey: 'description', header: '描述' }
 ]
 
@@ -359,6 +357,7 @@ const myColumns = [
   { accessorKey: 'itemKey', header: '工作项' },
   { accessorKey: 'itemTitle', header: '标题' },
   { accessorKey: 'hours', header: '工时(h)' },
+  { accessorKey: 'reviewStatus', header: '状态' },
   { accessorKey: 'description', header: '描述' }
 ]
 
@@ -368,6 +367,9 @@ const currentColumns = computed(() => {
 
 // 记录工时弹窗
 const showLogModal = ref(false)
+watch(showLogModal, (open) => {
+  if (!open) workTimeIntents.clear()
+})
 const submitting = ref(false)
 const logForm = ref({
   itemKey: '',
@@ -383,10 +385,10 @@ async function handleLogTime() {
     const keyword = logForm.value.itemKey.trim()
     const [targetRes, matterRes] = await Promise.all([
       $fetch<{ code: number, data: { items: Array<{ id: number, itemKey: string }> } }>(
-        `/api/v1/projects/${projectId.value}/work-items?search=${encodeURIComponent(keyword)}&pageSize=100&tier=target`
+        moduleUrl(`/api/v1/projects/${projectId.value}/work-items?search=${encodeURIComponent(keyword)}&pageSize=100&tier=target`)
       ),
       $fetch<{ code: number, data: { items: Array<{ id: number, itemKey: string }> } }>(
-        `/api/v1/projects/${projectId.value}/work-items?search=${encodeURIComponent(keyword)}&pageSize=100&tier=matter`
+        moduleUrl(`/api/v1/projects/${projectId.value}/work-items?search=${encodeURIComponent(keyword)}&pageSize=100&tier=matter`)
       )
     ])
     const candidates = [
@@ -395,18 +397,17 @@ async function handleLogTime() {
     ]
     const matchItem = candidates.find(i => i.itemKey === keyword)
     if (!matchItem) {
-      alert('未找到匹配的工作项，请检查编号')
+      toast.add({ title: '未找到工作项', description: '请检查工作项编号是否属于当前项目。', color: 'warning' })
       return
     }
 
-    await $fetch(`/api/v1/work-items/${matchItem.id}/time-entries`, {
+    const body = { entryDate: logForm.value.entryDate, hours: Number(logForm.value.hours), description: logForm.value.description || undefined }
+    const intent = `create:${matchItem.id}`
+    await $fetch(moduleUrl(`/api/v1/work-items/${matchItem.id}/time-entries`), {
       method: 'POST',
-      body: {
-        entryDate: logForm.value.entryDate,
-        hours: Number(logForm.value.hours),
-        description: logForm.value.description || undefined
-      }
+      body, headers: workTimeIntents.headers(intent, body), retry: 0
     })
+    workTimeIntents.complete(intent)
 
     showLogModal.value = false
     logForm.value = {
@@ -418,7 +419,7 @@ async function handleLogTime() {
     await loadEntries()
   } catch (err) {
     console.error('记录工时失败', err)
-    alert('记录工时失败')
+    toast.add({ title: '记录工时失败', description: '工时未确认保存，请检查网络后重试。', color: 'error' })
   } finally {
     submitting.value = false
   }
@@ -435,15 +436,38 @@ onMounted(async () => {
   initialized.value = true
 })
 
-watch([activeView, startDate, endDate], () => {
+watch([activeView, startDate, endDate, projectId], () => {
+  entryRead.clear()
+  entryPage.value = 1
   if (!initialized.value) return
   void loadEntries()
+}, { flush: 'sync' })
+watch(entryPage, () => {
+  if (initialized.value) void loadEntries()
+}, {
+  flush: 'sync'
+})
+watch(entryRead.fingerprint, () => {
+  if (initialized.value && entryRead.fingerprint.value) void loadEntries()
+}, {
+  flush: 'sync'
 })
 
-watch(reviewAnchorDate, () => {
+watch([reviewAnchorDate, projectId, canReviewTimesheet], () => {
+  reviewRead.clear()
+  selectedReviewEntryIds.value = []
+  reviewPage.value = 1
   if (!initialized.value) return
   void loadReviewQueue()
+}, { flush: 'sync' })
+watch(reviewPage, () => {
+  if (initialized.value) void loadReviewQueue()
 })
+watch(reviewRead.fingerprint, () => {
+  selectedReviewEntryIds.value = []
+  reviewModalOpen.value = false
+  if (initialized.value && reviewRead.fingerprint.value) void loadReviewQueue()
+}, { flush: 'sync' })
 </script>
 
 <template>
@@ -469,7 +493,7 @@ watch(reviewAnchorDate, () => {
                 总工时
               </div>
               <div class="text-2xl font-bold mt-1">
-                {{ totalHours.toFixed(1) }}h
+                {{ entryRead.data.value ? `${totalHours.toFixed(1)}h` : '—' }}
               </div>
             </div>
             <div class="bg-elevated rounded-lg p-4">
@@ -477,7 +501,7 @@ watch(reviewAnchorDate, () => {
                 本周工时
               </div>
               <div class="text-2xl font-bold mt-1">
-                {{ weekHours.toFixed(1) }}h
+                {{ entryRead.data.value ? `${weekHours.toFixed(1)}h` : '—' }}
               </div>
             </div>
             <div class="bg-elevated rounded-lg p-4">
@@ -485,7 +509,7 @@ watch(reviewAnchorDate, () => {
                 今日工时
               </div>
               <div class="text-2xl font-bold mt-1">
-                {{ todayHours.toFixed(1) }}h
+                {{ entryRead.data.value ? `${todayHours.toFixed(1)}h` : '—' }}
               </div>
             </div>
           </div>
@@ -498,7 +522,7 @@ watch(reviewAnchorDate, () => {
                     待我审核的成员工时
                   </h2>
                   <UBadge color="warning" variant="subtle">
-                    {{ pendingReviewEntries.length }} 条待审核
+                    {{ reviewPendingTotal }} 条待审核
                   </UBadge>
                 </div>
                 <p class="mt-1 text-xs text-muted">
@@ -516,6 +540,7 @@ watch(reviewAnchorDate, () => {
                   {{ reviewPeriodKey }} · {{ reviewWeekRange.start }} 至 {{ reviewWeekRange.end }}
                 </UBadge>
                 <UButton
+                  v-if="canDecideTimesheet"
                   label="全选待审核"
                   color="neutral"
                   variant="soft"
@@ -526,10 +551,26 @@ watch(reviewAnchorDate, () => {
               </div>
             </div>
 
+            <UAlert
+              v-if="reviewRead.error.value"
+              color="error"
+              title="审核队列加载失败"
+              description="当前统计不可用，请重新加载。"
+            />
+            <UButton v-if="reviewRead.error.value" label="重新加载" @click="loadReviewQueue()" />
+            <div class="flex flex-wrap items-center justify-between gap-3 px-4 py-2">
+              <span class="text-sm text-muted">共 {{ reviewTotal }} 条</span>
+              <UPagination
+                v-model:page="reviewPage"
+                :total="reviewTotal"
+                :items-per-page="reviewPageSize"
+                :disabled="reviewLoading"
+              />
+            </div>
             <div v-if="reviewLoading" class="flex justify-center py-8">
               <UIcon name="i-lucide-loader-2" class="size-6 animate-spin text-muted" />
             </div>
-            <div v-else-if="reviewEntries.length === 0" class="px-4 py-8 text-center text-sm text-muted">
+            <div v-else-if="!reviewRead.error.value && reviewEntries.length === 0" class="px-4 py-8 text-center text-sm text-muted">
               本周没有分派给你的成员工时
             </div>
             <div v-else class="divide-y divide-default">
@@ -540,7 +581,7 @@ watch(reviewAnchorDate, () => {
               >
                 <UCheckbox
                   :model-value="selectedReviewEntryIds.includes(entry.id)"
-                  :disabled="entry.reviewStatus !== 'submitted'"
+                  :disabled="!canDecideTimesheet || entry.reviewStatus !== 'submitted'"
                   :aria-label="`选择 ${getUserName(entry.uid)} ${entry.entryDate} 的工时`"
                   @update:model-value="toggleReviewEntry(entry.id, $event)"
                 />
@@ -579,7 +620,7 @@ watch(reviewAnchorDate, () => {
               <p class="text-sm text-muted">
                 已选择 {{ selectedReviewCount }} 条
               </p>
-              <div class="flex gap-2">
+              <div v-if="canDecideTimesheet" class="flex gap-2">
                 <UButton
                   label="退回修改"
                   icon="i-lucide-undo-2"
@@ -622,23 +663,34 @@ watch(reviewAnchorDate, () => {
             <UInput v-model="endDate" type="date" class="w-40" />
           </div>
 
-          <!-- 加载中 -->
-          <div v-if="loading" class="flex justify-center py-12">
-            <UIcon name="i-lucide-loader-2" class="w-8 h-8 animate-spin text-muted" />
+          <UAlert
+            v-if="entryRead.error.value"
+            color="error"
+            title="工时记录加载失败"
+            description="统计和明细暂不可用，请重试。"
+          />
+          <UButton
+            v-if="entryRead.error.value"
+            label="重新加载"
+            color="neutral"
+            variant="outline"
+            @click="loadEntries()"
+          />
+          <div class="flex flex-wrap items-center justify-between gap-3">
+            <span class="text-sm text-muted">共 {{ entryTotal }} 条</span>
+            <UPagination
+              v-model:page="entryPage"
+              :total="entryTotal"
+              :items-per-page="entryPageSize"
+              :disabled="loading"
+            />
           </div>
-
-          <!-- 空状态 -->
-          <div v-else-if="entries.length === 0" class="text-center py-12 text-muted">
-            <UIcon name="i-lucide-clock" class="w-12 h-12 mx-auto mb-3" />
-            <p>暂无工时记录</p>
-          </div>
-
           <!-- 工时表格 -->
           <UTable
-            v-else
             :data="entries"
             :columns="currentColumns"
             class="w-full"
+            :loading="loading"
           >
             <template #entryDate-cell="{ row }">
               {{ row.original.entryDate?.slice(0, 10) || '-' }}
@@ -655,8 +707,16 @@ watch(reviewAnchorDate, () => {
             <template #hours-cell="{ row }">
               <span class="font-medium">{{ Number(row.original.hours).toFixed(1) }}</span>
             </template>
+            <template #reviewStatus-cell="{ row }">
+              <UBadge :color="entryStatusColor(row.original.reviewStatus)" variant="soft" size="sm">
+                {{ entryStatusLabel(row.original.reviewStatus) }}
+              </UBadge>
+            </template>
             <template #description-cell="{ row }">
               <span class="text-sm text-muted truncate max-w-xs inline-block">{{ row.original.description || '-' }}</span>
+            </template>
+            <template #empty>
+              <CommonEmptyState icon="i-lucide-clock" title="暂无工时记录" description="当前期间没有可显示的工时记录。" />
             </template>
           </UTable>
 
@@ -709,6 +769,7 @@ watch(reviewAnchorDate, () => {
           </UModal>
 
           <UModal
+            v-if="canDecideTimesheet"
             v-model:open="reviewModalOpen"
             :title="reviewAction === 'approve' ? '确认成员工时' : '退回成员工时'"
           >
