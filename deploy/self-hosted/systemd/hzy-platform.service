@@ -1,0 +1,38 @@
+# ARCHIVED (2026-09-29, Platform plan §8c): production control plane is the shared https://hzy.wiztek.cn Platform; this host no longer runs Platform. Kept for reference only — do not install.
+[Unit]
+Description=HZY self-hosted platform node-server
+After=network-online.target mysqld.service
+Wants=network-online.target mysqld.service
+StartLimitIntervalSec=120
+StartLimitBurst=6
+
+[Service]
+Type=simple
+User=hzy-platform
+Group=hzy-platform
+WorkingDirectory=/home/hzy/apps/platform/current
+EnvironmentFile=/etc/hzy/platform.env
+ExecStartPre=/usr/local/bin/node /home/hzy/tools/verify.mjs --dir /home/hzy/apps/platform/current --app platform
+ExecStart=/usr/local/bin/node /home/hzy/apps/platform/current/.output/server/index.mjs
+ExecStartPost=/usr/local/bin/node /home/hzy/tools/health.mjs --app platform
+Restart=on-failure
+RestartSec=5
+TimeoutStartSec=45
+TimeoutStopSec=30
+KillSignal=SIGTERM
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=hzy-platform
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+UMask=0077
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target

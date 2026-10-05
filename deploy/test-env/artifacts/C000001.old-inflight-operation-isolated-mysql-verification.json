@@ -1,0 +1,21 @@
+{
+  "schemaVersion": "isolated-mysql-verification.v1",
+  "verifiedAt": "2026-09-15T03:18:28Z",
+  "baseCommit": "69cd749bd5f63d80c25d9edad4c216c3fec2290e",
+  "command": "node data-runtime/scripts/test-enterprise-external-ack-recovery-mysql.mjs",
+  "exitCode": 0,
+  "goPackageSeconds": 1.857,
+  "recoveryImplementationSha256": "098a5f35fcea9bf0535c9e75b3db133befd010e78d8f7eb9d21cbd09489743b9",
+  "recoveryTestsSha256": "8eed047d347c4b5fb38557bde43d387a504ffb43c4e4333380a959245fd99175",
+  "claimMySQLTestSha256": "b67f554470342218d0113328caddc3870036de04c68670b984a2c49034f21242",
+  "completionMySQLTestSha256": "7f21e03cd70fb3ca26db4435842ec19bd291094cb30e2488f5c35d0ef4509187",
+  "runnerSha256": "7be2425ee979733bc7488e89a895ca3de8f9656fb063b8ec240742a53c87ccbf",
+  "scope": "Fresh random /tmp MySQL 8.0.34 instance; pre-cutover pending and old-worker processing leases, active-lease exclusion, expired-lease recovery with increased fence/version and partial_unknown attempt classification, stable target receipt replay without duplicate side effect, final source success ACK",
+  "unrecognizedLegacyIdentity": "fail_closed_with_manual_recovery_record",
+  "providerMutationCount": 1,
+  "temporaryInstanceStopped": true,
+  "temporaryDirectoryRemoved": true,
+  "businessDatabaseAccessed": false,
+  "realExternalProviderCalled": false,
+  "productionCutoverPerformed": false
+}

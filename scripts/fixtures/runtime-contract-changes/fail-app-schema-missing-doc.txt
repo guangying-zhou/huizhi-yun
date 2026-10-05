@@ -1,0 +1,4 @@
+# Tests and API docs cannot replace the affected app schema document.
+data-runtime/internal/apps/aims/project_weekly_report_schema.go
+data-runtime/internal/apps/aims/project_weekly_report_summary_test.go
+data-runtime/README.md

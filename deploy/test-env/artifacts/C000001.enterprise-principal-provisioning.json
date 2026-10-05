@@ -1,0 +1,43 @@
+{
+  "schemaVersion": "enterprise-principal-verification.v2",
+  "observedAt": "2026-09-14T15:38:47.846Z",
+  "mode": "read-only-admin-metadata",
+  "tenant": "C000001",
+  "principal": {
+    "user": "hzy_enterprise_test_runtime",
+    "host": "localhost",
+    "accountExists": true,
+    "accountLocked": "N"
+  },
+  "targetSchema": "hzy_enterprise_shadow_review_20260913",
+  "compatibilityViewsSource": "cutover-20260914-test/compatibility-views.json",
+  "protectedCompatibilityViewCount": 55,
+  "observedSchemaPrivileges": [
+    {
+      "schemaName": "hzy_enterprise_shadow_review_20260913",
+      "privilege": "DELETE",
+      "grantable": "NO"
+    },
+    {
+      "schemaName": "hzy_enterprise_shadow_review_20260913",
+      "privilege": "INSERT",
+      "grantable": "NO"
+    },
+    {
+      "schemaName": "hzy_enterprise_shadow_review_20260913",
+      "privilege": "SELECT",
+      "grantable": "NO"
+    },
+    {
+      "schemaName": "hzy_enterprise_shadow_review_20260913",
+      "privilege": "UPDATE",
+      "grantable": "NO"
+    }
+  ],
+  "observedTargetTablePrivilegeCount": 55,
+  "observedShowViewCount": 55,
+  "missingCompatibilityViewCount": 0,
+  "unexpectedSchemaPrivilegeCount": 0,
+  "unexpectedTablePrivilegeCount": 0,
+  "verificationStatus": "verified"
+}

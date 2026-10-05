@@ -1,0 +1,12 @@
+[Unit]
+Description=Schedule CodeInsight Stage A metadata sync
+
+[Timer]
+OnBootSec=1m
+OnUnitActiveSec=10m
+AccuracySec=1m
+Persistent=true
+Unit=codeinsight-sync-commits.service
+
+[Install]
+WantedBy=timers.target

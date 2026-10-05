@@ -1,0 +1,238 @@
+{
+  "server/routes/aims/api/v1/product-permissions.get.ts": [
+    "productGlobalAuthorization"
+  ],
+  "server/routes/aims/api/v1/products/[productCode]/adoption.get.ts": [
+    "productAuthorization",
+    "productWorkspaceInput"
+  ],
+  "server/routes/aims/api/v1/products/[productCode]/components/permissions.get.ts": [],
+  "server/routes/aims/api/v1/products/[productCode]/features/[featureId].delete.ts": [
+    "productFeatureDeleteRuntime"
+  ],
+  "server/routes/aims/api/v1/products/[productCode]/features/[featureId].get.ts": [
+    "productFeatureReadRuntime"
+  ],
+  "server/routes/aims/api/v1/products/[productCode]/features/[featureId].patch.ts": [
+    "productFeatureEditRuntime"
+  ],
+  "server/routes/aims/api/v1/products/[productCode]/features/[featureId]/component.post.ts": [
+    "productFeatureComponentRuntime"
+  ],
+  "server/routes/aims/api/v1/products/[productCode]/features/[featureId]/lifecycle.post.ts": [
+    "productFeatureLifecycleRuntime"
+  ],
+  "server/routes/aims/api/v1/products/[productCode]/features/[featureId]/requests.get.ts": [
+    "productFeatureRequestRuntime"
+  ],
+  "server/routes/aims/api/v1/products/[productCode]/features/[featureId]/requests.post.ts": [
+    "productFeatureRequestRuntime"
+  ],
+  "server/routes/aims/api/v1/products/[productCode]/features/[featureId]/roadmap.get.ts": [
+    "productFeatureRoadmapRuntime"
+  ],
+  "server/routes/aims/api/v1/products/[productCode]/features/[featureId]/unscheduled.get.ts": [
+    "productFeatureUnscheduledRuntime"
+  ],
+  "server/routes/aims/api/v1/products/[productCode]/features/index.get.ts": [
+    "productFeatureReadRuntime"
+  ],
+  "server/routes/aims/api/v1/products/[productCode]/features/index.post.ts": [
+    "productFeatureCreateRuntime"
+  ],
+  "server/routes/aims/api/v1/products/[productCode]/features/permissions.get.ts": [],
+  "server/routes/aims/api/v1/products/[productCode]/permissions.get.ts": [],
+  "server/routes/aims/api/v1/products/[productCode]/planning-cycles.get.ts": [
+    "productFeatureCycleRuntime"
+  ],
+  "server/routes/aims/api/v1/products/[productCode]/planning-items/[itemId].get.ts": [
+    "productHandoffDetailRuntime"
+  ],
+  "server/routes/aims/api/v1/products/[productCode]/planning-items/[itemId]/handoffs.post.ts": [
+    "productHandoffRuntime"
+  ],
+  "server/routes/aims/api/v1/products/[productCode]/planning-items/permissions.get.ts": [],
+  "server/routes/aims/api/v1/products/[productCode]/requests.post.ts": [
+    "productRequestCreateRuntime"
+  ],
+  "server/routes/aims/api/v1/products/[productCode]/requests/[requestId].patch.ts": [
+    "productRequestActionRuntime"
+  ],
+  "server/routes/aims/api/v1/products/[productCode]/requests/[requestId]/decision.post.ts": [
+    "productRequestActionRuntime"
+  ],
+  "server/routes/aims/api/v1/products/[productCode]/requests/[requestId]/handoffs.post.ts": [
+    "productHandoffRuntime"
+  ],
+  "server/routes/aims/api/v1/products/[productCode]/requests/[requestId]/merge.post.ts": [
+    "productRequestActionRuntime"
+  ],
+  "server/routes/aims/api/v1/products/[productCode]/requests/[requestId]/sources/[sourceId].delete.ts": [
+    "productRequestActionRuntime"
+  ],
+  "server/routes/aims/api/v1/products/[productCode]/requests/[requestId]/sources/index.get.ts": [
+    "productRequestReadRuntime"
+  ],
+  "server/routes/aims/api/v1/products/[productCode]/requests/[requestId]/sources/index.post.ts": [
+    "productRequestActionRuntime"
+  ],
+  "server/routes/aims/api/v1/products/[productCode]/requests/permissions.get.ts": [],
+  "server/routes/aims/api/v1/products/[productCode]/roadmaps/execution-coordination.get.ts": [
+    "productExecutionCoordinationRuntime"
+  ],
+  "server/routes/aims/api/v1/products/[productCode]/versions/[versionId].delete.ts": [
+    "productVersionAcceptanceRuntime"
+  ],
+  "server/routes/aims/api/v1/products/[productCode]/versions/[versionId].get.ts": [
+    "productVersionRuntime"
+  ],
+  "server/routes/aims/api/v1/products/[productCode]/versions/[versionId].patch.ts": [
+    "productVersionRuntime"
+  ],
+  "server/routes/aims/api/v1/products/[productCode]/versions/[versionId]/acceptance-preview.get.ts": [
+    "productVersionAcceptanceRuntime"
+  ],
+  "server/routes/aims/api/v1/products/[productCode]/versions/[versionId]/acceptances.get.ts": [
+    "productVersionAcceptanceRuntime"
+  ],
+  "server/routes/aims/api/v1/products/[productCode]/versions/[versionId]/acceptances.post.ts": [
+    "productVersionAcceptanceRuntime"
+  ],
+  "server/routes/aims/api/v1/products/[productCode]/versions/[versionId]/acceptances/[acceptanceId].get.ts": [
+    "productVersionAcceptanceRuntime"
+  ],
+  "server/routes/aims/api/v1/products/[productCode]/versions/[versionId]/archive.post.ts": [
+    "productVersionAcceptanceRuntime"
+  ],
+  "server/routes/aims/api/v1/products/[productCode]/versions/[versionId]/features/[scopeId].patch.ts": [
+    "productVersionScopeRuntime"
+  ],
+  "server/routes/aims/api/v1/products/[productCode]/versions/[versionId]/features/[scopeId]/deliver.post.ts": [
+    "productVersionScopeRuntime"
+  ],
+  "server/routes/aims/api/v1/products/[productCode]/versions/[versionId]/features/[scopeId]/history.get.ts": [
+    "productVersionScopeRuntime"
+  ],
+  "server/routes/aims/api/v1/products/[productCode]/versions/[versionId]/features/[scopeId]/legacy-criteria.post.ts": [
+    "productVersionScopeRuntime"
+  ],
+  "server/routes/aims/api/v1/products/[productCode]/versions/[versionId]/features/[scopeId]/reopen.post.ts": [
+    "productVersionScopeRuntime"
+  ],
+  "server/routes/aims/api/v1/products/[productCode]/versions/[versionId]/features/[scopeId]/visibility.post.ts": [
+    "productVersionScopeRuntime"
+  ],
+  "server/routes/aims/api/v1/products/[productCode]/versions/[versionId]/features/index.get.ts": [
+    "productVersionScopeRuntime"
+  ],
+  "server/routes/aims/api/v1/products/[productCode]/versions/[versionId]/plan.get.ts": [
+    "productLightweightPlanRuntime"
+  ],
+  "server/routes/aims/api/v1/products/[productCode]/versions/[versionId]/plan.patch.ts": [
+    "productLightweightPlanRuntime"
+  ],
+  "server/routes/aims/api/v1/products/[productCode]/versions/[versionId]/plan/confirm.post.ts": [
+    "productLightweightPlanRuntime"
+  ],
+  "server/routes/aims/api/v1/products/[productCode]/versions/[versionId]/plan/items/[scopeId].delete.ts": [
+    "productLightweightPlanRuntime"
+  ],
+  "server/routes/aims/api/v1/products/[productCode]/versions/[versionId]/plan/items/[scopeId].patch.ts": [
+    "productLightweightPlanRuntime"
+  ],
+  "server/routes/aims/api/v1/products/[productCode]/versions/[versionId]/plan/items/index.get.ts": [
+    "productLightweightPlanRuntime"
+  ],
+  "server/routes/aims/api/v1/products/[productCode]/versions/[versionId]/plan/items/index.post.ts": [
+    "productLightweightPlanRuntime"
+  ],
+  "server/routes/aims/api/v1/products/[productCode]/versions/[versionId]/publish.post.ts": [
+    "productVersionAcceptanceRuntime"
+  ],
+  "server/routes/aims/api/v1/products/[productCode]/versions/[versionId]/releases/[recordId].get.ts": [
+    "productVersionRuntime"
+  ],
+  "server/routes/aims/api/v1/products/[productCode]/versions/[versionId]/releases/index.get.ts": [
+    "productVersionRuntime"
+  ],
+  "server/routes/aims/api/v1/products/[productCode]/versions/[versionId]/reopen.post.ts": [
+    "productVersionAcceptanceRuntime"
+  ],
+  "server/routes/aims/api/v1/products/[productCode]/versions/[versionId]/transition.post.ts": [
+    "productVersionRuntime"
+  ],
+  "server/routes/aims/api/v1/products/[productCode]/versions/index.get.ts": [
+    "productVersionRuntime"
+  ],
+  "server/routes/aims/api/v1/products/[productCode]/versions/index.post.ts": [
+    "productVersionRuntime"
+  ],
+  "server/routes/aims/api/v1/products/[productCode]/versions/permissions.get.ts": [],
+  "server/utils/enterpriseAimsProjectProducts.ts": [
+    "productAuthorization"
+  ],
+  "server/utils/enterpriseAimsProjectWriteAuthorization.ts": [
+    "aimsScopedAuthorization"
+  ],
+  "server/utils/enterpriseAimsProjects.ts": [
+    "aimsScopedAuthorization",
+    "userDepartments"
+  ],
+  "server/utils/enterpriseAimsWeeklyGovernance.ts": [
+    "companyWeeklySummaryRecipients"
+  ],
+  "server/utils/enterpriseCodocsProjectDocument.ts": [
+    "codocsApi",
+    "projectDocumentAccess"
+  ],
+  "server/utils/enterpriseProductAuthorization.ts": [
+    "productAuthorization",
+    "productAuthorizationCore"
+  ],
+  "server/utils/enterpriseProductComponents.ts": [
+    "productComponentRuntime"
+  ],
+  "server/utils/enterpriseProductDocumentLink.ts": [
+    "productAuthorization"
+  ],
+  "server/utils/enterpriseProductDocuments.ts": [
+    "productAuthorization"
+  ],
+  "server/utils/enterpriseProductFeatures.ts": [
+    "productCommandBridge"
+  ],
+  "server/utils/enterpriseProductHandoff.ts": [
+    "productCommandBridge"
+  ],
+  "server/utils/enterpriseProductHandoffCandidates.ts": [
+    "aimsRuntimeForward",
+    "aimsScopedAuthorization",
+    "productAuthorization",
+    "productHandoffProjectAuthorizationCore",
+    "productRequestInput",
+    "productWorkspaceInput"
+  ],
+  "server/utils/enterpriseProductList.ts": [
+    "productGlobalAuthorizationCore",
+    "productListInput"
+  ],
+  "server/utils/enterpriseProductOnboarding.ts": [
+    "productCandidatesRuntime",
+    "productOnboardBridge",
+    "productOnboardingRuntime"
+  ],
+  "server/utils/enterpriseProductPlanning.ts": [
+    "productCommandBridge"
+  ],
+  "server/utils/enterpriseProductRequestActions.ts": [
+    "productCommandBridge"
+  ],
+  "server/utils/enterpriseProductRequestRead.ts": [
+    "productRequestInput",
+    "productWorkspaceInput"
+  ],
+  "server/utils/enterpriseProductWorkspace.ts": [
+    "productAuthorization",
+    "productWorkspaceInput"
+  ]
+}

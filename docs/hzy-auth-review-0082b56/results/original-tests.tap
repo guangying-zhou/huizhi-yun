@@ -1,0 +1,56 @@
+TAP version 13
+# Subtest: egress permits exact Enterprise reads and rejects writes or identity overrides
+ok 1 - egress permits exact Enterprise reads and rejects writes or identity overrides
+  ---
+  duration_ms: 0.843752
+  type: 'test'
+  ...
+# Subtest: approved product write retains exact scope, audience and identity restrictions
+ok 2 - approved product write retains exact scope, audience and identity restrictions
+  ---
+  duration_ms: 0.247286
+  type: 'test'
+  ...
+# {"event":"hzy0-console-egress","path":"/api/v1/console/vault","status":403,"stage":"allowlist"}
+# {"event":"hzy0-console-egress","path":"/oauth/token","status":200,"stage":"upstream"}
+# Subtest: authenticated loopback transport pins remote origin/context
+ok 3 - authenticated loopback transport pins remote origin/context
+  ---
+  duration_ms: 22.507926
+  type: 'test'
+  ...
+# {"event":"hzy0-console-egress","path":"/oauth/userinfo","status":403,"stage":"upstream"}
+# {"event":"hzy0-console-egress","path":"/oauth/userinfo","status":403}
+# Subtest: upstream diagnostic bodies and headers are never relayed
+ok 4 - upstream diagnostic bodies and headers are never relayed
+  ---
+  duration_ms: 14.419308
+  type: 'test'
+  ...
+# Subtest: reviewed protocol fields survive while diagnostic material is discarded
+ok 5 - reviewed protocol fields survive while diagnostic material is discarded
+  ---
+  duration_ms: 1.932647
+  type: 'test'
+  ...
+# Subtest: only bounded retry intervals and host-only known cookie deletion survive
+ok 6 - only bounded retry intervals and host-only known cookie deletion survive
+  ---
+  duration_ms: 0.552099
+  type: 'test'
+  ...
+# Subtest: registered product write errors preserve codes without diagnostic payloads
+ok 7 - registered product write errors preserve codes without diagnostic payloads
+  ---
+  duration_ms: 0.435556
+  type: 'test'
+  ...
+1..7
+# tests 7
+# suites 0
+# pass 7
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 108.437124

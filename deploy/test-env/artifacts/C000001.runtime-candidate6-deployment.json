@@ -1,0 +1,30 @@
+{
+  "schemaVersion": "test-runtime-deployment.v1",
+  "deployedAt": "2026-09-14T16:13:28Z",
+  "tenant": "C000001",
+  "environment": "test",
+  "version": "0.3.219-test.adr018-candidate.6",
+  "sourceCommit": "5a3d5d0c",
+  "sourceTree": "2b8e5e1fa1e7dc43a4c4aefb78181901ee044645",
+  "binarySha256": "ff7c799addac899daaa1bb71d2b772ddbc62f7a00c4fbc64f00cae3523b19734",
+  "previousBinarySha256": "2b720e3be9953410ed15ad871d359eb9d72320fe85d3cf3a84e5cab50de180e6",
+  "configUnchanged": true,
+  "backupDirectory": "/Users/gavinzhou/Library/Application Support/HuizhiYun/test-runtime/backups/adr018-candidate5-20260914T161328Z",
+  "localHealth": {
+    "address": "127.0.0.1:18084",
+    "httpStatus": 200,
+    "status": "ok",
+    "version": "0.3.219-test.adr018-candidate.6",
+    "commit": "5a3d5d0c",
+    "tenant": "C000001",
+    "deployment": "c000001-test-tenant-runtime"
+  },
+  "heartbeat": {
+    "launchAgent": "cn.wiztek.hzy-test-runtime",
+    "state": "running",
+    "platformDatabaseReadback": "not-performed"
+  },
+  "productionConfigUsed": false,
+  "enterpriseActivationPerformed": false,
+  "releaseReady": false
+}

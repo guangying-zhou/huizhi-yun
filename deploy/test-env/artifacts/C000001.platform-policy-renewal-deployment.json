@@ -1,0 +1,33 @@
+{
+  "deployedAt": "2026-09-22T18:58:27.075Z",
+  "target": "hzy-platform-dev",
+  "candidateEntry": "/wiztek/hzy-test/platform-candidates/policy-renewal-20260922/platform/.output/server/index.mjs",
+  "candidateHash": "6d6cbddb2bdba10fa3f493b7b65455fabe5dbe7a2449f808e566b14d24dae5a7",
+  "artifactHash": "85c2333df594b6bb6f784d9eb0dfa2642ee8dcda923edf7e3a3ad851fee7b5c0",
+  "sourceHashes": {
+    "server/utils/policyEnvelopeDelivery.ts": "04c483eb8750052d8d11bfa0a203d49d2078bde0b5d0ee31809dd1219c4b409c",
+    "server/utils/currentPolicyEnvelope.ts": "0f5354f34a16294a2587857ff6833332af1205190d6b8d4ee694f8236c0362ba",
+    "server/utils/policyBundle.ts": "2af8a335543f03904d731504972aa962434dd3f6c443d1ac51a172f3fdbd17e0",
+    "server/api/platform/internal/console/tenants/[tenantCode]/bundle.get.ts": "89a6a25d7cfbdc6bf36775be82d3e96eed6df84b469a5c8c1528d328bfedd250",
+    "server/api/v1/runtime/deployments/[deploymentCode]/bundle.get.ts": "d645446fd9ba1cab4c7395cc4cefc9bcdf42dc3202f99cd8262d9167d2bf4545",
+    "packages/authz-core/src/policy-envelope.ts": "075f05891da4e8f6c856387def642aa7e8861b5fe881eeaae4aae22122912efd",
+    "test/policyEnvelopeDelivery.test.ts": "58c9fb6ebb8e50ac6a9b382a0cc091a6a3c258125518b982aa92787f421ed4b7"
+  },
+  "previousEntry": "/wiztek/hzy-test/platform-candidates/policy-lease-20260922/platform/.output/server/index.mjs",
+  "previousHash": "2844da3f3cce8ab1d400f6dfc8b0cf39649b299e107d3a1086010b0c5de2200c",
+  "rollbackConfig": "/wiztek/hzy-test/platform-candidates/policy-renewal-20260922/attempt-0TeXH7/rollback.config.json",
+  "pid": 3676967,
+  "bundleVersion": "pv_test_20260914161219_0014",
+  "policyRevision": 14,
+  "lifetimeMs": 93600000,
+  "health": 200,
+  "anonymous": 403,
+  "revisionProbe": 200,
+  "missingDeploymentRefusal": 409,
+  "historicalFormat": 400,
+  "policyRowsUnchanged": true,
+  "otherProcessesUnchanged": true,
+  "checks": null,
+  "persistence": null,
+  "notes": "C000001/test only. Stage C of docs/Policy-Sync-Cadence-Assessment-20260922.md. General lease variable unset (5-minute default); pinned test Console keeps 93600000. Not G1 or revocation-matrix approval."
+}

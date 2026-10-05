@@ -1,0 +1,22 @@
+[
+  {
+    "Logical": "work_item_deletion_evidence",
+    "Physical": "aims_work_item_deletion_evidence",
+    "DDL": "CREATE TABLE `aims_work_item_deletion_evidence` (\n  `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,\n  `project_id` BIGINT UNSIGNED NOT NULL,\n  `work_item_id` BIGINT UNSIGNED NOT NULL,\n  `parent_id` BIGINT UNSIGNED DEFAULT NULL,\n  `expected_version` CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,\n  `snapshot_json` JSON NOT NULL,\n  `snapshot_sha256` CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,\n  `detached_children_json` JSON NOT NULL,\n  `actor_uid` VARCHAR(100) NOT NULL,\n  `idempotency_key` VARCHAR(191) NOT NULL,\n  `operation_id` CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,\n  `command_sha256` CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,\n  `created_at` DATETIME(6) NOT NULL,\n  PRIMARY KEY (`id`),\n  UNIQUE KEY `aims_uq_wide_operation` (`operation_id`),\n  KEY `aims_idx_wide_project_created` (`project_id`,`created_at`),\n  KEY `aims_idx_wide_item` (`work_item_id`)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci\n  COMMENT='工作项删除冻结证据；不随工作项/项目物理删除级联清除'",
+    "Columns": [
+      "id",
+      "project_id",
+      "work_item_id",
+      "parent_id",
+      "expected_version",
+      "snapshot_json",
+      "snapshot_sha256",
+      "detached_children_json",
+      "actor_uid",
+      "idempotency_key",
+      "operation_id",
+      "command_sha256",
+      "created_at"
+    ]
+  }
+]

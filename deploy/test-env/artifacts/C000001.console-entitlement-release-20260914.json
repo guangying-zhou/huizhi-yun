@@ -1,0 +1,132 @@
+{
+  "schemaVersion": "console-entitlement-release-attempt.v1",
+  "target": {
+    "worker": "hzy-test-console",
+    "tenant": "C000001",
+    "environment": "test",
+    "deployment": "wiztek-test-console",
+    "workersDev": false,
+    "previewUrls": false,
+    "bundleCacheBackend": "runtime"
+  },
+  "candidate": {
+    "sourceGitHead": "801b402ef6a0ed9f251cdccb584c25af5656235d",
+    "sourceSnapshotSha256": "a24625ef42bc8f4ba51346bef975af602105f64f65056350e6bafd9b2106eda1",
+    "buildArtifactSha256": "98ed19665e0bf7f35b72af0996ac40369b18ea90208cf66b5066065a32683839",
+    "enterpriseEntitlementConsumer": true,
+    "persistentRevisionWatermark": true
+  },
+  "baseline": {
+    "activeVersionId": "e8038396-6f4b-44ee-b9bb-34710a1a8cca",
+    "activePercentage": 100,
+    "latestVersionId": "e8038396-6f4b-44ee-b9bb-34710a1a8cca"
+  },
+  "postFailureVerification": {
+    "activeVersionId": "952afe48-8399-477f-b4ec-9951ff8794c1",
+    "activePercentage": 100,
+    "latestVersionId": "952afe48-8399-477f-b4ec-9951ff8794c1"
+  },
+  "initialAttempt": {
+    "status": "blocked_before_version_creation",
+    "providerErrorCode": 10055,
+    "reason": "preserving 82 non-secret bindings, 9 secret bindings, and current test configuration requires 91 variables; the current Free plan limit is 64",
+    "deploymentCreated": false,
+    "trafficChanged": false,
+    "platformOrBusinessSwitch": false,
+    "secretsWritten": false,
+    "smokeExecuted": false
+  },
+  "simplification": {
+    "classification": "no current Console/Foundation/collab runtime reader; test config explicitly omits each stale alias",
+    "removedStaleNonSecretAliases": [
+      "HZY_AIMS_API_URL",
+      "HZY_AIMS_TARGET_DEPLOYMENT",
+      "HZY_AIMS_URL",
+      "HZY_ALTOC_API_URL",
+      "HZY_ALTOC_TARGET_DEPLOYMENT",
+      "HZY_ALTOC_URL",
+      "HZY_ASSETS_API_URL",
+      "HZY_ASSETS_TARGET_DEPLOYMENT",
+      "HZY_ASSETS_URL",
+      "HZY_CODOCS_API_URL",
+      "HZY_CODOCS_TARGET_DEPLOYMENT",
+      "HZY_CODOCS_URL",
+      "HZY_COLLAB_ENABLED",
+      "HZY_CONSOLE_AUTH_CLIENT_MATERIALIZE_ENABLED",
+      "HZY_CONSOLE_TARGET_DEPLOYMENT",
+      "HZY_FINANCE_API_URL",
+      "HZY_FINANCE_TARGET_DEPLOYMENT",
+      "HZY_FINANCE_URL",
+      "HZY_PEOPLE_API_URL",
+      "HZY_PEOPLE_TARGET_DEPLOYMENT",
+      "HZY_PEOPLE_URL",
+      "HZY_PLATFORM_BUNDLE_ALLOW_LEGACY_CACHE",
+      "HZY_PLATFORM_BUNDLE_CACHE_LEGACY_FALLBACK",
+      "HZY_SYNC_APPROVAL_ACTIONS_ON_STARTUP",
+      "HZY_WORKFLOW_TARGET_DEPLOYMENT",
+      "HZY_WORKFLOW_URL",
+      "NUXT_PUBLIC_ACCOUNT_URL",
+      "NUXT_PUBLIC_AIMS_URL",
+      "NUXT_PUBLIC_ALTOC_URL",
+      "NUXT_PUBLIC_ASSETS_URL",
+      "NUXT_PUBLIC_CODOCS_URL",
+      "NUXT_PUBLIC_FINANCE_URL",
+      "NUXT_PUBLIC_PEOPLE_URL",
+      "NUXT_PUBLIC_WORKFLOW_URL"
+    ],
+    "retained": {
+      "plainText": 48,
+      "secretBindings": 9,
+      "total": 57,
+      "limit": 64,
+      "assets": true,
+      "workersDev": false,
+      "previewUrls": false
+    }
+  },
+  "deployment": {
+    "status": "active",
+    "versionId": "952afe48-8399-477f-b4ec-9951ff8794c1",
+    "traffic": 100,
+    "rollbackVersionId": "e8038396-6f4b-44ee-b9bb-34710a1a8cca",
+    "routesChanged": false,
+    "platformOrBusinessSwitch": false
+  },
+  "smoke": {
+    "policySyncHttpStatus": 200,
+    "successfulTargets": 1,
+    "activationStatusHttpStatus": 200,
+    "activated": true,
+    "bundleReady": true,
+    "tenant": "C000001",
+    "deployment": "wiztek-test-console",
+    "bundleVersionPresent": true,
+    "bundleHashPresent": true,
+    "lastError": null,
+    "credentialsPersisted": false
+  },
+  "persistenceEvidence": {
+    "verifiedAt": "2026-09-14T04:58:46.007Z",
+    "runtimePath": "Gateway scheduled sync -> Console -> Runtime policy-bundle API",
+    "snapshotRow": {
+      "tenant": "C000001",
+      "deployment": "wiztek-test-console",
+      "matchedConsoleBundleVersion": true,
+      "matchedConsoleBundleHash": true,
+      "envelopeContentRead": false,
+      "etagPresent": true,
+      "envelopeBytes": 564644
+    },
+    "coldStart": {
+      "status": "not-executed",
+      "reason": "Cloudflare exposes no trustworthy isolate identity or fresh-instance assertion. Bootstrap may cold-read the persistent store while HZY_PLATFORM_BUNDLE_REFRESH_ON_BOOT=false prevents Platform refresh; a same-byte redeploy cannot distinguish these paths without a new test interface."
+    }
+  },
+  "notificationChannelObservation": {
+    "observedAt": "2026-09-14T04:59:30.624Z",
+    "channels": [],
+    "externalChannelEnabled": false,
+    "secretValuesRead": false,
+    "historyInferred": false
+  }
+}

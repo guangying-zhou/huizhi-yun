@@ -1,0 +1,25 @@
+{
+  "checkedAt": "2026-09-21T21:33:51.008Z",
+  "node": "v24.18.0",
+  "sourceHashes": {
+    "nuxt.config.ts": "b1483ecec7ecc567a76d41f83946f5e77d2837bb334f5a98d049c0e511f6529e",
+    "packages/authz-core/package.json": "4224c948ee159e17626bf468552eabd2396f22afea4c1db158ac2aca30a6e221",
+    "server/api/platform/internal/console/tenants/[tenantCode]/bundle.get.ts": "8169eac4a4d4c75bd9ce012130ab64737e286146022fef061d1ad082f0548078",
+    "server/api/v1/runtime/deployments/[deploymentCode]/bundle.get.ts": "21b2e9ebaecd9519812e6014a3601527f17ef477f1172a8cb54160ce47e1b1de",
+    "server/utils/policyBundle.ts": "5f834f6889057cb20f4102877da07f08d6ee8db92bf98d63dc330cac05110961",
+    "packages/authz-core/src/policy-envelope.ts": "86e8eaf79ffc4afa59ef1e19bd914afba97fe18435e515e6e660776e7b270121",
+    "server/utils/currentPolicyEnvelope.ts": "5c9029d69e6055fa7b94f936e5523f1b41beb9bd4fdc587ce4313061780dcdfc",
+    "server/utils/policyEnvelope.ts": "db7c924a8c4eb29016f1ea5db6aac96eafa7eb3153fc317e5022ca1cc7fb519f",
+    "server/utils/policyEnvelopeDelivery.ts": "358271a990c1abdbe5455ec814802963ba74ad50a2aff1d7bd9f1dc089de6e53",
+    "test/policyEnvelope.test.ts": "df8515f187769f93365a0e63c2eb34e5b9100f51e66bf613fdf7db4e9591b0a7",
+    "test/policyEnvelopeDelivery.test.ts": "59a087f2feeaee02132cb14e7995ec04b573a15d9a4410b9fce27be79008b7b0"
+  },
+  "artifactHash": "ea9de5aabb4d68e5f6b363d3e011e7d4521edb8716b80ec58c9740fcd6bc67c9",
+  "entryHash": "2844da3f3cce8ab1d400f6dfc8b0cf39649b299e107d3a1086010b0c5de2200c",
+  "checks": [
+    "scoped lint",
+    "typecheck",
+    "policy envelope tests",
+    "node build"
+  ]
+}

@@ -1,0 +1,121 @@
+{
+  "schemaVersion": 1,
+  "module": "people",
+  "targetMode": "upgrade",
+  "bootstrap": [
+    {
+      "path": "people/docs/people_schema.sql",
+      "sha256": "f04ae45bfcb6a5a96410c1895b08fe0522c5b5ebb0f192f6ecec74729bc8fab6",
+      "requiresEmptyDatabase": true
+    }
+  ],
+  "upgrade": [
+    {
+      "path": "people/docs/people_standard_cost_incremental.sql",
+      "sha256": "9f5912c17f5fa83feb4760b2936a87566aae7d56b1bc9fd5aa49fbfc17d3488a",
+      "sequence": 10
+    },
+    {
+      "path": "people/docs/people_offboarding_tasks_20260710.sql",
+      "sha256": "38a636cfc0f7f06f3b928773ba5a6a9c2020363e0eaef729afdd4ab1a1f56515",
+      "sequence": 20
+    },
+    {
+      "path": "people/docs/people_assets_offboarding_projection_20260710.sql",
+      "sha256": "a8931b991e6ad9c54a59b886c2d10106bcf5371a4bf51b982837627d5a3722fb",
+      "sequence": 30
+    },
+    {
+      "path": "people/docs/migrations/20260710_contribution_scope_versions.sql",
+      "sha256": "c1baeacbaacd38e63858b26b2089782c39608c8a97cd14100edcae096a227d31",
+      "sequence": 40
+    },
+    {
+      "path": "people/docs/migrations/20260710_directory_lifecycle_versions.sql",
+      "sha256": "75e02a08e81590c79f58e3c52e489f9f17fb06a90369fe3561029a1214b60d7c",
+      "sequence": 50
+    },
+    {
+      "path": "people/docs/migrations/20260711_people_dead_letter_actionable_lifecycle.sql",
+      "sha256": "c8983a41a7502c971691194d1ac2b0c7f4bc9604962b81f1bdb131abf43b1607",
+      "sequence": 60
+    },
+    {
+      "path": "people/docs/people_connector_sync_incremental.sql",
+      "sha256": "b692eb8d33e5997bc790274aeb8c660438aea260e134a62334680f426e755d75",
+      "sequence": 70
+    },
+    {
+      "path": "people/docs/migrations/20260725_unscored_project_facts.sql",
+      "sha256": "1178ee8b030a89222657620ad6b9672f783e1e9534d341d264d63870e8b3cdbd",
+      "sequence": 80
+    },
+    {
+      "path": "people/docs/migrations/20260829_rank_series.sql",
+      "sha256": "e8d4ef60b55d9086fcd4409453109039f5cdae4c38d0bdbc59eac55a438160db",
+      "sequence": 90
+    },
+    {
+      "path": "people/docs/migrations/20260902_dingtalk_profile_fields.sql",
+      "sha256": "9d666ac7a89ca6348837d1440a65ab59c7955f9ca3bf3e0ba1dcb2702156b021",
+      "sequence": 100
+    },
+    {
+      "path": "people/docs/migrations/20260902_onboarding_cases.sql",
+      "sha256": "b0c5fac1d78f1b5fd8660ed12c48b4e0aa7dd4b90fe227541e90ee03a0557ad5",
+      "sequence": 110
+    },
+    {
+      "path": "people/docs/migrations/20260902_onboarding_provisioning_refs.sql",
+      "sha256": "dfa07c32059297dc72d8ed6e83a700f12530eb169b0798c0980e62dc6fbb16e0",
+      "sequence": 120
+    },
+    {
+      "path": "people/docs/migrations/20260904_employee_private_facts.sql",
+      "sha256": "8cfc0e2a539e4375856f88b2e56a63c103bcd46ffe3fe2a0618ef259f43131fb",
+      "sequence": 130
+    },
+    {
+      "path": "people/docs/migrations/20260904_employee_number_sequence.sql",
+      "sha256": "100aa33c01cd36b6084383a3af7836547ffdc8ef420958e5d5043a9234dcfd26",
+      "sequence": 140
+    }
+  ],
+  "postMigrationChecks": [
+    {
+      "path": "people/docs/migrations/20260725_unscored_project_facts_verify.sql",
+      "sha256": "8dc9d93b6969d1235e0d317d224d48654edccbfea6ebb5cab6382ef30229722b",
+      "after": "people/docs/migrations/20260725_unscored_project_facts.sql"
+    },
+    {
+      "path": "people/docs/migrations/20260829_rank_series_verify.sql",
+      "sha256": "59afff4e6941bcc4c0b7495fa8e5a96f0b92b6e97d52e186ee9c55fea0a21e79",
+      "after": "people/docs/migrations/20260829_rank_series.sql"
+    },
+    {
+      "path": "people/docs/migrations/20260902_dingtalk_profile_fields_verify.sql",
+      "sha256": "264f8f1c0d76757dfb72de8d2c370c9c0cb501a0cf86c92d5aef457774856049",
+      "after": "people/docs/migrations/20260902_dingtalk_profile_fields.sql"
+    },
+    {
+      "path": "people/docs/migrations/20260902_onboarding_cases_verify.sql",
+      "sha256": "69cfae40213bc1634c3c802f6d65f671b210e31f1b65d8b8b3aac5dd83bfb2ed",
+      "after": "people/docs/migrations/20260902_onboarding_cases.sql"
+    },
+    {
+      "path": "people/docs/migrations/20260902_onboarding_provisioning_refs_verify.sql",
+      "sha256": "fc78b7ba7ac31081dbd303f0cfee432674a6f71a524ba1c4fa6591b3a6b20dc9",
+      "after": "people/docs/migrations/20260902_onboarding_provisioning_refs.sql"
+    },
+    {
+      "path": "people/docs/migrations/20260904_employee_private_facts_verify.sql",
+      "sha256": "5ad6a93d7eb23654874cf990f7af06737b584b99f8cebac28f39ceaf6c4cc517",
+      "after": "people/docs/migrations/20260904_employee_private_facts.sql"
+    },
+    {
+      "path": "people/docs/migrations/20260904_employee_number_sequence_verify.sql",
+      "sha256": "b2459c2c71a78a641148820c70f999f13e74cec3e4b10fc4d4217896a0cf394c",
+      "after": "people/docs/migrations/20260904_employee_number_sequence.sql"
+    }
+  ]
+}

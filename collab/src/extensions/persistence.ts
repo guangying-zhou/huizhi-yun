@@ -1,0 +1,324 @@
+/**
+ * Collaboration persistence extension.
+ *
+ * Persists Yjs snapshots and Markdown mirrors to OSS.
+ */
+
+import type { afterUnloadDocumentPayload, Extension, onLoadDocumentPayload, onStoreDocumentPayload } from '@hocuspocus/server'
+import crypto from 'node:crypto'
+import OSS from 'ali-oss'
+import * as Y from 'yjs'
+// yjs 类型由 @hocuspocus/server 的 onLoadDocumentPayload.document 提供
+import type { OssConfig } from '../config.js'
+import { callCodocsRuntime } from '../utils/codocs-runtime.js'
+import { createDocumentVersion, createHookError, loadDocumentContext, parseDocumentName } from '../utils/document-context.js'
+import { yjsDocumentToMarkdown } from '../utils/prosemirror-markdown.js'
+import type { V2Snapshots } from '../utils/v2-snapshots.js'
+
+type V2Context = { mode?: string, sessionId?: string }
+const v2SessionOf = (context: unknown) => {
+  const value = context as V2Context | undefined
+  return value?.mode === 'v2' && value.sessionId ? value.sessionId : null
+}
+
+/**
+ * Fresh Runtime read of the collaboration context. The Runtime refuses it with
+ * 409 once the document is on snapshot v2 (document_on_snapshot_v2). Any other
+ * failure also aborts the save: an unknown state is treated as possibly v2.
+ */
+export async function refuseIfSnapshotV2(documentName: string): Promise<void> {
+  const uuid = parseDocumentName(documentName)
+  try {
+    await callCodocsRuntime(`/v1/codocs/collaboration/documents/${uuid}/context`)
+  } catch (error: unknown) {
+    if (/^codocs-runtime-error:409:/.test(String((error as Error)?.message || ''))) throw createHookError('document_on_snapshot_v2')
+    throw error
+  }
+}
+
+export class PersistenceExtension implements Extension {
+  private defaultClient: OSS | null = null
+  private projectsClient: OSS | null = null
+  private config: OssConfig
+  private lastStoredHash = new Map<string, string>()
+  private v2: V2Snapshots | null = null
+  private v2Sessions = new Map<string, string>()
+  // Documents the Runtime reported as converted to v2: legacy v1 rooms must never save them.
+  private v1RefusedDocs = new Set<string>()
+  private v1Guard: (documentName: string) => Promise<void> = documentName => refuseIfSnapshotV2(documentName)
+
+  constructor(config: OssConfig) {
+    this.config = config
+    this.initOSSClient()
+  }
+
+  useV2(v2: V2Snapshots | null) {
+    this.v2 = v2
+  }
+
+  /** Overrides the pre-save v2 check (tests). It must throw to refuse the save. */
+  useV1Guard(guard: (documentName: string) => Promise<void>) {
+    this.v1Guard = guard
+  }
+
+  private getYjsSnapshotPath(ossPath: string): string {
+    return ossPath.endsWith('.md') ? ossPath.replace(/\.md$/, '.yjs') : `${ossPath}.yjs`
+  }
+
+  /**
+   * 初始化 OSS 客户端
+   */
+  private initOSSClient(): void {
+    if (!this.config.accessKeyId || !this.config.accessKeySecret) {
+      console.warn('[collab] OSS credentials not configured, persistence disabled')
+      return
+    }
+
+    this.defaultClient = this.createOSSClient('default', {
+      bucketName: this.config.bucketName,
+      endpoint: this.config.endpoint,
+      bucketDomain: this.config.bucketDomain
+    })
+
+    this.projectsClient = this.createOSSClient('projects', {
+      bucketName: this.config.projectsBucketName || this.config.bucketName,
+      endpoint: this.config.projectsEndpoint || this.config.endpoint,
+      bucketDomain: this.config.projectsBucketDomain || this.config.bucketDomain
+    }) || this.defaultClient
+
+    if (!this.defaultClient) {
+      console.warn('[collab] OSS bucket or endpoint not configured, persistence disabled')
+      return
+    }
+
+    const projectsBucket = this.config.projectsBucketName || this.config.bucketName
+    console.log(`[collab] OSS clients initialized: default=${this.config.bucketName}, projects=${projectsBucket}`)
+  }
+
+  private createOSSClient(scope: 'default' | 'projects', config: {
+    bucketName?: string
+    endpoint?: string
+    bucketDomain?: string
+  }): OSS | null {
+    if (!config.bucketName || !config.endpoint) {
+      if (scope === 'default') {
+        console.warn('[collab] default OSS bucket or endpoint is missing')
+      }
+      return null
+    }
+
+    return new OSS({
+      bucket: config.bucketName,
+      endpoint: config.endpoint,
+      accessKeyId: this.config.accessKeyId,
+      accessKeySecret: this.config.accessKeySecret,
+      region: this.config.region
+    })
+  }
+
+  private useProjectsBucket(docType?: string): boolean {
+    return docType === 'git-project'
+  }
+
+  private clientForDocument(docType?: string): OSS | null {
+    if (this.useProjectsBucket(docType)) {
+      return this.projectsClient || this.defaultClient
+    }
+    return this.defaultClient
+  }
+
+  /**
+   * 文档加载优先恢复 Yjs 二进制快照。
+   * 仅当历史文档还没有 .yjs 快照时，才回退到 Markdown 文本重建。
+   *
+   * 注意：Yjs 文档不能在客户端/服务端分别从同一份纯文本独立重建后再 merge，
+   * 否则会把“相同文本”视作两段不同的 CRDT 插入历史，重连后出现整文重复追加。
+   */
+  async onLoadDocument(data: onLoadDocumentPayload): Promise<void> {
+    const { documentName, document } = data
+    const v2Session = v2SessionOf(data.context)
+    if (v2Session) {
+      if (!this.v2) throw new Error('collab-v2-disabled')
+      await this.v2.load(documentName, v2Session, document)
+      this.v2Sessions.set(documentName, v2Session)
+      this.v2.startLease(documentName, v2Session, () => {
+        console.warn(`[collab] v2 session lost, closing room: ${documentName}`)
+        data.instance.closeConnections(documentName)
+      })
+      return
+    }
+
+    try {
+      const { ossPath, docType } = await loadDocumentContext(documentName, data.context)
+      const client = this.clientForDocument(docType)
+      if (!client) {
+        throw new Error('collab-storage-unavailable')
+      }
+
+      const yjsPath = this.getYjsSnapshotPath(ossPath)
+      console.log(`[collab] loading document from OSS: ${ossPath}`)
+
+      try {
+        const yjsResult = await client.get(yjsPath)
+        const snapshotBuffer = yjsResult.content as Buffer
+        const update = new Uint8Array(snapshotBuffer)
+
+        if (update.byteLength > 0) {
+          Y.applyUpdate(document, update)
+        }
+
+        const syncedMarkdown = yjsDocumentToMarkdown(document)
+        if (syncedMarkdown.length > 0) {
+          const baselineHash = crypto.createHash('sha256').update(syncedMarkdown).digest('hex')
+          this.lastStoredHash.set(documentName, baselineHash)
+        }
+
+        console.log(`[collab] Yjs snapshot loaded: ${documentName}`)
+        return
+      } catch (yjsError: unknown) {
+        const error = yjsError as Record<string, unknown>
+        if (error.code !== 'NoSuchKey') {
+          throw yjsError
+        }
+      }
+
+      try {
+        const mdResult = await client.get(ossPath)
+        const markdown = mdResult.content.toString('utf-8')
+
+        const ytext = document.getText('content')
+        if (ytext.length === 0) {
+          ytext.insert(0, markdown)
+          console.log(`[collab] document loaded: ${documentName}`)
+        } else {
+          console.log(`[collab] skip re-insert, Y.Doc already has ${ytext.length} chars: ${documentName}`)
+        }
+        // 记录基线哈希，用于 onStoreDocument 防御空内容覆盖
+        if (markdown.length > 0) {
+          const baselineHash = crypto.createHash('sha256').update(markdown).digest('hex')
+          this.lastStoredHash.set(documentName, baselineHash)
+        }
+      } catch (mdError: unknown) {
+        const error = mdError as Record<string, unknown>
+        if (error.code === 'NoSuchKey') {
+          console.log(`[collab] new document: ${documentName}`)
+        } else {
+          throw mdError
+        }
+      }
+    } catch (error: unknown) {
+      const err = error as Record<string, unknown>
+      console.error(`[collab] failed to load document: ${documentName}`, err.message)
+      throw error
+    }
+  }
+
+  /**
+   * 文档保存同时写入：
+   * 1. .yjs 快照：协同状态真实来源，保证重连/重启后继续沿用同一 CRDT 历史
+   * 2. .md 快照：供预览、导出、版本记录与非协同读取使用
+   */
+  async onStoreDocument(data: onStoreDocumentPayload): Promise<void> {
+    const { documentName, document } = data
+    const v2Session = this.v2Sessions.get(documentName) || v2SessionOf(data.context)
+    if (v2Session) {
+      if (!this.v2) throw new Error('collab-v2-disabled')
+      // Failures propagate so the store is retried; nothing is published partially.
+      await this.v2.store(documentName, v2Session, document)
+      return
+    }
+
+    // Legacy v1 room: fail closed if the document is (or may be) on v2. The
+    // check runs against fresh Runtime state before any object is written,
+    // never against the context captured when the connection opened.
+    if (this.v1RefusedDocs.has(documentName)) {
+      data.instance?.closeConnections(documentName)
+      return
+    }
+    try {
+      await this.v1Guard(documentName)
+    } catch (error: unknown) {
+      if ((error as { reason?: string }).reason === 'document_on_snapshot_v2') {
+        this.v1RefusedDocs.add(documentName)
+        console.warn(`[collab] refuse v1 save, document is on snapshot v2: ${documentName}`)
+        data.instance?.closeConnections(documentName)
+        return
+      }
+      console.error(`[collab] v1 save blocked, cannot confirm document is not on snapshot v2: ${documentName}`)
+      throw error
+    }
+
+    try {
+      const context = await loadDocumentContext(documentName, data.context)
+      const { ossPath } = context
+      const client = this.clientForDocument(context.docType)
+      if (!client) {
+        throw new Error('collab-storage-unavailable')
+      }
+
+      const yjsPath = this.getYjsSnapshotPath(ossPath)
+
+      const markdown = yjsDocumentToMarkdown(document)
+      const contentHash = crypto.createHash('sha256').update(markdown).digest('hex')
+
+      // 防御：若即将写入空内容，而上一次已存的内容非空，拒绝保存以避免协同异常导致数据丢失
+      if (markdown.length === 0) {
+        const prevHash = this.lastStoredHash.get(documentName)
+        const emptyHash = crypto.createHash('sha256').update('').digest('hex')
+        if (prevHash && prevHash !== emptyHash) {
+          console.warn(`[collab] refuse to store empty markdown over non-empty prior content: ${documentName}`)
+          return
+        }
+      }
+
+      const snapshot = Buffer.from(Y.encodeStateAsUpdate(document))
+      await client.put(yjsPath, snapshot, {
+        headers: {
+          'Content-Type': 'application/octet-stream'
+        }
+      })
+
+      const markdownResult = await client.put(ossPath, Buffer.from(markdown, 'utf-8'), {
+        headers: {
+          'Content-Type': 'text/markdown; charset=utf-8'
+        }
+      })
+
+      if (this.lastStoredHash.get(documentName) !== contentHash) {
+        const responseHeaders = (markdownResult.res?.headers || {}) as Record<string, string | undefined>
+        const versionId = String(
+          responseHeaders['x-oss-version-id']
+          || responseHeaders['x-amz-version-id']
+          || (markdownResult as unknown as { versionId?: string }).versionId
+          || ''
+        )
+
+        await createDocumentVersion({
+          docId: context.docId,
+          docUuid: context.docUuid,
+          editorUid: context.actorUid || context.ownerUid || 'system',
+          ossVersionId: versionId,
+          contentSize: Buffer.byteLength(markdown, 'utf-8'),
+          contentSha256: contentHash
+        })
+
+        this.lastStoredHash.set(documentName, contentHash)
+      }
+
+      console.log(`[collab] document stored: ${documentName}`)
+    } catch (error: unknown) {
+      const err = error as Record<string, unknown>
+      console.error(`[collab] failed to store document: ${documentName}`, err.message)
+      throw error
+    }
+  }
+
+  async afterUnloadDocument(data: afterUnloadDocumentPayload): Promise<void> {
+    this.v1RefusedDocs.delete(data.documentName)
+    const session = this.v2Sessions.get(data.documentName)
+    if (session && this.v2) {
+      this.v2Sessions.delete(data.documentName)
+      await this.v2.release(data.documentName, session)
+    }
+  }
+}

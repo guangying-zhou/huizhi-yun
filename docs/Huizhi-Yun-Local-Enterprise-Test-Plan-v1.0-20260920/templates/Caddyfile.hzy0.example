@@ -1,0 +1,29 @@
+# 示例：只包含 hzy0 单站点，不是现有全局 Caddyfile 的替代品。
+# 前提：cloudflared 与 Caddy 同机/同网络命名空间，hzy0 ingress 指向本端口。
+# 23180/23120 为本方案建议值；先检查端口、外层访问保护和已实现的网关。
+# 本轮未运行 Caddy validate；实施时须在本机实际版本验证合并后的完整配置。
+# 如果当前 Caddy 已有这个站点/监听，合并其规则，不建立重叠监听。
+
+http://:23180 {
+    bind 127.0.0.1
+
+    @hzy0 host hzy0.isme.dev
+    handle @hzy0 {
+        reverse_proxy 127.0.0.1:23120 {
+            # 公共客户端不得提供内部 HZY 上下文；网关重新验证并生成。
+            header_up -X-Hzy-*
+            header_up -Forwarded
+            # 固定本站批准的外部 URL 语义，而不是信任任意转发头。
+            header_up Host hzy0.isme.dev
+            header_up X-Forwarded-Host hzy0.isme.dev
+            header_up X-Forwarded-Proto https
+            header_up X-Forwarded-Port 443
+            # 网关内部可信上下文不返回给浏览器。
+            header_down -X-Hzy-*
+        }
+    }
+
+    handle {
+        respond "Not Found" 404
+    }
+}

@@ -1,0 +1,47 @@
+{
+  "name": "account",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "nuxt build --dotenv .env",
+    "dev": "nuxt dev --dotenv .env.dev",
+    "preview": "nuxt preview",
+    "postinstall": "nuxt prepare",
+    "lint": "eslint .",
+    "typecheck": "nuxt typecheck"
+  },
+  "dependencies": {
+    "@hzy/foundation": "workspace:*",
+    "@iconify-json/lucide": "^1.2.71",
+    "tailwindcss": "^4.1.0",
+    "@iconify-json/simple-icons": "^1.2.55",
+    "@internationalized/date": "^3.10.0",
+    "@nuxt/ui": "^4.1.0",
+    "@types/d3-sankey": "^0.12.5",
+    "@unovis/ts": "^1.6.1",
+    "@unovis/vue": "^1.6.1",
+    "@vueuse/nuxt": "^13.9.0",
+    "ali-oss": "^6.23.0",
+    "d3": "^7.9.0",
+    "d3-sankey": "^0.12.3",
+    "date-fns": "^4.1.0",
+    "diff": "^8.0.3",
+    "lcn": "^7.2.2",
+    "ldapts": "^9.0.0",
+    "mysql2": "^3.15.3",
+    "nuxt": "^4.2.0",
+    "pinyin": "^4.0.0",
+    "zod": "^4.1.12"
+  },
+  "devDependencies": {
+    "@nuxt/devtools": "4.0.0-alpha.3",
+    "@nuxt/eslint": "^1.9.0",
+    "@types/ali-oss": "^6.23.1",
+    "@types/d3": "^7.4.3",
+    "@types/node": "^24.10.0",
+    "eslint": "^9.38.0",
+    "typescript": "^5.9.3",
+    "vue-tsc": "^3.1.2"
+  },
+  "packageManager": "pnpm@11.17.0"
+}

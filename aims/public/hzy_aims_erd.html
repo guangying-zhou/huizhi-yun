@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>hzy_aims 实体关系图</title>
+<style>
+  body { margin: 0; padding: 20px; background: #f8fafc; font-family: system-ui, sans-serif; }
+  h1 { text-align: center; color: #1e293b; margin-bottom: 4px; }
+  p.subtitle { text-align: center; color: #64748b; font-size: 14px; margin-bottom: 20px; }
+  .mermaid { display: flex; justify-content: center; }
+</style>
+</head>
+<body>
+<h1>hzy_aims 实体关系图</h1>
+<p class="subtitle">汇智云 Aims 项目管理模块 | 三层驱动架构: 里程碑(目标层) - 需求(价值层) - 任务(执行层)</p>
+
+<pre class="mermaid">
+erDiagram
+    project_portfolios {
+        bigint id PK
+        varchar name
+        text description
+        varchar domain_code
+        varchar owner_uid
+        varchar dept_code
+        tinyint is_product_line
+        enum status
+        varchar created_by
+    }
+
+    aims_projects {
+        bigint id PK
+        varchar project_code UK
+        varchar name
+        text description
+        enum category
+        enum methodology
+        enum lifecycle_status
+        bigint portfolio_id FK
+        varchar domain_code
+        varchar dept_code
+        varchar leader_uid
+        date start_date
+        date end_date
+        varchar customer_code
+        varchar customer_name
+        varchar contract_code
+        enum approval_status
+        json module_config
+        json board_config
+        json workflow_config
+        varchar created_by
+    }
+
+    aims_project_members {
+        bigint id PK
+        bigint project_id FK
+        varchar uid
+        enum role
+        enum status
+        datetime joined_at
+    }
+
+    aims_project_repos {
+        bigint id PK
+        bigint project_id FK
+        varchar repo_project_code
+        varchar last_commit_sha
+        datetime last_synced_at
+    }
+
+    project_counters {
+        bigint id PK
+        bigint project_id FK
+        int counter
+    }
+
+    workflow_transitions {
+        bigint id PK
+        bigint project_id FK
+        enum entity_type
+        varchar from_status
+        varchar to_status
+        varchar transition_key
+        tinyint is_initial
+    }
+
+    milestones {
+        bigint id PK
+        bigint project_id FK
+        varchar name
+        text description
+        enum mode
+        date start_date
+        date end_date
+        enum status
+        enum pivr_stage
+        json deliverables
+        varchar recurrence_rule
+        int sort_order
+    }
+
+    sprints {
+        bigint id PK
+        bigint project_id FK
+        bigint milestone_id FK
+        varchar name
+        varchar goal
+        date start_date
+        date end_date
+        enum status
+        decimal capacity_hours
+    }
+
+    work_items {
+        bigint id PK
+        bigint project_id FK
+        bigint milestone_id FK
+        bigint sprint_id FK
+        int item_number
+        varchar item_key UK
+        enum type
+        varchar title
+        longtext description
+        varchar status
+        enum priority
+        enum severity
+        smallint weight
+        varchar assignee_uid
+        varchar reporter_uid
+        date due_date
+        decimal estimated_hours
+        bigint parent_id FK
+        int sort_order
+    }
+
+    work_item_relations {
+        bigint id PK
+        bigint source_id FK
+        bigint target_id FK
+        enum relation_type
+    }
+
+    work_item_comments {
+        bigint id PK
+        bigint work_item_id FK
+        varchar author_uid
+        longtext content
+    }
+
+    work_item_changelog {
+        bigint id PK
+        bigint work_item_id FK
+        varchar field_name
+        text old_value
+        text new_value
+        varchar changed_by
+        datetime changed_at
+    }
+
+    work_item_attachments {
+        bigint id PK
+        bigint work_item_id FK
+        varchar file_name
+        varchar oss_key
+        bigint file_size
+        varchar content_type
+        varchar uploaded_by
+    }
+
+    work_item_documents {
+        bigint id PK
+        bigint work_item_id FK
+        varchar document_id
+        varchar linked_by
+    }
+
+    time_entries {
+        bigint id PK
+        bigint work_item_id FK
+        varchar uid
+        date entry_date
+        decimal hours
+        varchar description
+    }
+
+    gitlab_commits {
+        bigint id PK
+        bigint project_id FK
+        bigint work_item_id FK
+        varchar item_key
+        varchar repo_project_code
+        char commit_sha
+        text message
+        varchar author_name
+        datetime committed_at
+    }
+
+    notification_rules {
+        bigint id PK
+        bigint project_id FK
+        varchar event_type
+        tinyint enabled
+        json config
+    }
+
+    user_favorite_projects {
+        bigint id PK
+        varchar uid
+        bigint project_id FK
+    }
+
+    system_parameters {
+        bigint id PK
+        varchar param_key UK
+        text param_value
+        varchar description
+    }
+
+    project_portfolios ||--o{ aims_projects : contains
+    aims_projects ||--o{ aims_project_members : has
+    aims_projects ||--o{ aims_project_repos : links
+    aims_projects ||--|| project_counters : has
+    aims_projects ||--o{ workflow_transitions : defines
+    aims_projects ||--o{ milestones : contains
+    aims_projects ||--o{ sprints : contains
+    aims_projects ||--o{ work_items : contains
+    aims_projects ||--o{ gitlab_commits : tracks
+    aims_projects ||--o{ notification_rules : configures
+    aims_projects ||--o{ user_favorite_projects : favorited
+
+    milestones ||--o{ sprints : groups
+    milestones ||--o{ work_items : contains
+
+    sprints ||--o{ work_items : organizes
+
+    work_items ||--o{ work_items : nests
+    work_items ||--o{ work_item_relations : source
+    work_items ||--o{ work_item_relations : target
+    work_items ||--o{ work_item_comments : has
+    work_items ||--o{ work_item_changelog : logs
+    work_items ||--o{ work_item_attachments : attaches
+    work_items ||--o{ work_item_documents : links
+    work_items ||--o{ time_entries : records
+    work_items ||--o{ gitlab_commits : references
+</pre>
+
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+<script>
+  mermaid.initialize({
+    startOnLoad: true,
+    theme: 'default',
+    er: {
+      layoutDirection: 'TB',
+      entityPadding: 15,
+      fontSize: 12,
+      useMaxWidth: false
+    }
+  });
+</script>
+</body>
+</html>

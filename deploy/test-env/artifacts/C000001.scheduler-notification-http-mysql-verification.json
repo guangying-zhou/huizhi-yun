@@ -1,0 +1,11 @@
+{
+  "schemaVersion": "isolated-mysql-verification.v1",
+  "verifiedAt": "2026-09-14T06:24:04.910895+00:00",
+  "command": "node data-runtime/scripts/test-enterprise-scheduler-http-mysql.mjs",
+  "exitCode": 0,
+  "goPackageSeconds": 2.159,
+  "testSourceSha256": "7a2aa4d2da4e4a3d64e6a7773b74f8e0464439e11b8944f7bcb9f9b835ae4601",
+  "scope": "Temporary MySQL and local HTTP fixtures; signed JWT, Console credential/grant fixture, Registry generation, six notification operations, publish and closure replay, invalid inputs",
+  "externalDeliveryVerified": false,
+  "liveSchedulerOwnershipSwitched": false
+}

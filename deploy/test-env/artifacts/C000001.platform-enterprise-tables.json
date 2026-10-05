@@ -1,0 +1,60 @@
+{
+  "database": "hzy_platform_dev",
+  "tables": [
+    {
+      "name": "enterprise_drain_activity_approvals",
+      "present": false
+    },
+    {
+      "name": "enterprise_external_drain_approvals",
+      "present": false
+    },
+    {
+      "name": "enterprise_order_acceptances",
+      "present": false
+    },
+    {
+      "name": "enterprise_order_approvals",
+      "present": false
+    },
+    {
+      "name": "enterprise_recovery_route_receipts",
+      "present": false
+    },
+    {
+      "name": "enterprise_recovery_routes",
+      "present": false
+    },
+    {
+      "name": "tenant_enterprise_entitlement_current",
+      "present": false
+    },
+    {
+      "name": "tenant_enterprise_entitlement_migrations",
+      "present": false
+    },
+    {
+      "name": "tenant_enterprise_entitlement_state_commands",
+      "present": false
+    },
+    {
+      "name": "tenant_enterprise_entitlements",
+      "present": false
+    },
+    {
+      "name": "tenant_enterprise_order_fulfillments",
+      "present": false
+    },
+    {
+      "name": "tenant_scheduler_ownership",
+      "present": false
+    },
+    {
+      "name": "tenant_scheduler_ownership_receipts",
+      "present": false
+    }
+  ],
+  "observedAt": "2026-09-14T04:42:53.466312+00:00",
+  "schema": "enterprise-platform-table-observation.v1",
+  "schemaDefinitionsVerified": false
+}

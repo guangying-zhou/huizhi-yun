@@ -1,0 +1,16 @@
+{
+  "schema": "hzy.enterprise.version-create-json-contract-verification.v1",
+  "command": "node data-runtime/scripts/test-enterprise-migration-conflicts-mysql.mjs",
+  "result": "PASS",
+  "scope": "random isolated MySQL; synthetic versions.go result shape and paired create audit",
+  "checks": [
+    "legacy product_versions:create succeeded result snapshot with actual writer shape passes",
+    "matched create audit with same actor/key/object and unchanged JSON passes",
+    "specific receipt/audit fields pass unregistered JSON gate only with validator dependencies",
+    "extra unknown schema marker and missing version reference block",
+    "audit result snapshot mutation blocks"
+  ],
+  "businessDataAccess": false,
+  "deployment": false,
+  "temporaryInstanceCleaned": true
+}

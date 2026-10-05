@@ -1,0 +1,54 @@
+{
+  "kind": "enterprise-shadow-copy-rehearsal",
+  "completedAt": "2026-09-14T05:44:48Z",
+  "tenant": "C000001",
+  "environment": "test",
+  "runtimeDeployment": "c000001-test-tenant-runtime",
+  "mode": "verified-shadow",
+  "purpose": "isolated 150-table rehearsal only; no final target, source fence, route binding, close, or seal action",
+  "sourcePlanReviewHash": "5404dd29e3374a66cb7180670a2850ade0e61414ae250464775e58c16c5eda97",
+  "rehearsalReviewHash": "0ab4642f195f491c0cab797600868cbf533e443b7f7d5a37d3477c32c03922a5",
+  "protectedPlanSha256": "90f2062edd658c5f47831ec76c949626df5e096deb3595a73a39d968ef9dbd90",
+  "protectedCompatibilityArtifactSha256": "4797b78cd34f5edfb37e61f66bfbd5b8721e25091c1b574e68e09358478fc867",
+  "target": {
+    "schema": "hzy_enterprise_rehearsal_20260914b",
+    "serverUuid": "37d8994e-4c12-11ee-afad-8cb2da2e572b",
+    "generation": 0,
+    "schemaVersion": "enterprise.v1",
+    "baseTables": 153,
+    "businessTables": 150,
+    "rows": 478,
+    "triggers": 38,
+    "views": 55
+  },
+  "verification": {
+    "targetInitiallyAbsent": true,
+    "sourceAndTargetServerUuidMatched": true,
+    "migrationLedger": {
+      "status": "verified-shadow",
+      "reviewHashMatched": true
+    },
+    "checkpoints": {
+      "verified": 150,
+      "total": 150
+    },
+    "registry": {
+      "tenantMatched": true,
+      "environmentMatched": true,
+      "deploymentMatched": true,
+      "generation": 0
+    },
+    "sourceFenceTables": 0,
+    "compatibilityRehearsal": "verified-shadow"
+  },
+  "protectedEvidence": {
+    "directory": "enterprise-rehearsal-20260914b",
+    "configAndCommandLogsMode": "0600",
+    "directoryMode": "0700"
+  },
+  "boundaries": [
+    "The production and final enterprise targets were not queried or modified.",
+    "No source fence, cutover, runtime configuration, worker binding, close, or seal operation was performed.",
+    "Credentials, connection configuration, and raw database errors remain in protected storage."
+  ]
+}

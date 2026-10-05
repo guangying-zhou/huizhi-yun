@@ -1,0 +1,272 @@
+{
+  "appCode": "finance",
+  "appName": "汇智云财务",
+  "appType": "business",
+  "description": "面向中小型项目制企业的经营财务中台：发票、到账、核销、费用报销、项目支出、银行账户、项目核算和个人财务绩效。",
+  "icon": "i-lucide-receipt-text",
+  "entry": {
+    "web": "/",
+    "apiBase": "/api/v1/finance"
+  },
+  "runtimeRequirements": {
+    "requiresSdk": true,
+    "supportsCustomerHosted": true,
+    "supportsManagedControlPlane": false
+  },
+  "compatibility": {
+    "minControlPlaneVersion": "0.1.0",
+    "minSdkVersion": "0.1.0"
+  },
+  "supportedScopes": ["tenant:global", "subject:self"],
+  "resources": [
+    {
+      "code": "product-cost",
+      "name": "产品成本服务",
+      "description": "签名委托原用户读取产品期间成本和维护分摊规则",
+      "actions": ["read", "replace-rules", "read-rules"],
+      "sortOrder": 95
+    },
+    {
+      "code": "dashboard",
+      "name": "财务工作台",
+      "description": "现金流、应收应付、审批和经营财务摘要",
+      "actions": ["view", "export"],
+      "sortOrder": 1
+    },
+    {
+      "code": "invoices",
+      "name": "发票管理",
+      "description": "开票申请、正式发票、发票状态和发票关联",
+      "actions": ["view", "edit", "approve", "issue", "admin"],
+      "sortOrder": 10
+    },
+    {
+      "code": "receipts",
+      "name": "收款管理",
+      "description": "到账记录、银行流水、收款确认和收款核销",
+      "actions": ["view", "edit", "confirm", "admin"],
+      "sortOrder": 20
+    },
+    {
+      "code": "expenses",
+      "name": "费用支出",
+      "description": "项目支出、费用报销、付款申请和支出台账",
+      "actions": ["view", "edit", "approve", "confirm", "admin"],
+      "sortOrder": 30
+    },
+    {
+      "code": "bank_accounts",
+      "name": "银行账户",
+      "description": "账户资料、余额快照和资金账户管理",
+      "actions": ["view", "edit", "admin"],
+      "sortOrder": 40
+    },
+    {
+      "code": "reconciliation",
+      "name": "核销管理",
+      "description": "发票、收款、合同和回款计划核销",
+      "actions": ["view", "edit", "confirm", "admin"],
+      "sortOrder": 50
+    },
+    {
+      "code": "project_accounting",
+      "name": "项目核算",
+      "description": "项目收入、支出、成本、毛利和费用分摊",
+      "actions": ["view", "edit", "admin"],
+      "sortOrder": 60
+    },
+    {
+      "code": "performance",
+      "name": "个人财务绩效",
+      "description": "个人贡献、提成、绩效金额和财务结果归因",
+      "actions": ["view", "edit", "admin"],
+      "sortOrder": 70
+    },
+    {
+      "code": "reports",
+      "name": "财务报表",
+      "description": "现金流、收支、利润和经营财务分析",
+      "actions": ["view", "export", "admin"],
+      "sortOrder": 80
+    },
+    {
+      "code": "integration_operations",
+      "name": "跨应用操作",
+      "description": "诊断并受控重放 Finance 发起的跨应用可靠操作",
+      "actions": ["view", "replay"],
+      "sortOrder": 85
+    },
+    {
+      "code": "settings",
+      "name": "财务设置",
+      "description": "科目、费用类型、人力成本参数、审批规则和集成配置",
+      "actions": ["view", "edit", "admin"],
+      "sortOrder": 90
+    }
+  ],
+  "recommendedRoles": [
+    {
+      "code": "finance:viewer",
+      "name": "财务只读",
+      "description": "查看被授权范围内的发票、收款、支出、项目核算和报表",
+      "suggestedPermissions": [
+        "finance:dashboard:view",
+        "finance:invoices:view",
+        "finance:receipts:view",
+        "finance:expenses:view",
+        "finance:project_accounting:view",
+        "finance:reports:view"
+      ]
+    },
+    {
+      "code": "finance:expense_submitter",
+      "name": "费用申请人",
+      "description": "提交本人费用报销、项目支出和付款申请",
+      "suggestedPermissions": [
+        "finance:dashboard:view",
+        "finance:expenses:view",
+        "finance:expenses:edit"
+      ]
+    },
+    {
+      "code": "finance:ar_accountant",
+      "name": "应收会计",
+      "description": "维护开票、正式发票和收款台账，不执行审批或收款确认",
+      "suggestedPermissions": [
+        "finance:dashboard:view",
+        "finance:invoices:edit",
+        "finance:invoices:issue",
+        "finance:receipts:edit",
+        "finance:reports:view"
+      ]
+    },
+    {
+      "code": "finance:ap_accountant",
+      "name": "应付会计",
+      "description": "维护费用报销、项目支出和付款申请台账，不执行审批或付款确认",
+      "suggestedPermissions": [
+        "finance:dashboard:view",
+        "finance:expenses:edit",
+        "finance:reports:view"
+      ]
+    },
+    {
+      "code": "finance:cashier",
+      "name": "出纳",
+      "description": "确认到账收款和费用付款，不维护申请审批或银行账户资料",
+      "suggestedPermissions": [
+        "finance:dashboard:view",
+        "finance:receipts:view",
+        "finance:receipts:confirm",
+        "finance:expenses:view",
+        "finance:expenses:confirm",
+        "finance:bank_accounts:view"
+      ]
+    },
+    {
+      "code": "finance:accountant",
+      "name": "财务会计",
+      "description": "维护发票、收款、核销和支出台账，不执行审批、付款确认或收款确认",
+      "suggestedPermissions": [
+        "finance:dashboard:view",
+        "finance:invoices:edit",
+        "finance:receipts:edit",
+        "finance:expenses:edit",
+        "finance:bank_accounts:view",
+        "finance:reconciliation:edit",
+        "finance:reports:view"
+      ]
+    },
+    {
+      "code": "finance:reconciliation_operator",
+      "name": "核销经办",
+      "description": "处理发票、收款、合同和回款计划核销确认，不执行费用审批或付款确认",
+      "suggestedPermissions": [
+        "finance:dashboard:view",
+        "finance:invoices:view",
+        "finance:receipts:view",
+        "finance:reconciliation:edit",
+        "finance:reconciliation:confirm",
+        "finance:reports:view"
+      ]
+    },
+    {
+      "code": "finance:invoice_approver",
+      "name": "开票审批人",
+      "description": "审批开票申请并确认开票申请进入已审批/已开票状态",
+      "suggestedPermissions": [
+        "finance:dashboard:view",
+        "finance:invoices:view",
+        "finance:invoices:approve"
+      ]
+    },
+    {
+      "code": "finance:expense_approver",
+      "name": "费用审批人",
+      "description": "审批费用报销、项目支出和付款申请",
+      "suggestedPermissions": [
+        "finance:dashboard:view",
+        "finance:expenses:view",
+        "finance:expenses:approve"
+      ]
+    },
+    {
+      "code": "finance:manager",
+      "name": "财务负责人",
+      "description": "管理财务台账、核销、项目核算、个人绩效和财务报表，不默认执行审批或付款确认",
+      "suggestedPermissions": [
+        "finance:dashboard:view",
+        "finance:dashboard:export",
+        "finance:invoices:admin",
+        "finance:receipts:admin",
+        "finance:expenses:admin",
+        "finance:bank_accounts:admin",
+        "finance:reconciliation:admin",
+        "finance:project_accounting:admin",
+        "finance:performance:admin",
+        "finance:reports:export",
+        "finance:settings:edit"
+      ]
+    },
+    {
+      "code": "finance:report_viewer",
+      "name": "财务报表查看",
+      "description": "查看和导出经营财务报表、项目核算摘要和绩效金额财务口径",
+      "suggestedPermissions": [
+        "finance:dashboard:view",
+        "finance:dashboard:export",
+        "finance:project_accounting:view",
+        "finance:performance:view",
+        "finance:reports:view",
+        "finance:reports:export"
+      ]
+    },
+    {
+      "code": "finance:admin",
+      "name": "财务管理员",
+      "description": "管理 Finance 模块全部配置、权限和集成参数",
+      "suggestedPermissions": [
+        "finance:dashboard:view",
+        "finance:dashboard:export",
+        "finance:invoices:admin",
+        "finance:invoices:approve",
+        "finance:invoices:issue",
+        "finance:receipts:admin",
+        "finance:receipts:confirm",
+        "finance:expenses:admin",
+        "finance:expenses:approve",
+        "finance:expenses:confirm",
+        "finance:bank_accounts:admin",
+        "finance:reconciliation:admin",
+        "finance:reconciliation:confirm",
+        "finance:project_accounting:admin",
+        "finance:performance:admin",
+        "finance:reports:export",
+        "finance:reports:admin",
+        "finance:integration_operations:view",
+        "finance:integration_operations:replay",
+        "finance:settings:admin"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,27 @@
+{
+  "generatedAt": "2026-08-21T23:47:00-07:00",
+  "targetBranch": "codex/monorepo-migration",
+  "historyTool": {
+    "name": "git-filter-repo",
+    "release": "v2.47.0",
+    "sha256": "67447413e273fc76809289111748870b6f6072f08b17efe94863a92d810b7d94"
+  },
+  "repositories": [
+    { "name": "foundation", "path": ".", "remote": "https://gitlab.wiztek.cn/huizhi-yun/foundation.git", "oldHead": "b0747ea414b86fabf1153f024dbb7e7d8165599e", "newHead": "b0747ea414b86fabf1153f024dbb7e7d8165599e", "oldTree": "3bc9a63d8bc4990745b4114868b0d59c6f0e9033", "tagCount": 1 },
+    { "name": "aims", "path": "aims", "remote": "https://gitlab.wiztek.cn/huizhi-yun/aims", "oldHead": "33d53b5f4c1ae8b4a0b92b0e52fbc5157a74b5ad", "newHead": "8e34bffe5f1fc5845c5443934ff8a5fce258bd0a", "oldTree": "eed44081176c47e3143532d9fbeef37538a7da13", "tagCount": 6 },
+    { "name": "altoc", "path": "altoc", "remote": "https://gitlab.wiztek.cn/huizhi-yun/altoc.git", "oldHead": "77ee1e4c95c4577b5a025b5b5a9c09806212fc7b", "newHead": "a5bb8147cf42d46d8beb20f3bcbaa80ed763cac2", "oldTree": "b6679eb1e90a413f879142444aa30813e6bab609", "tagCount": 7 },
+    { "name": "assets", "path": "assets", "remote": "https://gitlab.wiztek.cn/huizhi-yun/assets.git", "oldHead": "3c3bbdc75f7a23deac4bdf49f14d41236c6a1464", "newHead": "feb9bfadb3b05aa58c486209f124f8760e4dd38e", "oldTree": "a600100986ee5fe0fb5ef4499d4fc5fbcbe68aa0", "tagCount": 4 },
+    { "name": "codocs", "path": "codocs", "remote": "https://gitlab.wiztek.cn/huizhi-yun/codocs", "oldHead": "17a1352fbc3d2a632b9efd6bec51517abf5710f6", "newHead": "956591e681d72b662b9d30c62d64bb41aacdb5ce", "oldTree": "afa1cc30ade10217fea6c9f748ce5bd2a8cb8ccb", "tagCount": 7 },
+    { "name": "console", "path": "console", "remote": "https://gitlab.wiztek.cn/huizhi-yun/console.git", "oldHead": "6b2b056704403128d8e2be55559a7cc62bbe00e1", "newHead": "888c1840dae1059f5d2c3336280bb94528224a82", "oldTree": "879e28978f6cb064cf6e3cf8fd8b481f0ee463ff", "tagCount": 8 },
+    { "name": "finance", "path": "finance", "remote": "https://gitlab.wiztek.cn/huizhi-yun/finance.git", "oldHead": "e24c2a3d1ef904e83d4370eaf81d66d5ebfdf859", "newHead": "1b79620471816d54a2b9c588c8736260a287b25c", "oldTree": "bff7f092284fab5c1901ffb6ffecafccbb9aa40b", "tagCount": 4 },
+    { "name": "people", "path": "people", "remote": "https://gitlab.wiztek.cn/huizhi-yun/people.git", "oldHead": "0523bdc474cfd4fb74c0bb9ada8c518db19bae2c", "newHead": "ee856a3ef4de864146a3836ac6c5be5170bf06eb", "oldTree": "32e0dceb13e561c3631073a8a3167341e6dcd1d6", "tagCount": 6 },
+    { "name": "align", "path": "align", "remote": "https://gitlab.wiztek.cn/huizhi-yun/align", "oldHead": "b58eeac942daeded47a3fc19399833da979468a4", "newHead": "d1a1e57986cf78eb940499ad04dc61954da249fd", "oldTree": "784ec2e4e9317aa4fcd1cb73c8e7e52f46d095d8", "tagCount": 0 },
+    { "name": "insights", "path": "insights", "remote": "https://gitlab.wiztek.cn/huizhi-yun/insights.git", "oldHead": "ecd0e0c72764ae74f123025e00eaab0e5632ace8", "newHead": "005eaa1a4a01720c0d3535813b342c381a3475be", "oldTree": "608e7616b9b2c8139e1ddddc473959b141f53742", "tagCount": 2 },
+    { "name": "platform", "path": "platform", "remote": "https://gitlab.wiztek.cn/huizhi-yun/platform.git", "oldHead": "6dee3e8fb56ac62904a260b673a41dd7f4abf400", "newHead": "05cc496292926d79853e789c106f7d80610955c5", "oldTree": "c341620eeae0bc1e5e4c30af109e7a31ccc059cb", "tagCount": 2 },
+    { "name": "workflow", "path": "workflow", "remote": "https://gitlab.wiztek.cn/huizhi-yun/workflow.git", "oldHead": "21e5750fa9bcabc80191259cd921a3ca17c379bb", "newHead": "5c53636c9ff4d70d5cb153d2bdee2e308ef36e63", "oldTree": "e379c9868e8a32812fbf720566e6a48fd3be303c", "tagCount": 5 },
+    { "name": "collab", "path": "collab", "remote": "https://gitlab.wiztek.cn/huizhi-yun/collab.git", "oldHead": "b54fe49074497d2c42e4291b8277e0a396b71d01", "newHead": "f5af66752139b945d41fe0c3d8f1bdb2316912a9", "oldTree": "afd27861b570ac6b3ea95f43f411179a72304674", "tagCount": 1 },
+    { "name": "webdev", "path": "webdev", "remote": "https://gitlab.wiztek.cn/huizhi-yun/webdev.git", "oldHead": "3cf726901c463bdf8102efe1cc9e433053cbac3c", "newHead": "0db6ff3682cd4b3ef0e488269f76db563c0312f8", "oldTree": "c22761369af9deb8eb018e15555a84067eacb7f1", "tagCount": 1 },
+    { "name": "nuxt-template", "path": "nuxt-template", "remote": "https://gitlab.wiztek.cn/huizhi-yun/templates/nuxt-template.git", "oldHead": "ba6383e16fef9c3f1aac29ab4d5750f752a41504", "newHead": "a56dc1e5a28f1a03e985b4d7b7622f0afe37a4e0", "oldTree": "33277402faf509f8890e5f614b68279e15694206", "tagCount": 0 },
+    { "name": "account", "path": "account", "remote": "https://gitlab.wiztek.cn/huizhi-yun/account", "oldHead": "9797231772bb5b9ea82afe48827a3ef162966e9e", "newHead": "e93ebc7de854f367001668d7acf014e3d1977e51", "oldTree": "d3716770fd1b41cfd579fdec65c121aeb2fdc199", "tagCount": 1 }
+  ]
+}

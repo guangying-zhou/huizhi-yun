@@ -1,0 +1,178 @@
+[
+  {
+    "name": "only263",
+    "scopes": [
+      {
+        "dimension": "project",
+        "predicate": "code",
+        "value": "263"
+      }
+    ],
+    "projection": {
+      "version": 1,
+      "project_codes": [
+        "263"
+      ],
+      "department_codes": [],
+      "department_tree_roots": [],
+      "masks": [
+        0,
+        65535
+      ]
+    },
+    "cases": [
+      {
+        "facts": {
+          "projectCode": "263",
+          "departmentCode": "D",
+          "departmentTree": [],
+          "member": false,
+          "owner": false,
+          "creator": false,
+          "participant": false
+        },
+        "allowed": true
+      },
+      {
+        "facts": {
+          "projectCode": "257",
+          "departmentCode": "D",
+          "departmentTree": [],
+          "member": true,
+          "owner": true,
+          "creator": false,
+          "participant": false
+        },
+        "allowed": false
+      }
+    ]
+  },
+  {
+    "name": "memberDepartmentTree",
+    "scopes": [
+      {
+        "dimension": "project",
+        "predicate": "member"
+      },
+      {
+        "dimension": "department",
+        "predicate": "tree",
+        "value": "D"
+      }
+    ],
+    "projection": {
+      "version": 1,
+      "project_codes": [],
+      "department_codes": [
+        "D"
+      ],
+      "department_tree_roots": [
+        "D"
+      ],
+      "masks": [
+        0,
+        43690,
+        43690,
+        43690
+      ]
+    },
+    "cases": [
+      {
+        "facts": {
+          "projectCode": "263",
+          "departmentCode": "child",
+          "departmentTree": [
+            "D"
+          ],
+          "member": true,
+          "owner": false,
+          "creator": false,
+          "participant": false
+        },
+        "allowed": true
+      },
+      {
+        "facts": {
+          "projectCode": "263",
+          "departmentCode": "D",
+          "departmentTree": [],
+          "member": true,
+          "owner": false,
+          "creator": false,
+          "participant": false
+        },
+        "allowed": true
+      },
+      {
+        "facts": {
+          "projectCode": "263",
+          "departmentCode": "child",
+          "departmentTree": [],
+          "member": true,
+          "owner": false,
+          "creator": false,
+          "participant": false
+        },
+        "allowed": false
+      },
+      {
+        "facts": {
+          "projectCode": "263",
+          "departmentCode": "child",
+          "departmentTree": [
+            "D"
+          ],
+          "member": false,
+          "owner": true,
+          "creator": false,
+          "participant": false
+        },
+        "allowed": false
+      }
+    ]
+  },
+  {
+    "name": "creatorIndependentOfLeaderAndMembership",
+    "scopes": [
+      {
+        "dimension": "subject",
+        "predicate": "self"
+      }
+    ],
+    "projection": {
+      "version": 1,
+      "project_codes": [],
+      "department_codes": [],
+      "department_tree_roots": [],
+      "masks": [
+        61680
+      ]
+    },
+    "cases": [
+      {
+        "facts": {
+          "projectCode": "263",
+          "departmentCode": "D",
+          "departmentTree": [],
+          "member": false,
+          "owner": false,
+          "creator": true,
+          "participant": false
+        },
+        "allowed": true
+      },
+      {
+        "facts": {
+          "projectCode": "263",
+          "departmentCode": "D",
+          "departmentTree": [],
+          "member": true,
+          "owner": true,
+          "creator": false,
+          "participant": false
+        },
+        "allowed": false
+      }
+    ]
+  }
+]

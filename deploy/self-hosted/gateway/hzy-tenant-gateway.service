@@ -1,0 +1,44 @@
+# systemd unit example for the self-hosted Tenant Gateway (one site per unit).
+# Install: copy to /etc/systemd/system/, adjust User/paths, then
+#   systemctl daemon-reload && systemctl enable --now hzy-tenant-gateway
+[Unit]
+Description=HZY self-hosted Tenant Gateway
+# tailscaled ordering matters only for the optional Tailscale ingress bind
+# (listeners.ingress.allowedPeers); After= on a unit that is not installed is
+# harmless. The tailnet address can still appear after tailscaled starts: the
+# gateway retries EADDRNOTAVAIL for up to 120 s, then exits 1 and
+# Restart=on-failure starts it again.
+After=network-online.target tailscaled.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=hzy-gateway
+Group=hzy-gateway
+# Release checkout that contains deploy/ and foundation/shared (imported by the Worker source).
+WorkingDirectory=/opt/hzy/current
+ExecStart=/usr/bin/node deploy/self-hosted/gateway/server.mjs --config /etc/hzy-gateway/gateway.json
+Restart=on-failure
+RestartSec=5
+# Exit code 78 = configuration rejected; do not restart-loop on it.
+RestartPreventExitStatus=78
+Environment=NODE_ENV=production
+# Hardening: loopback (or one allowlisted Tailscale) listener, read-only code,
+# no privilege escalation.
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictNamespaces=true
+LockPersonality=true
+ReadOnlyPaths=/opt/hzy /etc/hzy-gateway
+UMask=0077
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target

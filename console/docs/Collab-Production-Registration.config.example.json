@@ -1,0 +1,15 @@
+{
+  "bindings": {
+    "tenant": "C000001",
+    "deployments": {
+      "collab": "C000001-collab"
+    }
+  },
+  "db": {
+    "host": "<approved-local-database-host>",
+    "port": 3306,
+    "user": "<grant-migration-user>",
+    "password": "<read-from-protected-config-at-execution>",
+    "database": "<approved-console-database>"
+  }
+}

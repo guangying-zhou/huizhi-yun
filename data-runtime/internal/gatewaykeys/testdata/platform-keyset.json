@@ -1,0 +1,10 @@
+{
+  "rootPublicKey": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEAwTs1ch56p0kLYFAb/p3mK2iDGQPe1dluqlR7bwpP5i4=\n-----END PUBLIC KEY-----\n",
+  "envelope": {
+    "schema": "hzy-gateway-keyset.v1",
+    "alg": "Ed25519",
+    "kid": "fixture-root",
+    "body": "{\"environment\":\"test\",\"expiresAt\":301000,\"gatewayDeployment\":\"test-gateway\",\"issuedAt\":1000,\"keys\":[{\"kid\":\"72cd6e8422c407fb6d098690f1130b7ded7ec2f7f5e1d30bd9d521f015363793\",\"notAfter\":500000,\"notBefore\":1000,\"publicKey\":\"AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE\",\"status\":\"active\"}],\"revision\":1,\"runtimeCode\":\"test-runtime\",\"tenant\":\"T-TEST\"}",
+    "signature": "LTCPRWMmSna9SvYtuoyw2O3JXehG2CAuV-YyqzBTvTvf4i8xm8shsXCitLaPoCpNTz51yO0R4SlWrkD4PUF8Dg"
+  }
+}

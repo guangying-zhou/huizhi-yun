@@ -1,0 +1,136 @@
+{
+  "node": "v22.16.0",
+  "scope": "isolated real egress HTTP with fake upstream; no actual grant/role/deployment validation",
+  "rows": [
+    {
+      "scope": "aims:products:view",
+      "purpose": "产品列表",
+      "localAllowed": true,
+      "status": 200,
+      "forwardedToFakeConsole": true,
+      "errorCode": null
+    },
+    {
+      "scope": "aims:products:authorization-object",
+      "purpose": "产品对象授权事实（详情/权限前置）",
+      "localAllowed": false,
+      "status": 403,
+      "forwardedToFakeConsole": false,
+      "errorCode": null
+    },
+    {
+      "scope": "aims:product-versions:read",
+      "purpose": "版本读取（仍有前置授权依赖）",
+      "localAllowed": true,
+      "status": 200,
+      "forwardedToFakeConsole": true,
+      "errorCode": null
+    },
+    {
+      "scope": "codocs:personal-documents:read",
+      "purpose": "个人文档元数据",
+      "localAllowed": true,
+      "status": 200,
+      "forwardedToFakeConsole": true,
+      "errorCode": null
+    },
+    {
+      "scope": "integration_config:view",
+      "purpose": "对象存储集成配置",
+      "localAllowed": false,
+      "status": 403,
+      "forwardedToFakeConsole": false,
+      "errorCode": null
+    },
+    {
+      "scope": "credential_vault:resolve",
+      "purpose": "对象存储凭据解析",
+      "localAllowed": false,
+      "status": 403,
+      "forwardedToFakeConsole": false,
+      "errorCode": null
+    },
+    {
+      "scope": "codocs:personal-documents:export",
+      "purpose": "文档下载",
+      "localAllowed": false,
+      "status": 403,
+      "forwardedToFakeConsole": false,
+      "errorCode": null
+    },
+    {
+      "scope": "codocs:document-access-records:record",
+      "purpose": "公司文档访问审计",
+      "localAllowed": false,
+      "status": 403,
+      "forwardedToFakeConsole": false,
+      "errorCode": null
+    },
+    {
+      "scope": "assets:product:edit",
+      "purpose": "获准产品编辑例外",
+      "localAllowed": true,
+      "status": 200,
+      "forwardedToFakeConsole": true,
+      "errorCode": null
+    },
+    {
+      "scope": "codocs:personal-documents:create",
+      "purpose": "未获准文档创建",
+      "localAllowed": false,
+      "status": 403,
+      "forwardedToFakeConsole": false,
+      "errorCode": null
+    }
+  ],
+  "errors": [
+    {
+      "input": {
+        "statusCode": 403,
+        "message": "Console egress request failed"
+      },
+      "output": {
+        "statusCode": 403,
+        "message": "Local Enterprise request failed",
+        "code": "hzy0_upstream_error"
+      }
+    },
+    {
+      "input": {
+        "statusCode": 503,
+        "data": {
+          "code": "enterprise_module_runtime_not_ready"
+        }
+      },
+      "output": {
+        "statusCode": 503,
+        "message": "Local Enterprise request failed",
+        "code": "hzy0_upstream_error"
+      }
+    },
+    {
+      "input": {
+        "statusCode": 503,
+        "message": "文档存储暂不可用"
+      },
+      "output": {
+        "statusCode": 503,
+        "message": "Local Enterprise request failed",
+        "code": "hzy0_upstream_error"
+      }
+    },
+    {
+      "input": {
+        "error": "insufficient_scope"
+      },
+      "output": {
+        "statusCode": 403,
+        "code": "insufficient_scope",
+        "message": "Permission is required",
+        "data": {
+          "code": "insufficient_scope"
+        }
+      }
+    }
+  ]
+}

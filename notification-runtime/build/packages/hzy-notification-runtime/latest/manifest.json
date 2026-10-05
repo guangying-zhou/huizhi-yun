@@ -1,0 +1,25 @@
+{
+  "name": "hzy-notification-runtime",
+  "version": "0.1.6",
+  "commit": "5198853",
+  "builtAt": "2026-07-14T20:50:31Z",
+  "schema": {
+    "version": "002",
+    "path": "schema/002_notification_delivery_reconciliation.sql",
+    "sha256": "284147a31442d464aee30c3054f5c23297bb7304ae5f29aa92134c802edb4aa7"
+  },
+  "schemas": [
+    {"version": "001", "path": "schema/001_notification_delivery_ledger.sql", "sha256": "ef942fedc3f8e121dfd55374745dc37f23db0bc114d03527e3b0d34e1f2cccc3"},
+    {"version": "002", "path": "schema/002_notification_delivery_reconciliation.sql", "sha256": "284147a31442d464aee30c3054f5c23297bb7304ae5f29aa92134c802edb4aa7"}
+  ],
+  "platforms": [
+    {
+      "os": "linux",
+      "arch": "amd64"
+    },
+    {
+      "os": "linux",
+      "arch": "arm64"
+    }
+  ]
+}

@@ -1,0 +1,22 @@
+{
+  "recordedAt": "2026-09-14T05:52:03.740283+00:00",
+  "scope": "isolated MySQL fixture only; AA04 has no registered HTTP route or deployed activation",
+  "command": "node data-runtime/scripts/test-registered-activation-mysql.mjs",
+  "result": "PASS",
+  "packageDurationSeconds": 3.08,
+  "checks": [
+    "fresh completion and exact receipt/source ACK",
+    "same-key replay without duplicate receipt",
+    "late processing-to-succeeded ACK failure rolls back source and target",
+    "cross-contract payment term rejection",
+    "callback tenant mismatch with remaining source fields valid",
+    "callback deployment mismatch with remaining source fields valid",
+    "fresh pending receivable remains pending and source operation count unchanged after late ACK failure",
+    "committed callback response reports succeeded to suppress legacy external dispatch"
+  ],
+  "sourceSha256": {
+    "data-runtime/internal/apps/aims/milestone_completion_governance.go": "459752f4f5e19df189f5e4aa1f4b192b7f344a05d23b6f10d39465092862788f",
+    "data-runtime/internal/enterprisecontracts/milestone_receivable.go": "3f462bc81776adb40266ccdaa7c0ca9ac576be6b151eab27e3d00f047b9e6a02",
+    "data-runtime/internal/enterprisecontracts/activation_mysql_test.go": "0ac1ff351eb99c082d93c35c39213536f0270dab8c16aee5fe6b8668bfbf3074"
+  }
+}

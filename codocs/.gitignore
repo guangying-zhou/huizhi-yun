@@ -1,0 +1,41 @@
+# Nuxt dev/build outputs
+.output
+.data
+.nuxt
+.nitro
+.cache
+dist
+.wrangler.generated.jsonc
+
+# Node dependencies
+node_modules
+__pycache__
+.venv*
+
+# Logs
+logs
+*.log
+
+# Misc
+.DS_Store
+.fleet
+.idea
+
+# Local env files
+.env
+.env.dev
+.env.cloudflare
+.env.cloudflare.local
+# .env.*
+!.env.example
+!.env.cloudflare.example
+
+# VSC
+.history
+__init__.py
+
+*.zip
+# x-bookmark-fetcher/cookies.json
+
+
+.gstack/

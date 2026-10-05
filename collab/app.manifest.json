@@ -1,0 +1,40 @@
+{
+  "appCode": "collab",
+  "appName": "Collab Runtime",
+  "appType": "internal",
+  "serviceRole": "supporting_service",
+  "description": "平台级实时协作运行时，提供 Yjs WebSocket、presence、协作 token 校验和协作持久化能力。",
+  "icon": "i-lucide-radio-tower",
+  "authMode": "service",
+  "bundleEnabled": false,
+  "entry": {
+    "web": "/collab/",
+    "apiBase": "/api/v1/collab"
+  },
+  "runtimeRequirements": {
+    "requiresSdk": false,
+    "supportsCustomerHosted": true,
+    "supportsManagedControlPlane": true
+  },
+  "compatibility": {
+    "minControlPlaneVersion": "0.1.0",
+    "minSdkVersion": "0.1.0"
+  },
+  "resources": [
+    {
+      "code": "runtime",
+      "name": "协作运行时",
+      "description": "协作运行时健康状态、provider 状态和基础运行参数",
+      "actions": ["view", "admin"],
+      "sortOrder": 10
+    }
+  ],
+  "recommendedRoles": [],
+  "supportedScopes": [
+    "tenant:global"
+  ],
+  "capabilitiesRequired": [
+    "platform:app-registry",
+    "console:credential-vault"
+  ]
+}

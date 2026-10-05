@@ -1,0 +1,61 @@
+{
+  "receiptVersion": 1,
+  "deployedAt": "2026-09-14T05:36:41Z",
+  "scope": "authorized development-only replacement of the single hzy-platform-dev PM2 process; production and all other processes were untouched",
+  "preflight": {
+    "developmentDatabase": "hzy_platform_dev",
+    "developmentDatabaseUuid": "8a10b222-5108-11ef-8bb6-5600050b12e8",
+    "baseline": {
+      "entry": "/wiztek/hzy-test/platform-release-5f898581/platform/.output/server/index.mjs",
+      "cwd": "/wiztek/hzy-test/platform-release-5f898581/platform",
+      "entrySha256": "845e40b810118f24bf355dd237053b40f24b19ebdab9426280efd5b4c9264b03",
+      "safePm2ConfigurationSha256": "38ee4213691460c6267f9955fd3a3b6702705858b1c8165e63f81fd5992a5c9f"
+    },
+    "protectedOriginalPm2Snapshot": "/wiztek/hzy-test/platform-candidates/enterprise-platform-linux-20260914T052100Z/protected-original-pm2.json",
+    "protectedOriginalPm2SnapshotMode": "0600",
+    "candidate": {
+      "cwd": "/wiztek/hzy-test/platform-candidates/enterprise-platform-linux-20260914T052100Z",
+      "entry": "/wiztek/hzy-test/platform-candidates/enterprise-platform-linux-20260914T052100Z/.output/server/index.mjs",
+      "entrySha256": "eda69251613de61c0928bd181e61b2c9c087da2a3d9d55070b9aa8507cc9d00b",
+      "outputFiles": 849,
+      "outputManifestSha256": "9331f2c20650e22e9ca44a65d424ac7f3f0065e2f58f9b7ca828db0d09b55cd5"
+    }
+  },
+  "replacement": {
+    "method": "PM2 CLI delete and recreate of hzy-platform-dev using the prior process environment read only in memory",
+    "environmentWrittenToDisk": false,
+    "processName": "hzy-platform-dev",
+    "port": 3011,
+    "nodeEnv": "production",
+    "interpreter": "/root/.nvm/versions/node/v24.18.0/bin/node"
+  },
+  "postDeploymentVerification": {
+    "pm2": {
+      "status": "online",
+      "pid": 1483147,
+      "cwd": "/wiztek/hzy-test/platform-candidates/enterprise-platform-linux-20260914T052100Z",
+      "entry": "/wiztek/hzy-test/platform-candidates/enterprise-platform-linux-20260914T052100Z/.output/server/index.mjs",
+      "procCwdMatched": true,
+      "safePm2ConfigurationSha256": "1b5a52b07b3c7edbb2c9b9bae8c9fd1467b81d65198e9d6891269aa57db15f89"
+    },
+    "health": {
+      "endpoint": "http://127.0.0.1:3011/api/health",
+      "httpStatus": 200,
+      "service": "platform",
+      "status": "ok"
+    },
+    "unauthenticatedRouteBehavior": {
+      "GET /api/platform/ops/enterprise-roles": 401,
+      "POST /api/platform/ops/deployments/external-drain": 401,
+      "POST /api/v1/runtime/cutover-activation": 401
+    }
+  },
+  "rollback": {
+    "ready": true,
+    "entry": "/wiztek/hzy-test/platform-release-5f898581/platform/.output/server/index.mjs",
+    "cwd": "/wiztek/hzy-test/platform-release-5f898581/platform",
+    "entrySha256": "845e40b810118f24bf355dd237053b40f24b19ebdab9426280efd5b4c9264b03",
+    "trigger": "Any subsequent candidate health or required authenticated-flow failure."
+  },
+  "limitations": "Health and unauthenticated route checks prove process identity, route presence, and fail-closed authentication only. They do not replace the pending authenticated browser acceptance flow."
+}

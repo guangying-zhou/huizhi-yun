@@ -1,0 +1,22 @@
+diff --git a/dist/types/index.d.ts b/dist/types/index.d.ts
+index b89afecb68404b980badeb986296718d0e1c257e..0ca4db75f6c21fa525336970242b03041424f52a 100644
+--- a/dist/types/index.d.ts
++++ b/dist/types/index.d.ts
+@@ -119,7 +119,10 @@ interface TaskRunnerOptions {
+ 
+ interface InternalApi {
+ }
+-type NitroFetchRequest = Exclude<keyof InternalApi, `/_${string}` | `/api/_${string}`> | Exclude<FetchRequest, string> | (string & {});
++/** Opt in per TypeScript project to avoid expanding every route in generic request constraints. */
++interface NitroFetchConfig {
++}
++type NitroFetchRequest = NitroFetchConfig extends { flatRequest: true } ? FetchRequest : Exclude<keyof InternalApi, `/_${string}` | `/api/_${string}`> | Exclude<FetchRequest, string> | (string & {});
+ type MiddlewareOf<Route extends string, Method extends RouterMethod | "default"> = Method extends keyof InternalApi[MatchedRoutes<Route>] ? InternalApi[MatchedRoutes<Route>][Method] : never;
+ type TypedInternalResponse<Route, Default = unknown, Method extends RouterMethod = RouterMethod> = Default extends string | boolean | number | null | void | object ? Default : Route extends string ? MiddlewareOf<Route, Method> extends never ? MiddlewareOf<Route, "default"> extends never ? Default : MiddlewareOf<Route, "default"> : MiddlewareOf<Route, Method> : Default;
+ type AvailableRouterMethod<R extends NitroFetchRequest> = R extends string ? keyof InternalApi[MatchedRoutes<R>] extends undefined ? RouterMethod : Extract<keyof InternalApi[MatchedRoutes<R>], "default"> extends undefined ? Extract<RouterMethod, keyof InternalApi[MatchedRoutes<R>]> : RouterMethod : RouterMethod;
+@@ -255,4 +258,4 @@ declare module "h3" {
+ }
+ 
+ export { NitroConfig, NitroModule, NitroOptions };
+-export type { $Fetch, AssetMeta, AvailableRouterMethod, Base$Fetch, CaptureError, CapturedErrorContext, ExtractedRouteMethod, H3Event$Fetch, H3EventFetch, InternalApi, MatchedRoutes, MiddlewareOf, NitroApp, NitroAppPlugin, NitroAsyncContext, NitroFetchOptions, NitroFetchRequest, NitroRuntimeHooks, NitroStaticBuildFlags, PublicAsset, RenderContext, RenderHandler, RenderResponse, Serialize, SerializeObject, SerializeTuple, Simplify, Task, TaskContext, TaskEvent, TaskMeta, TaskPayload, TaskResult, TaskRunnerOptions, TypedInternalResponse };
++export type { $Fetch, AssetMeta, AvailableRouterMethod, Base$Fetch, CaptureError, CapturedErrorContext, ExtractedRouteMethod, H3Event$Fetch, H3EventFetch, InternalApi, MatchedRoutes, MiddlewareOf, NitroApp, NitroAppPlugin, NitroAsyncContext, NitroFetchConfig, NitroFetchOptions, NitroFetchRequest, NitroRuntimeHooks, NitroStaticBuildFlags, PublicAsset, RenderContext, RenderHandler, RenderResponse, Serialize, SerializeObject, SerializeTuple, Simplify, Task, TaskContext, TaskEvent, TaskMeta, TaskPayload, TaskResult, TaskRunnerOptions, TypedInternalResponse };

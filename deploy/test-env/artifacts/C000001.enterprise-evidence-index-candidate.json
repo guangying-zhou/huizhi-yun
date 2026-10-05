@@ -1,0 +1,183 @@
+{
+  "schemaVersion": "enterprise-evidence-index.v1",
+  "releaseState": "candidate",
+  "deploymentState": "not-deployed",
+  "sourceCommit": "8217fe4af7bd148f16b3f947bdbcf68fdf6ec59b",
+  "evidence": [
+    {
+      "id": "assets-product-master-isolated-mysql",
+      "type": "isolated-mysql",
+      "role": "isolated-mysql-receipt",
+      "testedCommit": "8217fe4af7bd148f16b3f947bdbcf68fdf6ec59b",
+      "source": {
+        "path": "deploy/test-env/artifacts/C000001.assets-product-master-cross-entry-isolated-mysql-verification.json",
+        "sha256": "2f36bb9af65d1e46bcdc9686a4e0355523dedfe5f9e8fd417fc70b295573126e"
+      },
+      "execution": {
+        "mode": "isolated",
+        "environment": "isolated",
+        "mocked": false
+      },
+      "deploymentState": "not-deployed",
+      "boundary": {
+        "proves": [
+          "temporary MySQL product-master cross-entry contract"
+        ],
+        "excludes": [
+          "deployed database",
+          "live tenant grant"
+        ]
+      }
+    },
+    {
+      "id": "enterprise-assets-api-identity-contract",
+      "type": "contract",
+      "role": "api-identity-contract",
+      "testedCommit": "8217fe4af7bd148f16b3f947bdbcf68fdf6ec59b",
+      "source": {
+        "path": "enterprise/test/assets-reads-bridge.test.mjs",
+        "sha256": "234fa9f5f263696ccadf3aff549cd7bc965ce5c78e1d9d6bb658b39a22cfa151"
+      },
+      "execution": {
+        "mode": "local",
+        "environment": "local",
+        "mocked": false
+      },
+      "deploymentState": "not-deployed",
+      "boundary": {
+        "proves": [
+          "Host to Foundation to Runtime identity and scoped read contract"
+        ],
+        "excludes": [
+          "OIDC browser session",
+          "deployed service grant"
+        ]
+      }
+    },
+    {
+      "id": "assets-owning-receipt-migration",
+      "type": "isolated-mysql",
+      "role": "migration-receipt",
+      "testedCommit": "8217fe4af7bd148f16b3f947bdbcf68fdf6ec59b",
+      "source": {
+        "path": "deploy/test-env/artifacts/C000001.assets-owned-receipt-migration.json",
+        "sha256": "9b2af3835407bdba685b03020651ca077bb39b1f4b3aa74b8e0511cfa8795079"
+      },
+      "execution": {
+        "mode": "isolated",
+        "environment": "isolated",
+        "mocked": false
+      },
+      "deploymentState": "not-deployed",
+      "boundary": {
+        "proves": [
+          "candidate owning-receipt migration record"
+        ],
+        "excludes": [
+          "production DDL application",
+          "live schema activation"
+        ]
+      }
+    },
+    {
+      "id": "enterprise-operation-permission-matrix",
+      "type": "contract",
+      "role": "permission-matrix",
+      "testedCommit": "8217fe4af7bd148f16b3f947bdbcf68fdf6ec59b",
+      "source": {
+        "path": "docs/Unified-Enterprise-Operation-Coverage-Matrix.md",
+        "sha256": "2623a6cf630e0fe03d784c40dc2380d81ff6499b7074063aecc878ae646e8a44"
+      },
+      "execution": {
+        "mode": "local",
+        "environment": "local",
+        "mocked": false
+      },
+      "deploymentState": "not-deployed",
+      "boundary": {
+        "proves": [
+          "registered operation and exact capability inventory"
+        ],
+        "excludes": [
+          "target tenant grant verification",
+          "default user authorization"
+        ]
+      }
+    },
+    {
+      "id": "platform-linux-build-performance-candidate",
+      "type": "unit",
+      "role": "build-performance",
+      "testedCommit": "8217fe4af7bd148f16b3f947bdbcf68fdf6ec59b",
+      "source": {
+        "path": "deploy/test-env/artifacts/C000001.platform-enterprise-linux-smoke-candidate.json",
+        "sha256": "081f50120a596407426c4aff9b5d63183850012419d8c2324fa64fc05a5ff0cb"
+      },
+      "execution": {
+        "mode": "local",
+        "environment": "local",
+        "mocked": false
+      },
+      "deploymentState": "not-deployed",
+      "boundary": {
+        "proves": [
+          "candidate Linux build and smoke output"
+        ],
+        "excludes": [
+          "deployed worker",
+          "production performance claim"
+        ]
+      }
+    },
+    {
+      "id": "enterprise-browser-candidate",
+      "type": "browser",
+      "role": "browser",
+      "testedCommit": "8217fe4af7bd148f16b3f947bdbcf68fdf6ec59b",
+      "source": {
+        "path": "deploy/test-env/artifacts/C000001.browser-acceptance-20260914.json",
+        "sha256": "3799155071247978abc8be537bcf0e7d52625d83b96caefe73956c7fbdbbb719"
+      },
+      "execution": {
+        "mode": "browser",
+        "environment": "test",
+        "mocked": false
+      },
+      "deploymentState": "not-deployed",
+      "boundary": {
+        "proves": [
+          "recorded candidate browser observations"
+        ],
+        "excludes": [
+          "current deployment",
+          "production acceptance"
+        ]
+      }
+    },
+    {
+      "id": "enterprise-host-rollback-candidate",
+      "type": "contract",
+      "role": "rollback",
+      "testedCommit": "8217fe4af7bd148f16b3f947bdbcf68fdf6ec59b",
+      "source": {
+        "path": "deploy/test-env/artifacts/C000001.enterprise-host-full-candidate-20260914.json",
+        "sha256": "d0d77650dc8bb75d08be0dd6f81e269c0e56cc3e90590853efab0926b1d2f617"
+      },
+      "execution": {
+        "mode": "test-tenant",
+        "environment": "test",
+        "mocked": false
+      },
+      "deploymentState": "not-deployed",
+      "boundary": {
+        "proves": [
+          "candidate rollback route version and protected receipt binding"
+        ],
+        "excludes": [
+          "deployed rollback route",
+          "release approval"
+        ]
+      }
+    }
+  ]
+}

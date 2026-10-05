@@ -1,0 +1,4 @@
+@import "tailwindcss"; @import "@nuxt/ui"; body{margin:0} html,body,#__nuxt{height:100%}
+@source "/Users/gavin/orca/workspaces/huizhi-yun/stream-c-people/codocs/app/components/published";
+@source "/Users/gavin/orca/workspaces/huizhi-yun/stream-c-people/codocs/app/components/company/AssetAccessRecords.vue";
+@source "/Users/gavin/orca/workspaces/huizhi-yun/stream-c-people/codocs/app/components/editor";

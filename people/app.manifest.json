@@ -1,0 +1,328 @@
+{
+  "appCode": "people",
+  "appName": "汇智云HR",
+  "appType": "internal",
+  "serviceRole": "business_app",
+  "description": "人员事实、任职快照、月度人员成本、项目贡献快照和绩效周期确认。",
+  "icon": "i-lucide-users",
+  "entry": {
+    "web": "/",
+    "apiBase": "/api/v1/people"
+  },
+  "runtimeRequirements": {
+    "requiresSdk": true,
+    "supportsCustomerHosted": true,
+    "supportsManagedControlPlane": false
+  },
+  "compatibility": {
+    "minControlPlaneVersion": "0.1.0",
+    "minSdkVersion": "0.1.0"
+  },
+  "resources": [
+    {
+      "code": "dashboard",
+      "name": "工作台",
+      "description": "汇智云HR工作台、人员和绩效摘要",
+      "actions": [
+        "view"
+      ],
+      "sortOrder": 1
+    },
+    {
+      "code": "employees",
+      "name": "员工",
+      "description": "员工事实、岗位、职级和成本摘要",
+      "actions": [
+        "view",
+        "edit",
+        "admin"
+      ],
+      "sortOrder": 10
+    },
+    {
+      "code": "assignments",
+      "name": "任职变更",
+      "description": "入转调离、任职历史和审批回写",
+      "actions": [
+        "view",
+        "edit",
+        "approve",
+        "admin"
+      ],
+      "sortOrder": 20
+    },
+    {
+      "code": "offboarding_tasks",
+      "name": "离职交接",
+      "description": "离职交接与资产回收协调任务；确认和取消为独立敏感动作",
+      "actions": [
+        "view",
+        "edit",
+        "confirm",
+        "cancel",
+        "admin"
+      ],
+      "sortOrder": 25
+    },
+    {
+      "code": "cost_snapshots",
+      "name": "成本快照",
+      "description": "月度标准成本和实际成本快照",
+      "actions": [
+        "view",
+        "edit",
+        "approve",
+        "admin"
+      ],
+      "sortOrder": 30
+    },
+    {
+      "code": "performance_cycles",
+      "name": "绩效周期",
+      "description": "绩效周期、项目贡献快照和周期确认",
+      "actions": [
+        "view",
+        "edit",
+        "approve",
+        "admin"
+      ],
+      "sortOrder": 40
+    },
+    {
+      "code": "documents",
+      "name": "文档引用",
+      "description": "员工、任职和绩效相关 Codocs 文档引用",
+      "actions": [
+        "view",
+        "edit",
+        "admin"
+      ],
+      "sortOrder": 50
+    },
+    {
+      "code": "standard_costs",
+      "name": "职级设置",
+      "description": "M/P 职级工资、绩效工资范围和成本快照生成口径",
+      "actions": [
+        "view",
+        "edit",
+        "approve",
+        "admin"
+      ],
+      "sortOrder": 70
+    },
+    {
+      "code": "positions",
+      "name": "岗位字典",
+      "description": "岗位主数据维护",
+      "actions": [
+        "view",
+        "admin"
+      ],
+      "sortOrder": 80
+    },
+    {
+      "code": "ranks",
+      "name": "职级字典",
+      "description": "职级主数据维护",
+      "actions": [
+        "view",
+        "admin"
+      ],
+      "sortOrder": 90
+    },
+    {
+      "code": "integration_operations",
+      "name": "跨应用操作",
+      "description": "诊断并受控重放 People 发起的 Directory 与 Assets 可靠操作",
+      "actions": [
+        "view",
+        "replay"
+      ],
+      "sortOrder": 95
+    },
+    {
+      "code": "hr_source_sync",
+      "name": "人事事实源",
+      "description": "钉钉正式行政组织、人员主归属和在离职状态同步",
+      "actions": [
+        "view",
+        "execute",
+        "admin"
+      ],
+      "sortOrder": 96
+    },
+    {
+      "code": "admin",
+      "name": "People 设置",
+      "description": "People 字典和系统设置",
+      "actions": [
+        "view",
+        "admin"
+      ],
+      "sortOrder": 100
+    }
+  ],
+  "recommendedRoles": [
+    {
+      "code": "people:viewer",
+      "name": "People 只读",
+      "description": "查看员工事实、任职、成本快照和绩效周期",
+      "suggestedPermissions": [
+        "people:dashboard:view",
+        "people:employees:view",
+        "people:assignments:view",
+        "people:offboarding_tasks:view",
+        "people:cost_snapshots:view",
+        "people:performance_cycles:view",
+        "people:documents:view"
+      ]
+    },
+    {
+      "code": "people:employee",
+      "name": "员工自助",
+      "description": "员工本人查看个人档案、任职记录和绩效周期",
+      "suggestedPermissions": [
+        "people:dashboard:view",
+        "people:employees:view",
+        "people:assignments:view",
+        "people:offboarding_tasks:view",
+        "people:offboarding_tasks:confirm",
+        "people:performance_cycles:view",
+        "people:documents:view"
+      ]
+    },
+    {
+      "code": "people:department_manager",
+      "name": "部门人员查看",
+      "description": "部门负责人查看授权部门内员工、任职和绩效信息",
+      "suggestedPermissions": [
+        "people:dashboard:view",
+        "people:employees:view",
+        "people:assignments:view",
+        "people:offboarding_tasks:view",
+        "people:offboarding_tasks:confirm",
+        "people:performance_cycles:view",
+        "people:documents:view"
+      ]
+    },
+    {
+      "code": "people:specialist",
+      "name": "人事专员",
+      "description": "维护员工档案和入转调离记录，不包含审批、薪酬成本和系统设置",
+      "suggestedPermissions": [
+        "people:dashboard:view",
+        "people:employees:edit",
+        "people:assignments:edit",
+        "people:ranks:view",
+        "people:offboarding_tasks:view",
+        "people:offboarding_tasks:edit",
+        "people:offboarding_tasks:cancel",
+        "people:documents:edit",
+        "people:performance_cycles:view"
+      ]
+    },
+    {
+      "code": "people:manager",
+      "name": "人力资源负责人",
+      "description": "管理全量员工事实和任职记录，查看绩效与成本信息，不包含专业审批、绩效维护、薪酬成本和系统设置",
+      "suggestedPermissions": [
+        "people:dashboard:view",
+        "people:employees:admin",
+        "people:assignments:admin",
+        "people:offboarding_tasks:admin",
+        "people:offboarding_tasks:confirm",
+        "people:offboarding_tasks:cancel",
+        "people:cost_snapshots:view",
+        "people:performance_cycles:view",
+        "people:documents:view",
+        "people:standard_costs:view"
+      ]
+    },
+    {
+      "code": "people:approver",
+      "name": "人事审批",
+      "description": "承接任职、成本和绩效周期的人事专业审批",
+      "suggestedPermissions": [
+        "people:dashboard:view",
+        "people:employees:view",
+        "people:assignments:view",
+        "people:offboarding_tasks:view",
+        "people:assignments:approve",
+        "people:cost_snapshots:view",
+        "people:cost_snapshots:approve",
+        "people:performance_cycles:view",
+        "people:performance_cycles:approve",
+        "people:documents:view"
+      ]
+    },
+    {
+      "code": "people:performance_manager",
+      "name": "绩效管理员",
+      "description": "维护绩效周期和贡献快照，不包含绩效确认审批",
+      "suggestedPermissions": [
+        "people:dashboard:view",
+        "people:employees:view",
+        "people:assignments:view",
+        "people:documents:view",
+        "people:performance_cycles:admin"
+      ]
+    },
+    {
+      "code": "people:compensation_admin",
+      "name": "薪酬成本管理员",
+      "description": "维护职级成本口径和成本快照，不包含成本调整审批",
+      "suggestedPermissions": [
+        "people:dashboard:view",
+        "people:employees:view",
+        "people:cost_snapshots:admin",
+        "people:standard_costs:admin",
+        "people:ranks:view"
+      ]
+    },
+    {
+      "code": "people:directory_admin",
+      "name": "People 字典管理员",
+      "description": "维护员工事实、岗位字典、职级字典和 People 设置",
+      "suggestedPermissions": [
+        "people:dashboard:view",
+        "people:employees:admin",
+        "people:documents:admin",
+        "people:positions:admin",
+        "people:ranks:admin",
+        "people:integration_operations:view",
+        "people:integration_operations:replay",
+        "people:admin:admin"
+      ]
+    },
+    {
+      "code": "people:admin",
+      "name": "People 管理员",
+      "description": "维护 People 全部人员事实、字典、成本和绩效周期",
+      "suggestedPermissions": [
+        "people:dashboard:view",
+        "people:employees:admin",
+        "people:assignments:admin",
+        "people:assignments:approve",
+        "people:offboarding_tasks:admin",
+        "people:offboarding_tasks:confirm",
+        "people:offboarding_tasks:cancel",
+        "people:cost_snapshots:admin",
+        "people:cost_snapshots:approve",
+        "people:performance_cycles:admin",
+        "people:performance_cycles:approve",
+        "people:documents:admin",
+        "people:standard_costs:admin",
+        "people:standard_costs:approve",
+        "people:positions:admin",
+        "people:ranks:admin",
+        "people:integration_operations:view",
+        "people:integration_operations:replay",
+        "people:hr_source_sync:view",
+        "people:hr_source_sync:execute",
+        "people:hr_source_sync:admin",
+        "people:admin:admin"
+      ]
+    }
+  ]
+}

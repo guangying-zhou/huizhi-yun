@@ -1,0 +1,96 @@
+[
+  {
+    "name": "hzy-platform-prod",
+    "pm2_env": {
+      "status": "online",
+      "pm_cwd": "/srv/hzy/platform-prod",
+      "pm_exec_path": "/srv/hzy/platform-prod/.output/server/index.mjs",
+      "HOST": "127.0.0.1",
+      "PORT": "3010",
+      "NITRO_HOST": "127.0.0.1",
+      "NITRO_PORT": "3010",
+      "DB_NAME": "hzy_platform",
+      "PLATFORM_SERVICE_URL": "https://platform.wiztek.cn",
+      "NUXT_PUBLIC_PLATFORM_STAGE": "production"
+    }
+  },
+  {
+    "name": "hzy-platform-dev",
+    "pm2_env": {
+      "status": "online",
+      "pm_cwd": "/srv/hzy/platform-dev",
+      "pm_exec_path": "/srv/hzy/platform-dev/.output/server/index.mjs",
+      "HOST": "127.0.0.1",
+      "PORT": "3011",
+      "NITRO_HOST": "127.0.0.1",
+      "NITRO_PORT": "3011",
+      "DB_NAME": "hzy_platform_dev",
+      "PLATFORM_SERVICE_URL": "https://platform-dev.wiztek.cn",
+      "NUXT_PUBLIC_PLATFORM_STAGE": "test"
+    }
+  },
+  {
+    "name": "hzy-console-prod",
+    "pm2_env": {
+      "status": "online",
+      "pm_cwd": "/srv/hzy/console-prod",
+      "pm_exec_path": "/srv/hzy/console-prod/.output/server/index.mjs",
+      "HOST": "127.0.0.1",
+      "PORT": "3030",
+      "NITRO_HOST": "127.0.0.1",
+      "NITRO_PORT": "3030",
+      "DB_NAME": "hzy_console",
+      "HZY_CONSOLE_RUN_MODE": "prod",
+      "HZY_PLATFORM_URL": "https://platform.wiztek.cn",
+      "HZY_PLATFORM_DEPLOYMENT_CODE": "wiztek-console",
+      "HZY_PLATFORM_BUNDLE_CACHE_BACKEND": "file",
+      "HZY_PLATFORM_BUNDLE_CACHE_DIR": ".data/platform-runtime",
+      "HZY_PLATFORM_BUNDLE_CACHE_SCOPE": "wiztek-console",
+      "HZY_PLATFORM_BUNDLE_CACHE_LEGACY_FALLBACK": "false",
+      "HZY_CONSOLE_TRUST_TENANT_GATEWAY": "false",
+      "CONSOLE_COLLAB_MODE": "embedded",
+      "COLLAB_PORT": "3021",
+      "COLLAB_DB_NAME": "hzy_codocs",
+      "HZY_PLATFORM_RUNTIME_ENABLED": "true",
+      "HZY_PLATFORM_HEARTBEAT_ENABLED": "true",
+      "HZY_PLATFORM_BUNDLE_REFRESH_ON_BOOT": "true",
+      "HZY_PLATFORM_AUTH_CLIENT_MATERIALIZE": "true",
+      "HZY_CONSOLE_AUTH_CLIENT_MATERIALIZE_MODE": "upsert",
+      "CONSOLE_AUTH_SIGNING_KEY_AUTOGENERATE": "false",
+      "CONSOLE_AUTH_SIGNING_KEY_ROTATE_UNUSABLE": "false",
+      "HZY_CONSOLE_BACKGROUND_JOBS_ENABLED": "true",
+      "HZY_CONSOLE_DEV_POLICY_BYPASS": "false"
+    }
+  },
+  {
+    "name": "hzy-console-test",
+    "pm2_env": {
+      "status": "online",
+      "pm_cwd": "/srv/hzy/console-test",
+      "pm_exec_path": "/srv/hzy/console-test/.output/server/index.mjs",
+      "HOST": "127.0.0.1",
+      "PORT": "3031",
+      "NITRO_HOST": "127.0.0.1",
+      "NITRO_PORT": "3031",
+      "DB_NAME": "hzy_console",
+      "HZY_CONSOLE_RUN_MODE": "test",
+      "HZY_PLATFORM_URL": "https://platform-dev.wiztek.cn",
+      "HZY_PLATFORM_DEPLOYMENT_CODE": "wiztek-test-console",
+      "HZY_PLATFORM_BUNDLE_CACHE_BACKEND": "file",
+      "HZY_PLATFORM_BUNDLE_CACHE_DIR": ".data/platform-runtime-test",
+      "HZY_PLATFORM_BUNDLE_CACHE_SCOPE": "wiztek-test-console",
+      "HZY_PLATFORM_BUNDLE_CACHE_LEGACY_FALLBACK": "false",
+      "HZY_CONSOLE_TRUST_TENANT_GATEWAY": "false",
+      "CONSOLE_COLLAB_MODE": "disabled",
+      "HZY_PLATFORM_RUNTIME_ENABLED": "true",
+      "HZY_PLATFORM_HEARTBEAT_ENABLED": "true",
+      "HZY_PLATFORM_BUNDLE_REFRESH_ON_BOOT": "true",
+      "HZY_PLATFORM_AUTH_CLIENT_MATERIALIZE": "true",
+      "HZY_CONSOLE_AUTH_CLIENT_MATERIALIZE_MODE": "append",
+      "CONSOLE_AUTH_SIGNING_KEY_AUTOGENERATE": "false",
+      "CONSOLE_AUTH_SIGNING_KEY_ROTATE_UNUSABLE": "false",
+      "HZY_CONSOLE_BACKGROUND_JOBS_ENABLED": "true",
+      "HZY_CONSOLE_DEV_POLICY_BYPASS": "false"
+    }
+  }
+]

@@ -1,0 +1,36 @@
+{
+  "method": "POST",
+  "target": "/v1/enterprise/altoc/contracts:list",
+  "token": "public-test-token",
+  "authorization": {
+    "actorUid": "person-a",
+    "tenant": "tenant-a",
+    "deployment": "enterprise-test",
+    "resource": "contract",
+    "action": "view",
+    "operation": "list",
+    "objectId": "",
+    "allowed": true,
+    "expiresAt": 1800000014000,
+    "bundleVersion": "v1",
+    "bundleHash": "hash",
+    "policyRevision": 42,
+    "scope": {
+      "access": "dept",
+      "departmentCodes": [
+        "D-1",
+        "部门二"
+      ]
+    },
+    "query": {
+      "page": 2,
+      "pageSize": 20,
+      "search": "合同<>&\"\\  ",
+      "status": "active",
+      "customerId": "7",
+      "contractId": ""
+    }
+  },
+  "canonical": "[\"hzy-enterprise-altoc-read-permit.v1\",\"POST\",\"/v1/enterprise/altoc/contracts:list\",\"person-a\",\"tenant-a\",\"enterprise-test\",\"contract\",\"view\",\"list\",\"\",true,1800000014000,\"v1\",\"hash\",42,\"dept\",[\"D-1\",\"部门二\"],2,20,\"合同<>&\\\"\\\\\\u2028\\u2029\",\"active\",\"7\",\"\"]",
+  "signature": "_r4sy1w7QawbJvbKk1LlCp9LG_YrupWwy8yKjF-ovhc"
+}

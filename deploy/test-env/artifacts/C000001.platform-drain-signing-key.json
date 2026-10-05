@@ -1,0 +1,19 @@
+{
+  "schema": "enterprise-drain-signing-key-observation.v1",
+  "observedAt": "2026-09-14T04:26:26.383992+00:00",
+  "source": "SSH authenticated hzy-platform-dev process, hzy_platform_dev active platform_signing_keys row",
+  "kid": "psk_20260718_AElQdK3VQSja",
+  "alg": "Ed25519",
+  "publicKey": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEAAJpz/Z7sSibKPA2deR/5r0BVMVYxMtqkQjo+Wy1Cz/w=\n-----END PUBLIC KEY-----\n",
+  "spkiSha256": "a156fa1e3f79bb7939c061acf1bbfb90e75ce5ed98f2b741f9015436a078ab39",
+  "activeRowCount": 1,
+  "runtimeSigningVerified": false,
+  "coordinatorDeployed": false,
+  "keyPairVerification": {
+    "kid": "psk_20260718_AElQdK3VQSja",
+    "spkiSha256": "a156fa1e3f79bb7939c061acf1bbfb90e75ce5ed98f2b741f9015436a078ab39",
+    "configuredKeyPairVerified": true,
+    "challengeVerified": true,
+    "applicationSigningEndpointVerified": false
+  }
+}

@@ -1,0 +1,37 @@
+# Nuxt dev/build outputs
+.output
+.data
+.nuxt
+.nitro
+.cache
+dist
+.wrangler.generated.jsonc
+
+# Node dependencies
+node_modules
+__pycache__
+.venv*
+.vscode
+!.vscode/settings.json
+
+# Logs
+logs
+*.log
+
+# Misc
+.DS_Store
+.fleet
+.idea
+
+# Local env files
+.env
+.env.dev
+.env.*
+!.env.example
+!.env.*.example
+
+# VSC
+.history
+__init__.py
+
+*.zip

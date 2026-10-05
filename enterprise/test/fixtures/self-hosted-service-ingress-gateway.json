@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "site": { "publicHost": "wiztek-ingress-fixture.example.test", "tenantCode": "C000001", "environment": "prod", "tenantDomainSuffix": "ingress-fixture.test" },
+  "platform": { "origin": "https://platform-ingress-fixture.example.test" },
+  "runtime": { "endpoint": "https://runtime-ingress-fixture.example.test", "runtimeCode": "C000001-prod-runtime" },
+  "apps": {
+    "console": { "origin": "http://127.0.0.1:31001", "deploymentCode": "C000001-prod-console" },
+    "enterprise": { "origin": "http://127.0.0.1:31002", "deploymentCode": "C000001-prod-enterprise" }
+  },
+  "listeners": { "ingress": { "host": "127.0.0.1", "port": 8780 }, "health": { "host": "127.0.0.1", "port": 8781 } },
+  "scheduler": { "drain": { "enabled": false, "apps": ["console"] }, "policySync": { "enabled": false } },
+  "secrets": { "gatewayInternalToken": "fixture-only-gateway-internal-token-not-real", "platformRegistryToken": "fixture-only-platform-registry-token-not-real" }
+}

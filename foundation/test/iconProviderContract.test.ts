@@ -1,0 +1,11 @@
+import { readFileSync } from 'node:fs'
+import assert from 'node:assert/strict'
+import test from 'node:test'
+
+const config = readFileSync(new URL('../nuxt.config.ts', import.meta.url), 'utf8')
+
+test('Foundation SPAs load icons from their own Nitro server', () => {
+  assert.match(config, /icon:\s*\{[\s\S]*?provider:\s*'server'/)
+  assert.match(config, /fallbackToApi:\s*false/)
+  assert.match(config, /collections:\s*\['lucide',\s*'simple-icons'\]/)
+})

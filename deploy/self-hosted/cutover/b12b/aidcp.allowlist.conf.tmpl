@@ -1,0 +1,111 @@
+# S4 aidcp.wiztek.cn entry (B12b: allowlisted sources are proxied to the self-hosted Gateway, everyone else gets the maintenance page). Installed as /etc/nginx/vhost/aidcp.wiztek.cn.conf on the gitlab host (included inside http{}).
+server {
+    listen 80;
+    server_name aidcp.wiztek.cn;
+    location /.well-known/acme-challenge/ { root /var/www/certbot; }
+    location / { return 301 https://$host$request_uri; }
+}
+
+# Source allowlist (B12b). $remote_addr is the real peer: this nginx terminates TLS directly, no CDN/SLB in front.
+#   127.0.0.1     local probes on the gitlab host
+#   8.130.81.31   gitlab host's own public address: what nginx sees for the connector (verified 2026-09-30: curl https://aidcp.wiztek.cn from the host is logged as 8.130.81.31)
+#   <user ip>     the operator's public egress IP(s), filled in at window time (one "<ip> 1;" line per address), never a range wider than needed
+geo $hzy_aidcp_allowed {
+    default 0;
+    127.0.0.1 1;
+    8.130.81.31 1;
+@USER_LINES@
+}
+
+server {
+    listen 443 ssl;
+    server_name aidcp.wiztek.cn;
+    ssl_certificate /etc/letsencrypt/live/aidcp.wiztek.cn/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/aidcp.wiztek.cn/privkey.pem;
+    root /var/www/aidcp-maintenance;
+    client_max_body_size 100m;   # equals the Gateway limits.maxRequestBodyBytes default
+
+    # Maintenance page for everything that is not proxied (also when the upstream is down).
+    error_page 503 /index.html;
+    error_page 502 504 =503 /index.html;
+    location = /index.html { internal; add_header Cache-Control "no-store" always; }
+
+    # Real-time collaboration socket (Collab is not enabled in S4; the Gateway answers a plain request with 426).
+    location = /codocs/ws {
+        if ($hzy_aidcp_allowed = 0) {
+            add_header Cache-Control "no-store" always;
+            add_header Retry-After 600 always;
+            return 503;
+        }
+        proxy_pass http://100.64.72.59:8780;
+        # Console SSO callbacks set many large cookies; the default 4k/8k header buffer turned them into a 502/maintenance page.
+        proxy_buffer_size 32k;
+        proxy_buffers 4 32k;
+        proxy_busy_buffers_size 32k;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        # Defence in depth: the Gateway strips every client x-hzy-* / forwarding header itself; here the known trusted-context names are cleared too
+        # (nginx has no wildcard), and the audit address is overwritten with the real peer instead of appended.
+        proxy_set_header X-Hzy-Gateway "";
+        proxy_set_header X-Hzy-Gateway-Token "";
+        proxy_set_header X-Hzy-Tenant "";
+        proxy_set_header X-Hzy-Deployment "";
+        proxy_set_header X-Hzy-Environment "";
+        proxy_set_header X-Hzy-App-Code "";
+        proxy_set_header X-Hzy-Actor-Uid "";
+        proxy_set_header X-Hzy-Service-Routes "";
+        proxy_set_header X-Hzy-Enterprise-Shell-Pages "";
+        proxy_set_header X-Hzy-Scheduler "";
+        proxy_set_header X-Hzy-Data-Runtime-Url "";
+        proxy_set_header X-Hzy-Tenant-Runtime-Url "";
+        proxy_set_header X-Hzy-Local-Runtime-Dial-Url "";
+        proxy_set_header X-Forwarded-Prefix "";
+        proxy_set_header X-Forwarded-Host "";
+        proxy_set_header X-Forwarded-Port "";
+        proxy_set_header Forwarded "";
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $remote_addr;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_buffering off;
+        proxy_read_timeout 600s;
+        proxy_send_timeout 600s;
+    }
+
+    location / {
+        if ($hzy_aidcp_allowed = 0) {
+            add_header Cache-Control "no-store" always;
+            add_header Retry-After 600 always;
+            return 503;
+        }
+        proxy_pass http://100.64.72.59:8780;
+        # Console SSO callbacks set many large cookies; the default 4k/8k header buffer turned them into a 502/maintenance page.
+        proxy_buffer_size 32k;
+        proxy_buffers 4 32k;
+        proxy_busy_buffers_size 32k;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        # Defence in depth: the Gateway strips every client x-hzy-* / forwarding header itself; here the known trusted-context names are cleared too
+        # (nginx has no wildcard), and the audit address is overwritten with the real peer instead of appended.
+        proxy_set_header X-Hzy-Gateway "";
+        proxy_set_header X-Hzy-Gateway-Token "";
+        proxy_set_header X-Hzy-Tenant "";
+        proxy_set_header X-Hzy-Deployment "";
+        proxy_set_header X-Hzy-Environment "";
+        proxy_set_header X-Hzy-App-Code "";
+        proxy_set_header X-Hzy-Actor-Uid "";
+        proxy_set_header X-Hzy-Service-Routes "";
+        proxy_set_header X-Hzy-Enterprise-Shell-Pages "";
+        proxy_set_header X-Hzy-Scheduler "";
+        proxy_set_header X-Hzy-Data-Runtime-Url "";
+        proxy_set_header X-Hzy-Tenant-Runtime-Url "";
+        proxy_set_header X-Hzy-Local-Runtime-Dial-Url "";
+        proxy_set_header X-Forwarded-Prefix "";
+        proxy_set_header X-Forwarded-Host "";
+        proxy_set_header X-Forwarded-Port "";
+        proxy_set_header Forwarded "";
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $remote_addr;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}

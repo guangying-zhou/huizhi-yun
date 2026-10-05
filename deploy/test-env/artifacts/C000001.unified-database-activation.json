@@ -1,0 +1,48 @@
+{
+  "schemaVersion": "enterprise-test-cutover-activation.v1",
+  "tenant": "C000001",
+  "environment": "test",
+  "checkedAt": "2026-09-14T15:34:08.168Z",
+  "activation": {
+    "applied": true,
+    "receipt": {
+      "OperationKey": "C000001-test-cutover-20260914",
+      "ReviewHash": "f835241cf6ab0ea311b43b120cc88cdb73760e0295df05153510777200dea866",
+      "EvidenceHash": "fb9f0911100ee6cb4782c351cd99b7937ae09ae052b2778ee8daa3322c2da699",
+      "Generation": 1
+    }
+  },
+  "sourceBackupSha256": "5ea96b38488ec1ab553f5fe32d9066cf59b2ee78fd59087390e939bd88ea37ac",
+  "sourcesFenced": true,
+  "targetDatabase": "hzy_enterprise_shadow_review_20260913",
+  "registryGeneration": 1,
+  "compatibilityViewsVerified": 55,
+  "principal": {
+    "user": "hzy_enterprise_test_runtime",
+    "privileges": "four DML on target; SHOW VIEW on 55 installed compatibility views; no DDL/global/source grants",
+    "writeRollbackVerified": true
+  },
+  "runtime": {
+    "version": "0.3.219-test.adr018-candidate.5",
+    "commit": "090ba513e82c8b41af6cffda1e366b62418d6ade",
+    "binarySha256": "2b720e3be9953410ed15ad871d359eb9d72320fe85d3cf3a84e5cab50de180e6",
+    "configSha256": "218341078e32e53b87d2e2cb4bf90e0be5e8d668dd1b1431027014489a80f4e6",
+    "enterpriseEnabled": true,
+    "localHealthStatus": 200,
+    "publicHealthStatus": 200,
+    "AA03Enabled": false,
+    "AA04Enabled": false
+  },
+  "drain": {
+    "mode": "sealed",
+    "revision": 4,
+    "unresolved": 0
+  },
+  "externalApprovalSha256": "1849ff5514fdbff8ee0cb42e12059adcaad756f3f41087382a7258b265f8a8b3",
+  "remaining": [
+    "scheduler ownership attestation",
+    "Gateway full business route activation",
+    "drain release",
+    "authenticated business acceptance"
+  ]
+}

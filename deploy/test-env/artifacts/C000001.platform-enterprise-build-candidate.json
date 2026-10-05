@@ -1,0 +1,62 @@
+{
+  "receiptVersion": 1,
+  "createdAt": "2026-09-14T05:00:00Z",
+  "scope": "development Platform candidate preparation only; no remote replacement, PM2 restart, traffic change, or production operation was performed",
+  "candidate": {
+    "remotePath": "/wiztek/hzy-test/platform-candidates/enterprise-platform-20260914T045500Z",
+    "sourceArchiveSha256": "98a8e67289cd80ff013cddebc133f96fe16233a522527d3171566bf7470dd01e",
+    "sourceArchiveBytes": 5908992,
+    "sourceArchiveEntries": 974,
+    "sourceSnapshotExcludes": [
+      "environment files",
+      "node_modules",
+      ".output",
+      ".nuxt",
+      "AppleDouble metadata"
+    ],
+    "workspacePatch": {
+      "path": "patches/nitropack@2.13.4.patch",
+      "sha256": "023d8fffe979e91e8522ae7cc096a575cab9f72af5ae390c04f0b96e0cdbf110",
+      "bytes": 2851,
+      "lockfileReferenceVerified": true,
+      "workspaceReferenceVerified": true,
+      "candidateCopyVerified": true,
+      "installedNitropackStoreEntry": "nitropack@2.13.4"
+    }
+  },
+  "developmentBaselineReadOnly": {
+    "pm2Process": "hzy-platform-dev",
+    "status": "online",
+    "port": 3011,
+    "database": "hzy_platform_dev",
+    "cwd": "/wiztek/hzy-test/platform-release-5f898581/platform",
+    "entry": "/wiztek/hzy-test/platform-release-5f898581/platform/.output/server/index.mjs",
+    "entrySha256": "845e40b810118f24bf355dd237053b40f24b19ebdab9426280efd5b4c9264b03"
+  },
+  "schemaPrerequisite": {
+    "receipt": "deploy/test-env/artifacts/C000001.platform-enterprise-schema-application.json",
+    "database": "hzy_platform_dev",
+    "databaseUuid": "8a10b222-5108-11ef-8bb6-5600050b12e8",
+    "application": "already applied by the authorized schema task; no schema action was taken here"
+  },
+  "validation": {
+    "focusedLocalTests": {
+      "command": "pnpm --dir platform exec node --test --experimental-strip-types enterprise entitlement and platform-ops focused tests",
+      "passed": 51,
+      "failed": 0
+    },
+    "remoteCandidate": {
+      "environmentSource": "read in-process from hzy-platform-dev only; no environment file was copied or printed",
+      "pnpmValidation": "failed before typechecking because pnpm attempted a protected node_modules replacement in non-interactive mode; no dependency installation was performed",
+      "directNuxtValidation": "typecheck and build both terminated by remote Node SIGABRT; first attempt reported heap exhaustion and the one 4096 MiB retry reported uv__io_poll errno EEXIST assertion",
+      "typeScriptDiagnostics": 0,
+      "buildArtifact": "not produced or accepted"
+    }
+  },
+  "deploymentReadiness": {
+    "eligible": false,
+    "reason": "A successful isolated typecheck and build artifact are required before any development replacement can be reviewed.",
+    "futureReplacementPlan": "Recheck this exact PM2 process, port, database, source hash, candidate build hash, and protected configuration immediately before a single hzy-platform-dev-only replacement. Keep the current release directory and entry hash as rollback, then verify the development listener after restart.",
+    "rollbackTarget": "/wiztek/hzy-test/platform-release-5f898581/platform/.output/server/index.mjs"
+  }
+}

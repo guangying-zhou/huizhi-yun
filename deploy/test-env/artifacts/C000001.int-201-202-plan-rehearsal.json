@@ -1,0 +1,60 @@
+{
+ "tenant": "C000001",
+ "environment": "test-local",
+ "recordedAt": "2026-09-15T15:05:02.759175+00:00",
+ "purpose": "INT-201/INT-202 dry-run plan rehearsal against the current source baseline",
+ "command": "go run ./cmd/hzy-enterprise-migrate --config <protected> --plan <plan>  (default dry-run; --apply not used)",
+ "baseline": {
+  "tables": 152,
+  "rows": 480,
+  "previouslyRecorded": {
+   "tables": 150,
+   "rows": 478
+  },
+  "reason": "the v5.37 product-line feature added product_line_workspaces and product_component_sources to the Aims source"
+ },
+ "finalReviewHash": "b431b3aa2817ae88e543710329baf8189e80e747686789e548f4c8bed757f416",
+ "blockingConflicts": {
+  "initial": 14,
+  "final": 0
+ },
+ "conflictResolutions": [
+  {
+   "kind": "product_workspace_missing_master",
+   "count": 2,
+   "finding": "the two reserved ~line- unified product-line spaces have no Assets master by design; the rule treated them as orphans",
+   "resolution": "rule tightened, not relaxed: a ~line- workspace is now a conflict only when product_line_workspaces has no matching row; sources predating v5.37 keep the original rule"
+  },
+  {
+   "kind": "json_field_contract_unregistered",
+   "count": 4,
+   "fields": [
+    "assets.product_assets.supported_terminals",
+    "assets.product_assets.covered_legacy_systems",
+    "aims.product_planning_cycles.model_snapshot",
+    "aims.product_catalog_page_receipts.result_json"
+   ],
+   "finding": "value-only JSON columns carrying no internal auto-increment id had no executable validation",
+   "resolution": "registered with per-family validators in value_json_contract.go (string lists, frozen scoring-model versions, catalog page receipt shape); registration keeps rejecting unknown versions, and value-only families no longer inherit the Aims planning dependency list"
+  },
+  {
+   "kind": "version_create_receipt_snapshot_invalid / version_create_audit_snapshot_invalid",
+   "count": 7,
+   "finding": "the version contract reports every unrecognised receipt/audit carrying JSON (fail closed); the product workspace onboarding family (products:onboard, products:edit, products:onboard-line) had never been registered",
+   "resolution": "new workspace_onboard_json_contract.go validates the family against the workspace row, the reserved ~line- namespace and product_line_workspaces; the version contract now defers those actions instead of judging them"
+  },
+  {
+   "kind": "version_mutation_audit_invalid",
+   "count": 1,
+   "finding": "the mutation rule judged every edit/transition audit, including workspace edits that belong to the onboarding family",
+   "resolution": "scoped to object_type=version"
+  },
+  {
+   "kind": "workspace_onboard_audit_snapshot_invalid",
+   "count": 1,
+   "finding": "onboard-line audit history exists in two frozen shapes across the product-selection change: the older row carries reason and no selected list",
+   "resolution": "the contract accepts both frozen shapes; audit history is never rewritten"
+  }
+ ],
+ "safety": "Dry-run only. Source remains the sole writer, target generation stays 0, and no runtime route, credential or business row was changed."
+}

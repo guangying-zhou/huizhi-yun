@@ -1,0 +1,61 @@
+{
+  "schema": "enterprise-oauth-live.v1",
+  "verifiedAt": "2026-09-17T03:16:42.881Z",
+  "tenant": "C000001",
+  "deployment": "C000001-test-enterprise",
+  "audience": "data-runtime",
+  "registrySha256": "0a5f499b4b1a6828b72c05bf06ff0855afb40fd87b0cfe7d5e96fd8dc61824ad",
+  "results": [
+    {
+      "scope": "aims:project-gitlab:view",
+      "verifiedAt": "2026-09-17T03:16:37.884Z",
+      "oauthIssued": true,
+      "tokenVerified": true,
+      "cfRayPresent": true,
+      "testGatewayMarker": true
+    },
+    {
+      "scope": "aims:project-gitlab:edit",
+      "verifiedAt": "2026-09-17T03:16:38.622Z",
+      "oauthIssued": true,
+      "tokenVerified": true,
+      "cfRayPresent": true,
+      "testGatewayMarker": true
+    },
+    {
+      "scope": "aims:work-item-commit-diff:view",
+      "verifiedAt": "2026-09-17T03:16:39.260Z",
+      "oauthIssued": true,
+      "tokenVerified": true,
+      "cfRayPresent": true,
+      "testGatewayMarker": true
+    },
+    {
+      "scope": "aims:work-item-commit-diff:edit",
+      "verifiedAt": "2026-09-17T03:16:39.794Z",
+      "oauthIssued": true,
+      "tokenVerified": true,
+      "cfRayPresent": true,
+      "testGatewayMarker": true
+    }
+  ],
+  "negatives": [
+    {
+      "scope": "aims:products:view",
+      "audience": "tenant-runtime",
+      "rejected": true,
+      "status": 400
+    },
+    {
+      "scope": "aims:unregistered:probe",
+      "audience": "data-runtime",
+      "rejected": true,
+      "status": 400
+    }
+  ],
+  "actualCombinedScopes": [],
+  "combinationReason": "Foundation callEnterpriseRuntime uses scope: route.capability; no combined-scope calls",
+  "configurationMutated": false,
+  "localSigning": false,
+  "browserAcceptance": false
+}

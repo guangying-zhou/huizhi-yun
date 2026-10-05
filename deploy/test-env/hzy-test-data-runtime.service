@@ -1,0 +1,32 @@
+[Unit]
+Description=HZY isolated test Data Runtime
+After=network.target docker.service
+Requires=docker.service
+
+[Service]
+Type=simple
+User=hzy-test-runtime
+Group=hzy-test-runtime
+WorkingDirectory=/wiztek/hzy-test/runtime
+Environment=HZY_DATA_RUNTIME_CONFIG=/wiztek/hzy-test/runtime/config.json
+Environment=HZY_DATA_RUNTIME_CONFIG_DIR=/wiztek/hzy-test/runtime
+Environment=HZY_CONSOLE_VAULT_MASTER_KEY_FILE=/wiztek/hzy-test/secrets/vault-key
+Environment=HZY_FINANCE_AGENT_ENABLED=false
+Environment=GOMEMLIMIT=192MiB
+Environment=GOMAXPROCS=1
+ExecStart=/wiztek/hzy-test/runtime/hzy-data-runtime
+Restart=always
+RestartSec=5
+MemoryMax=256M
+MemorySwapMax=0
+CPUQuota=50%
+TasksMax=128
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/wiztek/hzy-test/runtime
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

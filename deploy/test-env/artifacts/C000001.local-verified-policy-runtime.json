@@ -1,0 +1,16 @@
+{
+  "observedAt": "2026-09-21T23:23:50.923Z",
+  "version": "0.3.219-test.verified-policy.1",
+  "candidateHash": "426b747bea29d29729e8b73d81d5f1ffb6494e1b99d99a5b9e1241ee1cb197ec",
+  "previousHash": "dd054a05c5335035f8a488b68fdab93bd3b016c80f2de68e05731d8454fb50a0",
+  "backup": "/Users/gavinzhou/Library/Application Support/HuizhiYun/test-runtime/deployments/verified-policy-20260921",
+  "tenant": "C000001",
+  "deployment": "c000001-test-tenant-runtime",
+  "applied": true,
+  "enterpriseWriteGranted": false,
+  "acceptancePassed": false,
+  "enterpriseReadGrantId": 10319368,
+  "enterpriseReadGrantAdded": true,
+  "runtimeCommit": "7d42abd12f04-audit-policy",
+  "anonymousGuardsVerified": true
+}
