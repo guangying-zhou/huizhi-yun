@@ -1,0 +1,111 @@
+import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
+import test from 'node:test'
+import ts from 'typescript'
+
+const source = readFileSync(new URL('../server/plugins/local-policy-egress.ts', import.meta.url), 'utf8')
+const compiled = ts.transpile(source.replace(/^import .*\n/, '').replace('export default ', ''), { target: ts.ScriptTarget.ES2022 })
+type Event = { context: Record<string, unknown>, path?: string }
+type Binding = { fetch: (url: string, init?: RequestInit) => Promise<Response> }
+
+test('local policy adapter requires explicit mode and trusted Console identity; pins all remote request fields', async () => {
+  const calls: { url: string, init: RequestInit }[] = []
+  const env = { HZY0_LOCAL_CONSOLE_FACADE: 'true', HZY_CONSOLE_FEEDBACK_DELIVERY_ENABLED: 'false', HZY0_POLICY_EGRESS_URL: 'http://127.0.0.1:23121/__hzy0/platform-policy',
+    HZY_PLATFORM_BUNDLE_CACHE_BACKEND: 'verified-runtime', HZY0_GATEWAY_INTERNAL_TOKEN: 'local-fixture' }
+  let trusted: unknown = { tenant: 'C000001', environment: 'test', appCode: 'console', deployment: 'wiztek-test-console' }
+  let hook: ((event: Event) => void) | undefined
+  const install = () => new Function('defineNitroPlugin', 'resolveTrustedTenantGatewayContext', 'process', 'fetch', compiled)(
+    (plugin: (nitro: unknown) => void) => plugin({ hooks: { hook: (_name: string, handler: (event: Event) => void) => { hook = handler } } }),
+    () => trusted, { env }, async (url: string, init: RequestInit) => {
+      calls.push({ url, init })
+      return Response.json({ body: 'unchanged' })
+    })
+  install()
+  const event: Event = { context: {}, path: '/api/internal/policy-bundle/sync' }
+  hook!(event)
+  const binding = event.context.hzyPlatformTransport as Binding
+  const url = 'https://hzy.wiztek.cn/api/platform/internal/console/tenants/C000001/bundle?format=hzy-policy-envelope.v1&environment=test&deploymentCode=wiztek-test-console'
+  await binding.fetch(url, { headers: { authorization: 'Bearer caller-secret', cookie: 'private=1' } })
+  assert.equal(calls[0]!.url, env.HZY0_POLICY_EGRESS_URL)
+  assert.deepEqual(calls[0]!.init.headers, { 'x-hzy0-egress-token': 'local-fixture' })
+  assert.equal(calls[0]!.init.redirect, 'error')
+  for (const target of [url.replace('https:', 'http:'), url.replace('hzy.wiztek.cn', 'evil.test'),
+    url.replace('C000001', 'C000002'), url.replace('environment=test', 'environment=prod'),
+    `${url}&version=old`, `${url}&format=hzy-policy-envelope.v1`, `${url}#fragment`, url.replace('https://', 'https://user:pass@')]) {
+    await assert.rejects(binding.fetch(target), /Unapproved/)
+  }
+  await assert.rejects(binding.fetch(url, { method: 'POST' }), /Unapproved/)
+  await assert.rejects(binding.fetch(url, { body: '{}' }), /Unapproved/)
+  await assert.rejects(binding.fetch(url.replace('hzy-policy-envelope.v1', 'hzy-policy-bundle.v0')), /Unapproved/)
+  assert.equal(calls.length, 1)
+  await binding.fetch(url.replace('hzy-policy-envelope.v1', 'hzy-policy-revision.v1'))
+  assert.equal(calls[1]!.url, `${env.HZY0_POLICY_EGRESS_URL}-revision`)
+  assert.deepEqual(calls[1]!.init.headers, { 'x-hzy0-egress-token': 'local-fixture' })
+  const serviceEvent: Event = { context: {}, path: '/api/v1/console/service/authorization/role-holders' }
+  hook!(serviceEvent)
+  await (serviceEvent.context.hzyPlatformTransport as Binding).fetch(url.replace('hzy-policy-envelope.v1', 'hzy-policy-revision.v1'))
+  assert.equal(calls[2]!.url, `${env.HZY0_POLICY_EGRESS_URL}-revision-live`)
+  for (const path of ['/api/v1/console/service/authorization/subject-scoped', '/console/api/v1/console/service/authorization/subject-scoped']) {
+    const delegatedEvent: Event = { context: {}, path }
+    hook!(delegatedEvent)
+    await (delegatedEvent.context.hzyPlatformTransport as Binding).fetch(url.replace('hzy-policy-envelope.v1', 'hzy-policy-revision.v1'))
+    assert.equal(calls.at(-1)!.url, `${env.HZY0_POLICY_EGRESS_URL}-revision-live`)
+    assert.deepEqual(calls.at(-1)!.init.headers, { 'x-hzy0-egress-token': 'local-fixture' })
+  }
+  for (const path of ['/api/v1/console/service/authorization/subject-scoped/more', '/api/v1/console/service/authorization/subject-scoped-other']) {
+    const invalidEvent: Event = { context: {}, path }
+    hook!(invalidEvent)
+    await assert.rejects((invalidEvent.context.hzyPlatformTransport as Binding).fetch(url.replace('hzy-policy-envelope.v1', 'hzy-policy-revision.v1')), /Unapproved policy source/)
+  }
+  // Notification detail re-checks eligibility against a live revision; only the exact detail path is admitted.
+  for (const path of ['/api/v1/console/notifications/notif_abc-123/detail', '/console/api/v1/console/notifications/notif_abc-123/detail']) {
+    const detailEvent: Event = { context: {}, path }
+    hook!(detailEvent)
+    await (detailEvent.context.hzyPlatformTransport as Binding).fetch(url.replace('hzy-policy-envelope.v1', 'hzy-policy-revision.v1'))
+    assert.equal(calls.at(-1)!.url, `${env.HZY0_POLICY_EGRESS_URL}-revision-live`)
+  }
+  for (const path of ['/api/v1/console/notifications/notif_abc/detail/more', '/api/v1/console/notifications/other_abc/detail', '/api/v1/console/notifications']) {
+    const invalidDetail: Event = { context: {}, path }
+    hook!(invalidDetail)
+    await assert.rejects((invalidDetail.context.hzyPlatformTransport as Binding).fetch(url.replace('hzy-policy-envelope.v1', 'hzy-policy-revision.v1')), /Unapproved policy source/)
+  }
+  for (const prefix of ['/api/v1/console', '/console/api/v1/console']) {
+    for (const suffix of ['/feedback-settings', '/feedback', '/feedback/fixture-123', '/feedback/fixture-123/retry', '/feedback/fixture-123/cancel']) {
+      const feedbackEvent: Event = { context: {}, path: `${prefix}${suffix}` }
+      hook!(feedbackEvent)
+      await (feedbackEvent.context.hzyPlatformTransport as Binding).fetch(url.replace('hzy-policy-envelope.v1', 'hzy-policy-revision.v1'))
+      assert.equal(calls.at(-1)!.url, `${env.HZY0_POLICY_EGRESS_URL}-revision-live`)
+      assert.deepEqual(calls.at(-1)!.init.headers, { 'x-hzy0-egress-token': 'local-fixture' })
+    }
+    for (const suffix of ['/feedback-settings/more', '/feedback-other', '/feedback/id/submit', '/feedback/id/retry/more', '/feedback/id/unknown', '/feedback/' + 'a'.repeat(65)]) {
+      const invalidFeedback: Event = { context: {}, path: `${prefix}${suffix}` }
+      hook!(invalidFeedback)
+      await assert.rejects((invalidFeedback.context.hzyPlatformTransport as Binding).fetch(url.replace('hzy-policy-envelope.v1', 'hzy-policy-revision.v1')), /Unapproved policy source/)
+    }
+  }
+  for (const path of ['/api/internal/integration-operations/drain', '/console/api/internal/integration-operations/drain']) {
+    const workerEvent: Event = { context: {}, path }
+    hook!(workerEvent)
+    await assert.rejects((workerEvent.context.hzyPlatformTransport as Binding).fetch(url.replace('hzy-policy-envelope.v1', 'hzy-policy-revision.v1')), /Unapproved policy source/)
+    env.HZY_CONSOLE_FEEDBACK_DELIVERY_ENABLED = 'true'
+    await (workerEvent.context.hzyPlatformTransport as Binding).fetch(url.replace('hzy-policy-envelope.v1', 'hzy-policy-revision.v1'))
+    assert.equal(calls.at(-1)!.url, `${env.HZY0_POLICY_EGRESS_URL}-revision-live`)
+    env.HZY_CONSOLE_FEEDBACK_DELIVERY_ENABLED = 'false'
+  }
+  const unrelatedEvent: Event = { context: {}, path: '/api/internal/integration-operations/drain/more' }
+  hook!(unrelatedEvent)
+  await assert.rejects((unrelatedEvent.context.hzyPlatformTransport as Binding).fetch(url.replace('hzy-policy-envelope.v1', 'hzy-policy-revision.v1')), /Unapproved policy source/)
+  const profileEvent: Event = { context: {}, path: '/api/v1/console/profile' }
+  hook!(profileEvent)
+  await assert.rejects((profileEvent.context.hzyPlatformTransport as Binding).fetch(url.replace('hzy-policy-envelope.v1', 'hzy-policy-revision.v1')), /Unapproved policy source/)
+  calls.length = 1
+  for (const context of [null, { tenant: 'C000001', environment: 'test', appCode: 'enterprise', deployment: 'C000001-test-enterprise' },
+    { tenant: 'C000002', environment: 'test', appCode: 'console', deployment: 'wiztek-test-console' }]) {
+    trusted = context
+    const untrusted: Event = { context: {} }
+    hook!(untrusted)
+    assert.equal(untrusted.context.hzyPlatformTransport, undefined)
+  }
+  env.HZY0_POLICY_EGRESS_URL = 'http://evil.test'
+  assert.throws(install, /Invalid policy egress/)
+})

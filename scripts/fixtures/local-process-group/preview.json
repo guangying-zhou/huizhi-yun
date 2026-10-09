@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "totalTimeoutMs": 5000,
+  "pollMs": 100,
+  "allowedEnvironment": [
+    "DB_PASSWORD",
+    "TEST_MARKER"
+  ],
+  "allowedSourceEnvironment": [
+    "HZY_G3_PREVIEW_DB_PASSWORD"
+  ],
+  "processes": [
+    {
+      "name": "preview-only",
+      "command": "node",
+      "args": [
+        "--version"
+      ],
+      "cwd": ".",
+      "env": {
+        "TEST_MARKER": "must-not-appear-in-preview"
+      },
+      "envFrom": {
+        "DB_PASSWORD": "HZY_G3_PREVIEW_DB_PASSWORD"
+      },
+      "readiness": {
+        "url": "http://127.0.0.1:1/ready",
+        "status": 204
+      }
+    }
+  ]
+}

@@ -1,0 +1,80 @@
+<script setup lang="ts">
+import RemoteAssetObjectSelect from './RemoteAssetObjectSelect.vue'
+import type { ApiResponse, DigitalAssetItem } from '../../types'
+
+const props = defineProps<{ open: boolean, asset: DigitalAssetItem | null }>()
+const emit = defineEmits<{
+  'update:open': [value: boolean]
+  'created': []
+}>()
+
+const isOpen = computed({
+  get: () => props.open,
+  set: value => emit('update:open', value)
+})
+
+const toast = useToast()
+const submitting = ref(false)
+const state = reactive({ product_asset_id: undefined as number | undefined })
+
+watch(() => props.open, async (open) => {
+  if (open) {
+    state.product_asset_id = undefined
+  }
+})
+
+async function handleSubmit() {
+  if (!props.asset?.id) return
+  if (!state.product_asset_id) {
+    toast.add({ title: '缺少产品', description: '请先选择要关联的产品。', color: 'warning' })
+    return
+  }
+  submitting.value = true
+  try {
+    await $fetch<ApiResponse<{ id: number }>>(`/api/v1/digital-assets/${props.asset.id}/products`, {
+      method: 'POST',
+      body: { product_asset_id: state.product_asset_id }
+    })
+    toast.add({ title: '产品已关联', description: '数字资产与产品关系已保存。', color: 'success', icon: 'i-lucide-check' })
+    emit('created')
+    isOpen.value = false
+  } catch (error) {
+    console.error('[DigitalAssetProductLink] Failed:', error)
+    toast.add({ title: '关联失败', description: '可能已存在相同关联。', color: 'error', icon: 'i-lucide-circle-alert' })
+  } finally {
+    submitting.value = false
+  }
+}
+</script>
+
+<template>
+  <UModal
+    v-model:open="isOpen"
+    title="关联产品"
+    description="将数字资产挂到产品主档，建立代码/文档/模型与产品的关系。"
+    :ui="{ content: 'sm:max-w-2xl' }"
+  >
+    <template #body>
+      <div class="space-y-4 p-4">
+        <UFormField label="产品资产" required>
+          <RemoteAssetObjectSelect
+            v-model="state.product_asset_id"
+            kind="products"
+            :enabled="isOpen"
+            :exclude-ids="(props.asset?.linked_products || []).map(item => item.id)"
+          />
+        </UFormField>
+      </div>
+    </template>
+    <template #footer>
+      <div class="flex w-full justify-end gap-3">
+        <UButton color="neutral" variant="outline" @click="isOpen = false">
+          取消
+        </UButton>
+        <UButton :loading="submitting" icon="i-lucide-link-2" @click="handleSubmit">
+          确认关联
+        </UButton>
+      </div>
+    </template>
+  </UModal>
+</template>

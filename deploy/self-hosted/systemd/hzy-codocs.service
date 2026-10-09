@@ -1,0 +1,40 @@
+[Unit]
+Description=HZY self-hosted codocs node-server
+After=network-online.target mysqld.service hzy-data-runtime.service
+Wants=network-online.target
+Requires=hzy-data-runtime.service
+PartOf=hzy-data-runtime.service
+StartLimitIntervalSec=120
+StartLimitBurst=6
+
+[Service]
+Type=simple
+User=hzy-codocs
+Group=hzy-codocs
+WorkingDirectory=/home/hzy/apps/codocs/current
+EnvironmentFile=/etc/hzy/codocs.env
+ExecStartPre=/usr/local/bin/node /home/hzy/tools/verify.mjs --dir /home/hzy/apps/codocs/current --app codocs
+ExecStart=/usr/local/bin/node --max-http-header-size=65536 /home/hzy/apps/codocs/current/.output/server/index.mjs
+ExecStartPost=/usr/local/bin/node /home/hzy/tools/health.mjs --app codocs
+Restart=on-failure
+RestartSec=5
+TimeoutStartSec=45
+TimeoutStopSec=30
+KillSignal=SIGTERM
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=hzy-codocs
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+# AF_NETLINK: os.networkInterfaces() (npm 'address', used at startup by some Nuxt deps) fails with errno 97 without it.
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX AF_NETLINK
+UMask=0077
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target

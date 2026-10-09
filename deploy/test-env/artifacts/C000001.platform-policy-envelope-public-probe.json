@@ -1,0 +1,36 @@
+{
+  "observedAt": "2026-09-21T21:41:52.166Z",
+  "origin": "https://hzy.wiztek.cn",
+  "samples": [
+    {
+      "label": "historical-format",
+      "status": 400,
+      "elapsedMS": 3192
+    },
+    {
+      "label": "fresh-envelope",
+      "status": 200,
+      "elapsedMS": 3629
+    },
+    {
+      "label": "internal-no-credential",
+      "status": 403,
+      "elapsedMS": 255
+    },
+    {
+      "label": "runtime-no-credential",
+      "status": 401,
+      "elapsedMS": 274
+    }
+  ],
+  "consolePinnedKeyVerified": true,
+  "consoleAndEnterpriseBindingsVerified": true,
+  "wrongTenantEnvironmentDeploymentAndExpiredRejected": true,
+  "cacheControl": "no-store",
+  "kid": "psk_20260718_AElQdK3VQSja",
+  "bundleVersion": "pv_test_20260914161219_0014",
+  "policyRevision": 14,
+  "lifetimeMS": 300000,
+  "localRuntimeSwitched": false,
+  "browserLoginAccepted": false
+}

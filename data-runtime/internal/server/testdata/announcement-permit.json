@@ -1,0 +1,24 @@
+{
+  "method": "POST",
+  "path": "/v1/enterprise/console/announcements:save",
+  "key": "attempt-1",
+  "token": "fixture-only-not-a-real-token",
+  "now": 1800000000000,
+  "body": {
+    "payload": "{\"title\":\"中文 <标题> 😀\",\"body\":\"# 开放\\n仅测试 段落 结尾\",\"id\":\"00000000-0000-4000-8000-000000000001\"}",
+    "authorization": {
+      "actorUid": "alice",
+      "tenant": "T1",
+      "deployment": "T1-enterprise",
+      "resource": "announcements",
+      "action": "admin",
+      "operation": "save",
+      "expiresAt": 1800000010000,
+      "bundleVersion": "v1",
+      "bundleHash": "hash1",
+      "policyRevision": 7
+    }
+  },
+  "canonical": "[\"hzy-console-announcement-permit.v1\",\"POST\",\"/v1/enterprise/console/announcements:save\",\"attempt-1\",\"alice\",\"T1\",\"T1-enterprise\",\"announcements\",\"admin\",\"save\",1800000010000,\"v1\",\"hash1\",7,\"{\\\"title\\\":\\\"中文 <标题> 😀\\\",\\\"body\\\":\\\"# 开放\\\\n仅测试\\u2028段落\\u2029结尾\\\",\\\"id\\\":\\\"00000000-0000-4000-8000-000000000001\\\"}\"]",
+  "signature": "1TpaDju2BZU4OafqxZYWzccPFyw43cdVqokcg2LYNjo"
+}

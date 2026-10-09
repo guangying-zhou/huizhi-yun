@@ -1,0 +1,6 @@
+# Optional host-wide journald limits; install only after host operator review.
+[Journal]
+Storage=persistent
+SystemMaxUse=1G
+SystemKeepFree=2G
+MaxRetentionSec=14day

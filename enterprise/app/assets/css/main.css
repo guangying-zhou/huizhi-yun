@@ -1,0 +1,140 @@
+@import "tailwindcss";
+@import "@nuxt/ui";
+/*
+ * Business modules are composed through their layer/entry.mjs registries, not as
+ * Nuxt layers, so Nuxt UI does not add them as Tailwind sources. Scan each
+ * composed module's whole app/ and layer/ tree: a partial list silently drops
+ * classes used only by unlisted pages (e.g. responsive widths and grid columns).
+ * test/host-tailwind-sources.test.mjs enforces coverage of every registered page
+ * file and components.dirs entry.
+ */
+@source "../../../../aims/app";
+@source "../../../../aims/layer";
+@source "../../../../assets/app";
+@source "../../../../assets/layer";
+@source "../../../../codocs/app";
+@source "../../../../codocs/layer";
+@source "../../../../finance/app";
+@source "../../../../finance/layer";
+
+/* Host navigation tokens from the selected enterprise navigation design. */
+:root {
+  --host-nav-surface: #fafafa;
+  --host-nav-hover: #f4f4f5;
+  --host-nav-border: #e4e4e7;
+  --host-nav-ink: #18181b;
+  --host-nav-muted: #6b6b74;
+  --host-nav-active: #fff7ed;
+  --host-nav-active-ink: #9f2d00;
+  --host-nav-indicator: #f54a00;
+  --host-nav-focus: #1447e6;
+}
+
+.dark {
+  --host-nav-surface: #1f1f23;
+  --host-nav-hover: #27272a;
+  --host-nav-border: #3f3f46;
+  --host-nav-ink: #fafafa;
+  --host-nav-muted: #a1a1aa;
+  --host-nav-active: #441306;
+  --host-nav-active-ink: #ffb86a;
+  --host-nav-indicator: #ff6900;
+  --host-nav-focus: #51a2ff;
+}
+
+.host-nav-row {
+  color: var(--host-nav-muted);
+}
+
+.host-nav-row:hover {
+  background: var(--host-nav-hover);
+  color: var(--host-nav-ink);
+}
+
+.host-nav-row:focus-visible,
+.host-nav-control:focus-visible {
+  outline: 2px solid var(--host-nav-focus);
+  outline-offset: -2px;
+}
+
+.host-nav-row[aria-current="page"] {
+  background: var(--host-nav-active);
+  color: var(--host-nav-active-ink);
+  font-weight: 600;
+}
+
+.host-nav-indicator {
+  background: var(--host-nav-indicator);
+}
+
+.host-nav-branches {
+  position: relative;
+}
+
+.host-nav-branches::before {
+  position: absolute;
+  top: 4px;
+  bottom: 4px;
+  left: 20px;
+  width: 1px;
+  background: var(--host-nav-border);
+  content: "";
+}
+
+@source "../../../../people/layer";
+
+/* A page owns its inset exactly once. Match only the page-level panel/body,
+ * never nested cards, modal bodies or the Codocs editor workspace. The contract
+ * page is the reference: 16px mobile / 24px desktop, gap 16px / 24px. */
+.host-page-container:not([data-editor-workspace]):has(> [data-slot="root"] > [data-slot="body"]),
+.host-page-container:not([data-editor-workspace]):has(> .contents > [data-slot="root"] > [data-slot="body"]),
+.host-page-container:not([data-editor-workspace]):has(> .p-4),
+.host-page-container:not([data-editor-workspace]):has(> [data-host-workspace]) {
+  padding: 0;
+}
+
+.host-page-container:not([data-editor-workspace]) > [data-slot="root"] > [data-slot="body"]:has(> .p-4:only-child),
+.host-page-container:not([data-editor-workspace]) > .contents > [data-slot="root"] > [data-slot="body"]:has(> .p-4:only-child) {
+  padding: 0;
+}
+
+/* Pages that provide a padded body keep that inset; normalize People's p-4
+ * at desktop to the same reference without affecting standalone applications. */
+@media (min-width: 640px) {
+  .host-page-container:not([data-editor-workspace]) > [data-slot="root"] > [data-slot="body"] > .p-4:only-child,
+  .host-page-container:not([data-editor-workspace]) > .contents > [data-slot="root"] > [data-slot="body"] > .p-4:only-child {
+    padding: 1.5rem;
+  }
+}
+
+/* Read workspaces explicitly opt into full width; form width limits remain. */
+.host-page-container[data-content-width="full"] > .p-4,
+.host-page-container[data-content-width="full"] [data-host-content] > .p-4 {
+  max-width: none;
+  width: 100%;
+}
+
+/* Codocs uses DashboardPanel's default slot: it has a root but NO body slot.
+ * Remove only the Host inset; the document page owns its header/list/workspace.
+ * Do not target nested preview panes, dialogs or editor canvases. */
+.host-page-container[data-page-app="codocs"]:not([data-editor-workspace]):has(> [data-slot="root"]),
+.host-page-container[data-page-app="codocs"]:not([data-editor-workspace]):has(> .contents > [data-slot="root"]) {
+  padding: 0;
+}
+
+.host-page-container[data-page-app="codocs"]:not([data-editor-workspace]) > [data-slot="root"] > header:has([data-host-page-title]),
+.host-page-container[data-page-app="codocs"]:not([data-editor-workspace]) > .contents > [data-slot="root"] > header:has([data-host-page-title]) {
+  padding: 1rem 1rem 0.75rem;
+}
+
+@media (min-width: 640px) {
+  .host-page-container[data-page-app="codocs"]:not([data-editor-workspace]) > [data-slot="root"] > header:has([data-host-page-title]),
+  .host-page-container[data-page-app="codocs"]:not([data-editor-workspace]) > .contents > [data-slot="root"] > header:has([data-host-page-title]) {
+    padding: 1.5rem 1.5rem 0.75rem;
+  }
+
+  .host-page-container[data-page-app="codocs"]:not([data-editor-workspace]) > [data-slot="root"] > .p-4,
+  .host-page-container[data-page-app="codocs"]:not([data-editor-workspace]) > .contents > [data-slot="root"] > .p-4 {
+    padding: 1.5rem;
+  }
+}

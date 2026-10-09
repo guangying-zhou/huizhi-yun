@@ -1,0 +1,138 @@
+{
+  "snapshot": "0ca042dbe721e7ba72a290a7d90a551d561e4d04",
+  "declaredAreas": [
+    "工作台",
+    "产品",
+    "销售",
+    "交付与服务",
+    "经营",
+    "人力资源",
+    "协同文档",
+    "控制台"
+  ],
+  "generatedAreas": [
+    "产品",
+    "交付与服务",
+    "经营",
+    "控制台"
+  ],
+  "generatedLeaves": [
+    {
+      "label": "全部产品",
+      "to": "/assets/products"
+    },
+    {
+      "label": "产品管理空间",
+      "to": "/aims/products"
+    },
+    {
+      "label": "知识产权",
+      "to": "/assets/ip-assets"
+    },
+    {
+      "label": "数字资产",
+      "to": "/assets/digital-assets"
+    },
+    {
+      "label": "项目总览",
+      "to": "/aims/projects"
+    },
+    {
+      "label": "任务中心",
+      "to": "/aims/work-items"
+    },
+    {
+      "label": "工时日历",
+      "to": "/aims/timesheet"
+    },
+    {
+      "label": "周报汇总",
+      "to": "/aims/weekly-reports"
+    },
+    {
+      "label": "自用资产",
+      "to": "/assets/physical"
+    },
+    {
+      "label": "资源台账",
+      "to": "/assets/resources"
+    },
+    {
+      "label": "产品字典",
+      "to": "/assets/admin/asset-categories"
+    },
+    {
+      "label": "资产字典",
+      "to": "/assets/admin/dictionaries"
+    }
+  ],
+  "leafCount": 12,
+  "leafPropertySets": [
+    "label,to"
+  ],
+  "objectMatches": {
+    "/aims/projects": null,
+    "/aims/projects/new": {
+      "objectPath": "/aims/projects/new",
+      "returnTarget": "/aims/projects",
+      "targets": [
+        "/aims/projects/new",
+        "/aims/projects/new/plan",
+        "/aims/projects/new/board",
+        "/aims/projects/new/requirements",
+        "/aims/projects/new/documents",
+        "/aims/projects/new/members",
+        "/aims/projects/new/timesheet",
+        "/aims/projects/new/weekly-reports",
+        "/aims/projects/new/edit"
+      ]
+    },
+    "/aims/projects/42": {
+      "objectPath": "/aims/projects/42",
+      "returnTarget": "/aims/projects",
+      "targets": [
+        "/aims/projects/42",
+        "/aims/projects/42/plan",
+        "/aims/projects/42/board",
+        "/aims/projects/42/requirements",
+        "/aims/projects/42/documents",
+        "/aims/projects/42/members",
+        "/aims/projects/42/timesheet",
+        "/aims/projects/42/weekly-reports",
+        "/aims/projects/42/edit"
+      ]
+    },
+    "/aims/projects/42/plan": {
+      "objectPath": "/aims/projects/42",
+      "returnTarget": "/aims/projects",
+      "targets": [
+        "/aims/projects/42",
+        "/aims/projects/42/plan",
+        "/aims/projects/42/board",
+        "/aims/projects/42/requirements",
+        "/aims/projects/42/documents",
+        "/aims/projects/42/members",
+        "/aims/projects/42/timesheet",
+        "/aims/projects/42/weekly-reports",
+        "/aims/projects/42/edit"
+      ]
+    }
+  },
+  "shortcutDuplicateOutcome": "Business menu target appears twice: /aims/projects",
+  "projectObjectDestinations": [
+    "/aims/projects/:id",
+    "/aims/projects/:id/plan",
+    "/aims/projects/:id/board",
+    "/aims/projects/:id/requirements",
+    "/aims/projects/:id/documents",
+    "/aims/projects/:id/members",
+    "/aims/projects/:id/timesheet",
+    "/aims/projects/:id/weekly-reports",
+    "/aims/projects/:id/edit"
+  ],
+  "formerShellRoute": null,
+  "innerMigratedRoute": {
+    "path": "/aims/products",
+    "kind": "page"
+  }
+}

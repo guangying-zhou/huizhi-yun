@@ -1,0 +1,5 @@
+/* Shared by directory editors, including their teleported member drawers. */
+.directory-editor-header { position: relative; }
+.directory-editor-heading { min-width: 0; flex: 1; padding-inline-end: 2.5rem; }
+.directory-editor-title, .directory-editor-description { overflow-wrap: anywhere; white-space: normal; }
+.directory-editor-close { flex-shrink: 0; }

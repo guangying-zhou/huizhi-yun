@@ -1,0 +1,41 @@
+{
+  "method": "POST",
+  "target": "/v1/enterprise/altoc/contacts:update",
+  "body": {
+    "id": "",
+    "code": "",
+    "name": "",
+    "rowVersion": 0,
+    "page": 0,
+    "pageSize": 0,
+    "search": "",
+    "authorization": {
+      "actorUid": "Person",
+      "tenant": "C000001",
+      "deployment": "Host",
+      "resource": "customer",
+      "action": "edit",
+      "operation": "contacts-update",
+      "objectId": "1|CN-test",
+      "allowed": true,
+      "expiresAt": 123,
+      "bundleVersion": "1",
+      "bundleHash": "hash",
+      "policyRevision": 38,
+      "scope": {
+        "access": "self",
+        "departmentCodes": []
+      }
+    },
+    "customer": {
+      "customerId": "1",
+      "childCode": "CN-test",
+      "payload": {
+        "name": "中文<& 后",
+        "expectedVersion": 2,
+        "remark": null
+      }
+    }
+  },
+  "canonical": "[\"hzy-enterprise-apf-permit.v1\",\"POST\",\"/v1/enterprise/altoc/contacts:update\",\"Person\",\"C000001\",\"Host\",\"customer\",\"edit\",\"contacts-update\",\"1|CN-test\",true,123,\"1\",\"hash\",38,\"self\",[],\"\",\"\",\"\",0,0,0,\"\",[\"1\",\"CN-test\",[[\"expectedVersion\",2],[\"name\",\"中文<&\\u2028后\"],[\"remark\",null]]]]"
+}

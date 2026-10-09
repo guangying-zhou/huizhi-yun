@@ -1,0 +1,22 @@
+{
+  "hzy-console-prod": {
+    "deployment": "2ddc804d-3bbc-4b38-b88f-c2b4def5fa4b",
+    "versions": [
+      {
+        "version_id": "81ad528b-3c5f-45ea-91d3-3deb554174cb",
+        "percentage": 100
+      }
+    ],
+    "created_on": "2026-09-07T04:23:48.000125Z"
+  },
+  "hzy-tenant-gateway": {
+    "deployment": "9b755035-a412-421f-a84e-656e78a1ed71",
+    "versions": [
+      {
+        "version_id": "03f345e2-a300-411d-b7c5-9d8154f3e1fb",
+        "percentage": 100
+      }
+    ],
+    "created_on": "2026-09-07T04:24:22.793318Z"
+  }
+}

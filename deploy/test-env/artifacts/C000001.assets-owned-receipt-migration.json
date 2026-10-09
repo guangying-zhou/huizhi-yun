@@ -1,0 +1,14 @@
+{
+  "tenant": "C000001",
+  "database": "hzy_assets_test_local_20260910",
+  "instanceId": "37d8994e-4c12-11ee-afad-8cb2da2e572b",
+  "migrationPath": "assets/docs/migrations/20260913_assets_owned_product_receipts.sql",
+  "migrationSha256": "546d84e1659bb0e9f5895f0e008170f073b22ee8b5dfe29beedaa5d4a4c56e7b",
+  "beforeDdlSha256": "a12db0658a0749dd126e4a87c27ad253accf3638f05ea259409187d0512b0e9b",
+  "reviewHash": "9777985826364b6641bfc79ad47cf10d7bd2221ee3e6d839775fa138ec9f1c87",
+  "appliedAt": "2026-09-13T20:32:33.018Z",
+  "afterDdlSha256": "108eda2621bb08c5ed4d439a600d78f9736b59ad1e19fc6218668f47e59bf418",
+  "enforced": true,
+  "businessRowsMutated": false,
+  "sourcePlanRegenerationRequired": true
+}

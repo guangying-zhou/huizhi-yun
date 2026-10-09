@@ -1,0 +1,42 @@
+[
+  {
+    "Logical": "altoc_service_ticket_product_feedback",
+    "Physical": "altoc_service_ticket_product_feedback",
+    "DDL": "CREATE TABLE altoc_service_ticket_product_feedback (\n    ticket_id BIGINT NOT NULL PRIMARY KEY,\n    submission_id CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,\n    request_biz_id CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,\n    product_code VARCHAR(64) COLLATE utf8mb4_bin NOT NULL,\n    operation_id CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,\n    source_sha256 CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,\n    original_actor_uid VARCHAR(64) COLLATE utf8mb4_bin NOT NULL,\n    created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),\n    UNIQUE KEY uk_product_feedback_submission (submission_id),\n    UNIQUE KEY uk_product_feedback_request (request_biz_id),\n    UNIQUE KEY uk_product_feedback_operation (operation_id),\n    CONSTRAINT apf16f_fk_product_feedback_ticket FOREIGN KEY (ticket_id) REFERENCES altoc_service_ticket(id),\n    CONSTRAINT apf16f_ck_product_feedback_product CHECK (CHAR_LENGTH(TRIM(product_code)) > 0),\n    CONSTRAINT apf16f_ck_product_feedback_actor CHECK (CHAR_LENGTH(TRIM(original_actor_uid)) > 0)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;",
+    "Columns": [
+      "ticket_id",
+      "submission_id",
+      "request_biz_id",
+      "product_code",
+      "operation_id",
+      "source_sha256",
+      "original_actor_uid",
+      "created_at"
+    ]
+  },
+  {
+    "Logical": "altoc_product_feedback_status_projection",
+    "Physical": "altoc_product_feedback_status_projection",
+    "DDL": "CREATE TABLE altoc_product_feedback_status_projection (\n    ticket_id BIGINT NOT NULL PRIMARY KEY,\n    source_revision BIGINT UNSIGNED NOT NULL,\n    command_sha256 CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,\n    canonical_request_biz_id CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,\n    decision_status VARCHAR(20) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,\n    updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),\n    CONSTRAINT apf16f_fk_feedback_status_submission FOREIGN KEY(ticket_id) REFERENCES altoc_service_ticket_product_feedback(ticket_id),\n    CONSTRAINT apf16f_ck_feedback_status_revision CHECK(source_revision > 0),\n    CONSTRAINT apf16f_ck_feedback_status_decision CHECK(decision_status IN ('submitted','evaluating','accepted','deferred','rejected','merged'))\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;",
+    "Columns": [
+      "ticket_id",
+      "source_revision",
+      "command_sha256",
+      "canonical_request_biz_id",
+      "decision_status",
+      "updated_at"
+    ]
+  },
+  {
+    "Logical": "altoc_product_feedback_progress_projection",
+    "Physical": "altoc_product_feedback_progress_projection",
+    "DDL": "CREATE TABLE altoc_product_feedback_progress_projection (\n    ticket_id BIGINT NOT NULL PRIMARY KEY,\n    source_revision BIGINT UNSIGNED NOT NULL,\n    command_sha256 CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,\n    snapshot_json JSON NOT NULL,\n    updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),\n    CONSTRAINT apf16f_fk_feedback_progress_submission FOREIGN KEY(ticket_id) REFERENCES altoc_service_ticket_product_feedback(ticket_id),\n    CONSTRAINT apf16f_ck_feedback_progress_revision CHECK(source_revision > 0 AND source_revision <= 9007199254740991)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;",
+    "Columns": [
+      "ticket_id",
+      "source_revision",
+      "command_sha256",
+      "snapshot_json",
+      "updated_at"
+    ]
+  }
+]

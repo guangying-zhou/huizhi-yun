@@ -1,0 +1,12 @@
+[Unit]
+Description=Renew only the Platform development HTTPS certificate
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/certbot renew --cert-name hzy.wiztek.cn --nginx --non-interactive --no-random-sleep-on-renew
+ExecStart=/usr/bin/certbot renew --cert-name platform-dev.wiztek.cn --nginx --non-interactive --no-random-sleep-on-renew
+MemoryMax=256M
+CPUQuota=50%
+UMask=0077

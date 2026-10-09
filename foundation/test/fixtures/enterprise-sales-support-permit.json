@@ -1,0 +1,45 @@
+{
+  "method": "POST",
+  "target": "/v1/enterprise/altoc/opportunity-contact-roles:update",
+  "body": {
+    "id": "",
+    "code": "",
+    "name": "",
+    "rowVersion": 0,
+    "page": 0,
+    "pageSize": 0,
+    "search": "",
+    "authorization": {
+      "actorUid": "Person",
+      "tenant": "C000001",
+      "deployment": "Host",
+      "resource": "opportunity",
+      "action": "edit",
+      "operation": "opportunity-contact-roles-update",
+      "objectId": "7",
+      "allowed": true,
+      "expiresAt": 123,
+      "bundleVersion": "1",
+      "bundleHash": "hash",
+      "policyRevision": 38,
+      "scope": {
+        "access": "self",
+        "departmentCodes": []
+      }
+    },
+    "sales": {
+      "id": "7",
+      "payload": {
+        "childId": "9",
+        "contactId": "11",
+        "expectedVersion": 3,
+        "role": "sponsor",
+        "influence_level": "high",
+        "attitude": "supportive",
+        "is_primary": false,
+        "remark": "中文 说明"
+      }
+    }
+  },
+  "canonical": "[\"hzy-enterprise-apf-permit.v1\",\"POST\",\"/v1/enterprise/altoc/opportunity-contact-roles:update\",\"Person\",\"C000001\",\"Host\",\"opportunity\",\"edit\",\"opportunity-contact-roles-update\",\"7\",true,123,\"1\",\"hash\",38,\"self\",[],\"\",\"\",\"\",0,0,0,\"\",[\"7\",[[\"attitude\",\"supportive\"],[\"childId\",\"9\"],[\"contactId\",\"11\"],[\"expectedVersion\",3],[\"influence_level\",\"high\"],[\"is_primary\",false],[\"remark\",\"中文\\u2028说明\"],[\"role\",\"sponsor\"]]]]"
+}

@@ -1,0 +1,113 @@
+{
+  "schemaVersion": 1,
+  "packageId": "p3-p4-202607",
+  "keyPrefix": "DEMO-P3P4-202607-",
+  "seedOrder": [
+    "codocs",
+    "people",
+    "aims",
+    "assets",
+    "altoc",
+    "finance"
+  ],
+  "verifyOrder": [
+    "people",
+    "aims",
+    "finance",
+    "altoc",
+    "codocs",
+    "assets"
+  ],
+  "cleanupOrder": [
+    "finance",
+    "codocs",
+    "altoc",
+    "assets",
+    "aims",
+    "people"
+  ],
+  "modules": {
+    "people": {
+      "databaseEnv": "HZY_DEMO_PEOPLE_MYSQL_DATABASE",
+      "seed": "people/seed.sql",
+      "verify": "people/verify.sql",
+      "cleanup": "people/cleanup.sql",
+      "expectedCheckCodes": [
+        "people.employee",
+        "people.assignment",
+        "people.rank_and_rate",
+        "people.cost_snapshot",
+        "people.performance_cycle",
+        "people.aims_contribution_sync"
+      ]
+    },
+    "aims": {
+      "databaseEnv": "HZY_DEMO_AIMS_MYSQL_DATABASE",
+      "seed": "aims/seed.sql",
+      "verify": "aims/verify.sql",
+      "cleanup": "aims/cleanup.sql",
+      "expectedCheckCodes": [
+        "aims.project",
+        "aims.project_member",
+        "aims.project_task",
+        "aims.time_entries",
+        "aims.altoc_ticket_work_item"
+      ]
+    },
+    "finance": {
+      "databaseEnv": "HZY_DEMO_FINANCE_MYSQL_DATABASE",
+      "seed": "finance/seed.sql",
+      "verify": "finance/verify.sql",
+      "cleanup": "finance/cleanup.sql",
+      "expectedCheckCodes": [
+        "finance.people_cost_parameter",
+        "finance.maintenance_invoice",
+        "finance.nonmaintenance_canary",
+        "finance.maintenance_receipt",
+        "finance.reconciliation",
+        "finance.employee_cost_snapshot",
+        "finance.people_labor_allocation",
+        "finance.project_summary"
+      ]
+    },
+    "altoc": {
+      "databaseEnv": "HZY_DEMO_ALTOC_MYSQL_DATABASE",
+      "seed": "altoc/seed.sql",
+      "verify": "altoc/verify.sql",
+      "cleanup": "altoc/cleanup.sql",
+      "expectedCheckCodes": [
+        "altoc.customer_contract",
+        "altoc.service_agreement_coverage",
+        "altoc.sla_entitlement",
+        "altoc.service_ticket_source",
+        "altoc.renewal_opportunity",
+        "altoc.aims_work_item_backref",
+        "altoc.delivery_result_and_document"
+      ]
+    },
+    "codocs": {
+      "databaseEnv": "HZY_DEMO_CODOCS_MYSQL_DATABASE",
+      "seed": "codocs/seed.sql",
+      "verify": "codocs/verify.sql",
+      "cleanup": "codocs/cleanup.sql",
+      "expectedCheckCodes": [
+        "codocs.ops_document",
+        "codocs.ops_knowledge_relations",
+        "codocs.ops_knowledge_acl_hardened"
+      ]
+    },
+    "assets": {
+      "databaseEnv": "HZY_DEMO_ASSETS_MYSQL_DATABASE",
+      "seed": "assets/seed.sql",
+      "verify": "assets/verify.sql",
+      "cleanup": "assets/cleanup.sql",
+      "expectedCheckCodes": [
+        "assets.delivery_view",
+        "assets.environment",
+        "assets.customer_delivery_asset",
+        "assets.asset_environment_binding",
+        "assets.ops_document"
+      ]
+    }
+  }
+}

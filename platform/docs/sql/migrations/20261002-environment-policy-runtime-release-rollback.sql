@@ -1,0 +1,9 @@
+-- CANDIDATE ONLY. Do not execute after any new-environment publication/approval.
+-- Safe normal rollback is to a compatible binary retaining environment/mode guards.
+-- Destructive schema rollback ONLY in isolated rehearsal before consumers switch:
+-- confirm zero new signatures, zero new channels, every instance still pinned,
+-- compare encrypted baseline, stop all policy/approval/enrollment writers.
+-- DROP is deliberately commented: operator approval and verified baseline required.
+-- ALTER TABLE tenant_runtime_instances DROP COLUMN release_update_mode;
+-- DROP TABLE tenant_environment_policy_revisions;
+-- Never restore whole instance table over new control tokens/heartbeats.

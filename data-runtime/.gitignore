@@ -1,0 +1,10 @@
+/hzy-data-runtime
+/hzy-data-runtime-linux-*
+/enterprise-test-credential
+.bin/
+/build/
+*.tar.gz
+*.sha256
+coverage.out
+.env
+.env.dev

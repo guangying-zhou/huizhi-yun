@@ -1,0 +1,1 @@
+export default defineEventHandler(event=>{const token=getRouterParam(event,'token');if(token==='MissingLink1234_')throw createError({statusCode:404});if(token==='ForbiddenLink123')throw createError({statusCode:403});return {code:0,data:{path:'codocs/company/tech-specs/20260325-BZ-前端技术规范法典-发布稿-V1.0.0.md'}}})

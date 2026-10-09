@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>汇智云经营 — Design System Preview (Platform-aligned)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --primary: #F97316;
+    --primary-hover: #EA580C;
+    --primary-light: #FFF7ED;
+    --secondary: #3B82F6;
+    --secondary-light: #EFF6FF;
+    --success: #059669;
+    --warning: #D97706;
+    --error: #DC2626;
+    --info: #3B82F6;
+    --bg: #FFFFFF;
+    --bg-subtle: #FAFAFA;
+    --bg-muted: #F4F4F5;
+    --border: #E4E4E7;
+    --text: #18181B;
+    --text-secondary: #71717A;
+    --text-muted: #A1A1AA;
+    --surface: #FFFFFF;
+    --surface-hover: #FAFAFA;
+  }
+  [data-theme="dark"] {
+    --primary: #FB923C;
+    --primary-hover: #F97316;
+    --primary-light: #431407;
+    --secondary: #60A5FA;
+    --secondary-light: #1E3A5F;
+    --success: #10B981;
+    --warning: #F59E0B;
+    --error: #EF4444;
+    --bg: #18181B;
+    --bg-subtle: #27272A;
+    --bg-muted: #3F3F46;
+    --border: #3F3F46;
+    --text: #FAFAFA;
+    --text-secondary: #A1A1AA;
+    --text-muted: #71717A;
+    --surface: #27272A;
+    --surface-hover: #3F3F46;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Geist', -apple-system, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.6;
+    transition: background 0.2s, color 0.2s;
+  }
+  .container { max-width: 1200px; margin: 0 auto; padding: 48px 24px; }
+  h1 { font-size: 32px; font-weight: 700; letter-spacing: -0.02em; margin-bottom: 8px; }
+  h2 { font-size: 20px; font-weight: 600; margin: 48px 0 16px; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
+  h3 { font-size: 14px; font-weight: 500; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 12px; }
+  p { color: var(--text-secondary); font-size: 15px; max-width: 600px; }
+  .subtitle { font-size: 15px; color: var(--text-muted); margin-bottom: 32px; }
+  .theme-toggle {
+    position: fixed; top: 16px; right: 16px; z-index: 100;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 8px; padding: 8px 14px; cursor: pointer;
+    font-family: inherit; font-size: 13px; color: var(--text-secondary);
+  }
+  .theme-toggle:hover { background: var(--surface-hover); }
+
+  .swatches { display: flex; gap: 12px; flex-wrap: wrap; margin: 16px 0; }
+  .swatch { width: 80px; text-align: center; }
+  .swatch-color { width: 80px; height: 56px; border-radius: 8px; margin-bottom: 6px; border: 1px solid var(--border); }
+  .swatch-label { font-size: 11px; color: var(--text-secondary); }
+  .swatch-hex { font-family: 'Geist Mono', monospace; font-size: 11px; color: var(--text-muted); }
+
+  .neutral-strip { display: flex; border-radius: 8px; overflow: hidden; margin: 16px 0; height: 40px; }
+  .neutral-strip div { flex: 1; }
+
+  .specimen { margin: 16px 0 32px; }
+  .specimen-display { font-size: 48px; font-weight: 700; letter-spacing: -0.03em; line-height: 1.1; margin-bottom: 8px; }
+  .specimen-body { font-size: 15px; line-height: 1.7; color: var(--text-secondary); max-width: 560px; margin-bottom: 16px; }
+  .specimen-mono { font-family: 'Geist Mono', monospace; font-size: 13px; color: var(--text-secondary); background: var(--bg-muted); padding: 2px 6px; border-radius: 4px; }
+
+  .btn-row { display: flex; gap: 12px; flex-wrap: wrap; margin: 16px 0; }
+  .btn { padding: 8px 20px; border-radius: 8px; font-family: inherit; font-size: 14px; font-weight: 500; cursor: pointer; border: none; transition: all 0.15s; }
+  .btn-primary { background: var(--primary); color: #fff; }
+  .btn-primary:hover { background: var(--primary-hover); }
+  .btn-secondary { background: transparent; color: var(--text); border: 1px solid var(--border); }
+  .btn-secondary:hover { background: var(--surface-hover); }
+  .btn-ghost { background: transparent; color: var(--primary); }
+  .btn-ghost:hover { background: var(--primary-light); }
+  .btn-info { background: var(--secondary); color: #fff; }
+  .btn-info:hover { opacity: 0.9; }
+
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin: 16px 0; }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 20px; }
+  .card-label { font-size: 13px; color: var(--text-muted); margin-bottom: 4px; }
+  .card-value { font-size: 28px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .card-trend { font-size: 13px; margin-top: 4px; }
+  .card-trend.up { color: var(--success); }
+  .card-trend.down { color: var(--error); }
+  .card-trend.warn { color: var(--warning); }
+
+  .alerts { display: flex; flex-direction: column; gap: 12px; margin: 16px 0; }
+  .alert { padding: 12px 16px; border-radius: 8px; font-size: 14px; display: flex; align-items: center; gap: 8px; }
+  .alert-success { background: #ECFDF5; color: #065F46; border: 1px solid #A7F3D0; }
+  .alert-warning { background: #FFFBEB; color: #92400E; border: 1px solid #FDE68A; }
+  .alert-error { background: #FEF2F2; color: #991B1B; border: 1px solid #FECACA; }
+  .alert-info { background: #EFF6FF; color: #1E40AF; border: 1px solid #BFDBFE; }
+  [data-theme="dark"] .alert-success { background: #064E3B; color: #A7F3D0; border-color: #065F46; }
+  [data-theme="dark"] .alert-warning { background: #78350F; color: #FDE68A; border-color: #92400E; }
+  [data-theme="dark"] .alert-error { background: #7F1D1D; color: #FECACA; border-color: #991B1B; }
+  [data-theme="dark"] .alert-info { background: #1E3A5F; color: #BFDBFE; border-color: #1E40AF; }
+
+  .table-mock { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 14px; }
+  .table-mock th { text-align: left; padding: 10px 12px; font-weight: 500; font-size: 13px; color: var(--text-muted); border-bottom: 1px solid var(--border); background: var(--bg-subtle); }
+  .table-mock td { padding: 12px; border-bottom: 1px solid var(--border); font-variant-numeric: tabular-nums; }
+  .table-mock tr:hover td { background: var(--surface-hover); }
+  .badge { display: inline-block; padding: 2px 10px; border-radius: 9999px; font-size: 12px; font-weight: 500; }
+  .badge-active { background: #FFF7ED; color: #C2410C; }
+  .badge-won { background: #D1FAE5; color: #065F46; }
+  .badge-lost { background: #FEE2E2; color: #991B1B; }
+  .badge-pending { background: #FEF3C7; color: #92400E; }
+  [data-theme="dark"] .badge-active { background: #431407; color: #FB923C; }
+  [data-theme="dark"] .badge-won { background: #064E3B; color: #6EE7B7; }
+  [data-theme="dark"] .badge-lost { background: #7F1D1D; color: #FCA5A5; }
+  [data-theme="dark"] .badge-pending { background: #78350F; color: #FCD34D; }
+
+  .dashboard-layout { display: grid; grid-template-columns: 240px 1fr; gap: 0; border: 1px solid var(--border); border-radius: 12px; overflow: hidden; margin: 16px 0; min-height: 500px; }
+  .sidebar-mock { background: var(--bg-subtle); border-right: 1px solid var(--border); padding: 16px 0; }
+  .sidebar-logo { padding: 8px 16px 20px; font-weight: 600; font-size: 15px; display: flex; align-items: center; gap: 8px; }
+  .sidebar-logo-icon { width: 24px; height: 24px; background: var(--primary); border-radius: 6px; }
+  .sidebar-section { padding: 4px 8px; }
+  .sidebar-section-label { font-size: 11px; font-weight: 500; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; padding: 8px 12px 4px; }
+  .sidebar-item { padding: 8px 12px; border-radius: 6px; font-size: 14px; color: var(--text-secondary); cursor: pointer; transition: all 0.1s; }
+  .sidebar-item:hover { background: var(--bg-muted); color: var(--text); }
+  .sidebar-item.active { background: var(--primary); color: #fff; }
+  .main-content { padding: 24px; background: var(--bg); }
+  .main-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; }
+  .main-title { font-size: 20px; font-weight: 600; }
+
+  .form-group { margin-bottom: 16px; }
+  .form-label { font-size: 13px; font-weight: 500; color: var(--text-secondary); margin-bottom: 6px; display: block; }
+  .form-input { width: 100%; max-width: 400px; padding: 8px 12px; border: 1px solid var(--border); border-radius: 8px; font-family: inherit; font-size: 14px; background: var(--surface); color: var(--text); }
+  .form-input:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px rgba(249,115,22,0.15); }
+
+  @media (max-width: 768px) {
+    .dashboard-layout { grid-template-columns: 1fr; }
+    .sidebar-mock { display: none; }
+    .cards { grid-template-columns: 1fr 1fr; }
+  }
+</style>
+</head>
+<body>
+<button class="theme-toggle" onclick="toggleTheme()">Light / Dark</button>
+
+<div class="container">
+  <h1>汇智云经营</h1>
+  <p class="subtitle">Design System Preview — Geist + Orange Primary + Zinc Neutral (Platform-aligned)</p>
+
+  <h2>Typography — Geist Family</h2>
+  <h3>Display / KPI Numbers</h3>
+  <div class="specimen">
+    <div class="specimen-display">¥2,847,600</div>
+    <div style="font-size:13px; color:var(--text-muted);">Geist 700 · 48px · tabular-nums</div>
+  </div>
+  <h3>Page Title</h3>
+  <div class="specimen">
+    <div style="font-size:20px; font-weight:600;">商机管理 — 本月漏斗</div>
+    <div style="font-size:13px; color:var(--text-muted);">Geist 600 · 20px</div>
+  </div>
+  <h3>Body Text</h3>
+  <div class="specimen">
+    <p class="specimen-body">客户「上海数智科技有限公司」的商机「政务云平台二期」已进入商务谈判阶段，预计签约金额 ¥1,280,000。上次拜访时客户提到竞品方案，建议本周安排技术交流会。</p>
+    <div style="font-size:13px; color:var(--text-muted);">Geist 400 · 15px · line-height 1.7</div>
+  </div>
+  <h3>Business Code</h3>
+  <div class="specimen">
+    <span class="specimen-mono">OP-000142</span>
+    <span class="specimen-mono">CT-000089</span>
+    <span class="specimen-mono">QU-000217</span>
+  </div>
+
+  <h2>Color Palette — Platform-aligned</h2>
+  <h3>Brand & Semantic</h3>
+  <div class="swatches">
+    <div class="swatch"><div class="swatch-color" style="background:#F97316"></div><div class="swatch-label">Primary</div><div class="swatch-hex">orange</div></div>
+    <div class="swatch"><div class="swatch-color" style="background:#3B82F6"></div><div class="swatch-label">Secondary</div><div class="swatch-hex">blue</div></div>
+    <div class="swatch"><div class="swatch-color" style="background:#059669"></div><div class="swatch-label">Success</div><div class="swatch-hex">emerald</div></div>
+    <div class="swatch"><div class="swatch-color" style="background:#D97706"></div><div class="swatch-label">Warning</div><div class="swatch-hex">amber</div></div>
+    <div class="swatch"><div class="swatch-color" style="background:#DC2626"></div><div class="swatch-label">Error</div><div class="swatch-hex">red</div></div>
+  </div>
+  <h3>Neutrals (Zinc)</h3>
+  <div class="neutral-strip">
+    <div style="background:#FAFAFA"></div>
+    <div style="background:#F4F4F5"></div>
+    <div style="background:#E4E4E7"></div>
+    <div style="background:#D4D4D8"></div>
+    <div style="background:#A1A1AA"></div>
+    <div style="background:#71717A"></div>
+    <div style="background:#3F3F46"></div>
+    <div style="background:#27272A"></div>
+    <div style="background:#18181B"></div>
+  </div>
+
+  <h2>Components</h2>
+  <h3>Buttons</h3>
+  <div class="btn-row">
+    <button class="btn btn-primary">创建商机</button>
+    <button class="btn btn-info">查看报告</button>
+    <button class="btn btn-secondary">取消</button>
+    <button class="btn btn-ghost">查看详情</button>
+  </div>
+  <h3>Alerts</h3>
+  <div class="alerts">
+    <div class="alert alert-success">合同 CT-000089 已签署，回款计划已自动生成</div>
+    <div class="alert alert-warning">商机 OP-000142 已 15 天未跟进，建议尽快安排拜访</div>
+    <div class="alert alert-error">3 笔回款已逾期，总金额 ¥428,000</div>
+    <div class="alert alert-info">报价 QU-000217 待您审批</div>
+  </div>
+  <h3>Form Inputs</h3>
+  <div class="form-group">
+    <label class="form-label">客户名称</label>
+    <input class="form-input" value="上海数智科技有限公司">
+  </div>
+  <div class="form-group">
+    <label class="form-label">预计签约金额</label>
+    <input class="form-input" value="¥1,280,000">
+  </div>
+
+  <h2>Dashboard Mockup — 经营看板</h2>
+  <div class="cards">
+    <div class="card">
+      <div class="card-label">漏斗金额</div>
+      <div class="card-value">¥4.2M</div>
+      <div class="card-trend up">↑ 12% vs 上月</div>
+    </div>
+    <div class="card">
+      <div class="card-label">赢单率</div>
+      <div class="card-value">34.8%</div>
+      <div class="card-trend up">↑ 2.1pp</div>
+    </div>
+    <div class="card">
+      <div class="card-label">回款达成率</div>
+      <div class="card-value">78.5%</div>
+      <div class="card-trend warn">目标 85%</div>
+    </div>
+    <div class="card">
+      <div class="card-label" style="color:var(--error)">逾期应收</div>
+      <div class="card-value" style="color:var(--error)">¥428K</div>
+      <div class="card-trend down">↑ 3 笔新增</div>
+    </div>
+  </div>
+
+  <h2>Data Table — 商机列表</h2>
+  <table class="table-mock">
+    <thead>
+      <tr><th>商机名称</th><th>客户</th><th>阶段</th><th style="text-align:right">金额</th><th>赢率</th><th>预计签约</th><th>负责人</th></tr>
+    </thead>
+    <tbody>
+      <tr><td style="font-weight:500">政务云平台二期</td><td>上海数智科技</td><td><span class="badge badge-active">商务谈判</span></td><td style="text-align:right">¥1,280,000</td><td>75%</td><td>2026-04-15</td><td>张明</td></tr>
+      <tr><td style="font-weight:500">数据中台建设</td><td>杭州锐新信息</td><td><span class="badge badge-active">方案报价</span></td><td style="text-align:right">¥860,000</td><td>45%</td><td>2026-05-20</td><td>李芳</td></tr>
+      <tr><td style="font-weight:500">OA 系统升级</td><td>北京中科智联</td><td><span class="badge badge-won">赢单</span></td><td style="text-align:right">¥520,000</td><td>100%</td><td>2026-03-10</td><td>王强</td></tr>
+      <tr><td style="font-weight:500">安全态势感知</td><td>深圳前海数联</td><td><span class="badge badge-lost">输单</span></td><td style="text-align:right">¥2,100,000</td><td>0%</td><td>—</td><td>赵磊</td></tr>
+      <tr><td style="font-weight:500">智慧园区管理</td><td>成都天府软件</td><td><span class="badge badge-pending">需求确认</span></td><td style="text-align:right">¥680,000</td><td>25%</td><td>2026-06-30</td><td>张明</td></tr>
+    </tbody>
+  </table>
+
+  <h2>Full Layout Mockup</h2>
+  <div class="dashboard-layout">
+    <div class="sidebar-mock">
+      <div class="sidebar-logo"><div class="sidebar-logo-icon"></div>汇智云经营</div>
+      <div class="sidebar-section"><div class="sidebar-item active">首页</div></div>
+      <div class="sidebar-section">
+        <div class="sidebar-section-label">销售管理</div>
+        <div class="sidebar-item">客户</div>
+        <div class="sidebar-item">线索</div>
+        <div class="sidebar-item">商机</div>
+      </div>
+      <div class="sidebar-section">
+        <div class="sidebar-section-label">商务管理</div>
+        <div class="sidebar-item">报价</div>
+        <div class="sidebar-item">合同</div>
+        <div class="sidebar-item">回款</div>
+      </div>
+      <div class="sidebar-section">
+        <div class="sidebar-section-label">数据分析</div>
+        <div class="sidebar-item">看板</div>
+      </div>
+    </div>
+    <div class="main-content">
+      <div class="main-header">
+        <div class="main-title">经营概览</div>
+        <button class="btn btn-primary" style="font-size:13px; padding:6px 16px;">+ 新建商机</button>
+      </div>
+      <div class="cards" style="grid-template-columns: repeat(4, 1fr);">
+        <div class="card" style="padding:16px"><div class="card-label" style="font-size:12px">漏斗金额</div><div class="card-value" style="font-size:22px">¥4.2M</div><div class="card-trend up" style="font-size:12px">↑ 12%</div></div>
+        <div class="card" style="padding:16px"><div class="card-label" style="font-size:12px">赢单率</div><div class="card-value" style="font-size:22px">34.8%</div><div class="card-trend up" style="font-size:12px">↑ 2.1pp</div></div>
+        <div class="card" style="padding:16px"><div class="card-label" style="font-size:12px">回款达成率</div><div class="card-value" style="font-size:22px">78.5%</div><div class="card-trend warn" style="font-size:12px">目标 85%</div></div>
+        <div class="card" style="padding:16px"><div class="card-label" style="font-size:12px; color:var(--error)">逾期应收</div><div class="card-value" style="font-size:22px; color:var(--error)">¥428K</div><div class="card-trend down" style="font-size:12px">↑ 3 笔</div></div>
+      </div>
+      <div style="margin-top:20px; padding:16px; background:var(--bg-subtle); border-radius:8px; border:1px solid var(--border);">
+        <div style="font-size:14px; font-weight:500; margin-bottom:12px;">风险商机</div>
+        <div style="font-size:13px; color:var(--text-secondary); padding:8px 0; border-bottom:1px solid var(--border); display:flex; justify-content:space-between;">
+          <span><span style="color:var(--warning);">⚠</span> 政务云平台二期 — 15天未跟进</span>
+          <span style="color:var(--text-muted)">张明</span>
+        </div>
+        <div style="font-size:13px; color:var(--text-secondary); padding:8px 0; border-bottom:1px solid var(--border); display:flex; justify-content:space-between;">
+          <span><span style="color:var(--error);">●</span> 智慧园区管理 — 客户提及竞品</span>
+          <span style="color:var(--text-muted)">张明</span>
+        </div>
+        <div style="font-size:13px; color:var(--text-secondary); padding:8px 0; display:flex; justify-content:space-between;">
+          <span><span style="color:var(--warning);">⚠</span> 数据中台建设 — 预计签约日临近</span>
+          <span style="color:var(--text-muted)">李芳</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div style="margin-top:64px; padding-top:24px; border-top:1px solid var(--border); color:var(--text-muted); font-size:13px;">
+    Generated by /design-consultation · 2026-03-21 · 汇智云经营 (Altoc) · Platform-aligned: orange + blue + zinc
+  </div>
+</div>
+
+<script>
+function toggleTheme() {
+  const html = document.documentElement;
+  html.dataset.theme = html.dataset.theme === 'dark' ? 'light' : 'dark';
+}
+</script>
+</body>
+</html>

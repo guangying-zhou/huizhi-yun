@@ -1,0 +1,178 @@
+{
+  "method": "POST",
+  "cases": [
+    {
+      "target": "/v1/enterprise/altoc/migration-exceptions:resolve",
+      "body": {
+        "migrationResolve": {
+          "id": "11",
+          "expectedVersion": 3,
+          "method": "assign_customer",
+          "reason": "\u5ba2\u6237\u786e\u8ba4<\u5f52\u5c5e>&\"\u2028",
+          "customerId": "7",
+          "contactCode": "",
+          "customerScope": {
+            "access": "self_dept",
+            "departmentCodes": [
+              "D-1",
+              "\u90e8\u95e8\u4e8c"
+            ]
+          }
+        },
+        "authorization": {
+          "actorUid": "person-a",
+          "tenant": "tenant-a",
+          "deployment": "enterprise-test",
+          "resource": "migration_exceptions",
+          "action": "resolve",
+          "operation": "migration-exceptions-resolve",
+          "objectId": "11",
+          "allowed": true,
+          "expiresAt": 1800000014000,
+          "bundleVersion": "v1",
+          "bundleHash": "hash",
+          "policyRevision": 42,
+          "scope": {
+            "access": "all",
+            "departmentCodes": []
+          }
+        }
+      },
+      "canonical": "[\"hzy-enterprise-apf-permit.v1\",\"POST\",\"/v1/enterprise/altoc/migration-exceptions:resolve\",\"person-a\",\"tenant-a\",\"enterprise-test\",\"migration_exceptions\",\"resolve\",\"migration-exceptions-resolve\",\"11\",true,1800000014000,\"v1\",\"hash\",42,\"all\",[],\"\",\"\",\"\",0,0,0,\"\",[\"11\",3,\"assign_customer\",\"\u5ba2\u6237\u786e\u8ba4<\u5f52\u5c5e>&\\\"\\u2028\",\"7\",\"\",[\"self_dept\",[\"D-1\",\"\u90e8\u95e8\u4e8c\"]],\"\",\"\"]]"
+    },
+    {
+      "target": "/v1/enterprise/finance/migration-exceptions:resolve",
+      "body": {
+        "migrationResolve": {
+          "id": "8",
+          "expectedVersion": 1,
+          "method": "accept",
+          "reason": "",
+          "customerId": "",
+          "contactCode": ""
+        },
+        "authorization": {
+          "actorUid": "person-a",
+          "tenant": "tenant-a",
+          "deployment": "enterprise-test",
+          "resource": "migration_exceptions",
+          "action": "resolve",
+          "operation": "migration-exceptions-resolve",
+          "objectId": "8",
+          "allowed": true,
+          "expiresAt": 1800000014000,
+          "bundleVersion": "v1",
+          "bundleHash": "hash",
+          "policyRevision": 42,
+          "scope": {
+            "access": "all",
+            "departmentCodes": []
+          }
+        }
+      },
+      "canonical": "[\"hzy-enterprise-apf-permit.v1\",\"POST\",\"/v1/enterprise/finance/migration-exceptions:resolve\",\"person-a\",\"tenant-a\",\"enterprise-test\",\"migration_exceptions\",\"resolve\",\"migration-exceptions-resolve\",\"8\",true,1800000014000,\"v1\",\"hash\",42,\"all\",[],\"\",\"\",\"\",0,0,0,\"\",[\"8\",1,\"accept\",\"\",\"\",\"\",[],\"\",\"\"]]"
+    },
+    {
+      "target": "/v1/enterprise/altoc/migration-identities:confirm",
+      "body": {
+        "migrationIdentity": {
+          "sourceUserId": "employee:7",
+          "expectedStatus": "candidate",
+          "directoryUid": "person-b"
+        },
+        "authorization": {
+          "actorUid": "person-a",
+          "tenant": "tenant-a",
+          "deployment": "enterprise-test",
+          "resource": "migration_exceptions",
+          "action": "resolve",
+          "operation": "migration-identities-confirm",
+          "objectId": "employee:7",
+          "allowed": true,
+          "expiresAt": 1800000014000,
+          "bundleVersion": "v1",
+          "bundleHash": "hash",
+          "policyRevision": 42,
+          "scope": {
+            "access": "all",
+            "departmentCodes": []
+          }
+        }
+      },
+      "canonical": "[\"hzy-enterprise-apf-permit.v1\",\"POST\",\"/v1/enterprise/altoc/migration-identities:confirm\",\"person-a\",\"tenant-a\",\"enterprise-test\",\"migration_exceptions\",\"resolve\",\"migration-identities-confirm\",\"employee:7\",true,1800000014000,\"v1\",\"hash\",42,\"all\",[],\"\",\"\",\"\",0,0,0,\"\",[\"employee:7\",\"candidate\",\"person-b\"]]"
+    },
+    {
+      "target": "/v1/enterprise/altoc/migration-identities:apply",
+      "body": {
+        "migrationApply": {
+          "sourceUserId": "employee:7",
+          "limit": 100,
+          "customerScope": {
+            "access": "all",
+            "departmentCodes": []
+          },
+          "contractScope": {
+            "access": "dept",
+            "departmentCodes": [
+              "D-1",
+              "\u90e8\u95e8\u4e8c"
+            ]
+          }
+        },
+        "authorization": {
+          "actorUid": "person-a",
+          "tenant": "tenant-a",
+          "deployment": "enterprise-test",
+          "resource": "migration_exceptions",
+          "action": "resolve",
+          "operation": "migration-identities-apply",
+          "objectId": "employee:7",
+          "allowed": true,
+          "expiresAt": 1800000014000,
+          "bundleVersion": "v1",
+          "bundleHash": "hash",
+          "policyRevision": 42,
+          "scope": {
+            "access": "all",
+            "departmentCodes": []
+          }
+        }
+      },
+      "canonical": "[\"hzy-enterprise-apf-permit.v1\",\"POST\",\"/v1/enterprise/altoc/migration-identities:apply\",\"person-a\",\"tenant-a\",\"enterprise-test\",\"migration_exceptions\",\"resolve\",\"migration-identities-apply\",\"employee:7\",true,1800000014000,\"v1\",\"hash\",42,\"all\",[],\"\",\"\",\"\",0,0,0,\"\",[\"employee:7\",100,[\"all\",[]],[\"dept\",[\"D-1\",\"\u90e8\u95e8\u4e8c\"]]]]"
+    },
+    {
+      "target": "/v1/enterprise/finance/migration-exceptions:resolve",
+      "body": {
+        "migrationResolve": {
+          "id": "9",
+          "expectedVersion": 1,
+          "method": "record_balance",
+          "reason": "",
+          "customerId": "",
+          "contactCode": "",
+          "accountCode": "BA-W000002",
+          "amount": "-1200.50"
+        },
+        "authorization": {
+          "actorUid": "person-a",
+          "tenant": "tenant-a",
+          "deployment": "enterprise-test",
+          "resource": "migration_exceptions",
+          "action": "resolve",
+          "operation": "migration-exceptions-resolve",
+          "objectId": "9",
+          "allowed": true,
+          "expiresAt": 1800000014000,
+          "bundleVersion": "v1",
+          "bundleHash": "hash",
+          "policyRevision": 42,
+          "scope": {
+            "access": "all",
+            "departmentCodes": []
+          }
+        }
+      },
+      "canonical": "[\"hzy-enterprise-apf-permit.v1\",\"POST\",\"/v1/enterprise/finance/migration-exceptions:resolve\",\"person-a\",\"tenant-a\",\"enterprise-test\",\"migration_exceptions\",\"resolve\",\"migration-exceptions-resolve\",\"9\",true,1800000014000,\"v1\",\"hash\",42,\"all\",[],\"\",\"\",\"\",0,0,0,\"\",[\"9\",1,\"record_balance\",\"\",\"\",\"\",[],\"BA-W000002\",\"-1200.50\"]]"
+    }
+  ]
+}

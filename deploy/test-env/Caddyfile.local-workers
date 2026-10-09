@@ -1,0 +1,11 @@
+{
+	admin 127.0.0.1:2019
+	auto_https disable_redirects
+	skip_install_trust
+}
+
+https://wiztek.hzy.test {
+	bind 127.0.0.1
+	tls internal
+	reverse_proxy 127.0.0.1:8787
+}

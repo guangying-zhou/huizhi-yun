@@ -1,0 +1,24 @@
+[
+  {
+    "Logical": "altoc_collection_event",
+    "Physical": "altoc_collection_event",
+    "Columns": [
+      "id",
+      "code",
+      "billing_schedule_id",
+      "contract_id",
+      "event_type",
+      "before_json",
+      "after_json",
+      "result",
+      "promised_payment_date",
+      "promised_amount",
+      "next_followup_at",
+      "actor_uid",
+      "idempotency_key",
+      "operation_id",
+      "created_at"
+    ],
+    "DDL": "CREATE TABLE altoc_collection_event (\n id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,\n code VARCHAR(64) NOT NULL, billing_schedule_id BIGINT UNSIGNED NOT NULL,\n contract_id BIGINT UNSIGNED NOT NULL, event_type VARCHAR(32) NOT NULL,\n before_json JSON NOT NULL, after_json JSON NOT NULL, result VARCHAR(1000) NULL,\n promised_payment_date DATE NULL, promised_amount DECIMAL(18,2) NULL,\n next_followup_at DATETIME(3) NULL, actor_uid VARCHAR(64) NOT NULL,\n idempotency_key VARCHAR(100) NOT NULL, operation_id CHAR(36) NOT NULL, created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),\n UNIQUE KEY uk_collection_code(code), UNIQUE KEY uk_collection_intent(operation_id),\n KEY idx_collection_plan(billing_schedule_id,id), KEY idx_collection_contract(contract_id,id),\n CHECK(promised_amount IS NULL OR promised_amount>=0), CHECK(actor_uid<>''),\n CHECK(event_type IN ('assign','due_date','followup'))\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;"
+  }
+]

@@ -1,0 +1,200 @@
+import { projectAuthorizationObjectFromFacts } from './aimsProjectAuthorizationObjectCore'
+import { createError, type H3Event } from 'h3'
+import { requireAimsProjectAuthorizationRecord } from './aimsProjectAuthorizationRecord'
+import { runtimeEnvelopeError } from './aimsRuntimeForward'
+import { loadScopedAuthorizationFromConsoleRuntime } from '@hzy/foundation/server/utils/platformBundleAuthorization'
+import { loadSubjectScopedAuthorizationByService } from '@hzy/foundation/server/utils/subjectScopedAuthorization'
+import { evaluateFoundationScopedAuthorization } from '@hzy/foundation/server/utils/scopeEvaluator'
+import { verifiedServiceCommandActor, maybeCallTenantRuntime } from '@hzy/foundation/server/utils/tenantRuntimeClient'
+import type {
+  FoundationObjectContext
+} from '@hzy/foundation/server/utils/scopeEvaluator'
+import { appCode } from '../../app/config/permissions'
+import { getRequestUid } from './authIdentity'
+import {
+  aimsProjectListAdminScopeQueryFromGrants,
+  type AimsProjectListScopeContext
+} from './aimsProjectListScopeCore'
+
+type PermissionAction = 'view' | 'create' | 'edit' | 'delete' | 'assign' | 'submit' | 'approve' | 'confirm' | 'close' | 'export' | 'admin'
+
+interface RuntimeEnvelope<T> {
+  code?: number
+  data?: T
+  message?: string
+}
+
+interface AimsScopedPermissionOptions {
+  resourceCode: string
+  action: PermissionAction
+  object?: FoundationObjectContext
+}
+
+type RuntimeRecord = Record<string, unknown>
+
+// Multiple project fact queries within one signed document command share the
+// same freshly verified subject snapshot. Never share pending I/O across requests.
+const delegatedProjectAdminSnapshots = new WeakMap<H3Event, Map<string, ReturnType<typeof loadSubjectScopedAuthorizationByService>>>()
+
+function loadDelegatedProjectAdminSnapshot(event: H3Event, uid: string) {
+  let snapshots = delegatedProjectAdminSnapshots.get(event)
+  if (!snapshots) {
+    snapshots = new Map()
+    delegatedProjectAdminSnapshots.set(event, snapshots)
+  }
+  let snapshot = snapshots.get(uid)
+  if (!snapshot) {
+    snapshot = loadSubjectScopedAuthorizationByService({ event, timeoutMs: 100000, subjectUid: uid, purpose: 'enterprise_project_admin', resourceCode: 'projects', action: 'admin' })
+    snapshots.set(uid, snapshot)
+  }
+  return snapshot
+}
+
+function stringValue(value: unknown) {
+  return String(value || '').trim()
+}
+
+function unwrapRuntimeData<T>(value: RuntimeEnvelope<T> | T): T | null {
+  const envelope = value && typeof value === 'object' && !Array.isArray(value)
+    ? value as RuntimeEnvelope<T>
+    : null
+  if (envelope && envelope.code !== undefined) {
+    return envelope.code === 0 ? envelope.data ?? null : null
+  }
+  return value as T
+}
+
+function runtimeItems(value: unknown): RuntimeRecord[] {
+  if (Array.isArray(value)) {
+    return value.filter(item => item && typeof item === 'object' && !Array.isArray(item)) as RuntimeRecord[]
+  }
+  if (value && typeof value === 'object' && !Array.isArray(value)) {
+    const record = value as RuntimeRecord
+    return runtimeItems(record.items ?? record.data)
+  }
+  return []
+}
+
+export async function checkAimsScopedPermission(
+  event: H3Event,
+  options: AimsScopedPermissionOptions
+) {
+  const uid = getRequestUid(event)
+  if (!uid) return false
+
+  const object = options.object
+    ? { ...options.object, actorUid: options.object.actorUid || uid }
+    : { actorUid: uid }
+  if (verifiedServiceCommandActor(event, appCode)) {
+    if (options.resourceCode !== 'projects' || options.action !== 'admin') return false
+    const subject = await loadDelegatedProjectAdminSnapshot(event, uid)
+    return evaluateFoundationScopedAuthorization({ grants: subject.grants, required: { appCode, resourceCode: 'projects', action: 'admin' }, object, policyOf: () => subject.actionPolicy }).allowed
+  }
+  const scoped = await loadScopedAuthorizationFromConsoleRuntime(event, uid, appCode, {
+    resourceCode: options.resourceCode,
+    action: options.action,
+    object
+  })
+  return scoped.decision?.allowed === true
+}
+
+export async function resolveAimsProjectListAdminScopeQuery(
+  event: H3Event,
+  uid: string,
+  context: AimsProjectListScopeContext = {}
+) {
+  const normalizedUid = stringValue(uid)
+  if (!normalizedUid) return {}
+
+  try {
+    if (verifiedServiceCommandActor(event, appCode)) {
+      const subject = await loadDelegatedProjectAdminSnapshot(event, normalizedUid)
+      return aimsProjectListAdminScopeQueryFromGrants(subject.grants, context)
+    }
+    const scoped = await loadScopedAuthorizationFromConsoleRuntime(event, normalizedUid, appCode, {
+      resourceCode: 'projects',
+      action: 'admin'
+    })
+    return aimsProjectListAdminScopeQueryFromGrants(scoped.grants, context)
+  } catch (error) {
+    console.warn('[AimsScopedAuthorization] failed to resolve project list admin scopes:', error)
+    throw error
+  }
+}
+
+async function loadRuntimeRecord(
+  event: H3Event,
+  path: string,
+  query: Record<string, unknown>,
+  strict = false
+) {
+  const runtime = await maybeCallTenantRuntime<RuntimeEnvelope<RuntimeRecord>>(event, path, {
+    appCode,
+    scope: 'aims.read',
+    method: 'GET',
+    query
+  })
+  if (!runtime.handled) {
+    if (strict) throw createError({ statusCode: 503, message: '项目授权事实服务暂不可用' })
+    return null
+  }
+  if (strict && runtime.data?.code !== 0) {
+    if (runtime.data?.code !== undefined) throw runtimeEnvelopeError(runtime.data)
+    throw createError({ statusCode: 503, message: '项目授权事实响应不完整' })
+  }
+  return unwrapRuntimeData(runtime.data)
+}
+
+async function loadProjectMembers(
+  event: H3Event,
+  projectId: string,
+  query: Record<string, unknown>
+) {
+  const runtime = await maybeCallTenantRuntime<RuntimeEnvelope<unknown>>(event, `/v1/aims/projects/${encodeURIComponent(projectId)}/members`, {
+    appCode,
+    scope: 'aims.read',
+    method: 'GET',
+    query
+  })
+  if (!runtime.handled) return []
+  const data = unwrapRuntimeData(runtime.data)
+  return runtimeItems(data)
+}
+
+export async function resolveAimsProjectAuthorizationObject(
+  event: H3Event,
+  input: {
+    projectId: string
+    uid: string
+    currentDeptCodes?: string[]
+    managementDeptCodes?: string[]
+    requireCompleteFacts?: boolean
+  },
+  authorizationSource?: (projectId: string) => Promise<unknown>
+): Promise<FoundationObjectContext> {
+  if (authorizationSource) {
+    const project = requireAimsProjectAuthorizationRecord(await authorizationSource(input.projectId), input.projectId)
+    return projectAuthorizationObjectFromFacts(project, project.members as RuntimeRecord[], input.uid, input.projectId)
+  }
+  const query: Record<string, unknown> = {
+    current_user: input.uid
+  }
+  if (input.currentDeptCodes?.length) {
+    query.current_user_dept_codes = input.currentDeptCodes.join(',')
+  }
+  if (input.managementDeptCodes?.length) {
+    query.current_user_management_dept_codes = input.managementDeptCodes.join(',')
+  }
+
+  const authorizationRecord = await loadRuntimeRecord(event, `/v1/aims/projects/${encodeURIComponent(input.projectId)}/authorization-object`, query, input.requireCompleteFacts)
+  const project = input.requireCompleteFacts
+    ? requireAimsProjectAuthorizationRecord(authorizationRecord, input.projectId)
+    : authorizationRecord || await loadRuntimeRecord(event, `/v1/aims/projects/${encodeURIComponent(input.projectId)}`, query) || {}
+  const embeddedMembers = (project as RuntimeRecord).members
+    ?? (project as RuntimeRecord).projectMembers
+    ?? (project as RuntimeRecord).project_members
+  const members = Array.isArray(embeddedMembers)
+    ? runtimeItems(embeddedMembers)
+    : await loadProjectMembers(event, input.projectId, query)
+  return projectAuthorizationObjectFromFacts(project, members, input.uid, input.projectId)
+}

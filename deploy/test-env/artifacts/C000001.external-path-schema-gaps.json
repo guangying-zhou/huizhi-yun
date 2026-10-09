@@ -1,0 +1,46 @@
+{
+  "observedAt": "2026-09-14T04:52:10.349Z",
+  "readOnly": true,
+  "instanceId": "37d8994e-4c12-11ee-afad-8cb2da2e572b",
+  "observations": [
+    {
+      "app": "assets",
+      "schema": "hzy_assets_test_local_20260910",
+      "tables": [
+        {
+          "name": "customer_delivery_assets"
+        },
+        {
+          "name": "service_command_receipt"
+        }
+      ],
+      "columns": [
+        {
+          "name": "altoc_status_sync_revision"
+        },
+        {
+          "name": "altoc_status_sync_fingerprint"
+        },
+        {
+          "name": "altoc_status_sync_occurred_at"
+        }
+      ]
+    },
+    {
+      "app": "people",
+      "schema": "hzy_people_test_local_20260910",
+      "tables": [
+        {
+          "name": "integration_operation"
+        },
+        {
+          "name": "integration_operation_attempt"
+        },
+        {
+          "name": "people_contribution_scope_versions"
+        }
+      ],
+      "columns": []
+    }
+  ]
+}

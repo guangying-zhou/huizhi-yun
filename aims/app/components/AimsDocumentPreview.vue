@@ -1,0 +1,193 @@
+<script setup lang="ts">
+/**
+ * 统一文档预览组件
+ *   - codocs：通过项目范围签名命令读取 Markdown，在 Aims 内只读渲染
+ *   - repo：按 commit_id/ref 拉取 md 文本，用 MarkdownContent 渲染
+ */
+import { useAimsModule } from '../../layer/useAimsModule'
+import { fetchRepoDocContent } from '../composables/useAimsDocumentPicker'
+import type { DocumentSource } from '../composables/useAimsDocumentPicker'
+import MarkdownContent from './MarkdownContent.vue'
+
+// 同一份代码供独立应用与企业宿主使用：非宿主模式下 moduleUrl 原样返回路径。
+const { moduleUrl } = useAimsModule()
+const props = defineProps<{
+  source: DocumentSource
+  codocsUuid?: string | null
+  projectId?: number | null
+  projectDocumentId?: number | null
+  repoProjectCode?: string | null
+  repoFilePath?: string | null
+  repoCommitId?: string | null
+  title?: string | null
+}>()
+
+interface RepoContent {
+  content: string
+  path: string
+  commit_id: string
+  last_commit_id: string
+  latest_commit_id?: string
+  has_new_version?: boolean
+}
+
+interface CodocsContent {
+  uuid: string
+  title: string
+  docType: string
+  ownerUid: string
+  content: string
+  updatedAt: string
+}
+
+const repoContent = ref<RepoContent | null>(null)
+const repoLoading = ref(false)
+const repoError = ref('')
+const codocsContent = ref<CodocsContent | null>(null)
+const codocsLoading = ref(false)
+const codocsError = ref('')
+
+async function loadCodocsContent() {
+  codocsContent.value = null
+  codocsError.value = ''
+  if (props.source !== 'codocs') return
+  if (!props.codocsUuid) return
+
+  if (!props.projectId) {
+    codocsError.value = '缺少项目 ID，无法校验项目文档访问权限'
+    return
+  }
+
+  codocsLoading.value = true
+  try {
+    const response = await $fetch<{ code: number, data: CodocsContent }>(
+      moduleUrl(`/api/v1/codocs/documents/${encodeURIComponent(props.codocsUuid)}/content`),
+      {
+        query: {
+          projectId: props.projectId
+        }
+      }
+    )
+    codocsContent.value = response.data
+  } catch (err: unknown) {
+    const msg = (err as { data?: { message?: string } })?.data?.message
+      || (err as { message?: string })?.message
+      || '无法读取 Codocs 文档内容'
+    codocsError.value = msg
+  } finally {
+    codocsLoading.value = false
+  }
+}
+
+async function loadRepo() {
+  repoError.value = ''
+  repoContent.value = null
+  if (props.source !== 'repo' || !props.repoProjectCode || !props.repoFilePath) return
+  if (!props.repoCommitId) {
+    repoError.value = '尚未绑定固定提交版本，请重新选择仓库文档'
+    return
+  }
+  repoLoading.value = true
+  try {
+    const data = await fetchRepoDocContent(props.repoProjectCode, props.repoFilePath, {
+      commitId: props.repoCommitId || undefined,
+      documentId: props.projectDocumentId || undefined,
+      aimsProjectId: props.projectId
+    }, moduleUrl)
+    if (data) {
+      repoContent.value = {
+        content: data.content,
+        path: data.path,
+        commit_id: data.commit_id,
+        last_commit_id: data.last_commit_id,
+        latest_commit_id: data.latest_commit_id,
+        has_new_version: data.has_new_version
+      }
+    } else {
+      repoError.value = '无法拉取仓库文档内容'
+    }
+  } catch (err: unknown) {
+    const msg = (err as { data?: { message?: string } })?.data?.message
+      || (err as { message?: string })?.message
+      || '拉取失败'
+    repoError.value = msg
+  } finally {
+    repoLoading.value = false
+  }
+}
+
+watch(
+  () => [props.source, props.repoProjectCode, props.repoFilePath, props.repoCommitId],
+  () => {
+    if (props.source === 'repo') loadRepo()
+  },
+  { immediate: true }
+)
+
+watch(
+  () => [props.source, props.codocsUuid, props.projectId],
+  () => {
+    if (props.source === 'codocs') loadCodocsContent()
+  },
+  { immediate: true }
+)
+
+const showStaleWarning = computed(() => {
+  if (props.source !== 'repo') return false
+  if (!props.repoCommitId || !repoContent.value) return false
+  return repoContent.value.has_new_version === true
+})
+</script>
+
+<template>
+  <div class="h-full flex flex-col min-h-0">
+    <!-- codocs -->
+    <div v-if="source === 'codocs'" class="flex-1 min-h-0">
+      <div v-if="codocsLoading" class="flex items-center justify-center h-full text-muted">
+        <UIcon name="i-lucide-loader-2" class="size-5 animate-spin" />
+      </div>
+      <div v-else-if="codocsError" class="flex items-center gap-2 px-3 py-4 rounded-md bg-error/10 text-sm text-error">
+        <UIcon name="i-lucide-triangle-alert" class="size-4" />
+        {{ codocsError }}
+      </div>
+      <div v-else-if="codocsContent" class="h-full overflow-y-auto">
+        <MarkdownContent :markdown="codocsContent.content" />
+      </div>
+      <div v-else class="flex items-center justify-center h-full text-sm text-muted">
+        未关联文档
+      </div>
+    </div>
+
+    <!-- repo -->
+    <div v-else class="flex-1 min-h-0 flex flex-col">
+      <div v-if="repoLoading" class="flex items-center justify-center h-full text-muted">
+        <UIcon name="i-lucide-loader-2" class="size-5 animate-spin" />
+      </div>
+      <div v-else-if="repoError" class="flex items-center gap-2 px-3 py-4 rounded-md bg-error/10 text-sm text-error">
+        <UIcon name="i-lucide-triangle-alert" class="size-4" />
+        {{ repoError }}
+      </div>
+      <template v-else-if="repoContent">
+        <div class="flex items-center gap-2 text-xs text-muted font-mono mb-2 shrink-0">
+          <UIcon name="i-lucide-file-text" class="size-3.5" />
+          <span class="truncate">{{ repoContent.path }}</span>
+          <span v-if="repoCommitId" class="ml-auto shrink-0">快照 @ {{ repoCommitId.slice(0, 8) }}</span>
+          <span v-else class="ml-auto shrink-0">跟随默认分支</span>
+        </div>
+        <div
+          v-if="showStaleWarning"
+          class="flex items-center gap-2 px-3 py-2 rounded-md bg-warning/10 text-xs text-warning mb-2 shrink-0"
+        >
+          <UIcon name="i-lucide-triangle-alert" class="size-3.5" />
+          有更新版本（{{ repoContent.latest_commit_id?.slice(0, 8) }}），当前仍预览固定提交版本
+        </div>
+        <div class="flex-1 min-h-0 overflow-y-auto">
+          <MarkdownContent :markdown="repoContent.content" />
+        </div>
+      </template>
+      <div v-else class="flex items-center justify-center h-full text-sm text-muted">
+        未关联文档
+      </div>
+    </div>
+  </div>
+</template>

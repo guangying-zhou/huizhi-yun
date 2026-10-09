@@ -1,0 +1,51 @@
+{
+ "tenant": "C000001",
+ "environment": "test-local",
+ "recordedAt": "2026-09-15T15:07:50.511694+00:00",
+ "purpose": "INT-203 initial copy and read-only shadow comparison",
+ "target": "hzy_enterprise_shadow_review_int201_rehearsal",
+ "generation": 0,
+ "activated": false,
+ "reviewHash": "b431b3aa2817ae88e543710329baf8189e80e747686789e548f4c8bed757f416",
+ "copy": {
+  "mode": "verified-shadow",
+  "plannedTables": 152,
+  "rows": 480,
+  "targetTables": 155,
+  "targetTablesNote": "152 business tables plus 3 migration control tables",
+  "foreignKeys": 225,
+  "triggers": 488
+ },
+ "comparison": {
+  "perTableRowCounts": {
+   "checked": 152,
+   "mismatches": 0
+  },
+  "businessKeys": {
+   "assets.product_code": "identical set",
+   "aims.product_workspaces.biz_id": "identical set"
+  },
+  "orphanReferences": {
+   "product_line_workspaces->product_workspaces": 0,
+   "product_component_sources->product_components": 0
+  },
+  "sameSubjectQueryResults": [
+   {
+    "subject": "restricted (two product codes)",
+    "rows": 2,
+    "sourceSha256Prefix": "b9b2aee06fc4",
+    "shadowSha256Prefix": "b9b2aee06fc4",
+    "identical": true
+   },
+   {
+    "subject": "manager (all products)",
+    "rows": 53,
+    "sourceSha256Prefix": "9c1f6fa58947",
+    "shadowSha256Prefix": "9c1f6fa58947",
+    "identical": true
+   }
+  ]
+ },
+ "method": "Row-count, key-set, orphan and result-hash comparisons run read-only against source and shadow with the same grant predicate on both sides, including a constrained subject rather than admin-only full reads.",
+ "limits": "The comparison runs at the data layer with an identical predicate. It does not replace the authorized end-to-end comparison through the Host BFF with a real session, which stays part of INT-306/INT-503 acceptance. Source remains the sole writer; no route, credential or business row changed."
+}

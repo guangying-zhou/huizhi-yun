@@ -1,0 +1,41 @@
+{
+  "method": "POST",
+  "target": "/v1/enterprise/people/assignments:change",
+  "body": {
+    "authorization": {
+      "actorUid": "HR-A",
+      "tenant": "C000001",
+      "deployment": "Host",
+      "resource": "assignments",
+      "action": "edit",
+      "operation": "assignments-change",
+      "objectId": "|User-A",
+      "allowed": true,
+      "expiresAt": 2000,
+      "bundleVersion": "v1",
+      "bundleHash": "hash",
+      "policyRevision": 1,
+      "scope": {
+        "access": "dept",
+        "departmentCodes": [
+          "D-A"
+        ]
+      }
+    },
+    "peopleFacts": {
+      "id": "",
+      "employeeUid": "User-A",
+      "page": 0,
+      "pageSize": 0,
+      "search": "",
+      "payload": {
+        "change_type": "transfer",
+        "effective_from": "2030-01-01",
+        "dept_code": "D-A",
+        "remarks": "中文"
+      },
+      "sensitiveAllowed": false
+    }
+  },
+  "canonical": "[\"hzy-enterprise-apf-permit.v1\",\"POST\",\"/v1/enterprise/people/assignments:change\",\"HR-A\",\"C000001\",\"Host\",\"assignments\",\"edit\",\"assignments-change\",\"|User-A\",true,2000,\"v1\",\"hash\",1,\"dept\",[\"D-A\"],\"\",\"\",\"\",0,0,0,\"\",[\"\",\"User-A\",0,0,\"\",[[\"change_type\",\"transfer\"],[\"dept_code\",\"D-A\"],[\"effective_from\",\"2030-01-01\"],[\"remarks\",\"中文\"]],false]]"
+}

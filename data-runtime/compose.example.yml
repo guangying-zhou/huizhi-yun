@@ -1,0 +1,10 @@
+services:
+  hzy-data-runtime:
+    image: hzy-data-runtime:0.1.0
+    restart: unless-stopped
+    environment:
+      HZY_DATA_RUNTIME_CONFIG: /etc/hzy-data-runtime/config.json
+    ports:
+      - "127.0.0.1:8080:8080"
+    volumes:
+      - ./config.example.json:/etc/hzy-data-runtime/config.json:ro

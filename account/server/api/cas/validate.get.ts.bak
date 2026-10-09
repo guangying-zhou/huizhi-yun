@@ -1,0 +1,105 @@
+import { defineEventHandler, getQuery, setCookie, createError } from 'h3'
+import { useRuntimeConfig } from '#imports'
+import { queryRows } from '~~/server/utils/db'
+import type { RowDataPacket } from 'mysql2/promise'
+
+interface UserRoleRow extends RowDataPacket {
+  id: number
+  umask: number
+  status: number
+}
+
+export default defineEventHandler(async (event) => {
+  const q = getQuery(event)
+  const ticket
+    = typeof q.ticket === 'string'
+      ? q.ticket
+      : Array.isArray(q.ticket)
+        ? q.ticket[0]
+        : ''
+  const service = typeof q.service === 'string' ? q.service : ''
+  // Ensure the service used for CAS validation does not contain a 'ticket' param
+  const cleanService
+    = service && service.includes('ticket=')
+      ? (() => {
+          try {
+            const u = new URL(service)
+            u.searchParams.delete('ticket')
+            return u.origin + u.pathname + (u.search || '')
+          } catch {
+            return service
+              .replace(/([?&])ticket=[^&]*&?/, '$1')
+              .replace(/[?&]$/, '')
+          }
+        })()
+      : service
+
+  if (!ticket || !service) {
+    throw createError({
+      statusCode: 400,
+      statusMessage: 'Missing ticket or service'
+    })
+  }
+
+  const config = useRuntimeConfig(event)
+  const casBaseUrl = (config.public?.casBaseUrl as string) || ''
+  const validateUrl = `${casBaseUrl.replace(
+    /\/$/,
+    ''
+  )}/cas/p3/serviceValidate?service=${encodeURIComponent(
+    cleanService
+  )}&ticket=${encodeURIComponent(ticket)}`
+
+  // Request CAS validation (XML)
+  const xml = await $fetch<string>(validateUrl, {
+    parseResponse: txt => txt
+  })
+
+  // [DEBUG] Print CAS XML response to check for email or other attributes
+  // console.log('[CAS API] Validation XML:', xml)
+
+  const success = xml.includes('<cas:authenticationSuccess')
+  if (!success) {
+    throw createError({
+      statusCode: 401,
+      statusMessage: 'CAS validation failed'
+    })
+  }
+
+  const userMatch = xml.match(/<cas:user>([^<]+)<\/cas:user>/)
+  const user = userMatch?.[1] || ''
+
+  // Parse email (supports cas:mail or cas:email)
+  const mailMatch = xml.match(/<cas:mail>([^<]+)<\/cas:mail>/) || xml.match(/<cas:email>([^<]+)<\/cas:email>/)
+  const email = mailMatch?.[1] || ''
+
+  // Query system_users to get role permissions (umask)
+  let userRole = 0
+  let userId = 0
+  if (email) {
+    try {
+      const rows = await queryRows<UserRoleRow[]>(
+        'SELECT id, umask, status FROM system_users WHERE email = ? AND status = 1 LIMIT 1',
+        [email]
+      )
+      if (rows && rows.length > 0) {
+        userRole = rows[0].umask
+        userId = rows[0].id
+      }
+    } catch (e) {
+      console.error('Failed to fetch system user role:', e)
+    }
+  }
+
+  // Set cookies
+  setCookie(event, 'token', ticket, { path: '/', sameSite: 'lax' })
+  setCookie(event, 'auth_user', user, { path: '/', sameSite: 'lax' })
+  if (email) {
+    setCookie(event, 'auth_email', email, { path: '/', sameSite: 'lax' })
+  }
+  // Store usage role mask and ID
+  setCookie(event, 'auth_role', String(userRole), { path: '/', sameSite: 'lax' })
+  setCookie(event, 'auth_id', String(userId), { path: '/', sameSite: 'lax' })
+
+  return { ok: true, user, role: userRole }
+})

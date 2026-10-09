@@ -1,0 +1,17 @@
+# Python
+venv/
+__pycache__/
+*.pyc
+*.pyo
+
+# 环境变量
+#.env
+
+# 浏览器 session（含 cookies/认证信息）
+x-session/
+
+# 测试产物（HTML dump、截图、原始响应）
+*.html
+*.png
+raw_response.json
+# cookies.json

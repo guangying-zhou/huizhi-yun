@@ -1,0 +1,16 @@
+{
+  "schema": "hzy.enterprise.migration-target-sequence-verification.v1",
+  "command": "node data-runtime/scripts/test-enterprise-migration-conflicts-mysql.mjs",
+  "result": "PASS",
+  "scope": "fresh random temporary MySQL; synthetic fixtures only",
+  "checks": [
+    "unknown receipt operation/target type contract blocks instead of being ignored",
+    "registered product request receipt with missing target object blocks",
+    "unknown attempt status, noncontiguous number, nonincreasing fence, processing before last attempt, incomplete terminal or attempt after success blocks",
+    "unknown catalog watermark shape blocks under current epoch UUID plus positive revision contract; opaque values are not sorted",
+    "conflict plan apply rejects before target creation"
+  ],
+  "businessDataAccess": false,
+  "deployment": false,
+  "temporaryInstanceCleaned": true
+}

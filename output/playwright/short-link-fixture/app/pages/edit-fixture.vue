@@ -1,0 +1,1 @@
+<script setup lang="ts">const content=ref('# 普通编辑模式\n\n可选择与编辑的正文。\n\n```javascript\nconst value = 1;\n```')</script><template><EditorMilkdownEditor v-model="content" :show-sidebar="false" /></template>

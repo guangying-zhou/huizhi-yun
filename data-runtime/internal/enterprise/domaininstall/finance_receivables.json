@@ -1,0 +1,76 @@
+[
+  {
+    "Logical": "finance_historical_readiness",
+    "Physical": "finance_historical_readiness",
+    "Columns": [
+      "id",
+      "code",
+      "contract_id",
+      "billing_schedule_id",
+      "opening_batch_id",
+      "contract_code",
+      "billing_schedule_code",
+      "currency_code",
+      "opening_amount",
+      "cutoff_date",
+      "review_hash",
+      "confirmation_sha256",
+      "evidence_sha256",
+      "activated_by",
+      "activated_at",
+      "row_version",
+      "created_at",
+      "updated_at"
+    ],
+    "DDL": "CREATE TABLE finance_historical_readiness (\n  id BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,\n  code VARCHAR(64) NOT NULL,\n  contract_id BIGINT UNSIGNED NOT NULL,\n  billing_schedule_id BIGINT UNSIGNED NOT NULL,\n  opening_batch_id BIGINT UNSIGNED NOT NULL,\n  contract_code VARCHAR(64) NOT NULL,\n  billing_schedule_code VARCHAR(64) NOT NULL,\n  currency_code CHAR(3) NOT NULL,\n  opening_amount DECIMAL(18,2) NOT NULL,\n  cutoff_date DATE NOT NULL,\n  review_hash CHAR(64) NOT NULL,\n  confirmation_sha256 CHAR(64) NOT NULL,\n  evidence_sha256 CHAR(64) NOT NULL,\n  activated_by VARCHAR(64) NOT NULL,\n  activated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),\n  row_version BIGINT UNSIGNED NOT NULL DEFAULT 1,\n  created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),\n  updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),\n  UNIQUE KEY uq_code(code),\n  UNIQUE KEY uq_contract(contract_id),\n  UNIQUE KEY uq_schedule(billing_schedule_id),\n  CONSTRAINT fk_finance_ready_contract FOREIGN KEY(contract_id) REFERENCES altoc_contract(id),\n  CONSTRAINT fk_finance_ready_schedule FOREIGN KEY(billing_schedule_id) REFERENCES altoc_billing_schedule(id),\n  CONSTRAINT fk_finance_ready_batch FOREIGN KEY(opening_batch_id) REFERENCES mig_batch(id),\n  CHECK(opening_amount>0)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
+  },
+  {
+    "Logical": "finance_allocation_batch",
+    "Physical": "finance_allocation_batch",
+    "Columns": [
+      "id",
+      "code",
+      "receipt_id",
+      "receipt_code",
+      "currency_code",
+      "total_amount",
+      "allocation_lines",
+      "status",
+      "created_by",
+      "reversed_by",
+      "reversed_at",
+      "reverse_reason",
+      "row_version",
+      "created_at",
+      "updated_at"
+    ],
+    "DDL": "CREATE TABLE finance_allocation_batch (\n  id BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,\n  code VARCHAR(64) NOT NULL,\n  receipt_id BIGINT UNSIGNED NOT NULL,\n  receipt_code VARCHAR(64) NOT NULL,\n  currency_code CHAR(3) NOT NULL,\n  total_amount DECIMAL(18,2) NOT NULL,\n  allocation_lines JSON NOT NULL,\n  status VARCHAR(20) NOT NULL DEFAULT 'active',\n  created_by VARCHAR(64) NOT NULL,\n  reversed_by VARCHAR(64) DEFAULT NULL,\n  reversed_at DATETIME(3) DEFAULT NULL,\n  reverse_reason VARCHAR(1000) DEFAULT NULL,\n  row_version BIGINT UNSIGNED NOT NULL DEFAULT 1,\n  created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),\n  updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),\n  UNIQUE KEY uq_code(code),\n  KEY ix_receipt(receipt_id),\n  CONSTRAINT fk_finance_allocation_receipt FOREIGN KEY(receipt_id) REFERENCES finance_receipt(id),\n  CHECK(total_amount>0)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
+  },
+  {
+    "Logical": "finance_receivable_adjustment",
+    "Physical": "finance_receivable_adjustment",
+    "Columns": [
+      "id",
+      "code",
+      "contract_id",
+      "billing_schedule_id",
+      "contract_code",
+      "billing_schedule_code",
+      "currency_code",
+      "adjustment_type",
+      "amount",
+      "reason",
+      "status",
+      "entered_by",
+      "confirmed_by",
+      "confirmed_at",
+      "reversed_by",
+      "reversed_at",
+      "reverse_reason",
+      "row_version",
+      "created_at",
+      "updated_at"
+    ],
+    "DDL": "CREATE TABLE finance_receivable_adjustment (\n  id BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,\n  code VARCHAR(64) NOT NULL,\n  contract_id BIGINT UNSIGNED NOT NULL,\n  billing_schedule_id BIGINT UNSIGNED NOT NULL,\n  contract_code VARCHAR(64) NOT NULL,\n  billing_schedule_code VARCHAR(64) NOT NULL,\n  currency_code CHAR(3) NOT NULL,\n  adjustment_type VARCHAR(20) NOT NULL COMMENT 'discount/bad_debt/rounding/correction',\n  amount DECIMAL(18,2) NOT NULL,\n  reason VARCHAR(1000) NOT NULL,\n  status VARCHAR(20) NOT NULL DEFAULT 'draft',\n  entered_by VARCHAR(64) NOT NULL,\n  confirmed_by VARCHAR(64) DEFAULT NULL,\n  confirmed_at DATETIME(3) DEFAULT NULL,\n  reversed_by VARCHAR(64) DEFAULT NULL,\n  reversed_at DATETIME(3) DEFAULT NULL,\n  reverse_reason VARCHAR(1000) DEFAULT NULL,\n  row_version BIGINT UNSIGNED NOT NULL DEFAULT 1,\n  created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),\n  updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),\n  UNIQUE KEY uq_code(code),\n  KEY ix_schedule(billing_schedule_id,status),\n  CONSTRAINT fk_finance_adjustment_contract FOREIGN KEY(contract_id) REFERENCES altoc_contract(id),\n  CONSTRAINT fk_finance_adjustment_schedule FOREIGN KEY(billing_schedule_id) REFERENCES altoc_billing_schedule(id),\n  CHECK(amount<>0),\n  CHECK(confirmed_by IS NULL OR confirmed_by<>entered_by)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
+  }
+]

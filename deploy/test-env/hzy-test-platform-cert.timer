@@ -1,0 +1,11 @@
+[Unit]
+Description=Check the Platform development certificate twice daily
+
+[Timer]
+OnCalendar=*-*-* 05,17:00:00
+RandomizedDelaySec=3600
+Persistent=true
+Unit=hzy-test-platform-cert.service
+
+[Install]
+WantedBy=timers.target

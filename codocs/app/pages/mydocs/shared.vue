@@ -1,0 +1,753 @@
+<script setup lang="ts">
+import { documentLoadErrorMessage } from '../../utils/departmentDocumentWriteError'
+import MyDocumentSpaceHeader from '../../components/MyDocumentSpaceHeader.vue'
+import { useDocumentPreviewBootstrap } from '../../composables/useDocumentPreviewBootstrap'
+import { useResizablePanel } from '../../composables/useResizablePanel'
+import { useCodocsModule } from '../../../layer/useCodocsModule'
+import { useAccountStore } from '@hzy/foundation/app/stores/account'
+
+definePageMeta({ hostContentInset: false })
+
+usePageTitle('协同文档中心')
+
+const { user } = useAuth()
+const { moduleUrl, documentUrl, cacheKey } = useCodocsModule()
+const router = useRouter()
+const accountStore = useAccountStore()
+const { hasPermission, loadPermissions } = usePermissions()
+const { setPayload: setDocumentPreviewBootstrap } = useDocumentPreviewBootstrap()
+const { panelWidth, panelCollapsed, onResizeStart, showPanel } = useResizablePanel(384)
+
+interface CollabDocItem {
+  uuid: string
+  title: string
+  docType: string
+  ownerUid: string
+  deptCode: string | null
+  readonly: boolean
+  docStatus: number
+  published: boolean
+  ossPath: string
+  updatedAt: string
+  relationTypes: string[]
+  relationLabels: string[]
+  reviewId: number | null
+  reviewStatus: string | null
+  reviewType: string | null
+  reviewSubType: string | null
+  reviewExecutionStatus: string | null
+  isTodo: boolean
+  locationLabel: string
+}
+
+interface CollabDocsResponse {
+  code: number
+  data?: {
+    items: CollabDocItem[]
+    total: number
+    page: number
+    pageSize: number
+    ownerUids: string[]
+    deptCodes: string[]
+  }
+}
+
+interface CollabDocsState {
+  items: CollabDocItem[]
+  total: number
+  queryKey: string
+  ownerUids: string[]
+  deptCodes: string[]
+}
+
+interface DocumentPreviewResponse {
+  success: boolean
+  data?: {
+    content?: string
+    ai_abstract?: string
+    readonly_flag?: number
+  }
+}
+
+const category = ref<'shared' | 'original' | 'outside'>('shared')
+const scope = ref('all')
+const sharedTab = ref<'received' | 'sent'>('received')
+const { search: searchKeyword, debounced: debouncedKeyword, flush: flushSearch, reset: resetSearch } = useDebouncedSearch()
+const selectedDeptCode = ref('')
+const selectedOwnerUid = ref('')
+const selectedDocUuid = ref('')
+
+const previewLoading = ref(false)
+const previewContent = ref('')
+const previewAbstract = ref('')
+const previewReadonly = ref(true)
+const previewError = ref('')
+const showSealModal = ref(false)
+const showSendModal = ref(false)
+const showReceiveModal = ref(false)
+
+const categoryItems = [
+  { label: '共享文档', value: 'shared' as const, icon: 'i-lucide-share-2' },
+  { label: '移交文档', value: 'original' as const, icon: 'i-lucide-pen-tool' },
+  { label: '对外发文', value: 'outside' as const, icon: 'i-lucide-send' }
+]
+
+const scopeOptions = computed(() => {
+  if (category.value === 'outside') {
+    return [
+      { label: '全部', value: 'all' },
+      { label: '待我处理', value: 'todo' },
+      { label: '我发起的', value: 'initiated' },
+      { label: '我参与的', value: 'participated' },
+      { label: '已完成', value: 'done' }
+    ]
+  }
+
+  if (category.value === 'shared') {
+    return [
+      { label: '全部', value: 'all' }
+    ]
+  }
+
+  return [
+    { label: '全部', value: 'all' }
+  ]
+})
+
+const ensureScope = () => {
+  if (!scopeOptions.value.find(item => item.value === scope.value)) {
+    scope.value = 'all'
+  }
+}
+
+const { page, pageSize } = useListPage({ pageSize: 20, filters: { category, scope, sharedTab, keyword: searchKeyword, dept_code: selectedDeptCode, owner_uid: selectedOwnerUid } })
+watch(category, () => {
+  ensureScope()
+  selectedDeptCode.value = ''
+  selectedOwnerUid.value = ''
+})
+ensureScope()
+
+const currentQueryKey = computed(() => JSON.stringify({
+  category: category.value,
+  scope: scope.value,
+  keyword: debouncedKeyword.value || '',
+  deptCode: selectedDeptCode.value || '',
+  ownerUid: selectedOwnerUid.value || '',
+  sharedTab: category.value === 'shared' ? sharedTab.value : '',
+  page: page.value,
+  viewer: cacheKey('collab-docs')
+}))
+
+const data = ref<CollabDocsState | null>(null)
+const pending = ref(false)
+const loadError = ref('')
+let generation = 0
+let controller: AbortController | undefined
+const refresh = async () => {
+  const epoch = ++generation
+  controller?.abort()
+  controller = new AbortController()
+  data.value = null
+  loadError.value = ''
+  if (!user.value) {
+    pending.value = false
+    return
+  }
+  pending.value = true
+  const key = currentQueryKey.value
+  try {
+    const res = await $fetch<CollabDocsResponse>(moduleUrl('/api/collab-docs'), { params: {
+      category: category.value, scope: scope.value, keyword: debouncedKeyword.value || undefined,
+      dept_code: selectedDeptCode.value || undefined, owner_uid: selectedOwnerUid.value || undefined,
+      sharedTab: category.value === 'shared' ? sharedTab.value : undefined, page: page.value, pageSize
+    }, signal: controller.signal })
+    if (epoch !== generation || key !== currentQueryKey.value) return
+    const value = res.data
+    if (res.code !== 0 || !value || !Array.isArray(value.items) || !Number.isSafeInteger(value.total) || value.total < 0 || value.page !== page.value || value.pageSize !== pageSize || value.items.length > pageSize || ![value.ownerUids, value.deptCodes].every(values => Array.isArray(values) && values.every(v => typeof v === 'string'))) throw new Error('Invalid collaboration page')
+    const lastPage = Math.max(1, Math.ceil(value.total / pageSize))
+    if (page.value > lastPage) {
+      page.value = lastPage
+      return
+    }
+    data.value = { items: value.items, total: value.total, ownerUids: value.ownerUids, deptCodes: value.deptCodes, queryKey: key }
+  } catch {
+    if (epoch === generation) loadError.value = '协同文档加载失败，请重试'
+  } finally { if (epoch === generation) pending.value = false }
+}
+watch(currentQueryKey, refresh)
+onScopeDispose(() => {
+  generation++
+  controller?.abort()
+})
+
+const items = computed(() => {
+  if (data.value?.queryKey !== currentQueryKey.value) return []
+  return data.value?.items || []
+})
+const sharedTabs = computed(() => [
+  {
+    label: '共享给我',
+    icon: 'i-lucide-inbox',
+    value: 'received' as const
+  },
+  {
+    label: '我共享的',
+    icon: 'i-lucide-share-2',
+    value: 'sent' as const
+  }
+])
+
+// The owning reader merges relations and applies sharedTab before total/page.
+const visibleItems = items
+const total = computed(() => data.value?.queryKey === currentQueryKey.value ? data.value.total : 0)
+
+const selectedDoc = computed(() => visibleItems.value.find(item => item.uuid === selectedDocUuid.value) || null)
+
+const ownerOptions = computed(() => {
+  if (category.value === 'original') {
+    return [
+      { label: '原创人', value: '' }
+    ]
+  }
+
+  const owners = (data.value?.queryKey === currentQueryKey.value ? data.value.ownerUids : [])
+  return [
+    { label: '发起人', value: '' },
+    ...owners.map(ownerUid => ({
+      label: getUserDisplayName(ownerUid),
+      value: ownerUid
+    }))
+  ]
+})
+
+const deptOptions = computed(() => {
+  const deptCodes = (data.value?.queryKey === currentQueryKey.value ? data.value.deptCodes : [])
+  return [
+    { label: '部门', value: '' },
+    ...deptCodes.map(deptCode => ({
+      label: getDepartmentDisplayName(deptCode),
+      value: deptCode
+    }))
+  ]
+})
+
+const getUserDisplayName = (uid?: string | null) => {
+  const normalized = String(uid || '').trim()
+  if (!normalized) return ''
+  return accountStore.getUserByUid(normalized)?.realName || normalized
+}
+
+const getDepartmentDisplayName = (deptCode?: string | null) => {
+  const normalized = String(deptCode || '').trim()
+  if (!normalized) return '-'
+  return accountStore.getDepartmentById(normalized)?.name || normalized
+}
+
+const getPrimaryUserLabel = (item: CollabDocItem) => {
+  if (category.value === 'original') return '我'
+  return getUserDisplayName(item.ownerUid)
+}
+
+const loadRelatedMetadata = async () => {
+  const userIds = [...new Set(visibleItems.value.map(item => item.ownerUid).filter(Boolean))]
+  try {
+    await loadPermissions()
+    if (userIds.length) {
+      await accountStore.fetchUsersBatch(userIds)
+    }
+    await accountStore.fetchDepartments()
+  } catch (error) {
+    console.error('Failed to load collaboration metadata:', error)
+  }
+}
+
+const getAccessLabel = (item: CollabDocItem) => {
+  if (item.published) return '只读'
+  return item.readonly ? '只读共享' : '可编辑'
+}
+
+const getExecutionStatusLabel = (status?: string | null) => {
+  const labels: Record<string, string> = {
+    pending_seal: '待盖章',
+    pending_send: '待发送',
+    pending_receive: '待接收',
+    sent: '已发送',
+    received: '已接收'
+  }
+  return status ? (labels[status] || status) : '-'
+}
+
+const canConfirmSeal = computed(() => {
+  if (!selectedDoc.value) return false
+  return selectedDoc.value.reviewType === '对外发文'
+    && selectedDoc.value.reviewExecutionStatus === 'pending_seal'
+    && selectedDoc.value.reviewId !== null
+    && hasPermission('reviews', 'admin')
+})
+
+const canConfirmSend = computed(() => {
+  if (!selectedDoc.value) return false
+  const currentUid = String(user.value || '').trim()
+  return selectedDoc.value.reviewType === '对外发文'
+    && selectedDoc.value.reviewExecutionStatus === 'pending_send'
+    && selectedDoc.value.reviewId !== null
+    && selectedDoc.value.ownerUid === currentUid
+    && hasPermission('reviews', 'archive')
+})
+
+const canConfirmReceive = computed(() => {
+  if (!selectedDoc.value) return false
+  return selectedDoc.value.reviewType === '对外发文'
+    && selectedDoc.value.reviewExecutionStatus === 'pending_receive'
+    && selectedDoc.value.reviewId !== null
+    && selectedDoc.value.relationTypes.includes('outside_sender')
+})
+
+let previewGeneration = 0
+let previewController: AbortController | undefined
+onScopeDispose(() => {
+  previewGeneration++
+  previewController?.abort()
+})
+const loadPreview = async (uuid: string) => {
+  const epoch = ++previewGeneration
+  previewController?.abort()
+  previewController = new AbortController()
+  previewLoading.value = true
+  previewContent.value = ''
+  previewAbstract.value = ''
+  previewError.value = ''
+  previewReadonly.value = true
+
+  try {
+    const response = await $fetch<DocumentPreviewResponse>(moduleUrl(`/api/documents/${uuid}`), { signal: previewController.signal })
+    if (epoch !== previewGeneration) return
+    if (response.success) {
+      previewContent.value = response.data?.content || ''
+      previewAbstract.value = response.data?.ai_abstract || ''
+      previewReadonly.value = response.data?.readonly_flag === 1
+    }
+  } catch (error: unknown) {
+    if (epoch !== previewGeneration) return
+    previewError.value = documentLoadErrorMessage(error)
+  } finally {
+    if (epoch === previewGeneration) previewLoading.value = false
+  }
+}
+
+const selectDocument = async (item: CollabDocItem | null) => {
+  selectedDocUuid.value = item?.uuid || ''
+  if (!item?.uuid) {
+    previewContent.value = ''
+    previewAbstract.value = ''
+    previewError.value = ''
+    previewReadonly.value = true
+    return
+  }
+
+  await loadPreview(item.uuid)
+}
+
+const clearSelection = () => {
+  previewGeneration++
+  previewController?.abort()
+  previewLoading.value = false
+  showSealModal.value = false
+  showSendModal.value = false
+  showReceiveModal.value = false
+  selectedDocUuid.value = ''
+  previewContent.value = ''
+  previewAbstract.value = ''
+  previewError.value = ''
+  previewReadonly.value = true
+}
+
+watch(() => cacheKey('collab-docs'), () => {
+  generation++
+  controller?.abort()
+  data.value = null
+  pending.value = false
+  clearSelection()
+  if (page.value !== 1) page.value = 1
+  else void refresh()
+}, { flush: 'sync' })
+watch(currentQueryKey, clearSelection, { flush: 'sync' })
+
+const bootstrapSelection = async () => {
+  await loadRelatedMetadata()
+  clearSelection()
+}
+
+watch([items, sharedTab], async () => {
+  if (selectedDocUuid.value && visibleItems.value.some(item => item.uuid === selectedDocUuid.value)) {
+    return
+  }
+  await bootstrapSelection()
+}, { immediate: true })
+
+const openDocument = () => {
+  if (!selectedDoc.value) return
+
+  if (previewContent.value) {
+    setDocumentPreviewBootstrap(selectedDoc.value.uuid, {
+      content: previewContent.value,
+      aiAbstract: previewAbstract.value
+    })
+  }
+
+  router.push({ path: documentUrl(selectedDoc.value.uuid), query: { fromCollab: '1' } })
+}
+
+const handleSealSuccess = async () => {
+  await refresh()
+  const current = visibleItems.value.find(item => item.uuid === selectedDocUuid.value) || null
+  await selectDocument(current)
+}
+
+const handleSendSuccess = async () => {
+  await refresh()
+  const current = visibleItems.value.find(item => item.uuid === selectedDocUuid.value) || null
+  await selectDocument(current)
+}
+
+const handleReceiveSuccess = async () => {
+  await refresh()
+  const current = visibleItems.value.find(item => item.uuid === selectedDocUuid.value) || null
+  await selectDocument(current)
+}
+void refresh()
+</script>
+
+<template>
+  <UDashboardPanel grow>
+    <div class="px-4 pt-4 sm:px-6 sm:pt-6">
+      <MyDocumentSpaceHeader :description="sharedTab === 'sent' ? '查看你共享给他人的文档。' : '查看共享给你的协作文档。'" />
+    </div>
+    <div class="flex items-center justify-between gap-2 px-4 py-2 border-b border-default flex-wrap">
+      <UTabs
+        v-model="category"
+        :items="categoryItems"
+        :content="false"
+        variant="pill"
+        color="secondary"
+        size="md"
+      />
+      <div class="flex flex-wrap items-center gap-2">
+        <UInput
+          v-model="searchKeyword"
+          icon="i-lucide-search"
+          placeholder="搜索文档"
+          aria-label="搜索协同文档"
+          @keyup.enter="flushSearch"
+        />
+        <USelectMenu
+          v-if="category !== 'shared'"
+          v-model="scope"
+          :items="scopeOptions"
+          value-key="value"
+          label-key="label"
+          class="w-30"
+          :search-input="false"
+        />
+        <USelectMenu
+          v-if="category !== 'original'"
+          v-model="selectedOwnerUid"
+          :items="ownerOptions"
+          value-key="value"
+          label-key="label"
+          class="w-36"
+          :search-input="false"
+        />
+        <USelectMenu
+          v-model="selectedDeptCode"
+          :items="deptOptions"
+          value-key="value"
+          label-key="label"
+          class="w-28"
+          :search-input="false"
+        />
+        <UButton
+          label="重置"
+          color="neutral"
+          variant="ghost"
+          @click="resetSearch(); scope = 'all'; selectedDeptCode = ''; selectedOwnerUid = ''"
+        />
+        <UButton
+          icon="i-lucide-refresh-cw"
+          color="neutral"
+          variant="ghost"
+          :loading="pending"
+          @click="refresh()"
+        />
+        <UButton
+          v-if="panelCollapsed"
+          icon="i-lucide-folder-tree"
+          variant="ghost"
+          size="sm"
+          @click="showPanel"
+        >
+          列表
+        </UButton>
+      </div>
+    </div>
+
+    <div class="flex min-h-0 min-w-0 flex-1 overflow-hidden @container">
+      <aside
+        v-if="!panelCollapsed"
+        class="relative w-full border-r border-default bg-default flex flex-col overflow-hidden shrink-0 @3xl:w-(--document-list-width)"
+        :class="selectedDoc ? 'hidden @3xl:flex' : 'flex'"
+        :style="{ '--document-list-width': panelWidth + 'px' }"
+      >
+        <div
+          v-if="category === 'shared'"
+          class="px-3 pt-3"
+        >
+          <UTabs
+            v-model="sharedTab"
+            :items="sharedTabs"
+            :content="false"
+            color="primary"
+            variant="link"
+            :ui="{ list: 'w-full' }"
+          />
+        </div>
+
+        <UAlert
+          v-if="loadError"
+          color="error"
+          :title="loadError"
+          class="m-2"
+        />
+        <div class="flex-1 overflow-y-auto p-2 space-y-2">
+          <div v-if="pending && visibleItems.length === 0" class="flex justify-center py-6">
+            <UIcon name="i-lucide-loader-2" class="w-5 h-5 animate-spin text-muted" />
+          </div>
+
+          <div
+            v-else-if="visibleItems.length === 0"
+            class="rounded-lg border border-dashed border-default p-5 text-sm text-muted text-center"
+          >
+            暂无匹配文档
+          </div>
+
+          <button
+            v-for="item in visibleItems"
+            :key="item.uuid"
+            class="w-full text-left rounded-xl border p-3 transition-all"
+            :class="selectedDocUuid === item.uuid
+              ? 'border-primary bg-primary-50/60 dark:bg-primary-900/20'
+              : 'border-default bg-default hover:border-primary/40 hover:bg-elevated'"
+            @click="selectDocument(item)"
+          >
+            <div class="flex items-start gap-2">
+              <div class="w-9 h-9 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0">
+                <UIcon name="i-lucide-file-text" class="w-4 h-4" />
+              </div>
+              <div class="min-w-0 flex-1">
+                <div class="text-sm font-semibold truncate">
+                  {{ item.title || '无标题文档' }}
+                </div>
+                <div class="mt-1 text-xs text-muted truncate">
+                  <span>{{ getPrimaryUserLabel(item) }}</span>
+                  <span>· {{ item.locationLabel }}</span>
+                  <span>· {{ formatDateTime(item.updatedAt) }}</span>
+                </div>
+              </div>
+            </div>
+          </button>
+        </div>
+        <div class="px-3 py-2 text-sm text-muted flex justify-center">
+          共 {{ total }} 条
+        </div>
+
+        <div class="px-3 pb-2 flex justify-center">
+          <UPagination
+            v-model:page="page"
+            :items-per-page="pageSize"
+            :total="total"
+            :sibling-count="0"
+            size="xs"
+          />
+        </div>
+      </aside>
+
+      <div
+        v-if="!panelCollapsed"
+        class="hidden @3xl:block w-1.5 shrink-0 cursor-col-resize bg-default hover:bg-primary/40 active:bg-primary/60 transition-colors z-10 -ml-px"
+        @mousedown.prevent="onResizeStart"
+      />
+
+      <main class="min-w-0 flex-1 flex-col overflow-hidden bg-default" :class="selectedDoc ? 'flex' : 'hidden @3xl:flex'">
+        <UButton
+          v-if="selectedDoc"
+          label="返回列表"
+          icon="i-lucide-arrow-left"
+          color="neutral"
+          variant="ghost"
+          class="self-start @3xl:hidden"
+          @click="clearSelection"
+        />
+        <div
+          v-if="selectedDoc"
+          class="flex flex-col sm:flex-row sm:items-center justify-between px-4 py-3 border-b border-default bg-default gap-3 sm:gap-0"
+        >
+          <div class="flex items-center gap-1.5 text-sm font-medium overflow-hidden">
+            <UIcon name="i-lucide-file-text" class="w-4 h-4 text-muted shrink-0" />
+            <span class="text-default truncate" :title="selectedDoc.title">{{ selectedDoc.title }}</span>
+            <span class="text-muted shrink-0">· {{ selectedDoc.locationLabel }}</span>
+            <span class="text-muted shrink-0">· {{ formatDateTime(selectedDoc.updatedAt) }}</span>
+          </div>
+          <div class="flex items-center gap-2 self-end sm:self-auto">
+            <UButton
+              v-if="canConfirmSeal"
+              icon="i-lucide-stamp"
+              size="sm"
+              color="warning"
+              variant="soft"
+              @click="showSealModal = true"
+            >
+              确认盖章
+            </UButton>
+            <UButton
+              v-if="canConfirmSend"
+              icon="i-lucide-send"
+              size="sm"
+              color="primary"
+              variant="soft"
+              @click="showSendModal = true"
+            >
+              确认发送
+            </UButton>
+            <UButton
+              v-if="canConfirmReceive"
+              icon="i-lucide-mail-check"
+              size="sm"
+              color="success"
+              variant="soft"
+              @click="showReceiveModal = true"
+            >
+              确认接收
+            </UButton>
+            <UButton
+              icon="i-lucide-arrow-up-right"
+              size="sm"
+              color="primary"
+              @click="openDocument"
+            >
+              {{ previewReadonly ? '查看原文' : '打开文档' }}
+            </UButton>
+          </div>
+        </div>
+
+        <div class="flex-1 overflow-auto p-4">
+          <div v-if="!selectedDoc" class="h-full flex items-center justify-center">
+            <div class="text-center text-muted">
+              <UIcon name="i-lucide-file-search" class="w-14 h-14 mx-auto mb-3" />
+              <p>请从左侧选择文档进行预览</p>
+            </div>
+          </div>
+
+          <div v-else class="h-full flex flex-col gap-3">
+            <div class="rounded-xl border border-default bg-default px-4 py-3 shrink-0">
+              <div class="flex items-center gap-4 overflow-x-auto text-sm whitespace-nowrap">
+                <div class="shrink-0">
+                  <span class="text-muted">{{ category === 'original' ? '原创人' : '发起人' }}：</span>
+                  <span class="font-medium">{{ category === 'original' ? '我' : getUserDisplayName(selectedDoc.ownerUid) }}</span>
+                </div>
+                <div class="shrink-0 text-muted">
+                  |
+                </div>
+                <div class="shrink-0">
+                  <span class="text-muted">所属部门：</span>
+                  <span class="font-medium">{{ getDepartmentDisplayName(selectedDoc.deptCode) }}</span>
+                </div>
+                <div class="shrink-0 text-muted">
+                  |
+                </div>
+                <div class="shrink-0">
+                  <span class="text-muted">协同关系：</span>
+                  <span class="font-medium">{{ selectedDoc.relationLabels.map(label => label === 'shared_with_me' ? '共享给我' : label).join('、') }}</span>
+                </div>
+                <div class="shrink-0 text-muted">
+                  |
+                </div>
+                <div class="shrink-0">
+                  <span class="text-muted">访问权限：</span>
+                  <span class="font-medium">{{ getAccessLabel(selectedDoc) }}</span>
+                </div>
+                <div class="shrink-0 text-muted">
+                  |
+                </div>
+                <div class="shrink-0">
+                  <span class="text-muted">发布状态：</span>
+                  <span class="font-medium">{{ selectedDoc.published ? '已发布（只读）' : '未发布' }}</span>
+                </div>
+                <template v-if="selectedDoc.reviewExecutionStatus">
+                  <div class="shrink-0 text-muted">
+                    |
+                  </div>
+                  <div class="shrink-0">
+                    <span class="text-muted">执行状态：</span>
+                    <span class="font-medium">{{ getExecutionStatusLabel(selectedDoc.reviewExecutionStatus) }}</span>
+                  </div>
+                </template>
+              </div>
+            </div>
+
+            <div class="flex-1 min-h-0 w-full max-w-4xl mx-auto rounded-xl border border-default bg-default overflow-hidden">
+              <div v-if="previewLoading" class="h-full min-h-60 flex items-center justify-center">
+                <UIcon name="i-lucide-loader-2" class="w-6 h-6 animate-spin text-primary" />
+              </div>
+              <div v-else-if="previewError" class="h-full flex items-center justify-center text-error text-sm">
+                {{ previewError }}
+              </div>
+              <div v-else-if="previewContent" class="h-full overflow-auto">
+                <div
+                  v-if="previewAbstract"
+                  class="border-b border-primary-200 dark:border-primary-800 bg-primary-50 dark:bg-primary-900/20 px-4 py-2.5"
+                >
+                  <div class="flex items-start gap-2">
+                    <UIcon name="i-lucide-sparkles" class="w-4 h-4 text-primary mt-0.5 shrink-0" />
+                    <div>
+                      <span class="text-xs font-medium text-primary">AI 摘要</span>
+                      <p class="text-sm text-default leading-relaxed mt-0.5">
+                        {{ previewAbstract }}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+                <EditorDocLazyPreview :content="previewContent" />
+              </div>
+              <div v-else class="h-full flex items-center justify-center text-muted text-sm">
+                无法预览此文件
+              </div>
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+
+    <ReviewSealConfirmModal
+      v-if="selectedDoc?.reviewId"
+      v-model:open="showSealModal"
+      :review-id="selectedDoc.reviewId"
+      :doc-title="selectedDoc.title"
+      @success="handleSealSuccess"
+    />
+    <ReviewSendConfirmModal
+      v-if="selectedDoc?.reviewId"
+      v-model:open="showSendModal"
+      :review-id="selectedDoc.reviewId"
+      :doc-title="selectedDoc.title"
+      @success="handleSendSuccess"
+    />
+    <ReviewReceiveConfirmModal
+      v-if="selectedDoc?.reviewId"
+      v-model:open="showReceiveModal"
+      :review-id="selectedDoc.reviewId"
+      :doc-title="selectedDoc.title"
+      @success="handleReceiveSuccess"
+    />
+  </UDashboardPanel>
+</template>

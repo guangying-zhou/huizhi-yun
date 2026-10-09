@@ -1,0 +1,59 @@
+{
+  "schemaVersion": "hzy.connector-runtime-migration.v1",
+  "source": {
+    "product": "hzy-notification-runtime",
+    "serviceName": "hzy-notification-runtime.service",
+    "executable": "/usr/local/bin/hzy-notification-runtime",
+    "minimumVersion": "0.1.6"
+  },
+  "target": {
+    "product": "hzy-connector-runtime",
+    "serviceName": "hzy-connector-runtime.service",
+    "executable": "/usr/local/bin/hzy-connector-runtime"
+  },
+  "activation": "explicit",
+  "compatibility": [
+    {
+      "method": "POST",
+      "path": "/v1/notifications/send",
+      "sourceScope": "notification-runtime:send",
+      "targetScope": "connector-runtime:notifications:send"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/deliveries",
+      "sourceScope": "notification-runtime:deliveries:read",
+      "targetScope": "connector-runtime:deliveries:read"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/deliveries/{deliveryId}/reconcile",
+      "sourceScope": "notification-runtime:deliveries:reconcile",
+      "targetScope": "connector-runtime:deliveries:reconcile"
+    }
+  ],
+  "state": {
+    "sourceSQLitePath": "/opt/hzy/notification-runtime/data/delivery.db",
+    "targetSQLitePath": "/opt/hzy/connector-runtime/data/operations.db",
+    "preserveDeliveryLedger": true,
+    "containsProviderSecrets": false
+  },
+  "cutoverPreconditions": [
+    "source service is healthy",
+    "source ledger has no active processing lease",
+    "source ledger backup checksum is recorded",
+    "target package signature and checksum are valid",
+    "target health and capability compatibility checks pass"
+  ],
+  "rollback": {
+    "enabled": true,
+    "keepSourceInstalled": true,
+    "disableSourceUpdaterAfterCutover": true,
+    "restoreSourceOnTargetHealthFailure": true
+  },
+  "security": {
+    "arbitraryHttpProxy": false,
+    "providerSecretsInState": false,
+    "providerCredentialsSource": "console-vault"
+  }
+}

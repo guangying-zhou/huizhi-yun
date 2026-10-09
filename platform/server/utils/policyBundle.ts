@@ -1,0 +1,1508 @@
+import { loadEnvironmentAppSelection, selectionReceipt, assertSelectionUnchanged } from './environmentAppReleases.ts'
+import { projectEnvironmentReleaseFacts, selectedAppCodes, type EnvironmentAppSelection } from './environmentAppReleaseModel.ts'
+import { hashPolicyBundlePayload as hashBundlePayload, hashPolicyBundleFactsForRevision, reuseEnvironmentPolicyPayload } from './environmentPolicyPayload'
+import { resolveTenantEnvironmentPolicyRevision } from './environmentPolicyRevision'
+import type { H3Event } from 'h3'
+import { getHeader, setResponseHeader, setResponseStatus } from 'h3'
+import type { ResultSetHeader, RowDataPacket } from 'mysql2/promise'
+import { buildAppHomeUrl, defaultApiBase, defaultAppBasePath, deriveLogoutUrl, resolveOidcCallbackUrl } from '~~/server/utils/appUrls'
+import { queryRow, queryRows, withTransaction } from '~~/server/utils/db'
+import { parseStoredJson } from '~~/server/utils/platform'
+import { sign } from '~~/server/utils/platformSigning'
+import { materializeSystemRole } from '~~/server/utils/tenantSystemRoles'
+import {
+  buildPolicyBundleV2CompatFields,
+  POLICY_BUNDLE_V2_SCHEMA_VERSION,
+  stripLegacyPolicyBundleAuthorizationFields
+} from '~~/server/utils/policyBundleV2'
+import {
+  DEFAULT_DEPLOYMENT_ENVIRONMENT,
+  consoleLoginSettings,
+  normalizeDeploymentEnvironment,
+  parseTenantSettings
+} from '~~/server/utils/tenantDeploymentSettings'
+import { collectConfiguredBaselinePermissions } from '~~/server/utils/policyBundleBaseline'
+import { STATIC_ROLE_CONFLICT_RULES, type StaticRoleConflictRule } from '~~/server/utils/staticRoleConflicts'
+import { loadEnterpriseHostModuleRoutes, applyEnterpriseHostModuleRoutes, enterpriseHostRoutesMatch } from './enterpriseModuleRoutes'
+import { loadBundleEnterpriseEntitlement, enterpriseModuleAvailability, bundleEnterpriseEntitlementMatches, ENTERPRISE_MODULE_CATALOG_SQL } from '~~/server/utils/enterpriseEntitlementBundle'
+import { cachedCurrentPolicyPayload, stableStringifyPolicyPayload } from './policyEnvelopeDelivery'
+
+const POLICY_BUNDLE_SCHEMA_VERSION = POLICY_BUNDLE_V2_SCHEMA_VERSION
+const POLICY_BUNDLE_SIGNATURE_ALG = 'Ed25519'
+const LEGACY_CONSOLE_VIEWER_ROLE_CODES = ['console.viewer', 'tenant_console_view', 'tenant_console_viewer']
+const LEGACY_CONSOLE_VIEWER_ROLE_SQL = LEGACY_CONSOLE_VIEWER_ROLE_CODES.map(roleCode => `'${roleCode}'`).join(', ')
+
+interface TenantRow extends RowDataPacket {
+  tenantCode: string
+  tenantName: string
+  tenantType: string
+  status: string
+  settingsJson: unknown
+}
+
+interface DeploymentTargetRow extends RowDataPacket {
+  id: number
+  deploymentCode: string
+  appCode: string
+  subscriptionId: number
+  environment: string
+  status: string
+  siteId: number | null
+  basePath: string | null
+  apiBase: string | null
+  routeSource: string | null
+}
+
+interface DeploymentSiteProjectionRow extends RowDataPacket {
+  siteId: number
+  siteCode: string
+  publicUrl: string
+  rootAppCode: string | null
+  environment: string
+  status: string
+}
+
+interface NextSeqRow extends RowDataPacket {
+  nextSeq: number
+}
+
+interface DeploymentEnvironmentRow extends RowDataPacket {
+  environment: string
+}
+
+interface InheritedSystemRoleRow extends RowDataPacket {
+  roleCode: string
+}
+
+export interface RuntimePolicyBundleRow extends RowDataPacket {
+  id: number
+  tenant_code: string
+  environment: string
+  deployment_id: number
+  bundle_id: number
+  bundle_version: string
+  bundle_hash: string
+  policy_revision: number
+  policy_hash: string | null
+  bundle_payload_json: unknown
+  bundle_uri: string
+  signature: string | null
+  signed_by_kid: string | null
+  signed_at: string | null
+  schema_version: string
+  issued_at: string
+  expires_at: string | null
+  status: string
+  created_at: string
+}
+
+export interface GeneratedPolicyBundle {
+  tenantCode: string
+  environment: string
+  bundleId: number
+  bundleVersion: string
+  bundleHash: string
+  policyRevision: number
+  policyHash: string
+  bundleUri: string
+  schemaVersion: string
+  payload: Record<string, unknown>
+  signature: string
+  signedByKid: string
+  alg: string
+  signedAt: string
+  issuedAt: string
+  expiresAt: string | null
+  targets: Array<{
+    deploymentId: number
+    deploymentCode: string
+    appCode: string
+    environment: string
+  }>
+}
+
+function toSqlDateTime(date: Date) {
+  return date.toISOString().slice(0, 19).replace('T', ' ')
+}
+
+function toVersionTimestamp(date: Date) {
+  return date.toISOString().replace(/[-:TZ.]/g, '').slice(0, 14)
+}
+
+function parseJsonColumn<T>(value: unknown, fallback: T): T {
+  return parseStoredJson<T>(value) || fallback
+}
+
+function normalizePolicyRevision(value: unknown) {
+  const revision = Number(value)
+  return Number.isSafeInteger(revision) && revision >= 0 ? revision : 0
+}
+
+function hasAppCodes(appCodes: string[]) {
+  return appCodes.length > 0
+}
+
+function buildInClause(values: string[]) {
+  return values.map(() => '?').join(', ')
+}
+
+function excludeLegacyConsoleViewerRoleSql(alias: string) {
+  return `NOT (${alias}.app_code = 'console' AND ${alias}.role_code IN (${LEGACY_CONSOLE_VIEWER_ROLE_SQL}))`
+}
+
+function conflictRuleSide(rule: StaticRoleConflictRule, side: 'left' | 'right') {
+  const permission = side === 'left' ? rule.left : rule.right
+  return {
+    [`${side}RoleCode`]: side === 'left' ? rule.leftRoleCode || null : rule.rightRoleCode || null,
+    [`${side}AppCode`]: permission?.appCode || null,
+    [`${side}ResourceCode`]: permission?.resourceCode || null,
+    [`${side}Action`]: permission?.action || null
+  }
+}
+
+function staticConflictRuleToBundleRule(rule: StaticRoleConflictRule) {
+  return {
+    ruleCode: rule.ruleCode,
+    ruleName: rule.ruleName,
+    conflictType: rule.conflictType,
+    enforcement: rule.enforcement,
+    ...conflictRuleSide(rule, 'left'),
+    ...conflictRuleSide(rule, 'right'),
+    description: rule.description,
+    source: 'platform-default',
+    status: 'active'
+  }
+}
+
+function isMissingRoleConflictRulesTableError(error: unknown) {
+  const err = error as { code?: string, errno?: number, message?: string }
+  return err?.code === 'ER_NO_SUCH_TABLE'
+    || err?.errno === 1146
+    || String(err?.message || '').includes('tenant_role_conflict_rules')
+}
+
+async function findTenant(tenantCode: string) {
+  return queryRow<TenantRow>(
+    `SELECT tenant_code AS tenantCode, tenant_name AS tenantName, tenant_type AS tenantType, status,
+            settings_json AS settingsJson
+     FROM tenants
+     WHERE tenant_code = ?
+     LIMIT 1`,
+    [tenantCode]
+  )
+}
+
+function redactConsoleLoginSecret(value: Record<string, unknown>) {
+  const consoleLogin = value.consoleLogin
+  if (!consoleLogin || typeof consoleLogin !== 'object' || Array.isArray(consoleLogin)) {
+    return
+  }
+
+  const login = consoleLogin as Record<string, unknown>
+  for (const [sectionKey, secretKey] of [
+    ['oidc', 'clientSecret'],
+    ['wecom', 'corpsecret'],
+    ['dingtalk', 'appSecret']
+  ] as const) {
+    const section = login[sectionKey]
+    if (section && typeof section === 'object' && !Array.isArray(section)) {
+      const record = section as Record<string, unknown>
+      if (String(record[secretKey] || '').trim()) {
+        record[secretKey] = '[redacted]'
+      }
+    }
+  }
+}
+
+export function redactPolicyBundlePayloadForResponse(payload: Record<string, unknown>) {
+  const cloned = JSON.parse(JSON.stringify(payload || {})) as Record<string, unknown>
+  redactConsoleLoginSecret(cloned)
+  return cloned
+}
+
+async function findTargetDeployments(tenantCode: string, environment: string) {
+  return queryRows<DeploymentTargetRow[]>(
+    `SELECT id, deployment_code AS deploymentCode, app_code AS appCode, subscription_id AS subscriptionId,
+            environment,
+            site_id AS siteId, base_path AS basePath, api_base AS apiBase, route_source AS routeSource,
+            status
+     FROM deployments
+     WHERE tenant_code = ?
+       AND environment = ?
+       AND status = 'active'
+     ORDER BY app_code, id`,
+    [tenantCode, environment]
+  )
+}
+
+async function findDeploymentSiteProjection(tenantCode: string, environment: string) {
+  return queryRow<DeploymentSiteProjectionRow>(
+    `SELECT id AS siteId, site_code AS siteCode, public_url AS publicUrl,
+            root_app_code AS rootAppCode, environment, status
+     FROM deployment_sites
+     WHERE tenant_code = ?
+       AND environment = ?
+       AND status = 'active'
+     ORDER BY id DESC
+     LIMIT 1`,
+    [tenantCode, environment]
+  )
+}
+
+async function syncInheritedSystemRoles(tenantCode: string) {
+  const roles = await queryRows<InheritedSystemRoleRow[]>(
+    `SELECT DISTINCT tr.source_role_code AS roleCode
+     FROM tenant_roles tr
+     INNER JOIN platform_system_roles psr
+       ON psr.role_code = tr.source_role_code
+      AND psr.status = 'active'
+     WHERE tr.tenant_code = ?
+       AND tr.source = 'system'
+       AND tr.source_role_code IS NOT NULL
+       AND tr.is_overridden = 0
+       AND tr.status = 'active'
+     ORDER BY tr.source_role_code`,
+    [tenantCode]
+  )
+
+  if (!roles.length) {
+    return
+  }
+
+  await withTransaction(async (tx) => {
+    for (const role of roles) {
+      await materializeSystemRole(tx, {
+        tenantCode,
+        systemRoleCode: role.roleCode
+      })
+    }
+  })
+}
+
+async function collectTenantAppCodes(tenantCode: string, environment: string, deployments: DeploymentTargetRow[]) {
+  const rows = await queryRows<Array<RowDataPacket & { appCode: string }>>(
+    `SELECT DISTINCT app_code AS appCode
+     FROM subscriptions
+     WHERE tenant_code = ?
+       AND status = 'active'
+     UNION
+     SELECT DISTINCT app_code AS appCode
+     FROM deployments
+     WHERE tenant_code = ?
+       AND environment = ?
+       AND status = 'active'
+     ORDER BY appCode`,
+    [tenantCode, tenantCode, environment]
+  )
+
+  return [...new Set([...deployments.map(item => item.appCode), ...rows.map(item => item.appCode)].filter(Boolean))].sort()
+}
+
+async function collectApplications(tenantCode: string, environment: string, appCodes: string[]) {
+  if (!hasAppCodes(appCodes)) {
+    return []
+  }
+
+  const rows = await queryRows<RowDataPacket[]>(
+    `SELECT pa.app_code AS appCode, pa.app_name AS appName, pa.description, pa.icon,
+            pa.home_url AS defaultHomeUrl,
+            pa.callback_url AS defaultCallbackUrl,
+            pa.logout_url AS logoutUrl,
+            COALESCE(ds.public_url, tenant_site.public_url) AS publicUrl,
+            d.base_path AS basePath,
+            d.api_base AS apiBase,
+            d.route_source AS routeSource,
+            pa.app_type AS appType, pa.runtime_mode AS runtimeMode, pa.service_role AS serviceRole,
+            pa.auth_mode AS authMode, pa.bundle_enabled AS bundleEnabled, pa.sort_order AS sortOrder, pa.status
+     FROM platform_applications pa
+     LEFT JOIN deployments d
+       ON d.id = (
+         SELECT d2.id
+         FROM deployments d2
+         WHERE d2.tenant_code = ?
+           AND d2.app_code = pa.app_code
+           AND d2.environment = ?
+           AND d2.status = 'active'
+         ORDER BY CASE WHEN d2.status = 'active' THEN 0 ELSE 1 END, d2.updated_at DESC, d2.id DESC
+         LIMIT 1
+       )
+     LEFT JOIN deployment_sites ds
+       ON ds.id = d.site_id
+      AND ds.status = 'active'
+     LEFT JOIN deployment_sites tenant_site
+       ON tenant_site.id = (
+         SELECT ds2.id
+         FROM deployment_sites ds2
+         WHERE ds2.tenant_code = ?
+           AND ds2.environment = ?
+           AND ds2.status = 'active'
+         ORDER BY ds2.id DESC
+         LIMIT 1
+       )
+     WHERE pa.app_code IN (${buildInClause(appCodes)})
+     ORDER BY pa.sort_order ASC, pa.app_code ASC`,
+    [tenantCode, environment, tenantCode, environment, ...appCodes]
+  )
+
+  return rows.map((row) => {
+    const basePath = row.basePath || defaultAppBasePath(row.appCode)
+    const apiBase = row.apiBase || defaultApiBase(row.appCode)
+    const homeUrl = buildAppHomeUrl(row.publicUrl, basePath) || row.defaultHomeUrl || null
+    const callbackUrl = resolveOidcCallbackUrl(row.defaultCallbackUrl, homeUrl)
+    return {
+      appCode: row.appCode,
+      appName: row.appName,
+      description: row.description,
+      icon: row.icon,
+      basePath,
+      apiBase,
+      routeSource: row.routeSource || 'default',
+      homeUrl,
+      callbackUrl,
+      logoutUrl: row.logoutUrl || deriveLogoutUrl(homeUrl),
+      appType: row.appType,
+      runtimeMode: row.runtimeMode,
+      serviceRole: row.serviceRole,
+      authMode: row.authMode,
+      bundleEnabled: row.bundleEnabled,
+      sortOrder: Number(row.sortOrder || 0),
+      status: row.status
+    }
+  })
+}
+
+async function collectManifestResources(appCodes: string[]) {
+  if (!hasAppCodes(appCodes)) {
+    return []
+  }
+
+  return queryRows<RowDataPacket[]>(
+    `SELECT r.app_code AS appCode, r.manifest_id AS manifestId, r.resource_code AS resourceCode,
+            r.resource_name AS resourceName, r.description, r.sort_order AS sortOrder, r.status
+     FROM platform_app_manifest_resources r
+     LEFT JOIN platform_applications pa ON pa.app_code = r.app_code
+     WHERE r.status = 'active'
+       AND r.app_code IN (${buildInClause(appCodes)})
+       AND r.manifest_id = COALESCE(
+         pa.latest_manifest_id,
+         (
+           SELECT pam.id
+           FROM platform_app_manifests pam
+           WHERE pam.app_code = r.app_code
+             AND pam.status = 'active'
+           ORDER BY pam.manifest_seq DESC, pam.id DESC
+           LIMIT 1
+         )
+       )
+     ORDER BY r.app_code, r.resource_code`,
+    appCodes
+  )
+}
+
+async function collectManifestActions(appCodes: string[]) {
+  if (!hasAppCodes(appCodes)) {
+    return []
+  }
+
+  return queryRows<RowDataPacket[]>(
+    `SELECT a.app_code AS appCode, a.manifest_id AS manifestId, a.resource_code AS resourceCode,
+            a.action, a.action_code AS actionCode, a.action_name AS actionName,
+            a.description, a.sort_order AS sortOrder, a.requires_grant AS requiresGrant,
+            a.status
+     FROM platform_app_manifest_resource_actions a
+     LEFT JOIN platform_applications pa ON pa.app_code = a.app_code
+     WHERE a.status = 'active'
+       AND a.app_code IN (${buildInClause(appCodes)})
+       AND a.manifest_id = COALESCE(
+         pa.latest_manifest_id,
+         (
+           SELECT pam.id
+           FROM platform_app_manifests pam
+           WHERE pam.app_code = a.app_code
+             AND pam.status = 'active'
+           ORDER BY pam.manifest_seq DESC, pam.id DESC
+           LIMIT 1
+         )
+       )
+     ORDER BY a.app_code, a.resource_code, a.action`,
+    appCodes
+  )
+}
+
+async function collectManifestActionImplications(appCodes: string[]) {
+  if (!hasAppCodes(appCodes)) return []
+
+  const rows = await queryRows<Array<RowDataPacket & { appCode: string, manifestJson: unknown }>>(
+    `SELECT pam.app_code AS appCode, pam.manifest_json AS manifestJson
+     FROM platform_app_manifests pam
+     LEFT JOIN platform_applications pa ON pa.app_code = pam.app_code
+     WHERE pam.status = 'active'
+       AND pam.app_code IN (${buildInClause(appCodes)})
+       AND pam.id = COALESCE(
+         pa.latest_manifest_id,
+         (
+           SELECT latest.id
+           FROM platform_app_manifests latest
+           WHERE latest.app_code = pam.app_code
+             AND latest.status = 'active'
+           ORDER BY latest.manifest_seq DESC, latest.id DESC
+           LIMIT 1
+         )
+       )
+     ORDER BY pam.app_code`,
+    appCodes
+  )
+
+  return rows.flatMap((row) => {
+    const manifest = parseJsonColumn(row.manifestJson, {}) as Record<string, unknown>
+    const implications = Array.isArray(manifest.actionImplications) ? manifest.actionImplications : []
+    return implications.map(item => ({
+      ...(item && typeof item === 'object' && !Array.isArray(item) ? item : {}),
+      appCode: row.appCode,
+      source: 'app-manifest'
+    }))
+  })
+}
+
+async function collectSubjects(tenantCode: string) {
+  return queryRows<RowDataPacket[]>(
+    `SELECT s.subject_type AS subjectType, s.subject_code AS subjectCode,
+            s.display_name AS displayName, s.external_ref AS externalRef,
+            parent.subject_code AS parentSubjectCode, s.status
+     FROM tenant_subjects s
+     LEFT JOIN tenant_subjects parent ON parent.id = s.parent_subject_id
+     WHERE s.tenant_code = ?
+       AND s.status = 'active'
+     ORDER BY s.subject_type, s.subject_code`,
+    [tenantCode]
+  )
+}
+
+async function collectSubjectMemberships(tenantCode: string) {
+  return queryRows<RowDataPacket[]>(
+    `SELECT subject.subject_type AS subjectType,
+            subject.subject_code AS subjectCode,
+            container.subject_type AS containerSubjectType,
+            container.subject_code AS containerSubjectCode,
+            tsm.relation_type AS relationType,
+            tsm.is_primary AS isPrimary,
+            tsm.source,
+            tsm.status
+     FROM tenant_subject_memberships tsm
+     INNER JOIN tenant_subjects subject
+       ON subject.id = tsm.subject_id
+      AND subject.tenant_code = tsm.tenant_code
+      AND subject.status = 'active'
+     INNER JOIN tenant_subjects container
+       ON container.id = tsm.container_subject_id
+      AND container.tenant_code = tsm.tenant_code
+      AND container.status = 'active'
+     WHERE tsm.tenant_code = ?
+       AND tsm.status = 'active'
+       AND subject.subject_type = 'user'
+       AND container.subject_type IN ('department', 'job')
+       AND tsm.relation_type IN ('member', 'manager', 'leader')
+     ORDER BY subject.subject_code, container.subject_type, container.subject_code, tsm.relation_type`,
+    [tenantCode]
+  )
+}
+
+async function collectTenantRoles(tenantCode: string) {
+  return queryRows<RowDataPacket[]>(
+    `SELECT role_code AS roleCode, role_name AS roleName, role_type AS roleType,
+            app_code AS appCode, description, source, source_role_code AS sourceRoleCode,
+            source_manifest_id AS sourceManifestId, is_overridden AS isOverridden,
+            is_assignable AS isAssignable, status
+     FROM tenant_roles
+     WHERE tenant_code = ?
+       AND status = 'active'
+     ORDER BY COALESCE(app_code, ''), role_code`,
+    [tenantCode]
+  )
+}
+
+async function collectRoleHolderRevisions(tenantCode: string) {
+  return queryRows<RowDataPacket[]>(
+    `SELECT role.role_code AS roleCode,
+            COALESCE(revision.revision, 0) AS revision,
+            revision.updated_at AS updatedAt
+     FROM tenant_roles role
+     LEFT JOIN tenant_role_holder_revisions revision
+       ON revision.tenant_code = role.tenant_code
+      AND revision.role_id = role.id
+     WHERE role.tenant_code = ?
+       AND role.status = 'active'
+       AND role.max_active_assignments IS NOT NULL
+     ORDER BY role.role_code`,
+    [tenantCode]
+  )
+}
+
+async function collectTenantRolePermissions(tenantCode: string) {
+  return queryRows<RowDataPacket[]>(
+    `SELECT r.role_code AS roleCode, p.app_code AS appCode, p.resource_code AS resourceCode,
+            p.action, p.source_manifest_action_id AS sourceManifestActionId,
+            'custom' AS sourceType, NULL AS appRoleCode
+     FROM tenant_role_permissions p
+     INNER JOIN tenant_roles r
+       ON r.id = p.role_id
+      AND r.tenant_code = p.tenant_code
+      AND r.status = 'active'
+     WHERE p.tenant_code = ?
+       AND NOT (p.app_code = 'console' AND r.role_code IN (${LEGACY_CONSOLE_VIEWER_ROLE_SQL}))
+     UNION ALL
+     SELECT r.role_code AS roleCode, arp.app_code AS appCode, arp.resource_code AS resourceCode,
+            arp.action, arp.manifest_action_id AS sourceManifestActionId,
+            'app_role' AS sourceType, ar.role_code AS appRoleCode
+     FROM tenant_role_app_role_maps tram
+     INNER JOIN tenant_roles r
+       ON r.id = tram.role_id
+      AND r.tenant_code = tram.tenant_code
+      AND r.status = 'active'
+     INNER JOIN platform_app_roles ar
+      ON ar.role_code = tram.app_role_code
+      AND ar.status = 'active'
+      AND ar.app_code <> 'collab'
+      AND ${excludeLegacyConsoleViewerRoleSql('ar')}
+     INNER JOIN platform_app_role_permissions arp
+       ON arp.app_role_id = ar.id
+     WHERE tram.tenant_code = ?
+     ORDER BY roleCode, appCode, resourceCode, action`,
+    [tenantCode, tenantCode]
+  )
+}
+
+async function collectTenantRoleScopes(tenantCode: string) {
+  return queryRows<RowDataPacket[]>(
+    `SELECT r.role_code AS roleCode, s.app_code AS appCode, s.resource_code AS resourceCode,
+            s.action, s.scope_type AS scopeType, s.scope_value AS scopeValue,
+            s.source_manifest_action_id AS sourceManifestActionId, s.status,
+            'custom' AS sourceType, NULL AS appRoleCode
+     FROM tenant_role_scopes s
+     INNER JOIN tenant_roles r
+       ON r.id = s.role_id
+      AND r.tenant_code = s.tenant_code
+      AND r.status = 'active'
+     WHERE s.tenant_code = ?
+       AND s.status = 'active'
+       AND NOT (s.app_code = 'console' AND r.role_code IN (${LEGACY_CONSOLE_VIEWER_ROLE_SQL}))
+     UNION ALL
+     SELECT r.role_code AS roleCode, ars.app_code AS appCode, ars.resource_code AS resourceCode,
+            ars.action, ars.scope_type AS scopeType, ars.scope_value AS scopeValue,
+            ars.manifest_action_id AS sourceManifestActionId, ars.status,
+            'app_role' AS sourceType, ar.role_code AS appRoleCode
+     FROM tenant_role_app_role_maps tram
+     INNER JOIN tenant_roles r
+       ON r.id = tram.role_id
+      AND r.tenant_code = tram.tenant_code
+      AND r.status = 'active'
+     INNER JOIN platform_app_roles ar
+      ON ar.role_code = tram.app_role_code
+      AND ar.status = 'active'
+      AND ar.app_code <> 'collab'
+      AND ${excludeLegacyConsoleViewerRoleSql('ar')}
+     INNER JOIN platform_app_role_scopes ars
+       ON ars.app_role_id = ar.id
+      AND ars.status = 'active'
+     WHERE tram.tenant_code = ?
+     ORDER BY roleCode, appCode, resourceCode, action, scopeType, scopeValue`,
+    [tenantCode, tenantCode]
+  )
+}
+
+async function collectTenantRoleAppRoleMaps(tenantCode: string, historical = false) {
+  return queryRows<RowDataPacket[]>(
+    `SELECT r.role_code AS roleCode, tram.app_role_code AS appRoleCode,
+            tram.source_system_role_code AS sourceSystemRoleCode, tram.sort_order AS sortOrder
+     FROM tenant_role_app_role_maps tram
+     INNER JOIN tenant_roles r
+       ON r.id = tram.role_id
+      AND r.tenant_code = tram.tenant_code
+      AND r.status = 'active'
+     INNER JOIN platform_app_roles ar
+      ON ar.role_code = tram.app_role_code
+      ${historical ? '' : 'AND ar.status = \'active\''}
+      AND ar.app_code <> 'collab'
+      AND ${excludeLegacyConsoleViewerRoleSql('ar')}
+     WHERE tram.tenant_code = ?
+     ORDER BY r.role_code, tram.sort_order, tram.app_role_code`,
+    [tenantCode]
+  )
+}
+
+async function collectSubjectRoles(tenantCode: string) {
+  return queryRows<RowDataPacket[]>(
+    `SELECT sr.id AS assignmentId,
+            s.subject_type AS subjectType, s.subject_code AS subjectCode,
+            r.role_code AS roleCode, sr.source_type AS sourceType, sr.source_id AS sourceId,
+            sr.assignment_kind AS assignmentKind, sr.status,
+            sr.granted_at AS grantedAt, sr.starts_at AS startsAt, sr.expired_at AS expiredAt
+     FROM tenant_subject_roles sr
+     INNER JOIN tenant_subjects s
+       ON s.id = sr.subject_id
+      AND s.tenant_code = sr.tenant_code
+      AND s.status = 'active'
+     INNER JOIN tenant_roles r
+       ON r.id = sr.role_id
+      AND r.tenant_code = sr.tenant_code
+      AND r.status = 'active'
+     WHERE sr.tenant_code = ?
+       AND sr.status = 'active'
+       AND (sr.starts_at IS NULL OR sr.starts_at <= UTC_TIMESTAMP())
+       AND (sr.expired_at IS NULL OR sr.expired_at > UTC_TIMESTAMP())
+     ORDER BY s.subject_type, s.subject_code, r.role_code, sr.source_type, sr.source_id_key`,
+    [tenantCode]
+  )
+}
+
+async function collectSubjectRoleScopes(tenantCode: string) {
+  return queryRows<RowDataPacket[]>(
+    `SELECT srs.assignment_id AS assignmentId,
+            s.subject_type AS subjectType, s.subject_code AS subjectCode,
+            r.role_code AS roleCode,
+            sr.source_type AS sourceType, sr.source_id AS sourceId,
+            srs.app_code AS appCode, srs.resource_code AS resourceCode, srs.action,
+            srs.scope_dimension AS scopeDimension,
+            srs.scope_predicate AS scopePredicate,
+            srs.scope_value AS scopeValue,
+            srs.scope_group AS scopeGroup,
+            srs.scope_mode AS scopeMode,
+            srs.status
+     FROM tenant_subject_role_scopes srs
+     INNER JOIN tenant_subject_roles sr
+       ON sr.id = srs.assignment_id
+      AND sr.tenant_code = srs.tenant_code
+      AND sr.status = 'active'
+      AND (sr.starts_at IS NULL OR sr.starts_at <= UTC_TIMESTAMP())
+      AND (sr.expired_at IS NULL OR sr.expired_at > UTC_TIMESTAMP())
+     INNER JOIN tenant_subjects s
+       ON s.id = sr.subject_id
+      AND s.tenant_code = sr.tenant_code
+      AND s.status = 'active'
+     INNER JOIN tenant_roles r
+       ON r.id = sr.role_id
+      AND r.tenant_code = sr.tenant_code
+      AND r.status = 'active'
+     WHERE srs.tenant_code = ?
+       AND srs.status = 'active'
+     ORDER BY s.subject_type, s.subject_code, r.role_code, srs.assignment_id, srs.scope_group, srs.scope_dimension, srs.scope_predicate, srs.scope_value`,
+    [tenantCode]
+  )
+}
+
+async function collectPermissionTemplates(tenantCode: string) {
+  return queryRows<RowDataPacket[]>(
+    `SELECT template_code AS templateCode, template_name AS templateName,
+            template_type AS templateType, description, source,
+            source_template_code AS sourceTemplateCode, is_overridden AS isOverridden,
+            sort_order AS sortOrder, status
+     FROM tenant_permission_templates
+     WHERE tenant_code = ?
+       AND status = 'active'
+     ORDER BY sort_order, template_code`,
+    [tenantCode]
+  )
+}
+
+async function collectTemplateRoles(tenantCode: string) {
+  return queryRows<RowDataPacket[]>(
+    `SELECT t.template_code AS templateCode, r.role_code AS roleCode,
+            tr.sort_order AS sortOrder
+     FROM tenant_template_roles tr
+     INNER JOIN tenant_permission_templates t
+       ON t.id = tr.template_id
+      AND t.tenant_code = tr.tenant_code
+      AND t.status = 'active'
+     INNER JOIN tenant_roles r
+       ON r.id = tr.role_id
+      AND r.tenant_code = tr.tenant_code
+      AND r.status = 'active'
+     WHERE tr.tenant_code = ?
+     ORDER BY t.template_code, tr.sort_order, r.role_code`,
+    [tenantCode]
+  )
+}
+
+async function collectTemplateBindings(tenantCode: string) {
+  return queryRows<RowDataPacket[]>(
+    `SELECT t.template_code AS templateCode, b.subject_type AS subjectType,
+            s.subject_code AS subjectCode, b.priority, b.status,
+            b.start_at AS startAt, b.end_at AS endAt
+     FROM tenant_template_bindings b
+     INNER JOIN tenant_permission_templates t
+       ON t.id = b.template_id
+      AND t.tenant_code = b.tenant_code
+      AND t.status = 'active'
+     INNER JOIN tenant_subjects s
+       ON s.id = b.subject_id
+      AND s.tenant_code = b.tenant_code
+      AND s.status = 'active'
+     WHERE b.tenant_code = ?
+       AND b.status = 'active'
+       AND (b.start_at IS NULL OR b.start_at <= UTC_TIMESTAMP())
+       AND (b.end_at IS NULL OR b.end_at > UTC_TIMESTAMP())
+     ORDER BY b.priority, t.template_code, b.subject_type, s.subject_code`,
+    [tenantCode]
+  )
+}
+
+async function collectTemplateOverrides(tenantCode: string) {
+  return queryRows<RowDataPacket[]>(
+    `SELECT o.subject_type AS subjectType, s.subject_code AS subjectCode,
+            r.role_code AS roleCode, o.override_type AS overrideType,
+            t.template_code AS sourceTemplateCode, o.reason, o.status
+     FROM tenant_template_overrides o
+     INNER JOIN tenant_subjects s
+       ON s.id = o.subject_id
+      AND s.tenant_code = o.tenant_code
+      AND s.status = 'active'
+     INNER JOIN tenant_roles r
+       ON r.id = o.role_id
+      AND r.tenant_code = o.tenant_code
+      AND r.status = 'active'
+     LEFT JOIN tenant_permission_templates t
+       ON t.id = o.source_template_id
+      AND t.tenant_code = o.tenant_code
+     WHERE o.tenant_code = ?
+       AND o.status = 'active'
+     ORDER BY o.subject_type, s.subject_code, r.role_code, o.override_type, COALESCE(t.template_code, '')`,
+    [tenantCode]
+  )
+}
+
+async function collectRoleConflictRules(tenantCode: string) {
+  const rulesByCode = new Map<string, Record<string, unknown>>()
+  for (const rule of STATIC_ROLE_CONFLICT_RULES) {
+    rulesByCode.set(rule.ruleCode, staticConflictRuleToBundleRule(rule))
+  }
+
+  try {
+    const tenantRules = await queryRows<RowDataPacket[]>(
+      `SELECT rule_code AS ruleCode, rule_name AS ruleName, conflict_type AS conflictType,
+              enforcement,
+              left_role_code AS leftRoleCode, right_role_code AS rightRoleCode,
+              left_app_code AS leftAppCode, left_resource_code AS leftResourceCode,
+              left_action AS leftAction,
+              right_app_code AS rightAppCode, right_resource_code AS rightResourceCode,
+              right_action AS rightAction,
+              description, status
+       FROM tenant_role_conflict_rules
+       WHERE tenant_code = ?
+         AND status = 'active'
+       ORDER BY rule_code`,
+      [tenantCode]
+    )
+
+    for (const row of tenantRules) {
+      rulesByCode.set(String(row.ruleCode), {
+        ruleCode: row.ruleCode,
+        ruleName: row.ruleName,
+        conflictType: row.conflictType,
+        enforcement: row.enforcement,
+        leftRoleCode: row.leftRoleCode,
+        rightRoleCode: row.rightRoleCode,
+        leftAppCode: row.leftAppCode,
+        leftResourceCode: row.leftResourceCode,
+        leftAction: row.leftAction,
+        rightAppCode: row.rightAppCode,
+        rightResourceCode: row.rightResourceCode,
+        rightAction: row.rightAction,
+        description: row.description,
+        source: 'tenant',
+        status: row.status || 'active'
+      })
+    }
+  } catch (error) {
+    if (!isMissingRoleConflictRulesTableError(error)) throw error
+  }
+
+  return [...rulesByCode.values()].sort((left, right) => String(left.ruleCode).localeCompare(String(right.ruleCode)))
+}
+
+async function collectAppRoles(appCodes: string[]) {
+  return queryRows<RowDataPacket[]>(
+    `SELECT role_code AS roleCode, role_name AS roleName, role_type AS roleType,
+            app_code AS appCode, description, is_required AS isRequired, status
+     FROM platform_app_roles
+     WHERE status = 'active'
+       AND app_code <> 'collab'
+       AND ${excludeLegacyConsoleViewerRoleSql('platform_app_roles')}
+       ${hasAppCodes(appCodes) ? `AND app_code IN (${buildInClause(appCodes)})` : ''}
+     ORDER BY COALESCE(app_code, ''), role_code`,
+    appCodes
+  )
+}
+
+async function collectAppRolePermissions(appCodes: string[]) {
+  const appFilter = hasAppCodes(appCodes)
+    ? `AND (ar.app_code IN (${buildInClause(appCodes)}) OR p.app_code IN (${buildInClause(appCodes)}))`
+    : ''
+
+  return queryRows<RowDataPacket[]>(
+    `SELECT ar.role_code AS roleCode, p.app_code AS appCode, p.resource_code AS resourceCode,
+            p.action, p.manifest_action_id AS manifestActionId
+     FROM platform_app_role_permissions p
+     INNER JOIN platform_app_roles ar ON ar.id = p.app_role_id
+     WHERE ar.status = 'active'
+       AND ar.app_code <> 'collab'
+       AND ${excludeLegacyConsoleViewerRoleSql('ar')}
+       ${appFilter}
+     ORDER BY ar.role_code, p.app_code, p.resource_code, p.action`,
+    hasAppCodes(appCodes) ? [...appCodes, ...appCodes] : []
+  )
+}
+
+async function collectAppRoleScopes(appCodes: string[], versioned = false) {
+  if (versioned && !await queryRow<RowDataPacket>('SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=\'platform_app_role_scopes\' AND COLUMN_NAME=\'source_type\'')) {
+    throw createError({ statusCode: 503, message: '环境版本选择需要先安装 app role scope source_type 迁移' })
+  }
+  const appFilter = hasAppCodes(appCodes)
+    ? `AND (ar.app_code IN (${buildInClause(appCodes)}) OR s.app_code IN (${buildInClause(appCodes)}))`
+    : ''
+
+  return queryRows<RowDataPacket[]>(
+    `SELECT ar.role_code AS roleCode, s.app_code AS appCode, s.resource_code AS resourceCode,
+            s.action, s.scope_type AS scopeType, s.scope_value AS scopeValue,
+            s.manifest_action_id AS manifestActionId, s.status${versioned ? ', s.source_type AS sourceType' : ''}
+     FROM platform_app_role_scopes s
+     INNER JOIN platform_app_roles ar ON ar.id = s.app_role_id
+     WHERE 1=1 ${versioned ? '' : 'AND ar.status = \'active\''}
+       AND ar.app_code <> 'collab'
+       AND ${excludeLegacyConsoleViewerRoleSql('ar')}
+       ${versioned ? '' : 'AND s.status = \'active\''}
+       ${appFilter}
+     ORDER BY ar.role_code, s.app_code, s.resource_code, s.action, s.scope_type, s.scope_value`,
+    hasAppCodes(appCodes) ? [...appCodes, ...appCodes] : []
+  )
+}
+
+async function collectSystemRoles() {
+  return queryRows<RowDataPacket[]>(
+    `SELECT role_code AS roleCode, role_name AS roleName, role_type AS roleType,
+            description, is_required AS isRequired, sort_order AS sortOrder, status
+     FROM platform_system_roles
+     WHERE status = 'active'
+     ORDER BY sort_order, role_code`
+  )
+}
+
+async function collectSystemAppRoleMaps(appCodes: string[], historical = false) {
+  const appFilter = hasAppCodes(appCodes)
+    ? `AND ar.app_code IN (${buildInClause(appCodes)})`
+    : ''
+
+  return queryRows<RowDataPacket[]>(
+    `SELECT sr.role_code AS systemRoleCode, ar.role_code AS appRoleCode,
+            ar.app_code AS appCode, sarm.sort_order AS sortOrder
+     FROM platform_system_app_role_maps sarm
+     INNER JOIN platform_system_roles sr
+       ON sr.id = sarm.system_role_id
+      AND sr.status = 'active'
+     INNER JOIN platform_app_roles ar
+       ON ar.id = sarm.app_role_id
+      ${historical ? '' : 'AND ar.status = \'active\''}
+      AND ar.app_code <> 'collab'
+      AND ${excludeLegacyConsoleViewerRoleSql('ar')}
+     WHERE 1 = 1
+       ${appFilter}
+     ORDER BY sr.sort_order, sr.role_code, sarm.sort_order, ar.role_code`,
+    appCodes
+  )
+}
+
+async function collectCapabilities(tenantCode: string, environment: string) {
+  const rows = await queryRows<RowDataPacket[]>(
+    `SELECT l.license_code AS licenseCode, lc.capability_code AS capabilityCode,
+            lc.capability_value AS capabilityValue, pc.capability_name AS capabilityName,
+            pc.capability_type AS capabilityType, pc.value_schema_json AS valueSchemaJson
+     FROM licenses l
+     INNER JOIN license_deployments ld
+       ON ld.license_id = l.id
+      AND ld.status = 'active'
+      AND (ld.effective_until IS NULL OR ld.effective_until > UTC_TIMESTAMP())
+     INNER JOIN deployments d
+       ON d.id = ld.deployment_id
+      AND d.environment = ?
+     INNER JOIN license_capabilities lc ON lc.license_id = l.id
+     LEFT JOIN platform_capabilities pc ON pc.capability_code = lc.capability_code
+     WHERE l.tenant_code = ?
+       AND l.status = 'active'
+       AND (l.expires_at IS NULL OR l.expires_at > UTC_TIMESTAMP())
+     ORDER BY l.license_code, lc.capability_code`,
+    [environment, tenantCode]
+  )
+
+  return rows.map(row => ({
+    ...row,
+    valueSchemaJson: parseJsonColumn(row.valueSchemaJson, null)
+  }))
+}
+
+function normalizePolicyBundleInput(input: string | {
+  tenantCode: string
+  environment?: unknown
+  platformBaseUrl?: string | null
+  policyRevision?: unknown
+}) {
+  if (typeof input === 'string') {
+    return {
+      tenantCode: input.trim(),
+      environment: DEFAULT_DEPLOYMENT_ENVIRONMENT,
+      platformBaseUrl: null,
+      policyRevision: 0
+    }
+  }
+
+  return {
+    tenantCode: String(input.tenantCode || '').trim(),
+    environment: normalizeDeploymentEnvironment(input.environment),
+    platformBaseUrl: String(input.platformBaseUrl || '').trim().replace(/\/+$/, '') || null,
+    policyRevision: normalizePolicyRevision(input.policyRevision)
+  }
+}
+
+export async function buildPolicyBundlePayload(input: string | {
+  tenantCode: string
+  environment?: unknown
+  platformBaseUrl?: string | null
+  policyRevision?: unknown
+  appSelection?: EnvironmentAppSelection
+}) {
+  const { tenantCode, environment, platformBaseUrl, policyRevision } = normalizePolicyBundleInput(input)
+  const tenant = await findTenant(tenantCode)
+  if (!tenant) {
+    throw createError({
+      statusCode: 404,
+      statusMessage: 'Not Found',
+      message: `tenant not found: tenantCode=${tenantCode}`
+    })
+  }
+
+  const appSelection = typeof input !== 'string' && input.appSelection ? input.appSelection : await loadEnvironmentAppSelection({ queryRow, queryRows }, tenantCode, environment)
+  const deployments = await findTargetDeployments(tenantCode, environment)
+  const deploymentSite = await findDeploymentSiteProjection(tenantCode, environment)
+  const tenantSettings = parseTenantSettings(tenant.settingsJson)
+  const consoleLogin = consoleLoginSettings(tenantSettings, environment)
+  const generatedAt = new Date().toISOString()
+  const enterpriseEntitlement = await loadBundleEnterpriseEntitlement(queryRow, tenantCode, tenant.status, generatedAt)
+  const legacyAppCodes = await collectTenantAppCodes(tenantCode, environment, deployments)
+  const qualifiedAppCodes = enterpriseEntitlement
+    ? (await queryRows<Array<RowDataPacket & { appCode: string }>>(ENTERPRISE_MODULE_CATALOG_SQL)).map(row => row.appCode)
+    : legacyAppCodes
+  const appCodes = appSelection ? selectedAppCodes(appSelection) : qualifiedAppCodes
+  if (appSelection && appCodes.some(code => !qualifiedAppCodes.includes(code) && !legacyAppCodes.includes(code))) {
+    throw createError({ statusCode: 409, message: '所选应用不在当前租户有效应用目录中；版本选择不能扩张产品资格' })
+  }
+  // Full product qualification must not expand baseline grants or system-role app mappings.
+  // Explicit tenant role grants remain authoritative and use the full resource catalog.
+  const rawBaselinePermissions = await collectConfiguredBaselinePermissions(legacyAppCodes)
+
+  const [
+    rawApplications,
+    rawManifestResources,
+    rawManifestActions,
+    rawManifestActionImplications,
+    subjects,
+    subjectMemberships,
+    roles,
+    roleHolderRevisions,
+    rawRoleAppRoleMaps,
+    rawRolePermissions,
+    rawRoleScopes,
+    subjectRoles,
+    rawSubjectRoleScopes,
+    permissionTemplates,
+    templateRoles,
+    templateBindings,
+    templateOverrides,
+    rawAppRoles,
+    rawAppRolePermissions,
+    rawAppRoleScopes,
+    systemRoles,
+    rawSystemAppRoleMaps,
+    capabilities,
+    conflictRules
+  ] = await Promise.all([
+    collectApplications(tenantCode, environment, appCodes),
+    collectManifestResources(appCodes),
+    collectManifestActions(appCodes),
+    collectManifestActionImplications(appCodes),
+    collectSubjects(tenantCode),
+    collectSubjectMemberships(tenantCode),
+    collectTenantRoles(tenantCode),
+    collectRoleHolderRevisions(tenantCode),
+    collectTenantRoleAppRoleMaps(tenantCode, Boolean(appSelection)),
+    collectTenantRolePermissions(tenantCode),
+    collectTenantRoleScopes(tenantCode),
+    collectSubjectRoles(tenantCode),
+    collectSubjectRoleScopes(tenantCode),
+    collectPermissionTemplates(tenantCode),
+    collectTemplateRoles(tenantCode),
+    collectTemplateBindings(tenantCode),
+    collectTemplateOverrides(tenantCode),
+    collectAppRoles(appCodes),
+    collectAppRolePermissions(appCodes),
+    collectAppRoleScopes(appCodes, Boolean(appSelection)),
+    collectSystemRoles(),
+    collectSystemAppRoleMaps(legacyAppCodes, Boolean(appSelection)),
+    collectCapabilities(tenantCode, environment),
+    collectRoleConflictRules(tenantCode)
+  ])
+
+  const rawFacts = { applications: rawApplications, manifestResources: rawManifestResources, manifestActions: rawManifestActions, manifestActionImplications: rawManifestActionImplications, appRoles: rawAppRoles, appRolePermissions: rawAppRolePermissions, appRoleScopes: rawAppRoleScopes, roleAppRoleMaps: rawRoleAppRoleMaps, rolePermissions: rawRolePermissions, roleScopes: rawRoleScopes, systemAppRoleMaps: rawSystemAppRoleMaps, baselinePermissions: rawBaselinePermissions, subjectRoleScopes: rawSubjectRoleScopes, roles }
+  const { applications, manifestResources, manifestActions, manifestActionImplications, appRoles, appRolePermissions, appRoleScopes, roleAppRoleMaps, rolePermissions, roleScopes, systemAppRoleMaps, baselinePermissions, subjectRoleScopes } = appSelection ? projectEnvironmentReleaseFacts(rawFacts, appSelection) as typeof rawFacts : rawFacts
+
+  const enterpriseHostRoutes = enterpriseEntitlement ? await loadEnterpriseHostModuleRoutes(queryRow, tenantCode, environment) : []
+  const routedApplications = enterpriseEntitlement ? applyEnterpriseHostModuleRoutes(applications, enterpriseHostRoutes) : applications
+
+  const v2Compat = buildPolicyBundleV2CompatFields({
+    tenantCode,
+    environment,
+    subjectRoles,
+    subjectRoleScopes,
+    rolePermissions,
+    roleScopes,
+    baselinePermissions,
+    conflictRules,
+    actionImplications: manifestActionImplications,
+    policyRevision
+  })
+
+  return stripLegacyPolicyBundleAuthorizationFields({
+    schemaVersion: POLICY_BUNDLE_SCHEMA_VERSION,
+    ...v2Compat,
+    generatedAt,
+    ...(appSelection ? { appReleaseSelection: selectionReceipt(appSelection) } : {}),
+    ...(enterpriseEntitlement ? { enterpriseEntitlement, enterpriseHostRoutes, moduleAvailability: enterpriseModuleAvailability(applications, deployments, enterpriseHostRoutes) } : {}),
+    environment,
+    tenant: {
+      tenantCode: tenant.tenantCode,
+      tenantName: tenant.tenantName,
+      tenantType: tenant.tenantType,
+      status: tenant.status
+    },
+    platform: {
+      baseUrl: platformBaseUrl
+    },
+    consoleLogin,
+    deployment: deploymentSite
+      ? {
+          siteId: deploymentSite.siteId,
+          siteCode: deploymentSite.siteCode,
+          publicUrl: deploymentSite.publicUrl,
+          rootAppCode: deploymentSite.rootAppCode,
+          environment: deploymentSite.environment,
+          status: deploymentSite.status
+        }
+      : null,
+    deployments: deployments.map(item => ({
+      deploymentId: item.id,
+      deploymentCode: item.deploymentCode,
+      appCode: item.appCode,
+      environment: item.environment,
+      siteId: item.siteId,
+      basePath: item.basePath,
+      apiBase: item.apiBase,
+      routeSource: item.routeSource,
+      status: item.status
+    })),
+    applications: routedApplications,
+    manifestResources,
+    manifestActions,
+    subjects,
+    subjectMemberships,
+    roles,
+    roleHolderRevisions,
+    roleAppRoleMaps,
+    rolePermissions,
+    roleScopes,
+    subjectRoles,
+    subjectRoleScopes,
+    permissionTemplates,
+    templateRoles,
+    templateBindings,
+    templateOverrides,
+    appRoles,
+    appRolePermissions,
+    appRoleScopes,
+    systemRoles,
+    systemAppRoleMaps,
+    baselinePermissions,
+    capabilities
+  })
+}
+
+export async function generatePolicyBundle(input: {
+  tenantCode: string
+  environment?: unknown
+  platformBaseUrl?: string | null
+  expiresAt?: string | null
+}): Promise<GeneratedPolicyBundle> {
+  const tenantCode = String(input.tenantCode || '').trim()
+  if (!tenantCode) {
+    throw createError({
+      statusCode: 400,
+      statusMessage: 'Bad Request',
+      message: 'tenantCode is required'
+    })
+  }
+
+  const environment = normalizeDeploymentEnvironment(input.environment)
+  const platformBaseUrl = String(input.platformBaseUrl || '').trim().replace(/\/+$/, '') || null
+  const selection = await loadEnvironmentAppSelection({ queryRow, queryRows }, tenantCode, environment)
+  if (!selection && environment === 'prod') throw createError({ statusCode: 409, message: 'prod 必须先初始化环境应用版本；已有环境须使用已签基线包' })
+  if (!selection) await syncInheritedSystemRoles(tenantCode)
+  const draftPayload = await buildPolicyBundlePayload({ tenantCode, environment, platformBaseUrl, policyRevision: 0, ...(selection ? { appSelection: selection } : {}) })
+  const targetDeployments = Array.isArray(draftPayload.deployments) ? draftPayload.deployments : []
+
+  if (targetDeployments.length === 0) {
+    throw createError({
+      statusCode: 409,
+      statusMessage: 'Conflict',
+      message: `active deployment is required before generating policy bundle: tenantCode=${tenantCode}, environment=${environment}`
+    })
+  }
+
+  const policyHash = hashPolicyBundleFactsForRevision(draftPayload)
+  const now = new Date()
+  const issuedAt = toSqlDateTime(now)
+  const signedAt = issuedAt
+  const expiresAt = input.expiresAt ? toSqlDateTime(new Date(input.expiresAt)) : null
+
+  return withTransaction(async (tx) => {
+    await assertSelectionUnchanged(tx, tenantCode, environment, selectionReceipt(selection))
+    let policyRevision = await resolveTenantEnvironmentPolicyRevision(tx, tenantCode, policyHash, environment)
+    // Reuse exact published bytes/version, not a new generatedAt at the same
+    // revision. Consumers deliberately reject equal-revision content conflicts.
+    const previous = await tx.queryRow<RuntimePolicyBundleRow>(
+      // Resolve the id through the index first: sorting whole rows (large
+      // payload JSON) can exceed MySQL's sort buffer (ER_OUT_OF_SORTMEMORY).
+      `SELECT pb.*, pb.id AS bundle_id, 0 AS deployment_id
+       FROM policy_bundles pb
+       WHERE pb.id=(SELECT MAX(latest.id) FROM policy_bundles latest WHERE latest.tenant_code=? AND latest.environment=?)
+       FOR UPDATE`, [tenantCode, environment])
+    const previousTargets = previous
+      ? await tx.queryRows<DeploymentTargetRow[]>(
+          `SELECT d.id, d.deployment_code AS deploymentCode, d.app_code AS appCode, d.environment
+       FROM policy_bundle_targets t JOIN deployments d ON d.id=t.deployment_id
+       WHERE t.bundle_id=? ORDER BY d.app_code,d.id`, [previous.id])
+      : []
+    const expectedTargets = targetDeployments as Array<{ deploymentId: number }>
+    const sameTargets = previousTargets.map(d => d.id).join(',') === expectedTargets.map(d => d.deploymentId).join(',')
+    const previousExpiry = previous?.expires_at ? toSqlDateTime(new Date(previous.expires_at)) : null
+    const previousPayload = reuseEnvironmentPolicyPayload(previous, {
+      revision: policyRevision, hash: policyHash, expiresAt, sameTargets, now: now.getTime()
+    })
+    if (previous && previousPayload && previous.signature && previous.signed_by_kid) {
+      return { tenantCode, environment, bundleId: previous.id, bundleVersion: previous.bundle_version,
+        bundleHash: previous.bundle_hash, policyRevision, policyHash, bundleUri: previous.bundle_uri,
+        schemaVersion: previous.schema_version, payload: previousPayload, signature: previous.signature,
+        signedByKid: previous.signed_by_kid, alg: POLICY_BUNDLE_SIGNATURE_ALG, signedAt: previous.signed_at || previous.issued_at,
+        issuedAt: previous.issued_at, expiresAt: previousExpiry,
+        targets: previousTargets.map(d => ({ deploymentId: d.id, deploymentCode: d.deploymentCode, appCode: d.appCode, environment: d.environment })) }
+    }
+    if (previous && Number(previous.policy_revision) >= policyRevision) {
+      policyRevision = await resolveTenantEnvironmentPolicyRevision(tx, tenantCode, policyHash, environment, true)
+    }
+    const payload = {
+      ...draftPayload,
+      policyRevision
+    }
+    const payloadJson = stableStringifyPolicyPayload(payload)
+    const bundleHash = hashBundlePayload(payloadJson)
+    const signed = await sign(payloadJson)
+
+    const seqRow = await tx.queryRow<NextSeqRow>(
+      `SELECT COUNT(*) + 1 AS nextSeq
+       FROM policy_bundles
+       WHERE tenant_code = ?
+         AND environment = ?`,
+      [tenantCode, environment]
+    )
+    const nextSeq = Math.max(1, Number(seqRow?.nextSeq || 1))
+    const bundleVersion = `pv_${environment}_${toVersionTimestamp(now)}_${String(nextSeq).padStart(4, '0')}`
+    const bundleUri = `inline://policy-bundles/${tenantCode}/${environment}/${bundleVersion}`
+
+    const result = await tx.execute<ResultSetHeader>(
+      `INSERT INTO policy_bundles
+        (tenant_code, environment, bundle_version, bundle_hash, policy_revision, policy_hash,
+         bundle_payload_json, bundle_uri,
+         signature, signed_by_kid, signed_at, schema_version, issued_at, expires_at, status)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active')`,
+      [
+        tenantCode,
+        environment,
+        bundleVersion,
+        bundleHash,
+        policyRevision,
+        policyHash,
+        payloadJson,
+        bundleUri,
+        signed.signature,
+        signed.kid,
+        signedAt,
+        POLICY_BUNDLE_SCHEMA_VERSION,
+        issuedAt,
+        expiresAt
+      ]
+    )
+
+    const bundleId = result.insertId
+    const deployments = await tx.queryRows<DeploymentTargetRow[]>(
+      `SELECT id, deployment_code AS deploymentCode, app_code AS appCode, subscription_id AS subscriptionId,
+              environment,
+              site_id AS siteId, base_path AS basePath, api_base AS apiBase, route_source AS routeSource,
+              status
+       FROM deployments
+       WHERE tenant_code = ?
+         AND environment = ?
+         AND status = 'active'
+       ORDER BY app_code, id`,
+      [tenantCode, environment]
+    )
+
+    for (const deployment of deployments) {
+      await tx.execute<ResultSetHeader>(
+        `INSERT INTO policy_bundle_targets
+          (bundle_id, deployment_id, status, created_at, updated_at)
+         VALUES (?, ?, 'pending', UTC_TIMESTAMP(), UTC_TIMESTAMP())
+         ON DUPLICATE KEY UPDATE
+           status = VALUES(status),
+           updated_at = UTC_TIMESTAMP()`,
+        [bundleId, deployment.id]
+      )
+    }
+
+    return {
+      tenantCode,
+      environment,
+      bundleId,
+      bundleVersion,
+      bundleHash,
+      policyRevision,
+      policyHash,
+      bundleUri,
+      schemaVersion: POLICY_BUNDLE_SCHEMA_VERSION,
+      payload: parseJsonColumn<Record<string, unknown>>(payloadJson, {}),
+      signature: signed.signature,
+      signedByKid: signed.kid,
+      alg: signed.alg,
+      signedAt,
+      issuedAt,
+      expiresAt,
+      targets: deployments.map(item => ({
+        deploymentId: item.id,
+        deploymentCode: item.deploymentCode,
+        appCode: item.appCode,
+        environment: item.environment
+      }))
+    }
+  })
+}
+
+export async function findPolicyBundleForDeployment(input: {
+  deploymentId: number
+  version?: string | null
+}) {
+  const version = String(input.version || '').trim()
+  const selectColumns = `pb.id, pb.id AS bundle_id, pb.tenant_code, pb.environment, pbt.deployment_id, pb.bundle_version,
+          pb.bundle_hash, pb.policy_revision, pb.policy_hash, pb.bundle_payload_json, pb.bundle_uri, pb.signature,
+          pb.signed_by_kid, pb.signed_at, pb.schema_version, pb.issued_at,
+          pb.expires_at, pb.status, pb.created_at`
+
+  if (version) {
+    return queryRow<RuntimePolicyBundleRow>(
+      `SELECT ${selectColumns}
+       FROM policy_bundle_targets pbt
+       INNER JOIN policy_bundles pb ON pb.id = pbt.bundle_id
+       WHERE pbt.deployment_id = ?
+         AND pb.bundle_version = ?
+         AND pb.status = 'active'
+         AND (pb.expires_at IS NULL OR pb.expires_at > UTC_TIMESTAMP())
+       LIMIT 1`,
+      [input.deploymentId, version]
+    )
+  }
+
+  return queryRow<RuntimePolicyBundleRow>(
+    `SELECT ${selectColumns}
+     FROM (
+       SELECT MAX(pbt.bundle_id) AS bundle_id
+       FROM policy_bundle_targets pbt
+       INNER JOIN policy_bundles pb2 ON pb2.id = pbt.bundle_id
+       WHERE pbt.deployment_id = ?
+         AND pb2.status = 'active'
+         AND (pb2.expires_at IS NULL OR pb2.expires_at > UTC_TIMESTAMP())
+     ) latest
+     INNER JOIN policy_bundles pb ON pb.id = latest.bundle_id
+     INNER JOIN policy_bundle_targets pbt
+       ON pbt.bundle_id = pb.id
+      AND pbt.deployment_id = ?
+     WHERE latest.bundle_id IS NOT NULL`,
+    [input.deploymentId, input.deploymentId]
+  )
+}
+
+export async function findOrGeneratePolicyBundleForDeployment(input: {
+  deploymentId: number
+  tenantCode: string
+  version?: string | null
+}) {
+  const version = String(input.version || '').trim()
+  const existing = await findPolicyBundleForDeployment({
+    deploymentId: input.deploymentId,
+    version
+  })
+
+  const tenant = await findTenant(input.tenantCode)
+  if (!tenant) throw createError({ statusCode: 404, message: 'Tenant not found' })
+  const deployment = await queryRow<DeploymentEnvironmentRow>(
+    `SELECT environment
+     FROM deployments
+     WHERE id = ?
+       AND tenant_code = ?
+     LIMIT 1`,
+    [input.deploymentId, input.tenantCode]
+  )
+  if (!deployment) throw createError({ statusCode: 404, message: 'Deployment not found for tenant' })
+  const environment = deployment.environment
+  const currentEntitlement = await loadBundleEnterpriseEntitlement(queryRow, input.tenantCode, tenant.status, new Date().toISOString())
+  const hostRoutes = currentEntitlement ? await loadEnterpriseHostModuleRoutes(queryRow, input.tenantCode, environment) : []
+  if (existing && enterpriseHostRoutesMatch(parsePolicyBundlePayload(existing.bundle_payload_json), hostRoutes) && bundleEnterpriseEntitlementMatches(parsePolicyBundlePayload(existing.bundle_payload_json), currentEntitlement)) return existing
+  if (version) {
+    if (existing) throw createError({ statusCode: 409, message: 'Requested policy bundle has stale enterprise entitlement' })
+    return null
+  }
+
+  await generatePolicyBundle({
+    tenantCode: input.tenantCode,
+    environment: deployment?.environment || DEFAULT_DEPLOYMENT_ENVIRONMENT
+  })
+
+  const generated = await findPolicyBundleForDeployment({ deploymentId: input.deploymentId })
+  const latestTenant = await findTenant(input.tenantCode)
+  const latestEntitlement = await loadBundleEnterpriseEntitlement(queryRow, input.tenantCode, latestTenant?.status || 'suspended', new Date().toISOString())
+  const latestHostRoutes = latestEntitlement ? await loadEnterpriseHostModuleRoutes(queryRow, input.tenantCode, environment) : []
+  if (generated && (!enterpriseHostRoutesMatch(parsePolicyBundlePayload(generated.bundle_payload_json), latestHostRoutes) || !bundleEnterpriseEntitlementMatches(parsePolicyBundlePayload(generated.bundle_payload_json), latestEntitlement))) {
+    throw createError({ statusCode: 503, message: 'Enterprise entitlement changed during bundle generation; retry required' })
+  }
+  return generated
+}
+
+export function parsePolicyBundlePayload(value: unknown) {
+  return parseJsonColumn<Record<string, unknown>>(value, {})
+}
+
+// The newest row is selected regardless of status/expiry. Never fall back to
+// an older active policy when a newer policy was revoked, expired or untargeted.
+export async function findCurrentPolicyEnvelopeRow(deployment: {
+  id: number
+  tenant_code: string
+  deployment_code: string
+  environment: string
+}) {
+  // Tenant and deployment lifecycle are returned, not filtered: a suspended
+  // tenant must receive a signed inactive envelope, never an outage-like 503.
+  const row = await queryRow<RowDataPacket & {
+    id: number
+    tenant_code: string
+    environment: string
+    bundle_version: string
+    bundle_hash: string
+    policy_revision: number
+    status: string
+    expires_at: string | Date | null
+    tenant_status: string
+    deployment_status: string
+    storage_hash: string | null
+  }>(
+    `SELECT pb.id, pb.tenant_code, pb.environment, pb.bundle_version, pb.bundle_hash,
+            pb.policy_revision, pb.status, pb.expires_at,
+            SHA2(CAST(pb.bundle_payload_json AS CHAR), 256) AS storage_hash,
+            t.status AS tenant_status, d.status AS deployment_status FROM policy_bundles pb
+     INNER JOIN tenant_environment_policy_revisions rev ON rev.tenant_code=pb.tenant_code AND rev.environment=pb.environment
+       AND rev.policy_revision=pb.policy_revision AND rev.policy_hash=pb.policy_hash
+     INNER JOIN policy_bundle_targets pbt ON pbt.bundle_id=pb.id AND pbt.deployment_id=?
+     INNER JOIN tenants t ON t.tenant_code=pb.tenant_code
+     INNER JOIN deployments d ON d.id=pbt.deployment_id AND d.tenant_code=pb.tenant_code
+       AND d.environment=pb.environment
+     WHERE pb.tenant_code=? AND pb.environment=?
+       AND pb.id=(SELECT MAX(latest.id) FROM policy_bundles latest WHERE latest.tenant_code=? AND latest.environment=?)
+     LIMIT 1`,
+    [deployment.id, deployment.tenant_code, deployment.environment, deployment.tenant_code, deployment.environment]
+  )
+  if (!row) return null
+  const payload = await cachedCurrentPolicyPayload({
+    bundleId: row.id,
+    bundleHash: row.bundle_hash,
+    storageHash: row.storage_hash,
+    load: async () => {
+      const full = await queryRow<RowDataPacket & { bundle_payload_json: unknown, storage_hash: string | null }>(
+        `SELECT bundle_payload_json, SHA2(CAST(bundle_payload_json AS CHAR), 256) AS storage_hash
+         FROM policy_bundles WHERE id = ? LIMIT 1`,
+        [row.id]
+      )
+      return full ? { value: parsePolicyBundlePayload(full.bundle_payload_json), storageHash: full.storage_hash } : null
+    }
+  })
+  const rawExpiry = row.expires_at as string | Date | null
+  const expiry = rawExpiry === null
+    ? null
+    : rawExpiry instanceof Date
+      ? rawExpiry.getTime()
+      : Date.parse(/(?:Z|[+-]\d\d:\d\d)$/.test(rawExpiry) ? rawExpiry : `${rawExpiry.replace(' ', 'T')}Z`)
+  return {
+    tenant: row.tenant_code, environment: row.environment, deployment: deployment.deployment_code,
+    bundleVersion: row.bundle_version, policyRevision: Number(row.policy_revision), status: row.status,
+    payload, payloadHash: row.bundle_hash,
+    policyExpiresAt: expiry, tenantStatus: String(row.tenant_status), deploymentStatus: String(row.deployment_status)
+  }
+}
+
+export function formatPolicyBundleSignature(bundle: {
+  signature: string | null
+  signed_by_kid: string | null
+  signed_at?: string | null
+}) {
+  return {
+    signature: bundle.signature,
+    kid: bundle.signed_by_kid,
+    alg: POLICY_BUNDLE_SIGNATURE_ALG,
+    signedAt: bundle.signed_at || null
+  }
+}
+
+function normalizeEtagToken(value: string) {
+  const trimmed = value.trim()
+  const withoutWeakPrefix = trimmed.toLowerCase().startsWith('w/')
+    ? trimmed.slice(2).trim()
+    : trimmed
+
+  return withoutWeakPrefix.replace(/^"|"$/g, '')
+}
+
+export function setPolicyBundleCacheHeaders(event: H3Event, bundle: { bundle_hash: string, bundle_version: string }) {
+  setResponseHeader(event, 'ETag', `"${bundle.bundle_hash}"`)
+  setResponseHeader(event, 'x-policy-bundle-version', bundle.bundle_version)
+}
+
+export function maybeReturnPolicyBundleNotModified(event: H3Event, bundle: { bundle_hash: string, bundle_version: string }) {
+  setPolicyBundleCacheHeaders(event, bundle)
+
+  const ifNoneMatch = getHeader(event, 'if-none-match')
+  if (!ifNoneMatch) {
+    return false
+  }
+
+  const matched = ifNoneMatch
+    .split(',')
+    .map(normalizeEtagToken)
+    .some(value => value === '*' || value === bundle.bundle_hash)
+
+  if (!matched) {
+    return false
+  }
+
+  setResponseStatus(event, 304)
+  return true
+}

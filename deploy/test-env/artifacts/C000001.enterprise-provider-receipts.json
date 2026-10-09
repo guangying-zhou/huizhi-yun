@@ -1,0 +1,273 @@
+{
+  "schemaVersion": "enterprise-provider-receipts.v1",
+  "binding": {
+    "tenant": "C000001",
+    "environment": "test",
+    "runtimeDeployment": "c000001-test-tenant-runtime",
+    "instanceId": "37d8994e-4c12-11ee-afad-8cb2da2e572b",
+    "observations": {
+      "observedAt": "2026-09-14T04:56:46.551Z",
+      "workers": [
+        {
+          "app": "aims",
+          "versionId": "b4b4763b-57ac-4ad8-b4a8-67e042c31ad0",
+          "deploymentId": "019f31c4-76cb-4d93-9b41-4e4b77107c71",
+          "handlers": [
+            "fetch",
+            "scheduled",
+            "email",
+            "queue",
+            "tail",
+            "trace"
+          ],
+          "schedules": {
+            "schedules": []
+          },
+          "services": [
+            {
+              "binding": "HZY_ASSETS_SERVICE",
+              "service": "hzy-test-assets"
+            },
+            {
+              "binding": "HZY_CONSOLE_SERVICE",
+              "service": "hzy-test-console"
+            },
+            {
+              "binding": "HZY_DRAIN_COORDINATOR",
+              "service": "hzy-test-drain-coordinator"
+            },
+            {
+              "binding": "HZY_FINANCE_SERVICE",
+              "service": "hzy-test-finance"
+            }
+          ],
+          "providerUrls": {
+            "HZY_ALTOC_API_URL": "https://hzy-test.huizhi.yun/altoc",
+            "HZY_CODOCS_API_URL": "https://hzy-test.huizhi.yun/codocs"
+          },
+          "drainBoundaryBound": true
+        },
+        {
+          "app": "assets",
+          "versionId": "7f090cc0-b98f-4cec-ab2f-2612591c46ce",
+          "deploymentId": "2eb8f063-9e99-4d53-a4d8-de1286dcb6ff",
+          "handlers": [
+            "fetch",
+            "scheduled",
+            "email",
+            "queue",
+            "tail",
+            "trace"
+          ],
+          "schedules": {
+            "schedules": []
+          },
+          "services": [
+            {
+              "binding": "HZY_AIMS_SERVICE",
+              "service": "hzy-test-aims"
+            },
+            {
+              "binding": "HZY_CONSOLE_SERVICE",
+              "service": "hzy-test-console"
+            },
+            {
+              "binding": "HZY_DRAIN_COORDINATOR",
+              "service": "hzy-test-drain-coordinator"
+            },
+            {
+              "binding": "HZY_FINANCE_SERVICE",
+              "service": "hzy-test-finance"
+            }
+          ],
+          "providerUrls": {
+            "HZY_ALTOC_API_URL": "https://hzy-test.huizhi.yun/altoc",
+            "HZY_CODOCS_API_URL": "https://hzy-test.huizhi.yun/codocs"
+          },
+          "drainBoundaryBound": true
+        }
+      ],
+      "routes": [
+        {
+          "app": "altoc",
+          "status": 503,
+          "explicitDisabled": true
+        },
+        {
+          "app": "codocs",
+          "status": 503,
+          "explicitDisabled": true
+        }
+      ],
+      "runtime": {
+        "tenant": "C000001",
+        "deployment": "c000001-test-tenant-runtime",
+        "bindings": {
+          "console": "wiztek-test-console",
+          "people": "C000001-test-people",
+          "aims": "C000001-test-aims",
+          "assets": "C000001-test-assets",
+          "finance": "C000001-test-finance",
+          "enterprise": "C000001-test-enterprise"
+        },
+        "appEnabled": {
+          "console": true,
+          "directory": true,
+          "people": true,
+          "finance": true,
+          "aims": true,
+          "assets": true
+        }
+      }
+    },
+    "unconfiguredProviders": [
+      "altoc",
+      "codocs"
+    ],
+    "sources": [
+      {
+        "app": "aims",
+        "schema": "hzy_aims_test_local_20260910",
+        "deployment": "C000001-test-aims"
+      },
+      {
+        "app": "assets",
+        "schema": "hzy_assets_test_local_20260910",
+        "deployment": "C000001-test-assets"
+      }
+    ],
+    "providers": [
+      {
+        "app": "finance",
+        "schema": "hzy_finance_test_local_20260910",
+        "deployment": "C000001-test-finance"
+      },
+      {
+        "app": "people",
+        "schema": "hzy_people_test_local_20260910",
+        "deployment": "C000001-test-people"
+      },
+      {
+        "app": "console",
+        "schema": "hzy_console_test_local_20260910",
+        "deployment": "wiztek-test-console"
+      },
+      {
+        "app": "aims",
+        "schema": "hzy_aims_test_local_20260910",
+        "deployment": "C000001-test-aims"
+      },
+      {
+        "app": "assets",
+        "schema": "hzy_assets_test_local_20260910",
+        "deployment": "C000001-test-assets"
+      }
+    ]
+  },
+  "probes": [
+    {
+      "kind": "source",
+      "app": "aims",
+      "schema": "hzy_aims_test_local_20260910",
+      "deployment": "C000001-test-aims",
+      "count": 0,
+      "hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "rows": []
+    },
+    {
+      "kind": "source",
+      "app": "assets",
+      "schema": "hzy_assets_test_local_20260910",
+      "deployment": "C000001-test-assets",
+      "count": 0,
+      "hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "rows": []
+    },
+    {
+      "kind": "receipt",
+      "app": "finance",
+      "schema": "hzy_finance_test_local_20260910",
+      "deployment": "C000001-test-finance",
+      "count": 0,
+      "hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "rows": []
+    },
+    {
+      "kind": "receipt",
+      "app": "people",
+      "schema": "hzy_people_test_local_20260910",
+      "deployment": "C000001-test-people",
+      "count": 0,
+      "hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "rows": []
+    },
+    {
+      "kind": "notification",
+      "app": "console",
+      "schema": "hzy_console_test_local_20260910",
+      "deployment": "wiztek-test-console",
+      "count": 0,
+      "hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "rows": []
+    },
+    {
+      "kind": "receipt",
+      "app": "aims",
+      "schema": "hzy_aims_test_local_20260910",
+      "deployment": "C000001-test-aims",
+      "count": 0,
+      "hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "rows": []
+    },
+    {
+      "kind": "receipt",
+      "app": "assets",
+      "schema": "hzy_assets_test_local_20260910",
+      "deployment": "C000001-test-assets",
+      "count": 0,
+      "hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "rows": []
+    }
+  ],
+  "entries": [
+    {
+      "id": "coverage:unconfigured-provider:altoc",
+      "classification": "not-applicable",
+      "reason": "no-frozen-target-and-observed-path-disabled"
+    },
+    {
+      "id": "coverage:unconfigured-provider:codocs",
+      "classification": "not-applicable",
+      "reason": "no-frozen-target-and-observed-path-disabled"
+    },
+    {
+      "id": "coverage:deployed-worker-versions-and-direct-bindings",
+      "classification": "manual-required",
+      "reason": "registered-artifact-coverage-evidence-required"
+    },
+    {
+      "id": "coverage:pre-wrapper-inflight-history",
+      "classification": "manual-required",
+      "reason": "historical-external-send-outcomes-require-evidence"
+    },
+    {
+      "id": "coverage:runtime-direct-callers",
+      "classification": "automatic",
+      "reason": "actual-runtime-bindings-observed-source-DML-still-rechecked-by-fence"
+    },
+    {
+      "id": "coverage:external-notification-providers",
+      "classification": "manual-required",
+      "reason": "provider-history-not-implied-by-local-delivery-count"
+    },
+    {
+      "id": "coverage:scheduled-consumers-and-other-app-outboxes",
+      "classification": "automatic",
+      "reason": "actual-app-CF-crons-empty-other-callers-retained-in-boundary-coverage"
+    }
+  ],
+  "automaticCount": 2,
+  "manualCount": 3,
+  "blockedCount": 0,
+  "ready": false
+}

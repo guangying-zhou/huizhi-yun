@@ -1,0 +1,4 @@
+# App behavior: same-app Go test plus a tenant-runtime API contract inventory.
+data-runtime/internal/apps/aims/project_cost_summary.go
+data-runtime/internal/apps/aims/project_cost_summary_test.go
+data-runtime/README.md

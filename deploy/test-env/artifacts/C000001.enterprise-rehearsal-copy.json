@@ -1,0 +1,48 @@
+{
+  "kind": "enterprise-shadow-copy-rehearsal-receipt.v1",
+  "completedAt": "2026-09-14T04:34:39.965Z",
+  "mode": "verified-shadow",
+  "applyReviewHash": "6f45f24ffa4c64a4fb8914eea4c76323660d7bdcc1ea05a3dd73a14672817570",
+  "planArtifactSha256": "8d5983a1d4f4eb6325bfe1a61ae64c5b95f66cd1a9818abcf8b6a4b0c57f0b17",
+  "config": {
+    "Tenant": "C000001",
+    "Environment": "test",
+    "RuntimeDeployment": "c000001-test-tenant-runtime",
+    "InstanceID": "37d8994e-4c12-11ee-afad-8cb2da2e572b",
+    "SchemaVersion": "enterprise.v1",
+    "Generation": 1,
+    "SourceAims": "hzy_aims_test_local_20260910",
+    "SourceAssets": "hzy_assets_test_local_20260910",
+    "Target": "hzy_enterprise_rehearsal_20260914"
+  },
+  "result": {
+    "businessTables": 147,
+    "rows": 478,
+    "triggers": 38
+  },
+  "verification": {
+    "targetSchemaExists": true,
+    "targetBaseTables": 150,
+    "migrationLedger": {
+      "reviewHash": "6f45f24ffa4c64a4fb8914eea4c76323660d7bdcc1ea05a3dd73a14672817570",
+      "status": "verified-shadow"
+    },
+    "checkpoints": {
+      "verified": 147
+    },
+    "registry": {
+      "tenant": "C000001",
+      "environment": "test",
+      "runtimeDeployment": "c000001-test-tenant-runtime",
+      "schemaVersion": "enterprise.v1",
+      "generation": 0
+    },
+    "sourceFenceTables": 0,
+    "cliApplyVerified": "source review hash, every target table count/hash, foreign-key integrity, and trigger presence before ledger completion"
+  },
+  "boundaries": {
+    "sourceFenced": false,
+    "registryActivated": false,
+    "routesChanged": false
+  }
+}

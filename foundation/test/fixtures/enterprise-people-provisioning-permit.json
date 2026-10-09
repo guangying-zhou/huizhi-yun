@@ -1,0 +1,46 @@
+{
+  "method": "POST",
+  "target": "/v1/enterprise/people/onboarding-cases:aggregate-status",
+  "body": {
+    "authorization": {
+      "actorUid": "HR-A",
+      "tenant": "C000001",
+      "deployment": "Host",
+      "resource": "employees",
+      "action": "edit",
+      "operation": "onboarding-aggregate-status",
+      "objectId": "7|",
+      "allowed": true,
+      "expiresAt": 2000,
+      "bundleVersion": "v1",
+      "bundleHash": "hash",
+      "policyRevision": 1,
+      "scope": {
+        "access": "dept",
+        "departmentCodes": [
+          "D-A"
+        ]
+      }
+    },
+    "peopleFacts": {
+      "id": "7",
+      "employeeUid": "",
+      "page": 0,
+      "pageSize": 0,
+      "search": "",
+      "payload": {
+        "expectedVersion": 4,
+        "operationKey": "enterprise:people:onboarding:fixed",
+        "confirmation": {
+          "uid": "候选乙",
+          "operationId": "connector-1",
+          "status": "succeeded",
+          "directoryApplied": true,
+          "platformStatus": "pending"
+        }
+      },
+      "sensitiveAllowed": false
+    }
+  },
+  "canonical": "[\"hzy-enterprise-apf-permit.v1\",\"POST\",\"/v1/enterprise/people/onboarding-cases:aggregate-status\",\"HR-A\",\"C000001\",\"Host\",\"employees\",\"edit\",\"onboarding-aggregate-status\",\"7|\",true,2000,\"v1\",\"hash\",1,\"dept\",[\"D-A\"],\"\",\"\",\"\",0,0,0,\"\",[\"7\",\"\",0,0,\"\",[[\"confirmation\",{\"directoryApplied\":true,\"operationId\":\"connector-1\",\"platformStatus\":\"pending\",\"status\":\"succeeded\",\"uid\":\"候选乙\"}],[\"expectedVersion\",4],[\"operationKey\",\"enterprise:people:onboarding:fixed\"]],false]]"
+}

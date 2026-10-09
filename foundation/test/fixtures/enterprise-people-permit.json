@@ -1,0 +1,41 @@
+{
+  "method": "POST",
+  "target": "/v1/enterprise/people/employees:search",
+  "body": {
+    "people": {
+      "id": "",
+      "page": 1,
+      "pageSize": 20,
+      "search": "中文",
+      "payload": {},
+      "costAllowed": true,
+      "costScope": {
+        "access": "dept",
+        "departmentCodes": [
+          "D-A"
+        ]
+      }
+    },
+    "authorization": {
+      "actorUid": "Person",
+      "tenant": "C000001",
+      "deployment": "Host",
+      "resource": "employees",
+      "action": "view",
+      "operation": "employees-search",
+      "objectId": "",
+      "allowed": true,
+      "expiresAt": 123,
+      "bundleVersion": "1",
+      "bundleHash": "hash",
+      "policyRevision": 38,
+      "scope": {
+        "access": "self_dept",
+        "departmentCodes": [
+          "D-A"
+        ]
+      }
+    }
+  },
+  "canonical": "[\"hzy-enterprise-apf-permit.v1\",\"POST\",\"/v1/enterprise/people/employees:search\",\"Person\",\"C000001\",\"Host\",\"employees\",\"view\",\"employees-search\",\"\",true,123,\"1\",\"hash\",38,\"self_dept\",[\"D-A\"],\"\",\"\",\"\",0,0,0,\"\",[\"\",1,20,\"中文\",[],true,\"dept\",[\"D-A\"]]]"
+}

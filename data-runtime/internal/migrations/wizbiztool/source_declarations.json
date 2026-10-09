@@ -1,0 +1,3411 @@
+{
+  "wb_employee": {
+    "primaryKey": [
+      "employee_id"
+    ],
+    "columns": [
+      {
+        "name": "employee_id",
+        "type": "bigint",
+        "nullable": false,
+        "disposition": "identity",
+        "rule": "identity:employee_id",
+        "target": "employee_id",
+        "reason": ""
+      },
+      {
+        "name": "user_id",
+        "type": "bigint",
+        "nullable": true,
+        "disposition": "identity",
+        "rule": "identity:user_id",
+        "target": "user_id",
+        "reason": ""
+      },
+      {
+        "name": "job_number",
+        "type": "bigint",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:no_target_semantics",
+        "target": "",
+        "reason": "no_target_semantics"
+      },
+      {
+        "name": "name",
+        "type": "varchar(30)",
+        "nullable": true,
+        "disposition": "identity",
+        "rule": "identity:name",
+        "target": "name",
+        "reason": ""
+      },
+      {
+        "name": "id_number",
+        "type": "varchar(18)",
+        "nullable": false,
+        "disposition": "ledger_only",
+        "rule": "ledger:no_target_semantics",
+        "target": "",
+        "reason": "no_target_semantics"
+      },
+      {
+        "name": "date_of_birth",
+        "type": "date",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:no_target_semantics",
+        "target": "",
+        "reason": "no_target_semantics"
+      },
+      {
+        "name": "sex",
+        "type": "char(1)",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:no_target_semantics",
+        "target": "",
+        "reason": "no_target_semantics"
+      },
+      {
+        "name": "education",
+        "type": "char(1)",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:no_target_semantics",
+        "target": "",
+        "reason": "no_target_semantics"
+      },
+      {
+        "name": "title",
+        "type": "char(1)",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:no_target_semantics",
+        "target": "",
+        "reason": "no_target_semantics"
+      },
+      {
+        "name": "major",
+        "type": "char(30)",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:no_target_semantics",
+        "target": "",
+        "reason": "no_target_semantics"
+      },
+      {
+        "name": "school",
+        "type": "char(40)",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:no_target_semantics",
+        "target": "",
+        "reason": "no_target_semantics"
+      },
+      {
+        "name": "graduation",
+        "type": "datetime",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:no_target_semantics",
+        "target": "",
+        "reason": "no_target_semantics"
+      },
+      {
+        "name": "archive",
+        "type": "char(1)",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:no_target_semantics",
+        "target": "",
+        "reason": "no_target_semantics"
+      },
+      {
+        "name": "hiredate",
+        "type": "date",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:no_target_semantics",
+        "target": "",
+        "reason": "no_target_semantics"
+      },
+      {
+        "name": "emp_status",
+        "type": "char(1)",
+        "nullable": true,
+        "disposition": "identity",
+        "rule": "identity:emp_status",
+        "target": "emp_status",
+        "reason": ""
+      },
+      {
+        "name": "mobile_number",
+        "type": "varchar(30)",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:no_target_semantics",
+        "target": "",
+        "reason": "no_target_semantics"
+      },
+      {
+        "name": "phone_number",
+        "type": "varchar(30)",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:no_target_semantics",
+        "target": "",
+        "reason": "no_target_semantics"
+      },
+      {
+        "name": "email",
+        "type": "varchar(30)",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:no_target_semantics",
+        "target": "",
+        "reason": "no_target_semantics"
+      },
+      {
+        "name": "home_address",
+        "type": "varchar(255)",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:no_target_semantics",
+        "target": "",
+        "reason": "no_target_semantics"
+      },
+      {
+        "name": "emergency_contact",
+        "type": "varchar(30)",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:no_target_semantics",
+        "target": "",
+        "reason": "no_target_semantics"
+      },
+      {
+        "name": "emergency_number",
+        "type": "varchar(30)",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:no_target_semantics",
+        "target": "",
+        "reason": "no_target_semantics"
+      },
+      {
+        "name": "emergency_number2",
+        "type": "varchar(30)",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:no_target_semantics",
+        "target": "",
+        "reason": "no_target_semantics"
+      },
+      {
+        "name": "qq",
+        "type": "char(30)",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:no_target_semantics",
+        "target": "",
+        "reason": "no_target_semantics"
+      },
+      {
+        "name": "weixin",
+        "type": "char(40)",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:no_target_semantics",
+        "target": "",
+        "reason": "no_target_semantics"
+      },
+      {
+        "name": "ding_company",
+        "type": "varchar(20)",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:no_target_semantics",
+        "target": "",
+        "reason": "no_target_semantics"
+      },
+      {
+        "name": "att_group",
+        "type": "varchar(40)",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:no_target_semantics",
+        "target": "",
+        "reason": "no_target_semantics"
+      },
+      {
+        "name": "ding_id",
+        "type": "varchar(20)",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:no_target_semantics",
+        "target": "",
+        "reason": "no_target_semantics"
+      },
+      {
+        "name": "dept_id",
+        "type": "bigint",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:no_target_semantics",
+        "target": "",
+        "reason": "no_target_semantics"
+      },
+      {
+        "name": "archives_id",
+        "type": "varchar(36)",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:no_target_semantics",
+        "target": "",
+        "reason": "no_target_semantics"
+      },
+      {
+        "name": "operator_id",
+        "type": "bigint",
+        "nullable": false,
+        "disposition": "ledger_only",
+        "rule": "ledger:no_target_semantics",
+        "target": "",
+        "reason": "no_target_semantics"
+      },
+      {
+        "name": "operate_time",
+        "type": "datetime",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:no_target_semantics",
+        "target": "",
+        "reason": "no_target_semantics"
+      }
+    ]
+  },
+  "sys_user": {
+    "primaryKey": [
+      "user_id"
+    ],
+    "columns": [
+      {
+        "name": "user_id",
+        "type": "bigint",
+        "nullable": false,
+        "disposition": "identity",
+        "rule": "identity:user_id",
+        "target": "user_id",
+        "reason": ""
+      },
+      {
+        "name": "dept_id",
+        "type": "bigint",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:no_target_semantics",
+        "target": "",
+        "reason": "no_target_semantics"
+      },
+      {
+        "name": "user_name",
+        "type": "varchar(30)",
+        "nullable": false,
+        "disposition": "ledger_only",
+        "rule": "ledger:no_target_semantics",
+        "target": "",
+        "reason": "no_target_semantics"
+      },
+      {
+        "name": "nick_name",
+        "type": "varchar(30)",
+        "nullable": false,
+        "disposition": "identity",
+        "rule": "identity:nick_name",
+        "target": "nick_name",
+        "reason": ""
+      },
+      {
+        "name": "user_type",
+        "type": "varchar(2)",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:no_target_semantics",
+        "target": "",
+        "reason": "no_target_semantics"
+      },
+      {
+        "name": "email",
+        "type": "varchar(50)",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:no_target_semantics",
+        "target": "",
+        "reason": "no_target_semantics"
+      },
+      {
+        "name": "phonenumber",
+        "type": "varchar(11)",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:no_target_semantics",
+        "target": "",
+        "reason": "no_target_semantics"
+      },
+      {
+        "name": "sex",
+        "type": "char(1)",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:no_target_semantics",
+        "target": "",
+        "reason": "no_target_semantics"
+      },
+      {
+        "name": "avatar",
+        "type": "varchar(100)",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:no_target_semantics",
+        "target": "",
+        "reason": "no_target_semantics"
+      },
+      {
+        "name": "password",
+        "type": "varchar(100)",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:no_target_semantics",
+        "target": "",
+        "reason": "no_target_semantics"
+      },
+      {
+        "name": "status",
+        "type": "char(1)",
+        "nullable": true,
+        "disposition": "identity",
+        "rule": "identity:status",
+        "target": "status",
+        "reason": ""
+      },
+      {
+        "name": "del_flag",
+        "type": "char(1)",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:no_target_semantics",
+        "target": "",
+        "reason": "no_target_semantics"
+      },
+      {
+        "name": "login_ip",
+        "type": "varchar(128)",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:no_target_semantics",
+        "target": "",
+        "reason": "no_target_semantics"
+      },
+      {
+        "name": "login_date",
+        "type": "datetime",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:no_target_semantics",
+        "target": "",
+        "reason": "no_target_semantics"
+      },
+      {
+        "name": "create_by",
+        "type": "varchar(64)",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:no_target_semantics",
+        "target": "",
+        "reason": "no_target_semantics"
+      },
+      {
+        "name": "create_time",
+        "type": "datetime",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:no_target_semantics",
+        "target": "",
+        "reason": "no_target_semantics"
+      },
+      {
+        "name": "update_by",
+        "type": "varchar(64)",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:no_target_semantics",
+        "target": "",
+        "reason": "no_target_semantics"
+      },
+      {
+        "name": "update_time",
+        "type": "datetime",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:no_target_semantics",
+        "target": "",
+        "reason": "no_target_semantics"
+      },
+      {
+        "name": "remark",
+        "type": "varchar(500)",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:no_target_semantics",
+        "target": "",
+        "reason": "no_target_semantics"
+      }
+    ]
+  },
+  "wb_organization": {
+    "primaryKey": [
+      "org_id"
+    ],
+    "columns": [
+      {
+        "name": "org_id",
+        "type": "bigint",
+        "nullable": false,
+        "disposition": "map",
+        "rule": "code",
+        "target": "code",
+        "reason": ""
+      },
+      {
+        "name": "parent_id",
+        "type": "bigint",
+        "nullable": true,
+        "disposition": "map",
+        "rule": "parent_customer_id",
+        "target": "parent_customer_id",
+        "reason": ""
+      },
+      {
+        "name": "ancestors",
+        "type": "varchar(50)",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:derived_cache",
+        "target": "",
+        "reason": "derived_cache"
+      },
+      {
+        "name": "order_num",
+        "type": "int",
+        "nullable": true,
+        "disposition": "map",
+        "rule": "sort_no",
+        "target": "sort_no",
+        "reason": ""
+      },
+      {
+        "name": "org_name",
+        "type": "varchar(255)",
+        "nullable": false,
+        "disposition": "map",
+        "rule": "name",
+        "target": "name",
+        "reason": ""
+      },
+      {
+        "name": "short_name",
+        "type": "varchar(30)",
+        "nullable": true,
+        "disposition": "map",
+        "rule": "short_name",
+        "target": "short_name",
+        "reason": ""
+      },
+      {
+        "name": "org_type",
+        "type": "char(1)",
+        "nullable": true,
+        "disposition": "map",
+        "rule": "family/is_partner",
+        "target": "family/is_partner",
+        "reason": ""
+      },
+      {
+        "name": "employee_id",
+        "type": "bigint",
+        "nullable": false,
+        "disposition": "map",
+        "rule": "owner_uid",
+        "target": "owner_uid",
+        "reason": ""
+      },
+      {
+        "name": "contactman_id",
+        "type": "bigint",
+        "nullable": true,
+        "disposition": "map",
+        "rule": "primary_contact_id",
+        "target": "primary_contact_id",
+        "reason": ""
+      },
+      {
+        "name": "contactman",
+        "type": "varchar(30)",
+        "nullable": true,
+        "disposition": "map",
+        "rule": "contact_name_text",
+        "target": "contact_name_text",
+        "reason": ""
+      },
+      {
+        "name": "telephone",
+        "type": "varchar(20)",
+        "nullable": true,
+        "disposition": "map",
+        "rule": "telephone",
+        "target": "telephone",
+        "reason": ""
+      },
+      {
+        "name": "level",
+        "type": "int",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:no_target_semantics",
+        "target": "",
+        "reason": "no_target_semantics"
+      },
+      {
+        "name": "province",
+        "type": "varchar(20)",
+        "nullable": false,
+        "disposition": "map",
+        "rule": "province",
+        "target": "province",
+        "reason": ""
+      },
+      {
+        "name": "city",
+        "type": "varchar(20)",
+        "nullable": false,
+        "disposition": "map",
+        "rule": "city",
+        "target": "city",
+        "reason": ""
+      },
+      {
+        "name": "web_site",
+        "type": "varchar(255)",
+        "nullable": true,
+        "disposition": "map",
+        "rule": "website",
+        "target": "website",
+        "reason": ""
+      },
+      {
+        "name": "weixin_number",
+        "type": "varchar(255)",
+        "nullable": true,
+        "disposition": "map",
+        "rule": "wechat_official_account",
+        "target": "wechat_official_account",
+        "reason": ""
+      },
+      {
+        "name": "description",
+        "type": "varchar(255)",
+        "nullable": true,
+        "disposition": "map",
+        "rule": "description",
+        "target": "description",
+        "reason": ""
+      },
+      {
+        "name": "org_status",
+        "type": "char(1)",
+        "nullable": true,
+        "disposition": "map",
+        "rule": "status",
+        "target": "status",
+        "reason": ""
+      },
+      {
+        "name": "start_date",
+        "type": "date",
+        "nullable": true,
+        "disposition": "map",
+        "rule": "started_at",
+        "target": "started_at",
+        "reason": ""
+      },
+      {
+        "name": "count_all",
+        "type": "int",
+        "nullable": true,
+        "disposition": "snapshot",
+        "rule": "snapshot:contract_count_subtree",
+        "target": "contract_count_subtree",
+        "reason": ""
+      },
+      {
+        "name": "sum_all",
+        "type": "decimal(12,2)",
+        "nullable": true,
+        "disposition": "snapshot",
+        "rule": "snapshot:contract_amount_subtree",
+        "target": "contract_amount_subtree",
+        "reason": ""
+      },
+      {
+        "name": "count_total",
+        "type": "int",
+        "nullable": true,
+        "disposition": "snapshot",
+        "rule": "snapshot:contract_count_direct",
+        "target": "contract_count_direct",
+        "reason": ""
+      },
+      {
+        "name": "sum_total",
+        "type": "decimal(12,2)",
+        "nullable": true,
+        "disposition": "snapshot",
+        "rule": "snapshot:contract_amount_direct",
+        "target": "contract_amount_direct",
+        "reason": ""
+      },
+      {
+        "name": "count_three",
+        "type": "int",
+        "nullable": true,
+        "disposition": "snapshot",
+        "rule": "snapshot:contract_count_3y",
+        "target": "contract_count_3y",
+        "reason": ""
+      },
+      {
+        "name": "sum_three",
+        "type": "decimal(12,2)",
+        "nullable": true,
+        "disposition": "snapshot",
+        "rule": "snapshot:contract_amount_3y",
+        "target": "contract_amount_3y",
+        "reason": ""
+      },
+      {
+        "name": "count_year",
+        "type": "int",
+        "nullable": true,
+        "disposition": "snapshot",
+        "rule": "snapshot:contract_count_1y",
+        "target": "contract_count_1y",
+        "reason": ""
+      },
+      {
+        "name": "sum_year",
+        "type": "decimal(12,2)",
+        "nullable": true,
+        "disposition": "snapshot",
+        "rule": "snapshot:contract_amount_1y",
+        "target": "contract_amount_1y",
+        "reason": ""
+      },
+      {
+        "name": "count_current_year",
+        "type": "int",
+        "nullable": true,
+        "disposition": "snapshot",
+        "rule": "snapshot:contract_count_ytd",
+        "target": "contract_count_ytd",
+        "reason": ""
+      },
+      {
+        "name": "sum_current_year",
+        "type": "decimal(12,2)",
+        "nullable": true,
+        "disposition": "snapshot",
+        "rule": "snapshot:contract_amount_ytd",
+        "target": "contract_amount_ytd",
+        "reason": ""
+      },
+      {
+        "name": "count_recerivable",
+        "type": "int",
+        "nullable": true,
+        "disposition": "snapshot",
+        "rule": "snapshot:receivable_contract_count",
+        "target": "receivable_contract_count",
+        "reason": ""
+      },
+      {
+        "name": "sum_all_receivable",
+        "type": "decimal(12,2)",
+        "nullable": true,
+        "disposition": "snapshot",
+        "rule": "snapshot:receivable_amount_subtree",
+        "target": "receivable_amount_subtree",
+        "reason": ""
+      },
+      {
+        "name": "sum_receivable",
+        "type": "decimal(12,2)",
+        "nullable": true,
+        "disposition": "snapshot",
+        "rule": "snapshot:receivable_amount_direct",
+        "target": "receivable_amount_direct",
+        "reason": ""
+      },
+      {
+        "name": "archives_id",
+        "type": "varchar(36)",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "operator_id",
+        "type": "bigint",
+        "nullable": false,
+        "disposition": "identity",
+        "rule": "identity:created_by",
+        "target": "created_by",
+        "reason": ""
+      },
+      {
+        "name": "operate_time",
+        "type": "datetime",
+        "nullable": true,
+        "disposition": "map",
+        "rule": "created_at",
+        "target": "created_at",
+        "reason": ""
+      }
+    ]
+  },
+  "wb_contactman": {
+    "primaryKey": [
+      "contactman_id"
+    ],
+    "columns": [
+      {
+        "name": "contactman_id",
+        "type": "bigint",
+        "nullable": false,
+        "disposition": "map",
+        "rule": "code",
+        "target": "code",
+        "reason": ""
+      },
+      {
+        "name": "org_id",
+        "type": "bigint",
+        "nullable": true,
+        "disposition": "map",
+        "rule": "customer_id",
+        "target": "customer_id",
+        "reason": ""
+      },
+      {
+        "name": "cm_name",
+        "type": "varchar(255)",
+        "nullable": false,
+        "disposition": "map",
+        "rule": "name",
+        "target": "name",
+        "reason": ""
+      },
+      {
+        "name": "department",
+        "type": "varchar(50)",
+        "nullable": true,
+        "disposition": "map",
+        "rule": "dept_name",
+        "target": "dept_name",
+        "reason": ""
+      },
+      {
+        "name": "post",
+        "type": "varchar(20)",
+        "nullable": true,
+        "disposition": "map",
+        "rule": "job_title",
+        "target": "job_title",
+        "reason": ""
+      },
+      {
+        "name": "phone",
+        "type": "varchar(255)",
+        "nullable": true,
+        "disposition": "map",
+        "rule": "phone",
+        "target": "phone",
+        "reason": ""
+      },
+      {
+        "name": "mobile",
+        "type": "varchar(255)",
+        "nullable": true,
+        "disposition": "map",
+        "rule": "mobile",
+        "target": "mobile",
+        "reason": ""
+      },
+      {
+        "name": "mobile2",
+        "type": "varchar(255)",
+        "nullable": true,
+        "disposition": "map",
+        "rule": "alternate_mobile",
+        "target": "alternate_mobile",
+        "reason": ""
+      },
+      {
+        "name": "address",
+        "type": "varchar(255)",
+        "nullable": true,
+        "disposition": "map",
+        "rule": "mailing_address",
+        "target": "mailing_address",
+        "reason": ""
+      },
+      {
+        "name": "weixin_number",
+        "type": "varchar(255)",
+        "nullable": true,
+        "disposition": "map",
+        "rule": "wechat",
+        "target": "wechat",
+        "reason": ""
+      },
+      {
+        "name": "stars",
+        "type": "int",
+        "nullable": true,
+        "disposition": "map",
+        "rule": "star_level",
+        "target": "star_level",
+        "reason": ""
+      },
+      {
+        "name": "chief",
+        "type": "char(1)",
+        "nullable": true,
+        "disposition": "map",
+        "rule": "is_key_contact",
+        "target": "is_key_contact",
+        "reason": ""
+      },
+      {
+        "name": "remarks",
+        "type": "varchar(255)",
+        "nullable": true,
+        "disposition": "map",
+        "rule": "remark",
+        "target": "remark",
+        "reason": ""
+      },
+      {
+        "name": "archives_id",
+        "type": "varchar(36)",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "employee_id",
+        "type": "bigint",
+        "nullable": false,
+        "disposition": "identity",
+        "rule": "identity:owner_uid",
+        "target": "owner_uid",
+        "reason": ""
+      },
+      {
+        "name": "operator_id",
+        "type": "bigint",
+        "nullable": false,
+        "disposition": "identity",
+        "rule": "identity:created_by",
+        "target": "created_by",
+        "reason": ""
+      },
+      {
+        "name": "operate_time",
+        "type": "datetime",
+        "nullable": true,
+        "disposition": "map",
+        "rule": "created_at",
+        "target": "created_at",
+        "reason": ""
+      }
+    ]
+  },
+  "wb_bank_account": {
+    "primaryKey": [
+      "ba_id"
+    ],
+    "columns": [
+      {
+        "name": "ba_id",
+        "type": "bigint",
+        "nullable": false,
+        "disposition": "map",
+        "rule": "code",
+        "target": "code",
+        "reason": ""
+      },
+      {
+        "name": "org_id",
+        "type": "bigint",
+        "nullable": false,
+        "disposition": "map",
+        "rule": "legal_entity_code",
+        "target": "legal_entity_code",
+        "reason": ""
+      },
+      {
+        "name": "short_name",
+        "type": "varchar(20)",
+        "nullable": false,
+        "disposition": "map",
+        "rule": "short_name",
+        "target": "short_name",
+        "reason": ""
+      },
+      {
+        "name": "account_name",
+        "type": "varchar(255)",
+        "nullable": false,
+        "disposition": "map",
+        "rule": "account_name",
+        "target": "account_name",
+        "reason": ""
+      },
+      {
+        "name": "account_sn",
+        "type": "bigint",
+        "nullable": true,
+        "disposition": "map",
+        "rule": "sort_no:null-is-zero",
+        "target": "sort_no",
+        "reason": ""
+      },
+      {
+        "name": "account_number",
+        "type": "varchar(30)",
+        "nullable": false,
+        "disposition": "vault",
+        "rule": "vault:account_no_secret_ref",
+        "target": "account_no_secret_ref",
+        "reason": ""
+      },
+      {
+        "name": "bank_code",
+        "type": "varchar(30)",
+        "nullable": true,
+        "disposition": "map",
+        "rule": "bank_branch_code",
+        "target": "bank_branch_code",
+        "reason": ""
+      },
+      {
+        "name": "bank_name",
+        "type": "varchar(255)",
+        "nullable": false,
+        "disposition": "map",
+        "rule": "bank_name",
+        "target": "bank_name",
+        "reason": ""
+      },
+      {
+        "name": "ba_type",
+        "type": "char(1)",
+        "nullable": false,
+        "disposition": "map",
+        "rule": "account_type/account_subtype",
+        "target": "account_type/account_subtype",
+        "reason": ""
+      },
+      {
+        "name": "ba_status",
+        "type": "char(1)",
+        "nullable": false,
+        "disposition": "map",
+        "rule": "status",
+        "target": "status",
+        "reason": ""
+      },
+      {
+        "name": "create_time",
+        "type": "date",
+        "nullable": true,
+        "disposition": "map",
+        "rule": "opened_at",
+        "target": "opened_at",
+        "reason": ""
+      },
+      {
+        "name": "check_date",
+        "type": "date",
+        "nullable": true,
+        "disposition": "map",
+        "rule": "balance-cache-date",
+        "target": "balance-cache-date",
+        "reason": ""
+      },
+      {
+        "name": "balance",
+        "type": "decimal(12,2)",
+        "nullable": true,
+        "disposition": "map",
+        "rule": "balance-cache-amount",
+        "target": "balance-cache-amount",
+        "reason": ""
+      },
+      {
+        "name": "remark",
+        "type": "varchar(255)",
+        "nullable": true,
+        "disposition": "map",
+        "rule": "remark",
+        "target": "remark",
+        "reason": ""
+      },
+      {
+        "name": "operator_id",
+        "type": "bigint",
+        "nullable": false,
+        "disposition": "identity",
+        "rule": "identity:created_by",
+        "target": "created_by",
+        "reason": ""
+      },
+      {
+        "name": "operate_time",
+        "type": "datetime",
+        "nullable": true,
+        "disposition": "map",
+        "rule": "created_at",
+        "target": "created_at",
+        "reason": ""
+      }
+    ]
+  },
+  "wb_account_balance": {
+    "primaryKey": [
+      "ab_id"
+    ],
+    "columns": [
+      {
+        "name": "ab_id",
+        "type": "bigint",
+        "nullable": false,
+        "disposition": "map",
+        "rule": "entry_ref",
+        "target": "entry_ref",
+        "reason": ""
+      },
+      {
+        "name": "ba_id",
+        "type": "bigint",
+        "nullable": false,
+        "disposition": "map",
+        "rule": "bank_account_id",
+        "target": "bank_account_id",
+        "reason": ""
+      },
+      {
+        "name": "check_date",
+        "type": "date",
+        "nullable": false,
+        "disposition": "map",
+        "rule": "balance_date",
+        "target": "balance_date",
+        "reason": ""
+      },
+      {
+        "name": "balance",
+        "type": "decimal(12,2)",
+        "nullable": false,
+        "disposition": "map",
+        "rule": "balance_amount",
+        "target": "balance_amount",
+        "reason": ""
+      },
+      {
+        "name": "remark",
+        "type": "varchar(255)",
+        "nullable": true,
+        "disposition": "map",
+        "rule": "note",
+        "target": "note",
+        "reason": ""
+      },
+      {
+        "name": "operator_id",
+        "type": "bigint",
+        "nullable": false,
+        "disposition": "identity",
+        "rule": "identity:recorded_by",
+        "target": "recorded_by",
+        "reason": ""
+      },
+      {
+        "name": "operate_time",
+        "type": "datetime",
+        "nullable": true,
+        "disposition": "map",
+        "rule": "recorded_at",
+        "target": "recorded_at",
+        "reason": ""
+      }
+    ]
+  },
+  "wb_contract": {
+    "primaryKey": [
+      "contract_id"
+    ],
+    "columns": [
+      {
+        "name": "contract_id",
+        "type": "bigint",
+        "nullable": false,
+        "disposition": "map",
+        "rule": "code",
+        "target": "code",
+        "reason": ""
+      },
+      {
+        "name": "parent_id",
+        "type": "bigint",
+        "nullable": true,
+        "disposition": "map",
+        "rule": "parent_contract_id",
+        "target": "parent_contract_id",
+        "reason": ""
+      },
+      {
+        "name": "contract_code",
+        "type": "varchar(20)",
+        "nullable": false,
+        "disposition": "map",
+        "rule": "contract_no",
+        "target": "contract_no",
+        "reason": ""
+      },
+      {
+        "name": "contract_name",
+        "type": "varchar(255)",
+        "nullable": false,
+        "disposition": "map",
+        "rule": "name",
+        "target": "name",
+        "reason": ""
+      },
+      {
+        "name": "project_id",
+        "type": "bigint",
+        "nullable": false,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "impl_project_id",
+        "type": "bigint",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "company_id",
+        "type": "bigint",
+        "nullable": false,
+        "disposition": "map",
+        "rule": "legal_entity_party",
+        "target": "legal_entity_party",
+        "reason": ""
+      },
+      {
+        "name": "ba_id",
+        "type": "bigint",
+        "nullable": true,
+        "disposition": "map",
+        "rule": "receiving_bank_account_code",
+        "target": "receiving_bank_account_code",
+        "reason": ""
+      },
+      {
+        "name": "customer_id",
+        "type": "bigint",
+        "nullable": false,
+        "disposition": "map",
+        "rule": "customer_id",
+        "target": "customer_id",
+        "reason": ""
+      },
+      {
+        "name": "contactman_id",
+        "type": "bigint",
+        "nullable": true,
+        "disposition": "map",
+        "rule": "contact_id",
+        "target": "contact_id",
+        "reason": ""
+      },
+      {
+        "name": "employee_id",
+        "type": "bigint",
+        "nullable": false,
+        "disposition": "identity",
+        "rule": "identity:owner_uid",
+        "target": "owner_uid",
+        "reason": ""
+      },
+      {
+        "name": "system_id",
+        "type": "bigint",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "contract_type",
+        "type": "char(1)",
+        "nullable": true,
+        "disposition": "map",
+        "rule": "direction/primary_type/contract_category",
+        "target": "direction/primary_type/contract_category",
+        "reason": ""
+      },
+      {
+        "name": "is_third_party",
+        "type": "char(1)",
+        "nullable": false,
+        "disposition": "map",
+        "rule": "is_third_party",
+        "target": "is_third_party",
+        "reason": ""
+      },
+      {
+        "name": "third_party_id",
+        "type": "bigint",
+        "nullable": true,
+        "disposition": "map",
+        "rule": "third_party_customer_id",
+        "target": "third_party_customer_id",
+        "reason": ""
+      },
+      {
+        "name": "total_amount",
+        "type": "decimal(10,2)",
+        "nullable": true,
+        "disposition": "map",
+        "rule": "signed_amount/amount_tax_inclusive",
+        "target": "signed_amount/amount_tax_inclusive",
+        "reason": ""
+      },
+      {
+        "name": "prime_amount",
+        "type": "decimal(10,2)",
+        "nullable": true,
+        "disposition": "map",
+        "rule": "effective_amount",
+        "target": "effective_amount",
+        "reason": ""
+      },
+      {
+        "name": "invoice_amount",
+        "type": "decimal(10,2)",
+        "nullable": true,
+        "disposition": "snapshot",
+        "rule": "snapshot:remaining_uninvoiced_amount",
+        "target": "remaining_uninvoiced_amount",
+        "reason": ""
+      },
+      {
+        "name": "exec_amount",
+        "type": "decimal(10,2)",
+        "nullable": true,
+        "disposition": "snapshot",
+        "rule": "snapshot:remaining_settlement_amount",
+        "target": "remaining_settlement_amount",
+        "reason": ""
+      },
+      {
+        "name": "description",
+        "type": "varchar(255)",
+        "nullable": true,
+        "disposition": "map",
+        "rule": "content_summary",
+        "target": "content_summary",
+        "reason": ""
+      },
+      {
+        "name": "payment",
+        "type": "varchar(255)",
+        "nullable": true,
+        "disposition": "map",
+        "rule": "payment_term_summary",
+        "target": "payment_term_summary",
+        "reason": ""
+      },
+      {
+        "name": "tos",
+        "type": "varchar(255)",
+        "nullable": true,
+        "disposition": "map",
+        "rule": "service_terms",
+        "target": "service_terms",
+        "reason": ""
+      },
+      {
+        "name": "service_period",
+        "type": "int",
+        "nullable": true,
+        "disposition": "map",
+        "rule": "service_period_months",
+        "target": "service_period_months",
+        "reason": ""
+      },
+      {
+        "name": "contract_period",
+        "type": "int",
+        "nullable": true,
+        "disposition": "map",
+        "rule": "contract_period_months",
+        "target": "contract_period_months",
+        "reason": ""
+      },
+      {
+        "name": "contract_status",
+        "type": "char(1)",
+        "nullable": true,
+        "disposition": "map",
+        "rule": "status/axes",
+        "target": "status/axes",
+        "reason": ""
+      },
+      {
+        "name": "sign_date",
+        "type": "datetime",
+        "nullable": true,
+        "disposition": "map",
+        "rule": "sign_date/signed_at",
+        "target": "sign_date/signed_at",
+        "reason": ""
+      },
+      {
+        "name": "due_date",
+        "type": "date",
+        "nullable": true,
+        "disposition": "map",
+        "rule": "end_date",
+        "target": "end_date",
+        "reason": ""
+      },
+      {
+        "name": "archives_id",
+        "type": "varchar(36)",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "operator_id",
+        "type": "bigint",
+        "nullable": false,
+        "disposition": "identity",
+        "rule": "identity:created_by",
+        "target": "created_by",
+        "reason": ""
+      },
+      {
+        "name": "operate_time",
+        "type": "datetime",
+        "nullable": true,
+        "disposition": "map",
+        "rule": "created_at",
+        "target": "created_at",
+        "reason": ""
+      },
+      {
+        "name": "old_id",
+        "type": "bigint",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      }
+    ]
+  },
+  "wb_invoice": {
+    "primaryKey": [
+      "invoice_id"
+    ],
+    "columns": [
+      {
+        "name": "invoice_id",
+        "type": "bigint",
+        "nullable": false,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "invoice_code",
+        "type": "varchar(10)",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "project_id",
+        "type": "bigint",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "contract_id",
+        "type": "bigint",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "company_id",
+        "type": "bigint",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "receiver",
+        "type": "varchar(255)",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "item",
+        "type": "varchar(255)",
+        "nullable": false,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "amount",
+        "type": "decimal(12,2)",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "invoice_date",
+        "type": "datetime",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "remark",
+        "type": "varchar(255)",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "ap_id",
+        "type": "varchar(36)",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "operator_id",
+        "type": "bigint",
+        "nullable": false,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "operate_time",
+        "type": "datetime",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "oldcontract_id",
+        "type": "bigint",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "oldinvoice_id",
+        "type": "bigint",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      }
+    ]
+  },
+  "wb_project_income": {
+    "primaryKey": [
+      "pi_id"
+    ],
+    "columns": [
+      {
+        "name": "pi_id",
+        "type": "bigint",
+        "nullable": false,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "pi_code",
+        "type": "varchar(10)",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "project_id",
+        "type": "bigint",
+        "nullable": false,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "employee_id",
+        "type": "bigint",
+        "nullable": false,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "receipt_date",
+        "type": "date",
+        "nullable": false,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "amount",
+        "type": "decimal(10,2)",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "channel",
+        "type": "varchar(1)",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "ba_id",
+        "type": "bigint",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "income_type",
+        "type": "varchar(2)",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "payer",
+        "type": "varchar(255)",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "matter",
+        "type": "varchar(255)",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "contract_id",
+        "type": "bigint",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "pp_id",
+        "type": "bigint",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "operator_id",
+        "type": "bigint",
+        "nullable": false,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "operate_time",
+        "type": "datetime",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "oldpayment_id",
+        "type": "bigint",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      }
+    ]
+  },
+  "wb_project_payment": {
+    "primaryKey": [
+      "pp_id"
+    ],
+    "columns": [
+      {
+        "name": "pp_id",
+        "type": "bigint",
+        "nullable": false,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "pp_code",
+        "type": "varchar(10)",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "project_id",
+        "type": "bigint",
+        "nullable": false,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "employee_id",
+        "type": "bigint",
+        "nullable": false,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "pay_date",
+        "type": "date",
+        "nullable": false,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "amount",
+        "type": "decimal(10,2)",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "charge",
+        "type": "decimal(10,2)",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "process_code",
+        "type": "varchar(30)",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "channel",
+        "type": "varchar(1)",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "ba_id",
+        "type": "bigint",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "payment_type",
+        "type": "varchar(2)",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "matter",
+        "type": "varchar(255)",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "contract_id",
+        "type": "bigint",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "pi_id",
+        "type": "bigint",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "receiver",
+        "type": "varchar(50)",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "receiver_acc",
+        "type": "varchar(30)",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "receiver_bank",
+        "type": "varchar(100)",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "operator_id",
+        "type": "bigint",
+        "nullable": false,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "operate_time",
+        "type": "datetime",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      }
+    ]
+  },
+  "wb_payment_plan": {
+    "primaryKey": [
+      "pp_id"
+    ],
+    "columns": [
+      {
+        "name": "pp_id",
+        "type": "bigint",
+        "nullable": false,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "org_id",
+        "type": "bigint",
+        "nullable": false,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "planned_date",
+        "type": "date",
+        "nullable": false,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "amount",
+        "type": "decimal(12,0)",
+        "nullable": false,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "matter",
+        "type": "varchar(255)",
+        "nullable": false,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "pay_status",
+        "type": "char(1)",
+        "nullable": false,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "operator_id",
+        "type": "bigint",
+        "nullable": false,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "operate_time",
+        "type": "datetime",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      }
+    ]
+  },
+  "wb_system": {
+    "primaryKey": [
+      "system_id"
+    ],
+    "columns": [
+      {
+        "name": "system_id",
+        "type": "bigint",
+        "nullable": false,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "parent_id",
+        "type": "bigint",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "system_name",
+        "type": "varchar(255)",
+        "nullable": false,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "quantity",
+        "type": "int",
+        "nullable": false,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "description",
+        "type": "varchar(255)",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "org_id",
+        "type": "bigint",
+        "nullable": false,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "contactman_id",
+        "type": "bigint",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "contract_id",
+        "type": "bigint",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "contract_ids",
+        "type": "varchar(255)",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "maint_ids",
+        "type": "varchar(255)",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "start_date",
+        "type": "date",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "first_due_date",
+        "type": "date",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "last_due_date",
+        "type": "date",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "total_amount",
+        "type": "decimal(12,2)",
+        "nullable": false,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "vaild_amount",
+        "type": "decimal(12,2)",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "maint_amount",
+        "type": "decimal(12,2)",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "ratio",
+        "type": "decimal(6,2)",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "object_scale",
+        "type": "bigint",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "main_body_scale",
+        "type": "bigint",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "enterprise_scale",
+        "type": "bigint",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "user_scale",
+        "type": "bigint",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "system_status",
+        "type": "char(1)",
+        "nullable": false,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "archives_id",
+        "type": "char(36)",
+        "nullable": false,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "operator_id",
+        "type": "bigint",
+        "nullable": false,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "operate_time",
+        "type": "datetime",
+        "nullable": false,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      }
+    ]
+  },
+  "wb_project": {
+    "primaryKey": [
+      "project_id"
+    ],
+    "columns": [
+      {
+        "name": "project_id",
+        "type": "bigint",
+        "nullable": false,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "parent_id",
+        "type": "bigint",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "org_id",
+        "type": "bigint",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "dept_id",
+        "type": "bigint",
+        "nullable": false,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "employee_id",
+        "type": "bigint",
+        "nullable": false,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "assistant_id",
+        "type": "bigint",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "assistant_ratio",
+        "type": "int",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "prj_name",
+        "type": "varchar(255)",
+        "nullable": false,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "short_name",
+        "type": "varchar(20)",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "prj_type",
+        "type": "char(2)",
+        "nullable": false,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "prj_code",
+        "type": "varchar(255)",
+        "nullable": false,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "prov_rates",
+        "type": "int",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "solution_id",
+        "type": "bigint",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "product_id",
+        "type": "bigint",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "pm_number",
+        "type": "int",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "budget",
+        "type": "decimal(12,2)",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "contracts",
+        "type": "int",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "amount",
+        "type": "decimal(12,2)",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "incomes",
+        "type": "int",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "income_amount",
+        "type": "decimal(12,2)",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "payments",
+        "type": "int",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "payment_amount",
+        "type": "decimal(12,2)",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "man_hours",
+        "type": "decimal(8,2)",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "hr_cost",
+        "type": "decimal(12,2)",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "year_contracts",
+        "type": "int",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "year_amount",
+        "type": "decimal(12,2)",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "year_contract_incomes",
+        "type": "int",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "year_contract_income",
+        "type": "decimal(12,2)",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "year_other_incomes",
+        "type": "int",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "year_other_income",
+        "type": "decimal(12,2)",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "year_incomes",
+        "type": "int",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "year_income",
+        "type": "decimal(12,2)",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "year_payments",
+        "type": "int",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "year_payment",
+        "type": "decimal(12,2)",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "year_hours",
+        "type": "decimal(8,2)",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "year_cost",
+        "type": "decimal(12,2)",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "year_ratio",
+        "type": "int",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "year_strength",
+        "type": "decimal(8,2)",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "activation",
+        "type": "decimal(14,2)",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "sub_projects",
+        "type": "int",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "stat_date",
+        "type": "date",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "prj_status",
+        "type": "char(1)",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "pmw_balance",
+        "type": "decimal(5,2)",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "amount_balance",
+        "type": "decimal(12,2)",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "income_balance",
+        "type": "decimal(12,2)",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "payment_balance",
+        "type": "decimal(12,2)",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "start_date",
+        "type": "date",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "end_date",
+        "type": "date",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "description",
+        "type": "varchar(255)",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "archives_id",
+        "type": "varchar(36)",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "operator_id",
+        "type": "bigint",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "operate_time",
+        "type": "datetime",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      }
+    ]
+  },
+  "wb_product": {
+    "primaryKey": [
+      "product_id"
+    ],
+    "columns": [
+      {
+        "name": "product_id",
+        "type": "bigint",
+        "nullable": false,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "parent_id",
+        "type": "bigint",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "product_code",
+        "type": "varchar(20)",
+        "nullable": false,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "product_name",
+        "type": "varchar(40)",
+        "nullable": false,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "solution_id",
+        "type": "bigint",
+        "nullable": false,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "dept_id",
+        "type": "bigint",
+        "nullable": false,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "employee_id",
+        "type": "bigint",
+        "nullable": false,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "start_date",
+        "type": "date",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "product_status",
+        "type": "char(1)",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "completeness",
+        "type": "int",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "description",
+        "type": "varchar(255)",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "archives_id",
+        "type": "varchar(36)",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "operator_id",
+        "type": "bigint",
+        "nullable": false,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "operate_time",
+        "type": "datetime",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      }
+    ]
+  },
+  "wb_archives": {
+    "primaryKey": [
+      "archives_id"
+    ],
+    "columns": [
+      {
+        "name": "archives_id",
+        "type": "varchar(36)",
+        "nullable": false,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "archives_code",
+        "type": "varchar(20)",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "archives_type",
+        "type": "varchar(20)",
+        "nullable": false,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "archives_name",
+        "type": "varchar(100)",
+        "nullable": false,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "position",
+        "type": "varchar(100)",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "level",
+        "type": "char(1)",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "start_date",
+        "type": "date",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "end_date",
+        "type": "date",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "description",
+        "type": "varchar(255)",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "archives_status",
+        "type": "char(1)",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "operator_id",
+        "type": "bigint",
+        "nullable": false,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "operate_time",
+        "type": "datetime",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      }
+    ]
+  },
+  "wb_archives_page": {
+    "primaryKey": [
+      "ap_id"
+    ],
+    "columns": [
+      {
+        "name": "ap_id",
+        "type": "varchar(36)",
+        "nullable": false,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "archives_id",
+        "type": "varchar(36)",
+        "nullable": false,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "ap_order",
+        "type": "int",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "ap_type",
+        "type": "varchar(20)",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "ap_name",
+        "type": "varchar(20)",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "ap_url",
+        "type": "varchar(255)",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "submit_date",
+        "type": "datetime",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "description",
+        "type": "varchar(255)",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "ap_status",
+        "type": "char(1)",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "operator_id",
+        "type": "bigint",
+        "nullable": false,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "operate_time",
+        "type": "datetime",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      }
+    ]
+  },
+  "wb_archives_list": {
+    "primaryKey": [
+      "al_id"
+    ],
+    "columns": [
+      {
+        "name": "al_id",
+        "type": "bigint",
+        "nullable": false,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "archives_type",
+        "type": "varchar(20)",
+        "nullable": false,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "al_order",
+        "type": "int",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "al_name",
+        "type": "varchar(20)",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      }
+    ]
+  },
+  "wb_organization_info": {
+    "primaryKey": [
+      "org_info_id"
+    ],
+    "columns": [
+      {
+        "name": "org_info_id",
+        "type": "bigint",
+        "nullable": false,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "org_id",
+        "type": "bigint",
+        "nullable": false,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "up_org_id",
+        "type": "bigint",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "name",
+        "type": "varchar(255)",
+        "nullable": false,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "short_name",
+        "type": "varchar(30)",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "type",
+        "type": "char(1)",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "web_site",
+        "type": "varchar(255)",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "weixin_number",
+        "type": "varchar(255)",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "description",
+        "type": "varchar(255)",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "archives_id",
+        "type": "bigint",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "employee_id",
+        "type": "bigint",
+        "nullable": false,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "operator_id",
+        "type": "bigint",
+        "nullable": false,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "operate_time",
+        "type": "datetime",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "change_time",
+        "type": "datetime",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "change_note",
+        "type": "varchar(255)",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      }
+    ]
+  },
+  "wb_contactman_info": {
+    "primaryKey": [
+      "contactman_info_id"
+    ],
+    "columns": [
+      {
+        "name": "contactman_info_id",
+        "type": "bigint",
+        "nullable": false,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "contactman_id",
+        "type": "bigint",
+        "nullable": false,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "org_id",
+        "type": "bigint",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "cm_name",
+        "type": "varchar(255)",
+        "nullable": false,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "post",
+        "type": "varchar(20)",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "phone",
+        "type": "varchar(255)",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "mobile",
+        "type": "varchar(255)",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "mobile2",
+        "type": "varchar(255)",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "weixin_number",
+        "type": "varchar(255)",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "stars",
+        "type": "char(1)",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "description",
+        "type": "varchar(255)",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "archives_id",
+        "type": "bigint",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "employee_id",
+        "type": "bigint",
+        "nullable": false,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "operator_id",
+        "type": "bigint",
+        "nullable": false,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "operate_time",
+        "type": "datetime",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "change_time",
+        "type": "datetime",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      },
+      {
+        "name": "change_note",
+        "type": "varchar(255)",
+        "nullable": true,
+        "disposition": "ledger_only",
+        "rule": "ledger:phase2_family",
+        "target": "",
+        "reason": "phase2_family"
+      }
+    ]
+  }
+}

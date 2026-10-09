@@ -1,0 +1,22 @@
+{
+  "method": "POST",
+  "target": "/v1/enterprise/aims/time-entry-reviews:submit",
+  "actor": "U中",
+  "tenant": "T1",
+  "deployment": "enterprise-test",
+  "projectId": "12",
+  "payload": {
+    "action": "return",
+    "entries": [
+      {
+        "id": 7,
+        "rowVersion": 2
+      }
+    ],
+    "reason": "修正 工时"
+  },
+  "key": "review-key",
+  "token": "test-service-token",
+  "canonical": "[\"hzy-enterprise-timesheet-review-write.v1\",\"POST\",\"/v1/enterprise/aims/time-entry-reviews:submit\",\"U中\",\"T1\",\"enterprise-test\",\"12\",\"return\",[[7,2]],\"修正\\u2028工时\",\"review-key\"]",
+  "signature": "le75tICjWnVZO0H-stHg6BSnvAw-LcXsmlwmGXOI7G4"
+}

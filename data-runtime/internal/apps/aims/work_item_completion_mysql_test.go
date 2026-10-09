@@ -1,0 +1,855 @@
+package aims
+
+import (
+	"context"
+	"database/sql"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"github.com/huizhi-yun/data-runtime/internal/projectscope"
+	"net/url"
+	"sync"
+	"testing"
+	"time"
+
+	"github.com/huizhi-yun/data-runtime/internal/httperror"
+)
+
+func testEnterpriseWorkItemCompletionMySQL(t *testing.T, ctx context.Context, db *sql.DB, a *Adapter, id EnterpriseProjectUpdateIdentity) {
+	exec := func(q string, args ...any) {
+		t.Helper()
+		if _, err := db.ExecContext(ctx, q, args...); err != nil {
+			t.Fatal(err)
+		}
+	}
+	exec("INSERT INTO aims_projects(id,project_code,name,short_name,category,leader_uid,lifecycle_status,created_by) VALUES(800,'COMP','Completion','CMP','routine','U1','active','U1')")
+	exec("INSERT INTO aims_project_members(project_id,uid,role,status) VALUES(800,'U1','manager','active'),(800,'U2','member','active')")
+	seed := func(n int) {
+		t.Helper()
+		exec("INSERT INTO work_items(id,project_id,item_number,item_key,tier,type,title,status) VALUES(?,800,? ,?,'target','task','Complete target','in_progress')", n, n, fmt.Sprint("COMP-", n))
+		exec("INSERT INTO work_items(id,project_id,item_number,item_key,tier,type,title,status,parent_id) VALUES(?,800,?,?,'matter','task','Child','completed',?)", n+1, n+1, fmt.Sprint("COMP-", n+1), n)
+	}
+	version := func(n int) string {
+		t.Helper()
+		_, v, err := a.EnterpriseWorkItemEditableSnapshot(ctx, fmt.Sprint(n))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return v
+	}
+	count := func(q string, args ...any) int {
+		t.Helper()
+		var n int
+		if err := db.QueryRowContext(ctx, q, args...).Scan(&n); err != nil {
+			t.Fatal(err)
+		}
+		return n
+	}
+	id.Personnel = nil
+	seed(8000)
+	input := map[string]any{"expectedVersion": version(8000)}
+	for _, mutate := range []func(*EnterpriseProjectUpdateIdentity){func(v *EnterpriseProjectUpdateIdentity) { v.Tenant = "T2" }, func(v *EnterpriseProjectUpdateIdentity) { v.SourceDeployment = "other-host" }, func(v *EnterpriseProjectUpdateIdentity) { v.TargetDeployment = "other-runtime" }, func(v *EnterpriseProjectUpdateIdentity) { v.ActorUID = "U2" }} {
+		bad := id
+		mutate(&bad)
+		bad.IdempotencyKey = "completion-denied"
+		if _, err := a.RequestEnterpriseWorkItemCompletion(ctx, bad, "800", "8000", input); err == nil {
+			t.Fatal("cross-bound or nonleader completion accepted")
+		}
+	}
+	if _, err := a.RequestEnterpriseWorkItemCompletion(ctx, id, "2", "8000", input); err == nil {
+		t.Fatal("cross-project completion accepted")
+	}
+	writer := a.enterpriseWrites
+	a.enterpriseWrites = nil
+	if _, err := a.RequestEnterpriseWorkItemCompletion(ctx, id, "800", "8000", input); err == nil {
+		t.Fatal("missing writer accepted")
+	}
+	a.enterpriseWrites = writer
+	exec("UPDATE enterprise_schema_registry SET generation=2 WHERE id=1")
+	if _, err := a.EnterpriseWorkItemCompletionState(ctx, "8000", "U1"); err == nil {
+		t.Fatal("stale generation read completion state")
+	}
+	if _, err := a.RequestEnterpriseWorkItemCompletion(ctx, id, "800", "8000", input); err == nil {
+		t.Fatal("stale generation accepted")
+	}
+	exec("UPDATE enterprise_schema_registry SET generation=1 WHERE id=1")
+	if count("SELECT COUNT(*) FROM work_item_completion_requests") != 0 {
+		t.Fatal("denied completion leaked request")
+	}
+	id.IdempotencyKey = "completion-first"
+	first, err := a.RequestEnterpriseWorkItemCompletion(ctx, id, "800", "8000", input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Scope must be rechecked before replaying an existing successful receipt.
+	for _, projection := range []projectscope.Projection{
+		{Version: 1, Masks: []int{0}},
+		{Version: 1, ProjectCodes: []string{"OTHER"}, Masks: []int{0, 65535}},
+	} {
+		denied := id
+		denied.CommandScope = &EnterpriseProjectCommandScope{Projection: projection, ExpiresAt: time.Now().Add(15 * time.Second).UnixMilli()}
+		if _, err := a.RequestEnterpriseWorkItemCompletion(ctx, denied, "800", "8000", input); err == nil {
+			t.Fatal("revoked/outside scope replay accepted")
+		}
+	}
+	id.CommandScope = &EnterpriseProjectCommandScope{Projection: projectscope.Projection{Version: 1, Masks: []int{65535}}, ExpiresAt: time.Now().Add(15 * time.Second).UnixMilli()}
+	exec("UPDATE aims_projects SET leader_uid='U3' WHERE id=800")
+	if _, err := a.RequestEnterpriseWorkItemCompletion(ctx, id, "800", "8000", input); err == nil {
+		t.Fatal("former leader completion replay accepted")
+	}
+	exec("UPDATE aims_projects SET leader_uid='U1' WHERE id=800")
+	replay, err := a.RequestEnterpriseWorkItemCompletion(ctx, id, "800", "8000", input)
+	if err != nil || first["receiptId"] != replay["receiptId"] {
+		t.Fatal("response-loss replay failed", err)
+	}
+	if _, err = a.RequestEnterpriseWorkItemCompletion(ctx, id, "800", "8000", map[string]any{"expectedVersion": "a"}); err == nil {
+		t.Fatal("same key changed input accepted")
+	}
+	if count("SELECT COUNT(*) FROM work_item_completion_requests WHERE work_item_id=8000") != 1 || count("SELECT COUNT(*) FROM integration_operation WHERE operation_code=?", workItemCompletionWorkflowOperation) != 1 {
+		t.Fatal("completion replay duplicated request or operation")
+	}
+	childVersion := version(8001)
+	editID := id
+	editID.IdempotencyKey = "completion-locked-edit"
+	if _, err = a.WriteEnterpriseWorkItem(ctx, editID, "800", "8001", "edit", map[string]any{"expectedVersion": childVersion, "title": "Changed child"}); err == nil {
+		t.Fatal("frozen child editable during review")
+	}
+	var requestID int
+	var hash string
+	var commandJSON []byte
+	if err = db.QueryRowContext(ctx, "SELECT id,snapshot_sha256 FROM work_item_completion_requests WHERE work_item_id=8000").Scan(&requestID, &hash); err != nil {
+		t.Fatal(err)
+	}
+	if err = db.QueryRowContext(ctx, "SELECT command_json FROM integration_operation WHERE operation_code=?", workItemCompletionWorkflowOperation).Scan(&commandJSON); err != nil {
+		t.Fatal(err)
+	}
+	var command map[string]any
+	if json.Unmarshal(commandJSON, &command) != nil || !validWorkItemCompletionWorkflowCommand(command) {
+		t.Fatal("frozen command invalid")
+	}
+	callbackBody := func(status string) map[string]any {
+		b := enterpriseCompletionStatusBody(EnterpriseProjectCreateIdentity{Tenant: id.Tenant, TargetDeployment: id.TargetDeployment, ActorUID: id.ActorUID, RequestID: "callback"}, "")
+		b["event"] = "flow_completed"
+		b["instance_id"] = 71
+		b["instance_no"] = "WF-71"
+		b["app_code"] = "aims"
+		b["resource_code"] = "tasks"
+		b["action_code"] = "complete"
+		b["biz_id"] = "8000"
+		b["status"] = status
+		b["initiator_uid"] = "U1"
+		b["approval_actor_uids"] = []string{"U9"}
+		b["non_self_approval_actor_uids"] = []string{"U9"}
+		b["approval_operator_uid"] = "U9"
+		b["idempotencyKey"] = fmt.Sprintf("workflow:callback:71:flow_completed:%s", status)
+		b["form_data"] = map[string]any{"completionRequestId": requestID, "projectId": 800, "workItemId": 8000, "snapshotSha256": hash}
+		return b
+	}
+	for _, mutate := range []func(map[string]any){func(b map[string]any) { b["approval_actor_uids"] = nil }, func(b map[string]any) { b["non_self_approval_actor_uids"] = []string{"U1"} }, func(b map[string]any) { b["approval_operator_uid"] = "U1" }, func(b map[string]any) { b["idempotencyKey"] = "caller-key" }} {
+		b := callbackBody("approved")
+		mutate(b)
+		if _, err := VerifiedWorkItemCompletionCallbackFromTrustedRuntime(url.Values{"workflow_callback_verified": {"1"}}, b); err == nil {
+			t.Fatal("unverified approval evidence accepted")
+		}
+	}
+	callback, err := VerifiedWorkItemCompletionCallbackFromTrustedRuntime(url.Values{"workflow_callback_verified": {"1"}}, callbackBody("approved"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	bad := callback
+	bad.projectID = 2
+	if _, err = a.ApplyWorkItemCompletionCallback(ctx, bad); err == nil {
+		t.Fatal("wrong project callback accepted")
+	}
+	bad = callback
+	bad.source.TenantCode = "T2"
+	if _, err = a.ApplyWorkItemCompletionCallback(ctx, bad); err == nil {
+		t.Fatal("wrong tenant callback accepted")
+	}
+	if _, err = a.ApplyWorkItemCompletionCallback(ctx, callback); err != nil {
+		t.Fatal("callback before ACK", err)
+	}
+	if result, err := a.ApplyWorkItemCompletionCallback(ctx, callback); err != nil || result["alreadyApplied"] != true {
+		t.Fatal("callback replay", result, err)
+	}
+	tx, _, err := a.beginBoundEnterpriseTransaction(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = completeWorkItemCompletionWorkflowTx(ctx, tx, command, map[string]any{"workflowInstanceId": 71, "workflowInstanceNo": "WF-71", "targetReceiptId": "receipt-71"}); err != nil {
+		tx.Rollback()
+		t.Fatal(err)
+	}
+	if err = tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+	if count("SELECT COUNT(*) FROM work_item_completion_requests WHERE id=? AND status='approved' AND target_receipt_id='receipt-71'", requestID) != 1 {
+		t.Fatal("late ACK reopened approved request")
+	}
+	tx, _, err = a.beginBoundEnterpriseTransaction(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = completeWorkItemCompletionWorkflowTx(ctx, tx, command, map[string]any{"workflowInstanceId": 72, "workflowInstanceNo": "WF-72"})
+	tx.Rollback()
+	if err == nil {
+		t.Fatal("mismatched ACK rebound request")
+	}
+	if count("SELECT COUNT(*) FROM project_activity_logs WHERE project_id=800 AND action='completion_result' AND actor_uid='U9'") != 1 {
+		t.Fatal("approval audit actor or replay invalid")
+	}
+	seed(8010)
+	same := version(8010)
+	var wg sync.WaitGroup
+	outcomes := make(chan error, 2)
+	for i := 0; i < 2; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			cmdID := id
+			cmdID.IdempotencyKey = fmt.Sprint("completion-concurrent-", i)
+			_, err := a.RequestEnterpriseWorkItemCompletion(ctx, cmdID, "800", "8010", map[string]any{"expectedVersion": same})
+			outcomes <- err
+		}(i)
+	}
+	wg.Wait()
+	close(outcomes)
+	success := 0
+	for err := range outcomes {
+		if err == nil {
+			success++
+		}
+	}
+	if success != 1 || count("SELECT COUNT(*) FROM work_item_completion_requests WHERE work_item_id=8010") != 1 {
+		t.Fatal("concurrent completion duplicated")
+	}
+	var recoveryKey string
+	var frozenHash string
+	var frozenJSON []byte
+	if err = db.QueryRowContext(ctx, "SELECT o.operation_key,o.command_sha256,o.command_json FROM integration_operation o JOIN work_item_completion_requests r ON r.operation_key=o.operation_key WHERE r.work_item_id=8010").Scan(&recoveryKey, &frozenHash, &frozenJSON); err != nil {
+		t.Fatal(err)
+	}
+	exec("UPDATE integration_operation SET status='failed_permanent',version_no=2,last_error_code='workflow_route_not_found' WHERE operation_key=?", recoveryKey)
+	state, err := a.EnterpriseWorkItemCompletionState(ctx, "8010", "U1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	stateRequest, ok := state["request"].(map[string]any)
+	if !ok || state["canReplay"] != true || state["canRequest"] != false || aimsMapText(stateRequest, "status") != "queued" || aimsMapText(stateRequest, "operation_status") != "failed_permanent" || serviceBodyInt(stateRequest, "operation_version") != 2 {
+		t.Fatal("completion snapshot mixed request/queue/recovery versions", state)
+	}
+	recovery := map[string]any{"expectedOperationVersion": 2, "reason": "已修复审批配置"}
+	recoverID := id
+	recoverID.IdempotencyKey = "completion-recovery"
+	for _, change := range []func(*EnterpriseProjectUpdateIdentity){func(v *EnterpriseProjectUpdateIdentity) { v.ActorUID = "U2" }, func(v *EnterpriseProjectUpdateIdentity) { v.Tenant = "T2" }, func(v *EnterpriseProjectUpdateIdentity) { v.SourceDeployment = "other-host" }, func(v *EnterpriseProjectUpdateIdentity) { v.TargetDeployment = "other-runtime" }} {
+		bad := recoverID
+		change(&bad)
+		if _, err = a.ReplayEnterpriseWorkItemCompletion(ctx, bad, "800", "8010", recovery); err == nil {
+			t.Fatal("cross-bound or nonmanager recovery accepted")
+		}
+	}
+	if _, err = a.ReplayEnterpriseWorkItemCompletion(ctx, recoverID, "2", "8010", recovery); err == nil {
+		t.Fatal("cross-project recovery accepted")
+	}
+	if _, err = a.ReplayEnterpriseWorkItemCompletion(ctx, recoverID, "800", "8010", map[string]any{"expectedOperationVersion": 1, "reason": "已修复审批配置"}); err == nil {
+		t.Fatal("stale operation version accepted")
+	}
+	exec("UPDATE enterprise_schema_registry SET generation=2 WHERE id=1")
+	if _, err := a.EnterpriseWorkItemCompletionState(ctx, "8010", "U1"); err == nil {
+		t.Fatal("recovery state ignored stale reader generation")
+	}
+	if _, err = a.ReplayEnterpriseWorkItemCompletion(ctx, recoverID, "800", "8010", recovery); err == nil {
+		t.Fatal("stale writer recovered operation")
+	}
+	exec("UPDATE enterprise_schema_registry SET generation=1 WHERE id=1")
+	exec("RENAME TABLE project_activity_logs TO recovery_hidden_audit")
+	_, err = a.ReplayEnterpriseWorkItemCompletion(ctx, recoverID, "800", "8010", recovery)
+	exec("RENAME TABLE recovery_hidden_audit TO project_activity_logs")
+	if err == nil || count("SELECT COUNT(*) FROM integration_operation WHERE operation_key=? AND status='failed_permanent' AND version_no=2", recoveryKey) != 1 || count("SELECT COUNT(*) FROM service_command_receipt WHERE idempotency_key='completion-recovery'") != 0 {
+		t.Fatal("recovery audit failure leaked operation or receipt", err)
+	}
+	recovered, err := a.ReplayEnterpriseWorkItemCompletion(ctx, recoverID, "800", "8010", recovery)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, scope := range []*EnterpriseProjectCommandScope{
+		{Projection: projectscope.Projection{Version: 1, Masks: []int{0}}, ExpiresAt: time.Now().Add(15 * time.Second).UnixMilli()},
+		{Projection: projectscope.Projection{Version: 1, Masks: []int{65535}}, ExpiresAt: time.Now().Add(-time.Second).UnixMilli()},
+	} {
+		denied := recoverID
+		denied.CommandScope = scope
+		if _, err := a.ReplayEnterpriseWorkItemCompletion(ctx, denied, "800", "8010", recovery); err == nil {
+			t.Fatal("revoked/expired recovery replay accepted")
+		}
+	}
+	recoveryReplay, err := a.ReplayEnterpriseWorkItemCompletion(ctx, recoverID, "800", "8010", recovery)
+	if err != nil || recoveryReplay["receiptId"] != recovered["receiptId"] {
+		t.Fatal("recovery response-loss replay", err)
+	}
+	if _, err = a.ReplayEnterpriseWorkItemCompletion(ctx, recoverID, "800", "8010", map[string]any{"expectedOperationVersion": 2, "reason": "另一个恢复理由"}); err == nil {
+		t.Fatal("same recovery key changed payload accepted")
+	}
+	if count("SELECT COUNT(*) FROM integration_operation WHERE operation_key=? AND status='pending' AND version_no=3 AND command_sha256=? AND command_json=CAST(? AS JSON)", recoveryKey, frozenHash, frozenJSON) != 1 {
+		t.Fatal("recovery rewrote frozen identity/command")
+	}
+	if count("SELECT COUNT(*) FROM project_activity_logs WHERE project_id=800 AND action='completion_replay'") != 1 {
+		t.Fatal("recovery replay duplicated audit")
+	}
+	recoverID.IdempotencyKey = "completion-recovery-pending"
+	if _, err = a.ReplayEnterpriseWorkItemCompletion(ctx, recoverID, "800", "8010", map[string]any{"expectedOperationVersion": 3, "reason": "已修复审批配置"}); err == nil {
+		t.Fatal("pending operation recovered again")
+	}
+	seed(8050)
+	exec("INSERT INTO work_item_service_ext(work_item_id,project_id,source_ticket_code) VALUES(8050,800,'ST-WITHDRAW')")
+	withdrawID := id
+	withdrawID.IdempotencyKey = "completion-withdraw"
+	if _, err = a.RequestEnterpriseWorkItemCompletion(ctx, withdrawID, "800", "8050", map[string]any{"expectedVersion": version(8050)}); err != nil {
+		t.Fatal(err)
+	}
+	var withdrawRequest int
+	var withdrawHash string
+	if err = db.QueryRowContext(ctx, "SELECT id,snapshot_sha256 FROM work_item_completion_requests WHERE work_item_id=8050").Scan(&withdrawRequest, &withdrawHash); err != nil {
+		t.Fatal(err)
+	}
+	withdrawBody := callbackBody("cancelled")
+	withdrawBody["instance_id"] = 91
+	withdrawBody["instance_no"] = "WF91"
+	withdrawBody["biz_id"] = "8050"
+	withdrawBody["idempotencyKey"] = "workflow:callback:91:flow_completed:cancelled"
+	withdrawBody["form_data"] = map[string]any{"completionRequestId": withdrawRequest, "projectId": 800, "workItemId": 8050, "snapshotSha256": withdrawHash}
+	delete(withdrawBody, "approval_actor_uids")
+	delete(withdrawBody, "non_self_approval_actor_uids")
+	delete(withdrawBody, "approval_operator_uid")
+	withdrawBody["cancellation_actor_uid"] = "OTHER"
+	if _, err = VerifiedWorkItemCompletionCallbackFromTrustedRuntime(url.Values{"workflow_callback_verified": {"1"}}, withdrawBody); err == nil {
+		t.Fatal("noninitiator withdrawal callback accepted")
+	}
+	withdrawBody["cancellation_actor_uid"] = "U1"
+	withdrawCallback, err := VerifiedWorkItemCompletionCallbackFromTrustedRuntime(url.Values{"workflow_callback_verified": {"1"}}, withdrawBody)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = a.ApplyWorkItemCompletionCallback(ctx, withdrawCallback); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = a.ApplyWorkItemCompletionCallback(ctx, withdrawCallback); err != nil {
+		t.Fatal(err)
+	}
+	if count("SELECT COUNT(*) FROM work_item_completion_requests WHERE id=? AND status='cancelled' AND active_work_item_id IS NULL", withdrawRequest) != 1 || count("SELECT COUNT(*) FROM work_items WHERE id=8050 AND status='in_progress'") != 1 || count("SELECT COUNT(*) FROM work_item_service_ext WHERE work_item_id=8050 AND delivery_generation=2 AND last_delivery_status='processing'") != 1 {
+		t.Fatal("withdraw did not unlock original state or preserve processing outbox")
+	}
+	withdrawID.IdempotencyKey = "completion-after-withdraw"
+	if _, err = a.RequestEnterpriseWorkItemCompletion(ctx, withdrawID, "800", "8050", map[string]any{"expectedVersion": version(8050)}); err != nil {
+		t.Fatal("withdraw left target permanently locked", err)
+	}
+	if _, err = a.ApplyWorkItemCompletionCallback(ctx, withdrawCallback); err != nil {
+		t.Fatal("old cancellation replay", err)
+	}
+	if count("SELECT COUNT(*) FROM work_items WHERE id=8050 AND status='in_review'") != 1 {
+		t.Fatal("old cancellation changed new review")
+	}
+	seed(8030)
+	exec("INSERT INTO work_item_service_ext(work_item_id,project_id,source_ticket_code) VALUES(8030,800,'ST-COMP')")
+	serviceID := id
+	serviceID.IdempotencyKey = "completion-service"
+	if _, err := a.RequestEnterpriseWorkItemCompletion(ctx, serviceID, "800", "8030", map[string]any{"expectedVersion": version(8030)}); err != nil {
+		t.Fatal(err)
+	}
+	if count("SELECT COUNT(*) FROM integration_operation WHERE operation_code=? AND JSON_UNQUOTE(JSON_EXTRACT(command_json,'$.ticketCode'))='ST-COMP' AND JSON_UNQUOTE(JSON_EXTRACT(command_json,'$.deliveryStatus'))='resolved'", serviceTicketDeliveryOperationCode) != 1 {
+		t.Fatal("review did not atomically freeze original resolved ticket result")
+	}
+	var serviceRequest int
+	var serviceHash string
+	if err = db.QueryRowContext(ctx, "SELECT id,snapshot_sha256 FROM work_item_completion_requests WHERE work_item_id=8030").Scan(&serviceRequest, &serviceHash); err != nil {
+		t.Fatal(err)
+	}
+	serviceBody := callbackBody("approved")
+	serviceBody["instance_id"] = 81
+	serviceBody["instance_no"] = "WF81"
+	serviceBody["biz_id"] = "8030"
+	serviceBody["idempotencyKey"] = "workflow:callback:81:flow_completed:approved"
+	serviceBody["form_data"] = map[string]any{"completionRequestId": serviceRequest, "projectId": 800, "workItemId": 8030, "snapshotSha256": serviceHash}
+	serviceCallback, err := VerifiedWorkItemCompletionCallbackFromTrustedRuntime(url.Values{"workflow_callback_verified": {"1"}}, serviceBody)
+	if err != nil {
+		t.Fatal(err)
+	}
+	exec("RENAME TABLE project_activity_logs TO completion_callback_hidden_audit")
+	_, err = a.ApplyWorkItemCompletionCallback(ctx, serviceCallback)
+	exec("RENAME TABLE completion_callback_hidden_audit TO project_activity_logs")
+	if err == nil || count("SELECT COUNT(*) FROM work_items WHERE id=8030 AND status='in_review'") != 1 || count("SELECT COUNT(*) FROM work_item_service_ext WHERE work_item_id=8030 AND delivery_generation=1") != 1 {
+		t.Fatal("callback audit failure leaked status or ticket generation", err)
+	}
+	if _, err = a.ApplyWorkItemCompletionCallback(ctx, serviceCallback); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = a.ApplyWorkItemCompletionCallback(ctx, serviceCallback); err != nil {
+		t.Fatal(err)
+	}
+	if count("SELECT COUNT(*) FROM integration_operation WHERE operation_code=? AND JSON_UNQUOTE(JSON_EXTRACT(command_json,'$.ticketCode'))='ST-COMP'", serviceTicketDeliveryOperationCode) != 2 || count("SELECT COUNT(*) FROM work_item_service_ext WHERE work_item_id=8030 AND delivery_generation=2 AND last_delivery_status='closed'") != 1 {
+		t.Fatal("approved callback/replay duplicated or missed original closed ticket result")
+	}
+	seed(8040)
+	outboxBefore := version(8040)
+	exec("CREATE TRIGGER completion_outbox_fail BEFORE INSERT ON integration_operation FOR EACH ROW SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='isolated outbox failure'")
+	failedOutbox := id
+	failedOutbox.IdempotencyKey = "completion-outbox-failure"
+	_, err = a.RequestEnterpriseWorkItemCompletion(ctx, failedOutbox, "800", "8040", map[string]any{"expectedVersion": outboxBefore})
+	exec("DROP TRIGGER completion_outbox_fail")
+	if err == nil || version(8040) != outboxBefore || count("SELECT COUNT(*) FROM work_item_completion_requests WHERE work_item_id=8040") != 0 || count("SELECT COUNT(*) FROM service_command_receipt WHERE idempotency_key='completion-outbox-failure'") != 0 {
+		t.Fatal("outbox failure leaked source mutation/receipt", err)
+	}
+	seed(8020)
+	before := version(8020)
+	exec("RENAME TABLE project_activity_logs TO completion_hidden_audit")
+	failedID := id
+	failedID.IdempotencyKey = "completion-audit-failure"
+	_, err = a.RequestEnterpriseWorkItemCompletion(ctx, failedID, "800", "8020", map[string]any{"expectedVersion": before})
+	exec("RENAME TABLE completion_hidden_audit TO project_activity_logs")
+	if err == nil || version(8020) != before || count("SELECT COUNT(*) FROM work_item_completion_requests WHERE work_item_id=8020") != 0 || count("SELECT COUNT(*) FROM service_command_receipt WHERE idempotency_key='completion-audit-failure'") != 0 {
+		t.Fatal("audit failure leaked status request outbox or receipt", err)
+	}
+	// The matter branch uses the same owning receipt/outbox and callback table,
+	// while preserving every existing target v1 command above.
+	exec("INSERT INTO work_items(id,project_id,item_number,item_key,tier,type,title,status,assignee_uid) VALUES(8060,800,8060,'COMP-8060','matter','task','Matter completion','in_progress','U1')")
+	matterState, err := a.EnterpriseWorkItemCompletionState(ctx, "8060", "U1")
+	if err != nil || matterState["kind"] != "matter" || matterState["canRequest"] != false || matterState["reason"] != "matter_completion_time_required" {
+		t.Fatal("matter without evidence shown as ready", matterState, err)
+	}
+	matterID := id
+	matterID.IdempotencyKey = "matter-missing-time"
+	if _, err = a.RequestEnterpriseWorkItemCompletionKind(ctx, matterID, "800", "8060", "matter", map[string]any{"expectedVersion": version(8060)}); err == nil {
+		t.Fatal("matter without work time accepted")
+	}
+	exec("INSERT INTO time_entries(project_id,work_item_id,uid,entry_date,hours) VALUES(800,8060,'U1','2026-09-25',1.50)")
+	exec("INSERT INTO deliverables(project_id,matter_id,name,deliverable_type,required,created_by) VALUES(800,8060,'Matter output','artifact',1,'U1')")
+	matterID.IdempotencyKey = "matter-missing-evidence"
+	if _, err = a.RequestEnterpriseWorkItemCompletionKind(ctx, matterID, "800", "8060", "matter", map[string]any{"expectedVersion": version(8060)}); err == nil {
+		t.Fatal("matter without required output evidence accepted")
+	}
+	if matterState, err = a.EnterpriseWorkItemCompletionState(ctx, "8060", "U1"); err != nil || matterState["reason"] != "matter_completion_evidence_required" {
+		t.Fatal("missing evidence reason not reported", matterState, err)
+	}
+	exec("UPDATE deliverables SET evidence_note='recorded' WHERE matter_id=8060")
+	matterState, err = a.EnterpriseWorkItemCompletionState(ctx, "8060", "U1")
+	if _, hasReason := matterState["reason"]; err != nil || matterState["canRequest"] != true || hasReason {
+		t.Fatal("matter evidence not shown as ready", matterState, err)
+	}
+	matterState, err = a.EnterpriseWorkItemCompletionState(ctx, "8060", "U2")
+	if err != nil || matterState["canRequest"] != false || matterState["reason"] != "matter_completion_assignee_required" {
+		t.Fatal("non-assignee shown as ready", matterState, err)
+	}
+	matterID.IdempotencyKey = "matter-completion"
+	matterBefore := version(8060)
+	matterResult, err := a.RequestEnterpriseWorkItemCompletionKind(ctx, matterID, "800", "8060", "matter", map[string]any{"expectedVersion": matterBefore})
+	if err != nil || matterResult["receiptId"] == nil {
+		t.Fatal("matter completion request", err)
+	}
+	if count("SELECT COUNT(*) FROM work_item_completion_requests WHERE work_item_id=8060 AND kind='matter' AND status='queued'") != 1 ||
+		count("SELECT COUNT(*) FROM integration_operation WHERE operation_key LIKE 'aims:work-item-completion:matter:%:workflow-submit:v2' AND command_schema_version='v2' AND JSON_UNQUOTE(JSON_EXTRACT(command_json,'$.kind'))='matter'") != 1 ||
+		count("SELECT COUNT(*) FROM work_items WHERE id=8060 AND status='in_review'") != 1 {
+		t.Fatal("matter request did not atomically write status, request and frozen outbox")
+	}
+	var matterRequest int
+	var matterHash string
+	if err = db.QueryRowContext(ctx, "SELECT id,snapshot_sha256 FROM work_item_completion_requests WHERE work_item_id=8060").Scan(&matterRequest, &matterHash); err != nil {
+		t.Fatal(err)
+	}
+	matterBody := callbackBody("approved")
+	matterBody["instance_id"] = 101
+	matterBody["instance_no"] = "WF101"
+	matterBody["biz_id"] = "8060"
+	matterBody["idempotencyKey"] = "workflow:callback:101:flow_completed:approved"
+	matterBody["form_data"] = map[string]any{"completionRequestId": matterRequest, "projectId": 800, "workItemId": 8060, "snapshotSha256": matterHash, "kind": "matter", "evidenceSummary": map[string]any{"deliverableCount": 1, "requiredDeliverableCount": 1, "commitCount": 0, "timeEntryCount": 1}}
+	callback, err = VerifiedWorkItemCompletionCallbackFromTrustedRuntime(url.Values{"workflow_callback_verified": {"1"}}, matterBody)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wrongSummaryBody := map[string]any{}
+	for key, value := range matterBody {
+		wrongSummaryBody[key] = value
+	}
+	wrongForm := map[string]any{}
+	for key, value := range matterBody["form_data"].(map[string]any) {
+		wrongForm[key] = value
+	}
+	wrongForm["evidenceSummary"] = map[string]any{"deliverableCount": 2, "requiredDeliverableCount": 1, "commitCount": 0, "timeEntryCount": 1}
+	wrongSummaryBody["form_data"] = wrongForm
+	wrongSummaryCallback, err := VerifiedWorkItemCompletionCallbackFromTrustedRuntime(url.Values{"workflow_callback_verified": {"1"}}, wrongSummaryBody)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = a.ApplyWorkItemCompletionCallback(ctx, wrongSummaryCallback); err == nil || count("SELECT COUNT(*) FROM work_items WHERE id=8060 AND status='in_review'") != 1 {
+		t.Fatal("matter callback summary swap accepted", err)
+	}
+	exec("UPDATE deliverables SET evidence_note='changed' WHERE matter_id=8060")
+	if _, err = a.ApplyWorkItemCompletionCallback(ctx, callback); err == nil || count("SELECT COUNT(*) FROM work_items WHERE id=8060 AND status='in_review'") != 1 {
+		t.Fatal("matter evidence drift accepted", err)
+	}
+	exec("UPDATE deliverables SET evidence_note='recorded' WHERE matter_id=8060")
+	if _, err = a.ApplyWorkItemCompletionCallback(ctx, callback); err != nil {
+		t.Fatal("matter approval", err)
+	}
+	if _, err = a.ApplyWorkItemCompletionCallback(ctx, callback); err != nil {
+		t.Fatal("matter callback replay", err)
+	}
+	if count("SELECT COUNT(*) FROM work_items WHERE id=8060 AND status='completed'") != 1 || count("SELECT COUNT(*) FROM work_item_completion_requests WHERE id=? AND status='approved'", matterRequest) != 1 {
+		t.Fatal("matter completion not applied once")
+	}
+
+	// A deliverable write takes the same project→matter lock order as the
+	// completion request. All write surfaces reject the frozen review period.
+	exec("INSERT INTO work_items(id,project_id,item_number,item_key,tier,type,title,status) VALUES(8070,800,8070,'COMP-8070','matter','task','Freeze guard','in_progress')")
+	manager := url.Values{"current_user": {"U1"}}
+	create := func(name string) error {
+		_, err := a.createDeliverablesBatch(ctx, manager, map[string]any{"items": []any{map[string]any{
+			"entityType": "matter", "entityId": 8070, "name": name,
+			"deliverableType": "document", "required": true,
+		}}})
+		return err
+	}
+	if err := create("Freeze output"); err != nil {
+		t.Fatal("matter create while in progress", err)
+	}
+	var deliverableID int64
+	if err := db.QueryRowContext(ctx, "SELECT id FROM deliverables WHERE matter_id=8070 AND name='Freeze output'").Scan(&deliverableID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := a.updateWorkItemDeliverable(ctx, "8070", fmt.Sprint(deliverableID), manager, map[string]any{"evidenceNote": "before review"}); err != nil {
+		t.Fatal("matter evidence while in progress", err)
+	}
+	if _, err := a.updateDirectDeliverable(ctx, fmt.Sprint(deliverableID), manager, map[string]any{"description": "before review"}); err != nil {
+		t.Fatal("matter direct edit while in progress", err)
+	}
+	exec("UPDATE work_items SET status='in_review' WHERE id=8070")
+	for label, write := range map[string]func() error{
+		"create": func() error { return create("Later output") },
+		"evidence": func() error {
+			_, err := a.updateWorkItemDeliverable(ctx, "8070", fmt.Sprint(deliverableID), manager, map[string]any{"evidenceNote": "after review"})
+			return err
+		},
+		"direct edit": func() error {
+			_, err := a.updateDirectDeliverable(ctx, fmt.Sprint(deliverableID), manager, map[string]any{"description": "after review"})
+			return err
+		},
+		"delete": func() error {
+			_, err := a.deleteDirectDeliverable(ctx, fmt.Sprint(deliverableID), manager)
+			return err
+		},
+	} {
+		var failure httperror.Error
+		if err := write(); !errors.As(err, &failure) || failure.Status != 409 || failure.Code != "matter_deliverable_frozen" {
+			t.Fatalf("%s during review: %v, want frozen 409", label, err)
+		}
+	}
+	if count("SELECT COUNT(*) FROM deliverables WHERE matter_id=8070") != 1 {
+		t.Fatal("frozen matter deliverables changed")
+	}
+	exec("UPDATE work_items SET status='in_progress' WHERE id=8070")
+	if _, err := a.deleteDirectDeliverable(ctx, fmt.Sprint(deliverableID), manager); err != nil {
+		t.Fatal("matter delete after return to in progress", err)
+	}
+	// PA01: a single out-of-scope owner rolls back the entire batch, and
+	// public visibility cannot relax the write projection.
+	exec("INSERT INTO aims_projects(id,project_code,name,short_name,leader_uid,created_by,lifecycle_status,security_level,confidentiality_level) VALUES(809,'OUTSIDE','Outside','OUT','U1','U1','active','company','L1')")
+	exec("INSERT INTO work_items(id,project_id,item_number,item_key,tier,type,title,status) VALUES(8090,809,1,'OUTSIDE-1','matter','task','Outside matter','in_progress'),(8092,800,8092,'COMP-8092','matter','task','Scoped matter','in_progress')")
+	scopedCtx := WithEnterpriseProjectCommandScope(ctx, EnterpriseProjectUpdateIdentity{ActorUID: "U1", CommandScope: &EnterpriseProjectCommandScope{Projection: projectscope.Projection{Version: 1, ProjectCodes: []string{"COMP"}, Masks: []int{0, 65535}}, ExpiresAt: time.Now().Add(15 * time.Second).UnixMilli()}})
+	row := func(item int, name string) any {
+		return map[string]any{"entityType": "matter", "entityId": item, "name": name, "deliverableType": "document"}
+	}
+	_, err = a.createDeliverablesBatch(scopedCtx, manager, map[string]any{"items": []any{row(8092, "Atomic allowed"), row(8090, "Atomic denied")}})
+	var denied httperror.Error
+	if !errors.As(err, &denied) || denied.Status != 403 || count("SELECT COUNT(*) FROM deliverables WHERE name IN ('Atomic allowed','Atomic denied')") != 0 {
+		t.Fatal("scope batch partially succeeded", err)
+	}
+	if _, err = a.createDeliverablesBatch(scopedCtx, manager, map[string]any{"items": []any{row(8092, "Scoped output")}}); err != nil {
+		t.Fatal("scoped create", err)
+	}
+	var scopedDeliverable int64
+	if err = db.QueryRow("SELECT id FROM deliverables WHERE matter_id=8092 AND name='Scoped output'").Scan(&scopedDeliverable); err != nil {
+		t.Fatal(err)
+	}
+	blocked := WithEnterpriseProjectCommandScope(ctx, EnterpriseProjectUpdateIdentity{ActorUID: "U1", CommandScope: &EnterpriseProjectCommandScope{Projection: projectscope.Projection{Version: 1, Masks: []int{0}}, ExpiresAt: time.Now().Add(15 * time.Second).UnixMilli()}})
+	for _, write := range []func() error{
+		func() error {
+			_, err := a.updateDirectDeliverable(blocked, fmt.Sprint(scopedDeliverable), manager, map[string]any{"description": "denied"})
+			return err
+		},
+		func() error {
+			_, err := a.deleteDirectDeliverable(blocked, fmt.Sprint(scopedDeliverable), manager)
+			return err
+		},
+		func() error {
+			_, err := a.updateWorkItemDeliverable(blocked, "8092", fmt.Sprint(scopedDeliverable), manager, map[string]any{"evidenceNote": "denied"})
+			return err
+		},
+	} {
+		if err := write(); !errors.As(err, &denied) || denied.Status != 403 {
+			t.Fatal("revoked deliverable grant write", err)
+		}
+	}
+	if _, err = a.updateWorkItemDeliverable(scopedCtx, "8092", fmt.Sprint(scopedDeliverable), manager, map[string]any{"evidenceNote": "allowed"}); err != nil {
+		t.Fatal("scoped evidence", err)
+	}
+	if _, err = a.updateDirectDeliverable(scopedCtx, fmt.Sprint(scopedDeliverable), manager, map[string]any{"description": "allowed"}); err != nil {
+		t.Fatal("scoped edit", err)
+	}
+	exec("UPDATE work_items SET status='in_review' WHERE id=8092")
+	if _, err := a.updateWorkItemDeliverable(scopedCtx, "8092", fmt.Sprint(scopedDeliverable), manager, map[string]any{"evidenceNote": "frozen"}); !errors.As(err, &denied) || denied.Status != 409 || denied.Code != "matter_deliverable_frozen" {
+		t.Fatal("scoped evidence bypassed freeze", err)
+	}
+	exec("UPDATE work_items SET status='in_progress' WHERE id=8092")
+	if _, err = a.deleteDirectDeliverable(scopedCtx, fmt.Sprint(scopedDeliverable), manager); err != nil {
+		t.Fatal("scoped delete", err)
+	}
+
+	previousMax := db.Stats().MaxOpenConnections
+	db.SetMaxOpenConns(1) // No second connection is needed while the owning transaction is held.
+	defer db.SetMaxOpenConns(previousMax)
+	// Scoped milestone writes share the project lock and transaction with
+	// milestone deliverable synchronization. A late domain failure rolls back
+	// the milestone, not only the final deliverable statement.
+	if _, err = a.createProjectMilestone(scopedCtx, "809", manager, map[string]any{"name": "Outside milestone"}); !errors.As(err, &denied) || denied.Status != 403 {
+		t.Fatal("public out-of-scope milestone create", err)
+	}
+	if _, err = a.createProjectMilestone(scopedCtx, "800", manager, map[string]any{"name": "Atomic milestone", "deliverables": []any{map[string]any{"name": "Required unreviewed", "required": true, "completed": true}}}); err == nil || count("SELECT COUNT(*) FROM milestones WHERE name='Atomic milestone'") != 0 {
+		t.Fatal("milestone failed deliverable synchronization was not atomic", err)
+	}
+	m, err := a.createProjectMilestone(scopedCtx, "800", manager, map[string]any{"name": "Scoped milestone"})
+	if err != nil {
+		t.Fatal("scoped milestone create", err)
+	}
+	mid := fmt.Sprint(m["id"])
+	for _, write := range []func() error{
+		func() error {
+			_, err := a.updateDirectMilestone(blocked, mid, manager, map[string]any{"description": "denied"})
+			return err
+		},
+		func() error { _, err := a.deleteDirectMilestone(blocked, mid, manager); return err },
+	} {
+		if err := write(); !errors.As(err, &denied) || denied.Status != 403 {
+			t.Fatal("revoked milestone write", err)
+		}
+	}
+	expiredMilestone := WithEnterpriseProjectCommandScope(ctx, EnterpriseProjectUpdateIdentity{ActorUID: "U1", CommandScope: &EnterpriseProjectCommandScope{Projection: projectscope.Projection{Version: 1, Masks: []int{65535}}, ExpiresAt: time.Now().Add(-time.Second).UnixMilli()}})
+	if _, err = a.updateDirectMilestone(expiredMilestone, mid, manager, map[string]any{"description": "expired"}); !errors.As(err, &denied) || denied.Status != 403 {
+		t.Fatal("expired milestone write", err)
+	}
+	if _, err = a.updateDirectMilestone(scopedCtx, mid, manager, map[string]any{"description": "allowed"}); err != nil {
+		t.Fatal("scoped milestone edit", err)
+	}
+	if count("SELECT COUNT(*) FROM milestones WHERE id=? AND description='allowed'", m["id"]) != 1 {
+		t.Fatal("milestone update missing")
+	}
+	exec("INSERT INTO aims_project_members(project_id,uid,role,status) VALUES(800,'U9','manager','active')")
+	revokedManager := WithEnterpriseProjectCommandScope(ctx, EnterpriseProjectUpdateIdentity{ActorUID: "U9", CommandScope: &EnterpriseProjectCommandScope{Projection: projectscope.Projection{Version: 1, Masks: []int{65535}}, ExpiresAt: time.Now().Add(15 * time.Second).UnixMilli()}})
+	exec("DELETE FROM aims_project_members WHERE project_id=800 AND uid='U9'")
+	if _, err = a.updateDirectMilestone(revokedManager, mid, url.Values{"current_user": {"U9"}}, map[string]any{"description": "removed manager"}); !errors.As(err, &denied) || denied.Status != 403 {
+		t.Fatal("removed milestone manager", err)
+	}
+	if _, err = a.deleteDirectMilestone(scopedCtx, mid, manager); err != nil {
+		t.Fatal("scoped milestone delete", err)
+	}
+	if count("SELECT COUNT(*) FROM milestones WHERE id=?", m["id"]) != 0 {
+		t.Fatal("milestone delete missing")
+	}
+
+	// Manual rollover cannot replay a historical result after scope revocation.
+	exec("INSERT INTO milestones(id,project_id,name,mode,pivr_stage,template_key,start_date,end_date,status) VALUES(8061,800,'Scoped source','periodic','I','scope-cycle','2026-09-01','2026-09-30','completed'),(8062,800,'Scoped next','periodic','I','scope-cycle','2026-10-01','2026-10-31','active'),(8063,809,'Outside milestone','rolling_plan','I',NULL,NULL,NULL,'active')")
+	exec("INSERT INTO milestone_cycle_snapshots(project_id,source_milestone_id,next_milestone_id,template_key,period_start,period_end,idempotency_key,source_biz_code) VALUES(800,8061,8062,'scope-cycle','2026-10-01','2026-10-31','Scoped-rollover-replay','COMP:8061')")
+	replayBody := map[string]any{"idempotencyKey": "Scoped-rollover-replay", "operator_uid": "forged"}
+	if result, err := a.rolloverProjectMilestone(scopedCtx, "COMP", 8061, replayBody); err != nil || result["idempotent"] != true {
+		t.Fatal("scoped rollover replay", err)
+	}
+	if replayBody["operator_uid"] != "forged" {
+		t.Fatal("rollover mutated caller body")
+	}
+	if _, err := a.rolloverProjectMilestone(blocked, "COMP", 8061, replayBody); !errors.As(err, &denied) || denied.Status != 403 {
+		t.Fatal("revoked rollover replay", err)
+	}
+	if _, err := a.rolloverProjectMilestone(expiredMilestone, "COMP", 8061, replayBody); !errors.As(err, &denied) || denied.Status != 403 {
+		t.Fatal("expired rollover replay", err)
+	}
+	if count("SELECT COUNT(*) FROM milestone_cycle_snapshots WHERE idempotency_key='Scoped-rollover-replay'") != 1 {
+		t.Fatal("rollover replay duplicated snapshot")
+	}
+	// Requirement acceptance keeps I/V/R and owning-milestone restrictions.
+	exec("INSERT INTO project_counters(project_id,counter) VALUES(800,9000) ON DUPLICATE KEY UPDATE counter=9000")
+	if _, err := a.createRequirementChangeTarget(scopedCtx, "809", manager, map[string]any{"milestoneId": 8063, "title": "Outside target"}); !errors.As(err, &denied) || denied.Status != 403 {
+		t.Fatal("public outside requirement target", err)
+	}
+	if _, err := a.createRequirementChangeTarget(scopedCtx, "800", manager, map[string]any{"milestoneId": 8063, "title": "Wrong parent target"}); !errors.As(err, &denied) || denied.Status != 404 {
+		t.Fatal("cross-project requirement milestone", err)
+	}
+	if _, err := a.createRequirementChangeTarget(scopedCtx, "800", manager, map[string]any{"milestoneId": 8062, "title": "Scoped target"}); err != nil {
+		t.Fatal("scoped requirement target", err)
+	}
+	if count("SELECT COUNT(*) FROM work_items WHERE title='Scoped target' AND project_id=800 AND milestone_id=8062") != 1 {
+		t.Fatal("requirement target not written")
+	}
+	if _, err := a.createRequirementChangeTarget(blocked, "800", manager, map[string]any{"milestoneId": 8062, "title": "Revoked target"}); !errors.As(err, &denied) || denied.Status != 403 {
+		t.Fatal("revoked requirement target", err)
+	}
+	if count("SELECT COUNT(*) FROM work_items WHERE title IN ('Outside target','Wrong parent target','Revoked target')") != 0 {
+		t.Fatal("denied target left writes")
+	}
+
+	// A timesheet grant does not imply manager status; an active ordinary member can report.
+	member := url.Values{"current_user": {"U2"}}
+	timeScope := func(projection projectscope.Projection, expiry int64) context.Context {
+		return WithEnterpriseProjectCommandScope(ctx, EnterpriseProjectUpdateIdentity{ActorUID: "U2", CommandScope: &EnterpriseProjectCommandScope{Projection: projection, ExpiresAt: expiry}})
+	}
+	allTime := timeScope(projectscope.Projection{Version: 1, Masks: []int{65535}}, time.Now().Add(15*time.Second).UnixMilli())
+	noTime := timeScope(projectscope.Projection{Version: 1, Masks: []int{0}}, time.Now().Add(15*time.Second).UnixMilli())
+	// A failure after the primary write must also roll back the inserted row.
+	_, err = enterpriseTimeEntryWrite(a, allTime, "800", "", member, func(writeCtx context.Context) (int, error) {
+		_, writeErr := a.timeEntryDB(writeCtx).ExecContext(writeCtx, "INSERT INTO time_entries(project_id,uid,entry_date,hours,description) VALUES(800,'U2','2026-09-27',0.1,'Forced response failure')")
+		if writeErr != nil {
+			return 0, writeErr
+		}
+		return 0, errors.New("forced response failure")
+	})
+	if err == nil || count("SELECT COUNT(*) FROM time_entries WHERE description='Forced response failure'") != 0 {
+		t.Fatal("time response failure did not roll back", err)
+	}
+	dateBody := map[string]any{"entryDate": "2026-09-27", "hours": 0.1, "description": "Scoped ordinary member time"}
+	entry, err := a.createProjectTimeEntry(allTime, "800", member, dateBody)
+	if err != nil {
+		t.Fatal("ordinary member scoped time create", err)
+	}
+	eid := fmt.Sprint(entry.ID)
+	if _, err = a.updateProjectTimeEntry(allTime, "800", eid, member, map[string]any{"description": "Edited scoped time"}); err != nil {
+		t.Fatal("scoped time update", err)
+	}
+	if _, err = a.createProjectTimeEntry(noTime, "800", member, dateBody); !errors.As(err, &denied) || denied.Status != 403 {
+		t.Fatal("denied scope create", err)
+	}
+	if _, err = a.updateProjectTimeEntry(noTime, "800", eid, member, map[string]any{"hours": 0.2}); !errors.As(err, &denied) || denied.Status != 403 {
+		t.Fatal("denied scope update", err)
+	}
+	if _, err = a.deleteProjectTimeEntry(noTime, "800", eid, member); !errors.As(err, &denied) || denied.Status != 403 {
+		t.Fatal("denied scope delete", err)
+	}
+	// Public company visibility never substitutes for write scope, including scoped admins.
+	if _, err = a.createProjectTimeEntry(noTime, "809", url.Values{"current_user": {"U2"}, "current_user_is_project_admin": {"1"}}, dateBody); !errors.As(err, &denied) || denied.Status != 403 {
+		t.Fatal("outside public time write", err)
+	}
+	if _, err = a.updateProjectTimeEntry(allTime, "809", eid, url.Values{"current_user": {"U2"}, "current_user_is_project_admin": {"1"}}, map[string]any{"hours": 0.2}); !errors.As(err, &denied) || denied.Status != 404 {
+		t.Fatal("cross project time", err)
+	}
+	if _, err = a.updateProjectTimeEntry(scopedCtx, "800", eid, manager, map[string]any{"hours": 0.2}); !errors.As(err, &denied) || denied.Status != 403 {
+		t.Fatal("other owner time", err)
+	}
+	expiredTime := timeScope(projectscope.Projection{Version: 1, Masks: []int{65535}}, time.Now().Add(-time.Second).UnixMilli())
+	if _, err = a.deleteProjectTimeEntry(expiredTime, "800", eid, member); !errors.As(err, &denied) || denied.Status != 403 {
+		t.Fatal("expired time", err)
+	}
+	exec("UPDATE time_entries SET review_status='submitted' WHERE id=?", entry.ID)
+	if _, err = a.deleteProjectTimeEntry(allTime, "800", eid, member); !errors.As(err, &denied) || denied.Status != 409 {
+		t.Fatal("submitted time remains frozen", err)
+	}
+	exec("UPDATE time_entries SET review_status='draft' WHERE id=?", entry.ID)
+	exec("DELETE FROM aims_project_members WHERE project_id=800 AND uid='U2'")
+	if _, err = a.updateProjectTimeEntry(allTime, "800", eid, member, map[string]any{"hours": 0.2}); !errors.As(err, &denied) || denied.Status != 403 {
+		t.Fatal("removed member time", err)
+	}
+	if count("SELECT COUNT(*) FROM time_entries WHERE id=? AND hours=0.1 AND description='Edited scoped time'", entry.ID) != 1 {
+		t.Fatal("denied time commands changed row")
+	}
+	exec("INSERT INTO aims_project_members(project_id,uid,role,status) VALUES(800,'U2','member','active')")
+	if _, err = a.deleteProjectTimeEntry(allTime, "800", eid, member); err != nil {
+		t.Fatal("scoped time delete", err)
+	}
+	if count("SELECT COUNT(*) FROM time_entries WHERE description IN ('Scoped ordinary member time','Edited scoped time')") != 0 {
+		t.Fatal("time residue")
+	}
+	// Work-item time entries use the same timesheet grant, resolving the owning
+	// project from the locked item rather than a browser-supplied project ID.
+	limitedTime := timeScope(projectscope.Projection{Version: 1, ProjectCodes: []string{"COMP"}, Masks: []int{0, 65535}}, time.Now().Add(15*time.Second).UnixMilli())
+	itemBody := map[string]any{"entryDate": "2026-09-27", "hours": 0.1, "description": "Scoped work item time"}
+	_, err = enterpriseWorkItemTimeEntryWrite(a, limitedTime, "8092", "", member, func(writeCtx context.Context) (int, error) {
+		_, writeErr := a.timeEntryDB(writeCtx).ExecContext(writeCtx, "INSERT INTO time_entries(project_id,work_item_id,uid,entry_date,hours,description) VALUES(800,8092,'U2','2026-09-27',0.1,'Forced work item response failure')")
+		if writeErr != nil {
+			return 0, writeErr
+		}
+		return 0, errors.New("forced work item response failure")
+	})
+	if err == nil || count("SELECT COUNT(*) FROM time_entries WHERE description='Forced work item response failure'") != 0 {
+		t.Fatal("work item time response failure did not roll back", err)
+	}
+	if _, err = a.createWorkItemTimeEntry(noTime, "8092", member, itemBody); !errors.As(err, &denied) || denied.Status != 403 {
+		t.Fatal("denied work item time create", err)
+	}
+	if _, err = a.createWorkItemTimeEntry(limitedTime, "8090", member, itemBody); !errors.As(err, &denied) || denied.Status != 403 {
+		t.Fatal("public outside work item time create", err)
+	}
+	if count("SELECT COUNT(*) FROM time_entries WHERE description='Scoped work item time'") != 0 {
+		t.Fatal("denied work item time left a row")
+	}
+	itemEntry, err := a.createWorkItemTimeEntry(limitedTime, "8092", member, itemBody)
+	if err != nil {
+		t.Fatal("scoped work item time create", err)
+	}
+	itemEntryID := fmt.Sprint(itemEntry.ID)
+	if _, err = a.updateWorkItemTimeEntry(noTime, "8092", itemEntryID, member, map[string]any{"hours": 0.2}); !errors.As(err, &denied) || denied.Status != 403 {
+		t.Fatal("denied work item time update", err)
+	}
+	if _, err = a.deleteWorkItemTimeEntry(noTime, "8092", itemEntryID, member); !errors.As(err, &denied) || denied.Status != 403 {
+		t.Fatal("denied work item time delete", err)
+	}
+	if _, err = a.updateWorkItemTimeEntry(allTime, "8090", itemEntryID, member, map[string]any{"hours": 0.2}); !errors.As(err, &denied) || denied.Status != 404 {
+		t.Fatal("cross-project work item time entry", err)
+	}
+	if _, err = a.updateWorkItemTimeEntry(limitedTime, "8092", itemEntryID, member, map[string]any{"description": "Edited scoped work item time"}); err != nil {
+		t.Fatal("scoped work item time update", err)
+	}
+	exec("DELETE FROM aims_project_members WHERE project_id=800 AND uid='U2'")
+	if _, err = a.updateWorkItemTimeEntry(limitedTime, "8092", itemEntryID, member, map[string]any{"hours": 0.2}); !errors.As(err, &denied) || denied.Status != 403 {
+		t.Fatal("removed member work item time update", err)
+	}
+	if count("SELECT COUNT(*) FROM time_entries WHERE id=? AND hours=0.1", itemEntry.ID) != 1 {
+		t.Fatal("revoked work item time write changed row")
+	}
+	exec("INSERT INTO aims_project_members(project_id,uid,role,status) VALUES(800,'U2','member','active')")
+	if _, err = a.deleteWorkItemTimeEntry(limitedTime, "8092", itemEntryID, member); err != nil {
+		t.Fatal("scoped work item time delete", err)
+	}
+	if count("SELECT COUNT(*) FROM time_entries WHERE id=?", itemEntry.ID) != 0 {
+		t.Fatal("work item time residue")
+	}
+
+	t.Run("caller-tx-in-process-zero-workflow-operations", func(t *testing.T) {
+		seed(8990)
+		local := id
+		local.ActorUID = "U1"
+		local.Personnel = nil
+		local.IdempotencyKey = "completion-in-process"
+		local.CommandScope = &EnterpriseProjectCommandScope{Projection: projectscope.Projection{Version: 1, Masks: []int{65535}}, ExpiresAt: time.Now().Add(15 * time.Second).UnixMilli()}
+		input := map[string]any{"expectedVersion": version(8990)}
+		operationsBefore := count("SELECT COUNT(*) FROM integration_operation")
+		tx, rs, err := a.enterpriseWrites.registry.BeginWriteTransaction(ctx, a.enterpriseWrites.writer)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer tx.Rollback()
+		result, err := a.RequestEnterpriseWorkItemCompletionInTransaction(ctx, tx, rs[0], local, "800", "8990", "target", input, json.RawMessage(`{"context":{"initiator_uid":"U1"}}`))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err = tx.Commit(); err != nil {
+			t.Fatal(err)
+		}
+		if result["receiptId"] == "" || count("SELECT COUNT(*) FROM service_command_receipt WHERE idempotency_key='completion-in-process'") != 1 {
+			t.Fatal("caller core receipt missing")
+		}
+		if count("SELECT COUNT(*) FROM integration_operation") != operationsBefore {
+			t.Fatal("caller-Tx enqueued external operation")
+		}
+		if count("SELECT COUNT(*) FROM project_activity_logs WHERE request_id='completion-in-process' AND action='completion_request'") != 1 || count("SELECT COUNT(*) FROM work_item_changelog WHERE work_item_id=8990 AND field_name='completion_workflow'") != 1 {
+			t.Fatal("caller audit missing")
+		}
+		if count("SELECT COUNT(*) FROM work_item_completion_requests WHERE work_item_id=8990") != 1 || count("SELECT COUNT(*) FROM work_items WHERE id=8990 AND status='in_review'") != 1 {
+			t.Fatal("caller business write missing")
+		}
+	})
+
+}

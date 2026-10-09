@@ -1,0 +1,9 @@
+{
+  "name": "hzy-wiztek-transition",
+  "account_id": "6cf3948db481580745329253415d59d3",
+  "main": "worker.mjs",
+  "compatibility_date": "2026-10-07",
+  "workers_dev": false,
+  "routes": [{"pattern": "wiztek.huizhi.yun/*", "zone_name": "huizhi.yun"}],
+  "rules": [{"type": "Text", "globs": ["**/*.html"], "fallthrough": true}]
+}

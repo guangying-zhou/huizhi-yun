@@ -1,0 +1,1 @@
+export default defineEventHandler(async event=>{await readBody(event);return {code:0,data:{token:'AbCdEfGhIjKlMn12'}}})

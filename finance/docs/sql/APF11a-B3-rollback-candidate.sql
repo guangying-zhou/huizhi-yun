@@ -1,0 +1,4 @@
+-- CANDIDATE ONLY: use domaininstall receipt rollback (ReviewHash, unchanged definitions, stopped writers, zero rows).
+-- This file intentionally contains no unconditional DROP: remove only tables created by this exact installation receipt, reverse dependency order.
+-- finance_attachment, finance_unclassified_income, finance_contract_summary, finance_reconciliation, finance_receipt, finance_invoice, finance_invoice_request.
+-- Existing B1 tables, ledger, grants and business rows must never be removed.

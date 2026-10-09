@@ -1,0 +1,13 @@
+{
+  "version": "0.1.6",
+  "files": {
+    "linux-arm64": "0.1.6/hzy-notification-runtime_0.1.6_linux_arm64.tar.gz",
+    "linux-amd64": "0.1.6/hzy-notification-runtime_0.1.6_linux_amd64.tar.gz"
+  },
+  "schema": {"version": "002", "path": "schema/002_notification_delivery_reconciliation.sql", "sha256": "284147a31442d464aee30c3054f5c23297bb7304ae5f29aa92134c802edb4aa7"},
+  "schemas": [{"version": "001", "path": "schema/001_notification_delivery_ledger.sql", "sha256": "ef942fedc3f8e121dfd55374745dc37f23db0bc114d03527e3b0d34e1f2cccc3"}, {"version": "002", "path": "schema/002_notification_delivery_reconciliation.sql", "sha256": "284147a31442d464aee30c3054f5c23297bb7304ae5f29aa92134c802edb4aa7"}],
+  "sha256": {
+    "linux-arm64": "9e6dc55c75d8056101655016334e26c33cbe326a054798626c7cdec8c7703fd7",
+    "linux-amd64": "822cde69aa33926c7e806d9f690ad592c2483f480f053071c388e88ff0b6dde3"
+  }
+}

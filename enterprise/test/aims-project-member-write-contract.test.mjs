@@ -1,0 +1,14 @@
+import test from 'node:test'
+import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
+
+const read = p => readFileSync(new URL(p, import.meta.url), 'utf8')
+test('member actions retain exact operation and actor object authorization', () => {
+  const bff = read('../server/utils/enterpriseAimsProjectMemberWrite.ts')
+  assert.match(bff, /Idempotency-Key/)
+  assert.match(bff, /enterpriseAimsProjectWriteAuthorization/)
+  assert.match(bff, /resource: 'project-members', action/)
+  const page = read('../../aims/layer/pages/enterprise-project-members.vue')
+  assert.match(page, /v-if="canManage && !loading && !error"/)
+  assert.match(page, /items.length&&canManage/)
+})

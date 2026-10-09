@@ -1,0 +1,3478 @@
+{
+  "appCode": "enterprise",
+  "appName": "汇智云企业应用",
+  "appType": "business",
+  "entry": {
+    "web": "/",
+    "apiBase": "/api"
+  },
+  "resources": [],
+  "recommendedRoles": [],
+  "composition": {
+    "schemaVersion": 1,
+    "kind": "hzy-enterprise-composition",
+    "registrationMode": "preserve-logical-module-manifests",
+    "modules": [
+      {
+        "appCode": "aims",
+        "manifestHash": "1397abd8cc96a718462474d48598b836fc9927808ba5162ff3cd04f6967b1f88",
+        "manifest": {
+          "appCode": "aims",
+          "appName": "汇智云项目",
+          "appType": "business",
+          "description": "面向中小研发团队的项目全生命周期管理（PIVR 方法论）：组合、项目、迭代、任务、缺陷、工时、看板与报表。",
+          "icon": "i-lucide-package",
+          "entry": {
+            "web": "/",
+            "apiBase": "/api/v1/aims"
+          },
+          "runtimeRequirements": {
+            "requiresSdk": true,
+            "supportsCustomerHosted": true,
+            "supportsManagedControlPlane": false
+          },
+          "compatibility": {
+            "minControlPlaneVersion": "0.1.0",
+            "minSdkVersion": "0.1.0"
+          },
+          "resources": [
+            {
+              "code": "product-request",
+              "name": "客户反馈需求接收服务",
+              "description": "接收经过签名和产品授权的外部客户反馈，不授予普通用户角色",
+              "actions": [
+                "create-from-feedback"
+              ],
+              "sortOrder": 1
+            },
+            {
+              "code": "aims_overview",
+              "name": "工作台",
+              "description": "AIMS 个人工作台与项目概览",
+              "actions": [
+                "view"
+              ],
+              "sortOrder": 1
+            },
+            {
+              "code": "portfolios",
+              "name": "项目组合",
+              "description": "组合（portfolio）层级的研发资产视图",
+              "actions": [
+                "view",
+                "edit",
+                "admin"
+              ],
+              "sortOrder": 10
+            },
+            {
+              "code": "projects",
+              "name": "项目",
+              "description": "立项、成员、迭代、状态流转",
+              "actions": [
+                "view",
+                "create",
+                "edit",
+                "approve",
+                "close",
+                "admin"
+              ],
+              "sortOrder": 20
+            },
+            {
+              "code": "work_items",
+              "name": "工作项",
+              "description": "需求 / 任务 / 缺陷统一视图",
+              "actions": [
+                "view",
+                "create",
+                "edit",
+                "delete",
+                "assign",
+                "confirm"
+              ],
+              "sortOrder": 30
+            },
+            {
+              "code": "project-documents",
+              "name": "项目文档代理",
+              "description": "企业 Host 经 Aims 正式身份读取项目文档元数据、Codocs 内容与文件柜预览，并登记/删除项目文档索引；download 为导出性质、write 为写入性质的独立敏感动作，均不由 read 蕴含",
+              "actions": [
+                "read",
+                "download",
+                "write"
+              ],
+              "sortOrder": 28
+            },
+            {
+              "code": "project-document-sources",
+              "name": "项目文档候选来源只读代理",
+              "description": "企业 Host 经 Aims 正式身份读取可附加为项目文档的候选来源：部门 Codocs 文档、项目集 Codocs 文档、已绑定仓库的 Markdown 目录与正文；每条都按操作者本人的部门／项目／仓库访问权重新判定",
+              "actions": [
+                "read"
+              ],
+              "sortOrder": 28
+            },
+            {
+              "code": "project-document-access",
+              "name": "项目文档访问策略代理",
+              "description": "企业 Host 经 Aims 正式身份读取或修改项目文档访问策略、权限判定与访问审计；改策略的门槛是项目经理而非文档编辑者，因此 manage 与 read 分列，read 不蕴含 manage",
+              "actions": [
+                "read",
+                "manage"
+              ],
+              "sortOrder": 28
+            },
+            {
+              "code": "work-item-completion-callback",
+              "name": "工作项完成审批回执服务",
+              "actions": [
+                "execute"
+              ],
+              "sortOrder": 20
+            },
+            {
+              "code": "board",
+              "name": "看板",
+              "description": "迭代看板与状态流转",
+              "actions": [
+                "view",
+                "edit"
+              ],
+              "sortOrder": 40
+            },
+            {
+              "code": "timesheet",
+              "name": "工时",
+              "description": "个人工时填报、审核与汇总",
+              "actions": [
+                "view",
+                "submit",
+                "approve",
+                "admin"
+              ],
+              "sortOrder": 50
+            },
+            {
+              "code": "reports",
+              "name": "报表",
+              "description": "项目进度、燃尽、负载等研发效能报表",
+              "actions": [
+                "view",
+                "edit",
+                "admin",
+                "export"
+              ],
+              "sortOrder": 60
+            },
+            {
+              "code": "weekly_reports",
+              "name": "项目周报",
+              "description": "项目周报填报、独立审阅、公司汇总发布与导出",
+              "actions": [
+                "view",
+                "submit",
+                "review",
+                "publish",
+                "export",
+                "configure"
+              ],
+              "sortOrder": 61
+            },
+            {
+              "code": "quality_reviews",
+              "name": "项目文档质量检查",
+              "description": "必交文档完整性、确定版本质量检查与项目总监豁免",
+              "actions": [
+                "view",
+                "review",
+                "waive",
+                "configure"
+              ],
+              "sortOrder": 62
+            },
+            {
+              "code": "notifications",
+              "name": "通知",
+              "description": "AIMS 内的通知中心与待办",
+              "actions": [
+                "view"
+              ],
+              "sortOrder": 70
+            },
+            {
+              "code": "project_templates",
+              "name": "项目模板",
+              "description": "项目模板与流程模板的定义与维护",
+              "actions": [
+                "view",
+                "edit",
+                "admin"
+              ],
+              "sortOrder": 80
+            },
+            {
+              "code": "integration_operation",
+              "name": "可靠操作执行服务",
+              "description": "AIMS worker 领取任务并保存执行回执的精确服务能力，不授予普通用户角色",
+              "actions": [
+                "execute"
+              ],
+              "sortOrder": 84
+            },
+            {
+              "code": "milestone-rollover",
+              "name": "周期里程碑滚动服务",
+              "description": "统一调度路径按 generation 滚动到期周期里程碑的精确服务能力，不授予普通用户角色",
+              "actions": [
+                "execute"
+              ],
+              "sortOrder": 86
+            },
+            {
+              "code": "notifications-due",
+              "name": "到期通知检查点服务",
+              "description": "统一调度路径按 generation 扫描到期条件并保存通知检查点的精确服务能力，不授予普通用户角色",
+              "actions": [
+                "execute"
+              ],
+              "sortOrder": 87
+            },
+            {
+              "code": "integration_operations",
+              "name": "跨应用操作",
+              "description": "诊断并受控重放 AIMS 发起的跨应用可靠操作",
+              "actions": [
+                "view",
+                "replay"
+              ],
+              "sortOrder": 85
+            },
+            {
+              "code": "admin",
+              "name": "系统管理",
+              "description": "AIMS 应用级后台管理",
+              "actions": [
+                "view",
+                "edit",
+                "admin"
+              ],
+              "sortOrder": 90
+            },
+            {
+              "code": "products",
+              "name": "产品空间",
+              "description": "独立产品或产品线统一管理空间的接入、定位、成员关系和生命周期；authorization-object 为内部服务读取能力，不授予默认用户角色",
+              "actions": [
+                "view",
+                "edit",
+                "onboard",
+                "authorization-object",
+                "archive",
+                "restore",
+                "admin"
+              ],
+              "sortOrder": 100
+            },
+            {
+              "code": "product_requests",
+              "name": "产品需求",
+              "description": "需求收集、决策与项目转交",
+              "actions": [
+                "view",
+                "create",
+                "edit",
+                "decide",
+                "handoff",
+                "delete"
+              ],
+              "sortOrder": 101
+            },
+            {
+              "code": "product_objectives",
+              "name": "产品目标",
+              "description": "产品目标与指标观测",
+              "actions": [
+                "view",
+                "edit",
+                "observe",
+                "activate",
+                "close",
+                "reopen",
+                "archive"
+              ],
+              "sortOrder": 116
+            },
+            {
+              "code": "product-objectives",
+              "name": "产品目标内部服务",
+              "description": "目标 Runtime 精确服务能力，不作为用户角色授权资源",
+              "actions": [
+                "read",
+                "create",
+                "edit",
+                "item-link",
+                "cycle-map",
+                "cycle-revoke",
+                "observe",
+                "activate",
+                "close",
+                "reopen",
+                "archive"
+              ],
+              "sortOrder": 117
+            },
+            {
+              "code": "product_components",
+              "name": "产品模块",
+              "description": "三层模块树与功能归属",
+              "actions": [
+                "view",
+                "edit",
+                "delete"
+              ],
+              "sortOrder": 114
+            },
+            {
+              "code": "product_features",
+              "name": "产品功能",
+              "description": "长期功能与演进范围",
+              "actions": [
+                "view",
+                "edit",
+                "delete"
+              ],
+              "sortOrder": 102
+            },
+            {
+              "code": "product_priorities",
+              "name": "产品优先级",
+              "description": "规划周期、评估、容量取舍和结果回看",
+              "actions": [
+                "view",
+                "edit",
+                "assess",
+                "prioritize",
+                "handoff",
+                "comment",
+                "observe"
+              ],
+              "sortOrder": 103
+            },
+            {
+              "code": "product-roadmaps",
+              "name": "产品路线内部服务",
+              "description": "路线图 Runtime 精确服务能力",
+              "actions": [
+                "read",
+                "window-edit",
+                "commit",
+                "view-create",
+                "view-update",
+                "view-delete"
+              ],
+              "sortOrder": 118
+            },
+            {
+              "code": "product_roadmaps",
+              "name": "产品路线图",
+              "description": "路线视图与正式承诺",
+              "actions": [
+                "view",
+                "edit",
+                "commit"
+              ],
+              "sortOrder": 104
+            },
+            {
+              "code": "product_versions",
+              "name": "产品版本",
+              "description": "版本范围、独立验收、发布和历史",
+              "actions": [
+                "view",
+                "edit",
+                "accept",
+                "publish",
+                "reopen",
+                "archive",
+                "delete"
+              ],
+              "sortOrder": 105
+            },
+            {
+              "code": "requirements",
+              "name": "需求管理",
+              "description": "项目需求池、评审与基线变更",
+              "actions": [
+                "view",
+                "edit",
+                "admin"
+              ],
+              "sortOrder": 31
+            },
+            {
+              "code": "product-requests",
+              "name": "产品需求内部服务",
+              "description": "产品需求 Runtime 精确服务能力，不作为用户角色授权资源",
+              "actions": [
+                "create",
+                "read",
+                "edit",
+                "decide",
+                "source-create",
+                "source-delete",
+                "merge"
+              ],
+              "sortOrder": 110
+            },
+            {
+              "code": "product-version-summary",
+              "name": "产品公开版本摘要",
+              "description": "Assets 只读版本元数据与公开特性计数",
+              "actions": [
+                "read"
+              ],
+              "sortOrder": 121
+            },
+            {
+              "code": "product-cost-rules",
+              "name": "产品成本规则内部服务",
+              "description": "冻结项目产品分摊规则的精确 Runtime 能力，不授予 Finance 项目核算编辑权限",
+              "actions": [
+                "freeze",
+                "status"
+              ],
+              "sortOrder": 120
+            },
+            {
+              "code": "product-documents",
+              "name": "产品文档关系内部服务",
+              "description": "产品文档关系 Runtime 精确读取、关联创建、用途维护、解除与恢复能力，不授予 Codocs 访问权限",
+              "actions": [
+                "read",
+                "remove",
+                "edit",
+                "restore",
+                "create"
+              ],
+              "sortOrder": 119
+            },
+            {
+              "code": "product-features",
+              "name": "产品功能内部服务",
+              "description": "长期功能 Runtime 精确服务能力，不作为用户角色授权资源",
+              "actions": [
+                "create",
+                "read",
+                "edit",
+                "delete",
+                "request-link",
+                "lifecycle",
+                "component-assign"
+              ],
+              "sortOrder": 112
+            },
+            {
+              "code": "product-components",
+              "name": "产品模块内部服务",
+              "description": "模块 Runtime 精确服务能力，不作为用户角色授权资源",
+              "actions": [
+                "read",
+                "create",
+                "move",
+                "edit",
+                "delete"
+              ],
+              "sortOrder": 115
+            },
+            {
+              "code": "product-versions",
+              "name": "产品版本内部服务",
+              "description": "产品版本 Runtime 精确能力，不作为用户角色授权资源",
+              "actions": [
+                "create",
+                "edit",
+                "read",
+                "scope-create",
+                "scope-edit",
+                "scope-deliver",
+                "scope-reopen",
+                "scope-visibility",
+                "scope-legacy-criteria",
+                "accept",
+                "publish",
+                "reopen",
+                "archive",
+                "delete"
+              ],
+              "sortOrder": 113
+            },
+            {
+              "code": "product-priorities",
+              "name": "产品规划内部服务",
+              "description": "产品规划 Runtime 精确服务能力，不作为用户角色授权资源",
+              "actions": [
+                "model-create",
+                "reach-record",
+                "rice-assess",
+                "cycle-model-select",
+                "cross-dependency-create",
+                "cross-dependency-remove",
+                "create",
+                "read",
+                "edit",
+                "cycle-open",
+                "cycle-close",
+                "cycle-review",
+                "budget-change",
+                "withdraw",
+                "consumption-confirm",
+                "comment",
+                "observe",
+                "assess",
+                "move",
+                "select",
+                "feature-link",
+                "project-authorization",
+                "handoff"
+              ],
+              "sortOrder": 111
+            },
+            {
+              "code": "product_documents",
+              "name": "产品文档关系",
+              "description": "维护产品与文档 UUID 的关联；不授予 Codocs 正文或分享权限",
+              "actions": [
+                "view",
+                "edit"
+              ],
+              "sortOrder": 109
+            }
+          ],
+          "recommendedRoles": [
+            {
+              "code": "aims:viewer",
+              "name": "AIMS 只读",
+              "description": "查看分配给自己的项目与工作项",
+              "suggestedPermissions": [
+                "aims:aims_overview:view",
+                "aims:projects:view",
+                "aims:requirements:view",
+                "aims:work_items:view",
+                "aims:board:view",
+                "aims:timesheet:view",
+                "aims:reports:view"
+              ]
+            },
+            {
+              "code": "aims:dev",
+              "name": "AIMS 开发",
+              "description": "执行任务、提交工时、参与看板流转",
+              "suggestedPermissions": [
+                "aims:aims_overview:view",
+                "aims:projects:view",
+                "aims:requirements:view",
+                "aims:work_items:edit",
+                "aims:board:edit",
+                "aims:timesheet:submit",
+                "aims:weekly_reports:view",
+                "aims:notifications:view"
+              ]
+            },
+            {
+              "code": "aims:member",
+              "name": "AIMS 项目成员",
+              "description": "执行项目任务、提交工时、参与看板流转；用于替代历史 aims:dev 展示语义",
+              "suggestedPermissions": [
+                "aims:aims_overview:view",
+                "aims:projects:view",
+                "aims:requirements:view",
+                "aims:work_items:edit",
+                "aims:board:edit",
+                "aims:timesheet:submit",
+                "aims:weekly_reports:view",
+                "aims:notifications:view"
+              ]
+            },
+            {
+              "code": "aims:pm",
+              "name": "AIMS 项目经理",
+              "description": "管理项目计划、迭代、人员、工时审核和工作项确认；项目级管理范围主要由项目关系或授权范围决定，不默认获得全局项目管理员",
+              "suggestedPermissions": [
+                "aims:aims_overview:view",
+                "aims:portfolios:view",
+                "aims:projects:view",
+                "aims:projects:create",
+                "aims:projects:edit",
+                "aims:projects:close",
+                "aims:requirements:view",
+                "aims:requirements:edit",
+                "aims:work_items:view",
+                "aims:work_items:create",
+                "aims:work_items:edit",
+                "aims:work_items:delete",
+                "aims:work_items:assign",
+                "aims:work_items:confirm",
+                "aims:board:view",
+                "aims:board:edit",
+                "aims:timesheet:view",
+                "aims:timesheet:submit",
+                "aims:timesheet:approve",
+                "aims:weekly_reports:view",
+                "aims:weekly_reports:submit",
+                "aims:reports:view",
+                "aims:reports:export",
+                "aims:notifications:view"
+              ]
+            },
+            {
+              "code": "aims:pmo",
+              "name": "AIMS PMO",
+              "description": "管理项目组合、跨项目交付质量、项目状态、工时审核和研发报表，不包含项目审批、应用后台配置或全局项目管理员",
+              "suggestedPermissions": [
+                "aims:aims_overview:view",
+                "aims:portfolios:view",
+                "aims:portfolios:edit",
+                "aims:portfolios:admin",
+                "aims:projects:view",
+                "aims:projects:create",
+                "aims:projects:edit",
+                "aims:projects:close",
+                "aims:requirements:view",
+                "aims:requirements:edit",
+                "aims:work_items:view",
+                "aims:board:view",
+                "aims:timesheet:view",
+                "aims:timesheet:approve",
+                "aims:reports:view",
+                "aims:reports:export",
+                "aims:notifications:view"
+              ]
+            },
+            {
+              "code": "aims:project_director",
+              "name": "AIMS 项目总监",
+              "description": "独立审阅项目周报、发布公司汇总、处理 QA 豁免和里程碑完成审批，并管理全局项目与项目模板",
+              "suggestedPermissions": [
+                "aims:aims_overview:view",
+                "aims:projects:view",
+                "aims:projects:admin",
+                "aims:requirements:view",
+                "aims:requirements:edit",
+                "aims:timesheet:view",
+                "aims:weekly_reports:view",
+                "aims:weekly_reports:review",
+                "aims:weekly_reports:publish",
+                "aims:weekly_reports:export",
+                "aims:quality_reviews:view",
+                "aims:quality_reviews:waive",
+                "aims:project_templates:admin",
+                "aims:notifications:view"
+              ]
+            },
+            {
+              "code": "aims:qa",
+              "name": "AIMS QA",
+              "description": "维护项目文档检查清单并对必交文档确定版本进行完整性与质量检查",
+              "suggestedPermissions": [
+                "aims:aims_overview:view",
+                "aims:projects:view",
+                "aims:requirements:view",
+                "aims:quality_reviews:view",
+                "aims:quality_reviews:review",
+                "aims:quality_reviews:configure",
+                "aims:notifications:view"
+              ]
+            },
+            {
+              "code": "aims:project_approver",
+              "name": "AIMS 项目审批",
+              "description": "处理立项、项目变更、验收和重大里程碑等项目审批",
+              "suggestedPermissions": [
+                "aims:aims_overview:view",
+                "aims:projects:view",
+                "aims:projects:approve",
+                "aims:requirements:view",
+                "aims:reports:view"
+              ]
+            },
+            {
+              "code": "aims:admin",
+              "name": "AIMS 管理员",
+              "description": "创建项目并管理 AIMS 全局配置与项目模板",
+              "suggestedPermissions": [
+                "aims:aims_overview:view",
+                "aims:portfolios:admin",
+                "aims:projects:create",
+                "aims:projects:admin",
+                "aims:requirements:admin",
+                "aims:work_items:edit",
+                "aims:timesheet:admin",
+                "aims:reports:view",
+                "aims:reports:admin",
+                "aims:weekly_reports:configure",
+                "aims:project_templates:admin",
+                "aims:integration_operations:view",
+                "aims:integration_operations:replay",
+                "aims:admin:admin"
+              ]
+            },
+            {
+              "code": "aims:product_viewer",
+              "name": "产品观察者",
+              "description": "查看授权产品；企业角色须配置 product:member 或显式产品范围",
+              "suggestedPermissions": [
+                "aims:products:view",
+                "aims:product_requests:view",
+                "aims:product_features:view",
+                "aims:product_components:view",
+                "aims:product_objectives:view",
+                "aims:product_priorities:view",
+                "aims:product_roadmaps:view",
+                "aims:product_versions:view",
+                "aims:product_documents:view"
+              ]
+            },
+            {
+              "code": "aims:product_contributor",
+              "name": "产品贡献者",
+              "description": "提交需求、补充证据和参与讨论；须配置产品成员范围",
+              "suggestedPermissions": [
+                "aims:products:view",
+                "aims:product_requests:view",
+                "aims:product_features:view",
+                "aims:product_components:view",
+                "aims:product_objectives:view",
+                "aims:product_priorities:view",
+                "aims:product_roadmaps:view",
+                "aims:product_versions:view",
+                "aims:product_requests:create",
+                "aims:product_requests:edit",
+                "aims:product_priorities:comment",
+                "aims:product_documents:view"
+              ]
+            },
+            {
+              "code": "aims:product_manager",
+              "name": "产品经理",
+              "description": "管理授权产品规划并负责验收；须配置 product:manager 范围，发布由独立发布者执行",
+              "suggestedPermissions": [
+                "aims:products:view",
+                "aims:product_requests:view",
+                "aims:product_features:view",
+                "aims:product_components:view",
+                "aims:product_objectives:view",
+                "aims:product_priorities:view",
+                "aims:product_roadmaps:view",
+                "aims:product_roadmaps:edit",
+                "aims:product_versions:view",
+                "aims:products:edit",
+                "aims:products:admin",
+                "aims:products:archive",
+                "aims:products:restore",
+                "aims:product_requests:create",
+                "aims:product_requests:edit",
+                "aims:product_requests:decide",
+                "aims:product_requests:handoff",
+                "aims:product_requests:delete",
+                "aims:product_features:edit",
+                "aims:product_components:edit",
+                "aims:product_objectives:edit",
+                "aims:product_objectives:observe",
+                "aims:product_objectives:activate",
+                "aims:product_objectives:close",
+                "aims:product_objectives:reopen",
+                "aims:product_objectives:archive",
+                "aims:product_components:delete",
+                "aims:product_features:delete",
+                "aims:product_priorities:edit",
+                "aims:product_priorities:assess",
+                "aims:product_priorities:prioritize",
+                "aims:product_priorities:handoff",
+                "aims:product_priorities:comment",
+                "aims:product_priorities:observe",
+                "aims:product_versions:edit",
+                "aims:product_versions:accept",
+                "aims:product_versions:archive",
+                "aims:product_versions:delete",
+                "aims:product_documents:view",
+                "aims:product_documents:edit"
+              ]
+            },
+            {
+              "code": "aims:product_director",
+              "name": "产品总监",
+              "description": "治理全租户产品目录、空间、成员、目标、优先级、路线图与版本计划；企业角色须显式配置 tenant:global 范围。验收与发布由独立职责执行，不授予永久删除权限。",
+              "suggestedPermissions": [
+                "aims:products:view",
+                "aims:product_requests:view",
+                "aims:product_features:view",
+                "aims:product_components:view",
+                "aims:product_objectives:view",
+                "aims:product_priorities:view",
+                "aims:product_roadmaps:view",
+                "aims:product_roadmaps:edit",
+                "aims:product_versions:view",
+                "aims:products:onboard",
+                "aims:products:edit",
+                "aims:products:admin",
+                "aims:products:archive",
+                "aims:products:restore",
+                "aims:product_requests:create",
+                "aims:product_requests:edit",
+                "aims:product_requests:decide",
+                "aims:product_requests:handoff",
+                "aims:product_features:edit",
+                "aims:product_components:edit",
+                "aims:product_objectives:edit",
+                "aims:product_objectives:observe",
+                "aims:product_objectives:activate",
+                "aims:product_objectives:close",
+                "aims:product_objectives:reopen",
+                "aims:product_objectives:archive",
+                "aims:product_priorities:edit",
+                "aims:product_priorities:assess",
+                "aims:product_priorities:prioritize",
+                "aims:product_priorities:handoff",
+                "aims:product_priorities:comment",
+                "aims:product_priorities:observe",
+                "aims:product_versions:edit",
+                "aims:product_versions:archive",
+                "aims:product_documents:view",
+                "aims:product_documents:edit"
+              ]
+            },
+            {
+              "code": "aims:product_publisher",
+              "name": "版本发布者",
+              "description": "独立发布与重新打开授权产品版本；须配置产品范围，不包含验收权",
+              "suggestedPermissions": [
+                "aims:products:view",
+                "aims:product_versions:view",
+                "aims:product_versions:publish",
+                "aims:product_versions:reopen",
+                "aims:product_documents:view"
+              ]
+            }
+          ],
+          "supportedScopes": [
+            "tenant:global",
+            "product:code",
+            "product:member",
+            "product:manager",
+            "project:member",
+            "project:owner",
+            "department:tree",
+            "subject:self"
+          ],
+          "capabilitiesRequired": [
+            "platform:app-registry"
+          ]
+        }
+      },
+      {
+        "appCode": "assets",
+        "manifestHash": "2a9c8f42a6b1342014eb23b87e5ee92ed56fb37e4aa7cd89ddc4a5916979a0de",
+        "manifest": {
+          "appCode": "assets",
+          "appName": "汇智云资产",
+          "appType": "business",
+          "description": "企业资产与资源管理：统一维护实物资产、资源资产、产品资产、知识产权、数字资产、环境视图、客户交付视图、采购入库、分配回收、预警与成本归因。",
+          "icon": "i-lucide-boxes",
+          "entry": {
+            "web": "/",
+            "apiBase": "/api/v1/assets"
+          },
+          "runtimeRequirements": {
+            "requiresSdk": true,
+            "supportsCustomerHosted": true,
+            "supportsManagedControlPlane": false
+          },
+          "compatibility": {
+            "minControlPlaneVersion": "0.1.0",
+            "minSdkVersion": "0.1.0"
+          },
+          "resources": [
+            {
+              "code": "dashboard",
+              "name": "工作台",
+              "description": "Assets 工作台、首页看板、待处理预警和资产摘要",
+              "actions": [
+                "view"
+              ],
+              "sortOrder": 1
+            },
+            {
+              "code": "asset_items",
+              "name": "资产台账",
+              "description": "实物资产与资源资产统一台账、详情、状态和文档关联",
+              "actions": [
+                "view",
+                "edit",
+                "approve",
+                "admin"
+              ],
+              "sortOrder": 10
+            },
+            {
+              "code": "product",
+              "name": "产品目录服务",
+              "description": "服务能力 assets:product:read/edit：读取或维护有界产品主档；调用方由 Console 精确 service grant 授权",
+              "actions": [
+                "read",
+                "edit"
+              ],
+              "sortOrder": 14
+            },
+            {
+              "code": "product-adoption",
+              "name": "产品采用查询服务",
+              "description": "服务能力 assets:product-adoption:read：按受信原用户的交付资产和环境权限查询产品当前采用；不授予用户角色",
+              "actions": [
+                "read"
+              ],
+              "sortOrder": 14
+            },
+            {
+              "code": "products",
+              "name": "产品资产",
+              "description": "产品主档、产品资产关系、关联技术底座和资源资产",
+              "actions": [
+                "view",
+                "edit",
+                "admin"
+              ],
+              "sortOrder": 15
+            },
+            {
+              "code": "ip_assets",
+              "name": "知识产权资产",
+              "description": "软著、商标、专利、资质证照及其产品和文档关联",
+              "actions": [
+                "view",
+                "edit",
+                "admin"
+              ],
+              "sortOrder": 16
+            },
+            {
+              "code": "digital_assets",
+              "name": "数字资产",
+              "description": "代码、文档、数据、模型、交付物等数字资产台账",
+              "actions": [
+                "view",
+                "edit",
+                "admin"
+              ],
+              "sortOrder": 17
+            },
+            {
+              "code": "technology_bases",
+              "name": "技术底座",
+              "description": "基础平台、中台、共用模块和工具模块",
+              "actions": [
+                "view",
+                "edit",
+                "admin"
+              ],
+              "sortOrder": 18
+            },
+            {
+              "code": "environments",
+              "name": "环境视图",
+              "description": "研发、测试、演示、客户生产等环境视图及环境资产关系",
+              "actions": [
+                "view",
+                "edit",
+                "admin"
+              ],
+              "sortOrder": 20
+            },
+            {
+              "code": "deliveries",
+              "name": "客户交付视图",
+              "description": "客户、合同、项目、环境、资产和交付成本视图",
+              "actions": [
+                "view",
+                "edit",
+                "admin"
+              ],
+              "sortOrder": 30
+            },
+            {
+              "code": "suppliers",
+              "name": "供应商台账",
+              "description": "供应商基础信息、采购关联和启停状态",
+              "actions": [
+                "view",
+                "edit",
+                "admin"
+              ],
+              "sortOrder": 40
+            },
+            {
+              "code": "purchase_orders",
+              "name": "采购单",
+              "description": "采购申请、采购明细、审批状态、采购闭环和订单变更",
+              "actions": [
+                "view",
+                "edit",
+                "approve",
+                "admin"
+              ],
+              "sortOrder": 50
+            },
+            {
+              "code": "receipts",
+              "name": "入库激活",
+              "description": "实物资产入库、资源资产开通、订阅授权激活和采购项收货",
+              "actions": [
+                "view",
+                "edit",
+                "admin"
+              ],
+              "sortOrder": 60
+            },
+            {
+              "code": "assignments",
+              "name": "资产操作",
+              "description": "资产分配、领用、转移、归还、释放、报废和操作记录",
+              "actions": [
+                "view",
+                "request",
+                "edit",
+                "approve",
+                "admin"
+              ],
+              "sortOrder": 70
+            },
+            {
+              "code": "offboarding_recoveries",
+              "name": "离职资产回收",
+              "description": "离职员工未归还资产清单、明确责任人分配与回收跟踪",
+              "actions": [
+                "view",
+                "edit",
+                "admin"
+              ],
+              "sortOrder": 75
+            },
+            {
+              "code": "alerts",
+              "name": "预警中心",
+              "description": "到期、余量不足、超期未归还、席位超分配等预警处理闭环",
+              "actions": [
+                "view",
+                "edit",
+                "admin"
+              ],
+              "sortOrder": 80
+            },
+            {
+              "code": "reports",
+              "name": "报表统计",
+              "description": "资产总览、到期管理、项目/部门成本归因、客户交付成本和环境资源视图",
+              "actions": [
+                "view",
+                "admin"
+              ],
+              "sortOrder": 90
+            },
+            {
+              "code": "integration_operations",
+              "name": "跨应用操作",
+              "description": "诊断并受控重放 Assets 发起的跨应用可靠操作",
+              "actions": [
+                "view",
+                "replay"
+              ],
+              "sortOrder": 95
+            },
+            {
+              "code": "notifications-due",
+              "name": "到期通知检查点服务",
+              "description": "统一调度路径按 generation 扫描到期与离职未回收条件并保存通知检查点的精确服务能力，不授予普通用户角色",
+              "actions": [
+                "execute"
+              ],
+              "sortOrder": 96
+            },
+            {
+              "code": "admin",
+              "name": "系统管理",
+              "description": "资产类别、字典、系统配置和应用后台管理",
+              "actions": [
+                "view",
+                "admin"
+              ],
+              "sortOrder": 100
+            }
+          ],
+          "actionImplications": [
+            {
+              "resourceCode": "assignments",
+              "action": "edit",
+              "implies": [
+                "view",
+                "request"
+              ]
+            },
+            {
+              "resourceCode": "assignments",
+              "action": "admin",
+              "implies": [
+                "view",
+                "edit",
+                "request"
+              ]
+            }
+          ],
+          "recommendedRoles": [
+            {
+              "code": "assets:viewer",
+              "name": "Assets 只读",
+              "description": "查看被授权范围内的资产、环境、交付、采购、预警和报表",
+              "suggestedPermissions": [
+                "assets:dashboard:view",
+                "assets:asset_items:view",
+                "assets:products:view",
+                "assets:ip_assets:view",
+                "assets:digital_assets:view",
+                "assets:technology_bases:view",
+                "assets:environments:view",
+                "assets:deliveries:view",
+                "assets:suppliers:view",
+                "assets:purchase_orders:view",
+                "assets:receipts:view",
+                "assets:assignments:view",
+                "assets:offboarding_recoveries:view",
+                "assets:alerts:view",
+                "assets:reports:view"
+              ]
+            },
+            {
+              "code": "assets:employee",
+              "name": "资产使用人",
+              "description": "查看本人相关资产，发起领用、归还、释放等资产操作",
+              "suggestedPermissions": [
+                "assets:dashboard:view",
+                "assets:asset_items:view",
+                "assets:assignments:view",
+                "assets:assignments:request",
+                "assets:alerts:view"
+              ]
+            },
+            {
+              "code": "assets:requester",
+              "name": "资产申请人",
+              "description": "查看资产目录，发起采购、领用、归还、释放等申请",
+              "suggestedPermissions": [
+                "assets:dashboard:view",
+                "assets:asset_items:view",
+                "assets:purchase_orders:edit",
+                "assets:assignments:view",
+                "assets:assignments:request",
+                "assets:alerts:view"
+              ]
+            },
+            {
+              "code": "assets:custodian",
+              "name": "资产保管人",
+              "description": "维护本人或被授权范围内的保管资产、资产操作和预警闭环",
+              "suggestedPermissions": [
+                "assets:dashboard:view",
+                "assets:asset_items:view",
+                "assets:asset_items:edit",
+                "assets:assignments:view",
+                "assets:assignments:edit",
+                "assets:offboarding_recoveries:view",
+                "assets:offboarding_recoveries:edit",
+                "assets:alerts:view",
+                "assets:alerts:edit",
+                "assets:reports:view"
+              ]
+            },
+            {
+              "code": "assets:owner",
+              "name": "部门/项目负责人",
+              "description": "管理本部门或项目相关资产、采购申请、环境交付视图和预警闭环",
+              "suggestedPermissions": [
+                "assets:dashboard:view",
+                "assets:asset_items:view",
+                "assets:asset_items:edit",
+                "assets:environments:view",
+                "assets:environments:edit",
+                "assets:deliveries:view",
+                "assets:purchase_orders:view",
+                "assets:purchase_orders:edit",
+                "assets:assignments:view",
+                "assets:assignments:edit",
+                "assets:offboarding_recoveries:view",
+                "assets:offboarding_recoveries:edit",
+                "assets:alerts:view",
+                "assets:alerts:edit",
+                "assets:reports:view"
+              ]
+            },
+            {
+              "code": "assets:procurement",
+              "name": "采购经办",
+              "description": "维护供应商、采购单和入库激活，不包含资产审批和资产台账管理",
+              "suggestedPermissions": [
+                "assets:dashboard:view",
+                "assets:asset_items:view",
+                "assets:suppliers:edit",
+                "assets:purchase_orders:edit",
+                "assets:receipts:edit",
+                "assets:reports:view"
+              ]
+            },
+            {
+              "code": "assets:inventory_manager",
+              "name": "资产台账管理员",
+              "description": "维护资产台账、产品资产、环境交付视图、入库记录和资产操作闭环，不包含资产审批",
+              "suggestedPermissions": [
+                "assets:dashboard:view",
+                "assets:asset_items:edit",
+                "assets:products:edit",
+                "assets:ip_assets:edit",
+                "assets:digital_assets:edit",
+                "assets:technology_bases:edit",
+                "assets:environments:edit",
+                "assets:deliveries:edit",
+                "assets:receipts:edit",
+                "assets:assignments:edit",
+                "assets:offboarding_recoveries:view",
+                "assets:offboarding_recoveries:edit",
+                "assets:alerts:edit",
+                "assets:reports:view"
+              ]
+            },
+            {
+              "code": "assets:asset_approver",
+              "name": "资产审批人",
+              "description": "审批资产采购、领用、调拨、报废和关键资产变更",
+              "suggestedPermissions": [
+                "assets:dashboard:view",
+                "assets:asset_items:view",
+                "assets:asset_items:approve",
+                "assets:purchase_orders:view",
+                "assets:purchase_orders:approve",
+                "assets:assignments:view",
+                "assets:assignments:approve",
+                "assets:offboarding_recoveries:view",
+                "assets:alerts:view"
+              ]
+            },
+            {
+              "code": "assets:finance",
+              "name": "资产财务",
+              "description": "查看采购金额、成本归因、客户交付成本和资产报表",
+              "suggestedPermissions": [
+                "assets:dashboard:view",
+                "assets:asset_items:view",
+                "assets:deliveries:view",
+                "assets:suppliers:view",
+                "assets:purchase_orders:view",
+                "assets:receipts:view",
+                "assets:reports:view"
+              ]
+            },
+            {
+              "code": "assets:admin",
+              "name": "Assets 管理员",
+              "description": "管理 Assets 全部资产资源、视图、采购、预警、报表和系统配置",
+              "suggestedPermissions": [
+                "assets:dashboard:view",
+                "assets:asset_items:admin",
+                "assets:asset_items:approve",
+                "assets:products:admin",
+                "assets:ip_assets:admin",
+                "assets:digital_assets:admin",
+                "assets:technology_bases:admin",
+                "assets:environments:admin",
+                "assets:deliveries:admin",
+                "assets:suppliers:admin",
+                "assets:purchase_orders:admin",
+                "assets:purchase_orders:approve",
+                "assets:receipts:admin",
+                "assets:assignments:admin",
+                "assets:assignments:approve",
+                "assets:offboarding_recoveries:admin",
+                "assets:alerts:admin",
+                "assets:reports:admin",
+                "assets:integration_operations:view",
+                "assets:integration_operations:replay",
+                "assets:admin:admin"
+              ]
+            }
+          ],
+          "supportedScopes": [
+            "tenant:global",
+            "department:tree",
+            "project:member",
+            "project:owner",
+            "subject:self",
+            "subject:owner",
+            "asset:owner",
+            "asset:keeper",
+            "asset:user"
+          ],
+          "capabilitiesRequired": [
+            "platform:app-registry"
+          ]
+        }
+      },
+      {
+        "appCode": "codocs",
+        "manifestHash": "27945d326646b7ef24a72fc682f0b2b3dcf30ed1813e02726eb8fab1e0368cac",
+        "manifest": {
+          "appCode": "codocs",
+          "appName": "汇智云文档",
+          "appType": "business",
+          "description": "协作文档、知识库、项目文档、部门文档、文档审阅与发布。",
+          "icon": "i-lucide-files",
+          "entry": {
+            "web": "/",
+            "apiBase": "/api/v1/codocs"
+          },
+          "runtimeRequirements": {
+            "requiresSdk": true,
+            "supportsCustomerHosted": true,
+            "supportsManagedControlPlane": false
+          },
+          "compatibility": {
+            "minControlPlaneVersion": "0.1.0",
+            "minSdkVersion": "0.1.0"
+          },
+          "resources": [
+            {
+              "code": "project-document-access",
+              "name": "项目文档服务访问控制",
+              "description": "Aims 已验签的项目文档查询、访问判定与策略治理",
+              "actions": [
+                "read",
+                "manage",
+                "create"
+              ],
+              "sortOrder": 9
+            },
+            {
+              "code": "documents",
+              "name": "文档中心",
+              "description": "个人文档、共享文档、收藏、回收站与通用文档操作",
+              "actions": [
+                "view",
+                "create",
+                "edit",
+                "delete",
+                "export",
+                "admin"
+              ],
+              "sortOrder": 10
+            },
+            {
+              "code": "projects",
+              "name": "项目文档",
+              "description": "项目组文档、代码库文档、需求与缺陷关联文档",
+              "actions": [
+                "view",
+                "create",
+                "edit",
+                "export",
+                "admin"
+              ],
+              "sortOrder": 20
+            },
+            {
+              "code": "departments",
+              "name": "部门文档",
+              "description": "部门协同文档、会议记录、周报、部门文件柜",
+              "actions": [
+                "view",
+                "create",
+                "edit",
+                "export",
+                "admin"
+              ],
+              "sortOrder": 30
+            },
+            {
+              "code": "company",
+              "name": "组织资产",
+              "description": "公司制度、公告、法务合规、技术规范、产品资料与知识库",
+              "actions": [
+                "view",
+                "create",
+                "edit",
+                "publish",
+                "export",
+                "admin"
+              ],
+              "sortOrder": 40
+            },
+            {
+              "code": "reviews",
+              "name": "审阅中心",
+              "description": "Workflow 发文审批及归档、盖章、发送、接收执行",
+              "actions": [
+                "view",
+                "submit",
+                "approve",
+                "archive",
+                "admin"
+              ],
+              "sortOrder": 50
+            },
+            {
+              "code": "info",
+              "name": "资讯中心",
+              "description": "前沿资讯、推荐文章、资讯书签管理",
+              "actions": [
+                "view",
+                "edit",
+                "admin"
+              ],
+              "sortOrder": 60
+            },
+            {
+              "code": "admin",
+              "name": "系统管理",
+              "description": "图片清理、归档治理等应用后台能力",
+              "actions": [
+                "view",
+                "admin"
+              ],
+              "sortOrder": 90
+            },
+            {
+              "code": "help",
+              "name": "使用指南",
+              "description": "Markdown 教程、Mermaid 语法",
+              "actions": [
+                "view"
+              ],
+              "sortOrder": 100
+            },
+            {
+              "code": "product-document",
+              "name": "产品文档服务读取",
+              "description": "由受信 AIMS 产品文档命令触发，逐文档重新校验 Codocs ACL；不授予产品成员正文权限",
+              "actions": [
+                "read",
+                "create"
+              ],
+              "sortOrder": 190
+            },
+            {
+              "code": "project-document",
+              "name": "项目文档服务能力",
+              "description": "供 Aims 与统一企业宿主按签名命令读取项目文档内容；不授予普通用户角色",
+              "actions": [
+                "content:read"
+              ],
+              "sortOrder": 191
+            },
+            {
+              "code": "collaboration-snapshots",
+              "name": "协作运行时 v2 快照",
+              "description": "Collab 服务身份（collab.runtime）经 Host 为已验证写者打开的协作会话读取、准备与发布 Markdown/Yjs 配对快照；每次写入在文档行锁下核对会话、epoch 与发起人写权限，不授予任何用户角色",
+              "actions": [
+                "read",
+                "publish"
+              ],
+              "sortOrder": 193
+            }
+          ],
+          "recommendedRoles": [
+            {
+              "code": "codocs:viewer",
+              "name": "Codocs 只读",
+              "description": "可进入 Codocs 并查看被授权的文档资源",
+              "suggestedPermissions": [
+                "codocs:documents:view",
+                "codocs:projects:view",
+                "codocs:departments:view",
+                "codocs:company:view",
+                "codocs:reviews:view",
+                "codocs:info:view",
+                "codocs:help:view"
+              ]
+            },
+            {
+              "code": "codocs:editor",
+              "name": "Codocs 编辑",
+              "description": "可创建、编辑被授权范围内的文档",
+              "suggestedPermissions": [
+                "codocs:documents:create",
+                "codocs:documents:edit",
+                "codocs:projects:create",
+                "codocs:projects:edit",
+                "codocs:departments:create",
+                "codocs:departments:edit",
+                "codocs:reviews:submit"
+              ]
+            },
+            {
+              "code": "codocs:publisher",
+              "name": "Codocs 发布审阅",
+              "description": "可处理组织资产发布与审阅归档流程",
+              "suggestedPermissions": [
+                "codocs:departments:export",
+                "codocs:company:publish",
+                "codocs:reviews:approve",
+                "codocs:reviews:archive"
+              ]
+            },
+            {
+              "code": "codocs:records_manager",
+              "name": "Codocs 档案管理员",
+              "description": "治理企业档案、项目档案、部门档案和审阅归档，不包含应用全局配置",
+              "suggestedPermissions": [
+                "codocs:documents:view",
+                "codocs:documents:export",
+                "codocs:projects:view",
+                "codocs:projects:export",
+                "codocs:departments:view",
+                "codocs:departments:export",
+                "codocs:company:view",
+                "codocs:reviews:view",
+                "codocs:reviews:archive",
+                "codocs:info:view"
+              ]
+            },
+            {
+              "code": "codocs:space_admin",
+              "name": "Codocs 空间管理员",
+              "description": "管理文档空间、项目文档、部门文档、组织资产和资讯空间，不包含应用后台配置",
+              "suggestedPermissions": [
+                "codocs:documents:admin",
+                "codocs:projects:admin",
+                "codocs:departments:admin",
+                "codocs:company:admin",
+                "codocs:info:admin"
+              ]
+            },
+            {
+              "code": "codocs:admin",
+              "name": "Codocs 管理员",
+              "description": "管理 Codocs 应用配置、发文执行与全局文档能力",
+              "suggestedPermissions": [
+                "codocs:documents:admin",
+                "codocs:documents:delete",
+                "codocs:documents:export",
+                "codocs:projects:admin",
+                "codocs:projects:export",
+                "codocs:departments:admin",
+                "codocs:departments:export",
+                "codocs:company:admin",
+                "codocs:company:publish",
+                "codocs:company:export",
+                "codocs:reviews:admin",
+                "codocs:reviews:approve",
+                "codocs:reviews:archive",
+                "codocs:info:admin",
+                "codocs:admin:admin"
+              ]
+            }
+          ],
+          "supportedScopes": [
+            "tenant:global",
+            "department:tree",
+            "project:member",
+            "subject:self"
+          ],
+          "capabilitiesRequired": [
+            "platform:app-registry"
+          ]
+        }
+      }
+    ],
+    "permissionCatalog": {
+      "permissionCodes": [
+        "aims:admin:admin",
+        "aims:admin:edit",
+        "aims:admin:view",
+        "aims:aims_overview:view",
+        "aims:board:edit",
+        "aims:board:view",
+        "aims:integration_operation:execute",
+        "aims:integration_operations:replay",
+        "aims:integration_operations:view",
+        "aims:milestone-rollover:execute",
+        "aims:notifications-due:execute",
+        "aims:notifications:view",
+        "aims:portfolios:admin",
+        "aims:portfolios:edit",
+        "aims:portfolios:view",
+        "aims:product-components:create",
+        "aims:product-components:delete",
+        "aims:product-components:edit",
+        "aims:product-components:move",
+        "aims:product-components:read",
+        "aims:product-cost-rules:freeze",
+        "aims:product-cost-rules:status",
+        "aims:product-documents:create",
+        "aims:product-documents:edit",
+        "aims:product-documents:read",
+        "aims:product-documents:remove",
+        "aims:product-documents:restore",
+        "aims:product-features:component-assign",
+        "aims:product-features:create",
+        "aims:product-features:delete",
+        "aims:product-features:edit",
+        "aims:product-features:lifecycle",
+        "aims:product-features:read",
+        "aims:product-features:request-link",
+        "aims:product-objectives:activate",
+        "aims:product-objectives:archive",
+        "aims:product-objectives:close",
+        "aims:product-objectives:create",
+        "aims:product-objectives:cycle-map",
+        "aims:product-objectives:cycle-revoke",
+        "aims:product-objectives:edit",
+        "aims:product-objectives:item-link",
+        "aims:product-objectives:observe",
+        "aims:product-objectives:read",
+        "aims:product-objectives:reopen",
+        "aims:product-priorities:assess",
+        "aims:product-priorities:budget-change",
+        "aims:product-priorities:comment",
+        "aims:product-priorities:consumption-confirm",
+        "aims:product-priorities:create",
+        "aims:product-priorities:cross-dependency-create",
+        "aims:product-priorities:cross-dependency-remove",
+        "aims:product-priorities:cycle-close",
+        "aims:product-priorities:cycle-model-select",
+        "aims:product-priorities:cycle-open",
+        "aims:product-priorities:cycle-review",
+        "aims:product-priorities:edit",
+        "aims:product-priorities:feature-link",
+        "aims:product-priorities:handoff",
+        "aims:product-priorities:model-create",
+        "aims:product-priorities:move",
+        "aims:product-priorities:observe",
+        "aims:product-priorities:project-authorization",
+        "aims:product-priorities:reach-record",
+        "aims:product-priorities:read",
+        "aims:product-priorities:rice-assess",
+        "aims:product-priorities:select",
+        "aims:product-priorities:withdraw",
+        "aims:product-request:create-from-feedback",
+        "aims:product-requests:create",
+        "aims:product-requests:decide",
+        "aims:product-requests:edit",
+        "aims:product-requests:merge",
+        "aims:product-requests:read",
+        "aims:product-requests:source-create",
+        "aims:product-requests:source-delete",
+        "aims:product-roadmaps:commit",
+        "aims:product-roadmaps:read",
+        "aims:product-roadmaps:view-create",
+        "aims:product-roadmaps:view-delete",
+        "aims:product-roadmaps:view-update",
+        "aims:product-roadmaps:window-edit",
+        "aims:product-version-summary:read",
+        "aims:product-versions:accept",
+        "aims:product-versions:archive",
+        "aims:product-versions:create",
+        "aims:product-versions:delete",
+        "aims:product-versions:edit",
+        "aims:product-versions:publish",
+        "aims:product-versions:read",
+        "aims:product-versions:reopen",
+        "aims:product-versions:scope-create",
+        "aims:product-versions:scope-deliver",
+        "aims:product-versions:scope-edit",
+        "aims:product-versions:scope-legacy-criteria",
+        "aims:product-versions:scope-reopen",
+        "aims:product-versions:scope-visibility",
+        "aims:product_components:delete",
+        "aims:product_components:edit",
+        "aims:product_components:view",
+        "aims:product_documents:edit",
+        "aims:product_documents:view",
+        "aims:product_features:delete",
+        "aims:product_features:edit",
+        "aims:product_features:view",
+        "aims:product_objectives:activate",
+        "aims:product_objectives:archive",
+        "aims:product_objectives:close",
+        "aims:product_objectives:edit",
+        "aims:product_objectives:observe",
+        "aims:product_objectives:reopen",
+        "aims:product_objectives:view",
+        "aims:product_priorities:assess",
+        "aims:product_priorities:comment",
+        "aims:product_priorities:edit",
+        "aims:product_priorities:handoff",
+        "aims:product_priorities:observe",
+        "aims:product_priorities:prioritize",
+        "aims:product_priorities:view",
+        "aims:product_requests:create",
+        "aims:product_requests:decide",
+        "aims:product_requests:delete",
+        "aims:product_requests:edit",
+        "aims:product_requests:handoff",
+        "aims:product_requests:view",
+        "aims:product_roadmaps:commit",
+        "aims:product_roadmaps:edit",
+        "aims:product_roadmaps:view",
+        "aims:product_versions:accept",
+        "aims:product_versions:archive",
+        "aims:product_versions:delete",
+        "aims:product_versions:edit",
+        "aims:product_versions:publish",
+        "aims:product_versions:reopen",
+        "aims:product_versions:view",
+        "aims:products:admin",
+        "aims:products:archive",
+        "aims:products:authorization-object",
+        "aims:products:edit",
+        "aims:products:onboard",
+        "aims:products:restore",
+        "aims:products:view",
+        "aims:project-document-access:manage",
+        "aims:project-document-access:read",
+        "aims:project-document-sources:read",
+        "aims:project-documents:download",
+        "aims:project-documents:read",
+        "aims:project-documents:write",
+        "aims:project_templates:admin",
+        "aims:project_templates:edit",
+        "aims:project_templates:view",
+        "aims:projects:admin",
+        "aims:projects:approve",
+        "aims:projects:close",
+        "aims:projects:create",
+        "aims:projects:edit",
+        "aims:projects:view",
+        "aims:quality_reviews:configure",
+        "aims:quality_reviews:review",
+        "aims:quality_reviews:view",
+        "aims:quality_reviews:waive",
+        "aims:reports:admin",
+        "aims:reports:edit",
+        "aims:reports:export",
+        "aims:reports:view",
+        "aims:requirements:admin",
+        "aims:requirements:edit",
+        "aims:requirements:view",
+        "aims:timesheet:admin",
+        "aims:timesheet:approve",
+        "aims:timesheet:submit",
+        "aims:timesheet:view",
+        "aims:weekly_reports:configure",
+        "aims:weekly_reports:export",
+        "aims:weekly_reports:publish",
+        "aims:weekly_reports:review",
+        "aims:weekly_reports:submit",
+        "aims:weekly_reports:view",
+        "aims:work-item-completion-callback:execute",
+        "aims:work_items:assign",
+        "aims:work_items:confirm",
+        "aims:work_items:create",
+        "aims:work_items:delete",
+        "aims:work_items:edit",
+        "aims:work_items:view",
+        "assets:admin:admin",
+        "assets:admin:view",
+        "assets:alerts:admin",
+        "assets:alerts:edit",
+        "assets:alerts:view",
+        "assets:asset_items:admin",
+        "assets:asset_items:approve",
+        "assets:asset_items:edit",
+        "assets:asset_items:view",
+        "assets:assignments:admin",
+        "assets:assignments:approve",
+        "assets:assignments:edit",
+        "assets:assignments:request",
+        "assets:assignments:view",
+        "assets:dashboard:view",
+        "assets:deliveries:admin",
+        "assets:deliveries:edit",
+        "assets:deliveries:view",
+        "assets:digital_assets:admin",
+        "assets:digital_assets:edit",
+        "assets:digital_assets:view",
+        "assets:environments:admin",
+        "assets:environments:edit",
+        "assets:environments:view",
+        "assets:integration_operations:replay",
+        "assets:integration_operations:view",
+        "assets:ip_assets:admin",
+        "assets:ip_assets:edit",
+        "assets:ip_assets:view",
+        "assets:notifications-due:execute",
+        "assets:offboarding_recoveries:admin",
+        "assets:offboarding_recoveries:edit",
+        "assets:offboarding_recoveries:view",
+        "assets:product-adoption:read",
+        "assets:product:edit",
+        "assets:product:read",
+        "assets:products:admin",
+        "assets:products:edit",
+        "assets:products:view",
+        "assets:purchase_orders:admin",
+        "assets:purchase_orders:approve",
+        "assets:purchase_orders:edit",
+        "assets:purchase_orders:view",
+        "assets:receipts:admin",
+        "assets:receipts:edit",
+        "assets:receipts:view",
+        "assets:reports:admin",
+        "assets:reports:view",
+        "assets:suppliers:admin",
+        "assets:suppliers:edit",
+        "assets:suppliers:view",
+        "assets:technology_bases:admin",
+        "assets:technology_bases:edit",
+        "assets:technology_bases:view",
+        "codocs:admin:admin",
+        "codocs:admin:view",
+        "codocs:collaboration-snapshots:publish",
+        "codocs:collaboration-snapshots:read",
+        "codocs:company:admin",
+        "codocs:company:create",
+        "codocs:company:edit",
+        "codocs:company:export",
+        "codocs:company:publish",
+        "codocs:company:view",
+        "codocs:departments:admin",
+        "codocs:departments:create",
+        "codocs:departments:edit",
+        "codocs:departments:export",
+        "codocs:departments:view",
+        "codocs:documents:admin",
+        "codocs:documents:create",
+        "codocs:documents:delete",
+        "codocs:documents:edit",
+        "codocs:documents:export",
+        "codocs:documents:view",
+        "codocs:help:view",
+        "codocs:info:admin",
+        "codocs:info:edit",
+        "codocs:info:view",
+        "codocs:product-document:create",
+        "codocs:product-document:read",
+        "codocs:project-document-access:create",
+        "codocs:project-document-access:manage",
+        "codocs:project-document-access:read",
+        "codocs:project-document:content:read",
+        "codocs:projects:admin",
+        "codocs:projects:create",
+        "codocs:projects:edit",
+        "codocs:projects:export",
+        "codocs:projects:view",
+        "codocs:reviews:admin",
+        "codocs:reviews:approve",
+        "codocs:reviews:archive",
+        "codocs:reviews:submit",
+        "codocs:reviews:view"
+      ],
+      "resources": [
+        {
+          "code": "admin",
+          "name": "系统管理",
+          "description": "AIMS 应用级后台管理",
+          "actions": [
+            "view",
+            "edit",
+            "admin"
+          ],
+          "sortOrder": 90,
+          "appCode": "aims"
+        },
+        {
+          "code": "aims_overview",
+          "name": "工作台",
+          "description": "AIMS 个人工作台与项目概览",
+          "actions": [
+            "view"
+          ],
+          "sortOrder": 1,
+          "appCode": "aims"
+        },
+        {
+          "code": "board",
+          "name": "看板",
+          "description": "迭代看板与状态流转",
+          "actions": [
+            "view",
+            "edit"
+          ],
+          "sortOrder": 40,
+          "appCode": "aims"
+        },
+        {
+          "code": "integration_operation",
+          "name": "可靠操作执行服务",
+          "description": "AIMS worker 领取任务并保存执行回执的精确服务能力，不授予普通用户角色",
+          "actions": [
+            "execute"
+          ],
+          "sortOrder": 84,
+          "appCode": "aims"
+        },
+        {
+          "code": "integration_operations",
+          "name": "跨应用操作",
+          "description": "诊断并受控重放 AIMS 发起的跨应用可靠操作",
+          "actions": [
+            "view",
+            "replay"
+          ],
+          "sortOrder": 85,
+          "appCode": "aims"
+        },
+        {
+          "code": "milestone-rollover",
+          "name": "周期里程碑滚动服务",
+          "description": "统一调度路径按 generation 滚动到期周期里程碑的精确服务能力，不授予普通用户角色",
+          "actions": [
+            "execute"
+          ],
+          "sortOrder": 86,
+          "appCode": "aims"
+        },
+        {
+          "code": "notifications",
+          "name": "通知",
+          "description": "AIMS 内的通知中心与待办",
+          "actions": [
+            "view"
+          ],
+          "sortOrder": 70,
+          "appCode": "aims"
+        },
+        {
+          "code": "notifications-due",
+          "name": "到期通知检查点服务",
+          "description": "统一调度路径按 generation 扫描到期条件并保存通知检查点的精确服务能力，不授予普通用户角色",
+          "actions": [
+            "execute"
+          ],
+          "sortOrder": 87,
+          "appCode": "aims"
+        },
+        {
+          "code": "portfolios",
+          "name": "项目组合",
+          "description": "组合（portfolio）层级的研发资产视图",
+          "actions": [
+            "view",
+            "edit",
+            "admin"
+          ],
+          "sortOrder": 10,
+          "appCode": "aims"
+        },
+        {
+          "code": "product_components",
+          "name": "产品模块",
+          "description": "三层模块树与功能归属",
+          "actions": [
+            "view",
+            "edit",
+            "delete"
+          ],
+          "sortOrder": 114,
+          "appCode": "aims"
+        },
+        {
+          "code": "product_documents",
+          "name": "产品文档关系",
+          "description": "维护产品与文档 UUID 的关联；不授予 Codocs 正文或分享权限",
+          "actions": [
+            "view",
+            "edit"
+          ],
+          "sortOrder": 109,
+          "appCode": "aims"
+        },
+        {
+          "code": "product_features",
+          "name": "产品功能",
+          "description": "长期功能与演进范围",
+          "actions": [
+            "view",
+            "edit",
+            "delete"
+          ],
+          "sortOrder": 102,
+          "appCode": "aims"
+        },
+        {
+          "code": "product_objectives",
+          "name": "产品目标",
+          "description": "产品目标与指标观测",
+          "actions": [
+            "view",
+            "edit",
+            "observe",
+            "activate",
+            "close",
+            "reopen",
+            "archive"
+          ],
+          "sortOrder": 116,
+          "appCode": "aims"
+        },
+        {
+          "code": "product_priorities",
+          "name": "产品优先级",
+          "description": "规划周期、评估、容量取舍和结果回看",
+          "actions": [
+            "view",
+            "edit",
+            "assess",
+            "prioritize",
+            "handoff",
+            "comment",
+            "observe"
+          ],
+          "sortOrder": 103,
+          "appCode": "aims"
+        },
+        {
+          "code": "product_requests",
+          "name": "产品需求",
+          "description": "需求收集、决策与项目转交",
+          "actions": [
+            "view",
+            "create",
+            "edit",
+            "decide",
+            "handoff",
+            "delete"
+          ],
+          "sortOrder": 101,
+          "appCode": "aims"
+        },
+        {
+          "code": "product_roadmaps",
+          "name": "产品路线图",
+          "description": "路线视图与正式承诺",
+          "actions": [
+            "view",
+            "edit",
+            "commit"
+          ],
+          "sortOrder": 104,
+          "appCode": "aims"
+        },
+        {
+          "code": "product_versions",
+          "name": "产品版本",
+          "description": "版本范围、独立验收、发布和历史",
+          "actions": [
+            "view",
+            "edit",
+            "accept",
+            "publish",
+            "reopen",
+            "archive",
+            "delete"
+          ],
+          "sortOrder": 105,
+          "appCode": "aims"
+        },
+        {
+          "code": "product-components",
+          "name": "产品模块内部服务",
+          "description": "模块 Runtime 精确服务能力，不作为用户角色授权资源",
+          "actions": [
+            "read",
+            "create",
+            "move",
+            "edit",
+            "delete"
+          ],
+          "sortOrder": 115,
+          "appCode": "aims"
+        },
+        {
+          "code": "product-cost-rules",
+          "name": "产品成本规则内部服务",
+          "description": "冻结项目产品分摊规则的精确 Runtime 能力，不授予 Finance 项目核算编辑权限",
+          "actions": [
+            "freeze",
+            "status"
+          ],
+          "sortOrder": 120,
+          "appCode": "aims"
+        },
+        {
+          "code": "product-documents",
+          "name": "产品文档关系内部服务",
+          "description": "产品文档关系 Runtime 精确读取、关联创建、用途维护、解除与恢复能力，不授予 Codocs 访问权限",
+          "actions": [
+            "read",
+            "remove",
+            "edit",
+            "restore",
+            "create"
+          ],
+          "sortOrder": 119,
+          "appCode": "aims"
+        },
+        {
+          "code": "product-features",
+          "name": "产品功能内部服务",
+          "description": "长期功能 Runtime 精确服务能力，不作为用户角色授权资源",
+          "actions": [
+            "create",
+            "read",
+            "edit",
+            "delete",
+            "request-link",
+            "lifecycle",
+            "component-assign"
+          ],
+          "sortOrder": 112,
+          "appCode": "aims"
+        },
+        {
+          "code": "product-objectives",
+          "name": "产品目标内部服务",
+          "description": "目标 Runtime 精确服务能力，不作为用户角色授权资源",
+          "actions": [
+            "read",
+            "create",
+            "edit",
+            "item-link",
+            "cycle-map",
+            "cycle-revoke",
+            "observe",
+            "activate",
+            "close",
+            "reopen",
+            "archive"
+          ],
+          "sortOrder": 117,
+          "appCode": "aims"
+        },
+        {
+          "code": "product-priorities",
+          "name": "产品规划内部服务",
+          "description": "产品规划 Runtime 精确服务能力，不作为用户角色授权资源",
+          "actions": [
+            "model-create",
+            "reach-record",
+            "rice-assess",
+            "cycle-model-select",
+            "cross-dependency-create",
+            "cross-dependency-remove",
+            "create",
+            "read",
+            "edit",
+            "cycle-open",
+            "cycle-close",
+            "cycle-review",
+            "budget-change",
+            "withdraw",
+            "consumption-confirm",
+            "comment",
+            "observe",
+            "assess",
+            "move",
+            "select",
+            "feature-link",
+            "project-authorization",
+            "handoff"
+          ],
+          "sortOrder": 111,
+          "appCode": "aims"
+        },
+        {
+          "code": "product-request",
+          "name": "客户反馈需求接收服务",
+          "description": "接收经过签名和产品授权的外部客户反馈，不授予普通用户角色",
+          "actions": [
+            "create-from-feedback"
+          ],
+          "sortOrder": 1,
+          "appCode": "aims"
+        },
+        {
+          "code": "product-requests",
+          "name": "产品需求内部服务",
+          "description": "产品需求 Runtime 精确服务能力，不作为用户角色授权资源",
+          "actions": [
+            "create",
+            "read",
+            "edit",
+            "decide",
+            "source-create",
+            "source-delete",
+            "merge"
+          ],
+          "sortOrder": 110,
+          "appCode": "aims"
+        },
+        {
+          "code": "product-roadmaps",
+          "name": "产品路线内部服务",
+          "description": "路线图 Runtime 精确服务能力",
+          "actions": [
+            "read",
+            "window-edit",
+            "commit",
+            "view-create",
+            "view-update",
+            "view-delete"
+          ],
+          "sortOrder": 118,
+          "appCode": "aims"
+        },
+        {
+          "code": "product-version-summary",
+          "name": "产品公开版本摘要",
+          "description": "Assets 只读版本元数据与公开特性计数",
+          "actions": [
+            "read"
+          ],
+          "sortOrder": 121,
+          "appCode": "aims"
+        },
+        {
+          "code": "product-versions",
+          "name": "产品版本内部服务",
+          "description": "产品版本 Runtime 精确能力，不作为用户角色授权资源",
+          "actions": [
+            "create",
+            "edit",
+            "read",
+            "scope-create",
+            "scope-edit",
+            "scope-deliver",
+            "scope-reopen",
+            "scope-visibility",
+            "scope-legacy-criteria",
+            "accept",
+            "publish",
+            "reopen",
+            "archive",
+            "delete"
+          ],
+          "sortOrder": 113,
+          "appCode": "aims"
+        },
+        {
+          "code": "products",
+          "name": "产品空间",
+          "description": "独立产品或产品线统一管理空间的接入、定位、成员关系和生命周期；authorization-object 为内部服务读取能力，不授予默认用户角色",
+          "actions": [
+            "view",
+            "edit",
+            "onboard",
+            "authorization-object",
+            "archive",
+            "restore",
+            "admin"
+          ],
+          "sortOrder": 100,
+          "appCode": "aims"
+        },
+        {
+          "code": "project_templates",
+          "name": "项目模板",
+          "description": "项目模板与流程模板的定义与维护",
+          "actions": [
+            "view",
+            "edit",
+            "admin"
+          ],
+          "sortOrder": 80,
+          "appCode": "aims"
+        },
+        {
+          "code": "project-document-access",
+          "name": "项目文档访问策略代理",
+          "description": "企业 Host 经 Aims 正式身份读取或修改项目文档访问策略、权限判定与访问审计；改策略的门槛是项目经理而非文档编辑者，因此 manage 与 read 分列，read 不蕴含 manage",
+          "actions": [
+            "read",
+            "manage"
+          ],
+          "sortOrder": 28,
+          "appCode": "aims"
+        },
+        {
+          "code": "project-document-sources",
+          "name": "项目文档候选来源只读代理",
+          "description": "企业 Host 经 Aims 正式身份读取可附加为项目文档的候选来源：部门 Codocs 文档、项目集 Codocs 文档、已绑定仓库的 Markdown 目录与正文；每条都按操作者本人的部门／项目／仓库访问权重新判定",
+          "actions": [
+            "read"
+          ],
+          "sortOrder": 28,
+          "appCode": "aims"
+        },
+        {
+          "code": "project-documents",
+          "name": "项目文档代理",
+          "description": "企业 Host 经 Aims 正式身份读取项目文档元数据、Codocs 内容与文件柜预览，并登记/删除项目文档索引；download 为导出性质、write 为写入性质的独立敏感动作，均不由 read 蕴含",
+          "actions": [
+            "read",
+            "download",
+            "write"
+          ],
+          "sortOrder": 28,
+          "appCode": "aims"
+        },
+        {
+          "code": "projects",
+          "name": "项目",
+          "description": "立项、成员、迭代、状态流转",
+          "actions": [
+            "view",
+            "create",
+            "edit",
+            "approve",
+            "close",
+            "admin"
+          ],
+          "sortOrder": 20,
+          "appCode": "aims"
+        },
+        {
+          "code": "quality_reviews",
+          "name": "项目文档质量检查",
+          "description": "必交文档完整性、确定版本质量检查与项目总监豁免",
+          "actions": [
+            "view",
+            "review",
+            "waive",
+            "configure"
+          ],
+          "sortOrder": 62,
+          "appCode": "aims"
+        },
+        {
+          "code": "reports",
+          "name": "报表",
+          "description": "项目进度、燃尽、负载等研发效能报表",
+          "actions": [
+            "view",
+            "edit",
+            "admin",
+            "export"
+          ],
+          "sortOrder": 60,
+          "appCode": "aims"
+        },
+        {
+          "code": "requirements",
+          "name": "需求管理",
+          "description": "项目需求池、评审与基线变更",
+          "actions": [
+            "view",
+            "edit",
+            "admin"
+          ],
+          "sortOrder": 31,
+          "appCode": "aims"
+        },
+        {
+          "code": "timesheet",
+          "name": "工时",
+          "description": "个人工时填报、审核与汇总",
+          "actions": [
+            "view",
+            "submit",
+            "approve",
+            "admin"
+          ],
+          "sortOrder": 50,
+          "appCode": "aims"
+        },
+        {
+          "code": "weekly_reports",
+          "name": "项目周报",
+          "description": "项目周报填报、独立审阅、公司汇总发布与导出",
+          "actions": [
+            "view",
+            "submit",
+            "review",
+            "publish",
+            "export",
+            "configure"
+          ],
+          "sortOrder": 61,
+          "appCode": "aims"
+        },
+        {
+          "code": "work_items",
+          "name": "工作项",
+          "description": "需求 / 任务 / 缺陷统一视图",
+          "actions": [
+            "view",
+            "create",
+            "edit",
+            "delete",
+            "assign",
+            "confirm"
+          ],
+          "sortOrder": 30,
+          "appCode": "aims"
+        },
+        {
+          "code": "work-item-completion-callback",
+          "name": "工作项完成审批回执服务",
+          "actions": [
+            "execute"
+          ],
+          "sortOrder": 20,
+          "appCode": "aims"
+        },
+        {
+          "code": "admin",
+          "name": "系统管理",
+          "description": "资产类别、字典、系统配置和应用后台管理",
+          "actions": [
+            "view",
+            "admin"
+          ],
+          "sortOrder": 100,
+          "appCode": "assets"
+        },
+        {
+          "code": "alerts",
+          "name": "预警中心",
+          "description": "到期、余量不足、超期未归还、席位超分配等预警处理闭环",
+          "actions": [
+            "view",
+            "edit",
+            "admin"
+          ],
+          "sortOrder": 80,
+          "appCode": "assets"
+        },
+        {
+          "code": "asset_items",
+          "name": "资产台账",
+          "description": "实物资产与资源资产统一台账、详情、状态和文档关联",
+          "actions": [
+            "view",
+            "edit",
+            "approve",
+            "admin"
+          ],
+          "sortOrder": 10,
+          "appCode": "assets"
+        },
+        {
+          "code": "assignments",
+          "name": "资产操作",
+          "description": "资产分配、领用、转移、归还、释放、报废和操作记录",
+          "actions": [
+            "view",
+            "request",
+            "edit",
+            "approve",
+            "admin"
+          ],
+          "sortOrder": 70,
+          "appCode": "assets"
+        },
+        {
+          "code": "dashboard",
+          "name": "工作台",
+          "description": "Assets 工作台、首页看板、待处理预警和资产摘要",
+          "actions": [
+            "view"
+          ],
+          "sortOrder": 1,
+          "appCode": "assets"
+        },
+        {
+          "code": "deliveries",
+          "name": "客户交付视图",
+          "description": "客户、合同、项目、环境、资产和交付成本视图",
+          "actions": [
+            "view",
+            "edit",
+            "admin"
+          ],
+          "sortOrder": 30,
+          "appCode": "assets"
+        },
+        {
+          "code": "digital_assets",
+          "name": "数字资产",
+          "description": "代码、文档、数据、模型、交付物等数字资产台账",
+          "actions": [
+            "view",
+            "edit",
+            "admin"
+          ],
+          "sortOrder": 17,
+          "appCode": "assets"
+        },
+        {
+          "code": "environments",
+          "name": "环境视图",
+          "description": "研发、测试、演示、客户生产等环境视图及环境资产关系",
+          "actions": [
+            "view",
+            "edit",
+            "admin"
+          ],
+          "sortOrder": 20,
+          "appCode": "assets"
+        },
+        {
+          "code": "integration_operations",
+          "name": "跨应用操作",
+          "description": "诊断并受控重放 Assets 发起的跨应用可靠操作",
+          "actions": [
+            "view",
+            "replay"
+          ],
+          "sortOrder": 95,
+          "appCode": "assets"
+        },
+        {
+          "code": "ip_assets",
+          "name": "知识产权资产",
+          "description": "软著、商标、专利、资质证照及其产品和文档关联",
+          "actions": [
+            "view",
+            "edit",
+            "admin"
+          ],
+          "sortOrder": 16,
+          "appCode": "assets"
+        },
+        {
+          "code": "notifications-due",
+          "name": "到期通知检查点服务",
+          "description": "统一调度路径按 generation 扫描到期与离职未回收条件并保存通知检查点的精确服务能力，不授予普通用户角色",
+          "actions": [
+            "execute"
+          ],
+          "sortOrder": 96,
+          "appCode": "assets"
+        },
+        {
+          "code": "offboarding_recoveries",
+          "name": "离职资产回收",
+          "description": "离职员工未归还资产清单、明确责任人分配与回收跟踪",
+          "actions": [
+            "view",
+            "edit",
+            "admin"
+          ],
+          "sortOrder": 75,
+          "appCode": "assets"
+        },
+        {
+          "code": "product",
+          "name": "产品目录服务",
+          "description": "服务能力 assets:product:read/edit：读取或维护有界产品主档；调用方由 Console 精确 service grant 授权",
+          "actions": [
+            "read",
+            "edit"
+          ],
+          "sortOrder": 14,
+          "appCode": "assets"
+        },
+        {
+          "code": "product-adoption",
+          "name": "产品采用查询服务",
+          "description": "服务能力 assets:product-adoption:read：按受信原用户的交付资产和环境权限查询产品当前采用；不授予用户角色",
+          "actions": [
+            "read"
+          ],
+          "sortOrder": 14,
+          "appCode": "assets"
+        },
+        {
+          "code": "products",
+          "name": "产品资产",
+          "description": "产品主档、产品资产关系、关联技术底座和资源资产",
+          "actions": [
+            "view",
+            "edit",
+            "admin"
+          ],
+          "sortOrder": 15,
+          "appCode": "assets"
+        },
+        {
+          "code": "purchase_orders",
+          "name": "采购单",
+          "description": "采购申请、采购明细、审批状态、采购闭环和订单变更",
+          "actions": [
+            "view",
+            "edit",
+            "approve",
+            "admin"
+          ],
+          "sortOrder": 50,
+          "appCode": "assets"
+        },
+        {
+          "code": "receipts",
+          "name": "入库激活",
+          "description": "实物资产入库、资源资产开通、订阅授权激活和采购项收货",
+          "actions": [
+            "view",
+            "edit",
+            "admin"
+          ],
+          "sortOrder": 60,
+          "appCode": "assets"
+        },
+        {
+          "code": "reports",
+          "name": "报表统计",
+          "description": "资产总览、到期管理、项目/部门成本归因、客户交付成本和环境资源视图",
+          "actions": [
+            "view",
+            "admin"
+          ],
+          "sortOrder": 90,
+          "appCode": "assets"
+        },
+        {
+          "code": "suppliers",
+          "name": "供应商台账",
+          "description": "供应商基础信息、采购关联和启停状态",
+          "actions": [
+            "view",
+            "edit",
+            "admin"
+          ],
+          "sortOrder": 40,
+          "appCode": "assets"
+        },
+        {
+          "code": "technology_bases",
+          "name": "技术底座",
+          "description": "基础平台、中台、共用模块和工具模块",
+          "actions": [
+            "view",
+            "edit",
+            "admin"
+          ],
+          "sortOrder": 18,
+          "appCode": "assets"
+        },
+        {
+          "code": "admin",
+          "name": "系统管理",
+          "description": "图片清理、归档治理等应用后台能力",
+          "actions": [
+            "view",
+            "admin"
+          ],
+          "sortOrder": 90,
+          "appCode": "codocs"
+        },
+        {
+          "code": "collaboration-snapshots",
+          "name": "协作运行时 v2 快照",
+          "description": "Collab 服务身份（collab.runtime）经 Host 为已验证写者打开的协作会话读取、准备与发布 Markdown/Yjs 配对快照；每次写入在文档行锁下核对会话、epoch 与发起人写权限，不授予任何用户角色",
+          "actions": [
+            "read",
+            "publish"
+          ],
+          "sortOrder": 193,
+          "appCode": "codocs"
+        },
+        {
+          "code": "company",
+          "name": "组织资产",
+          "description": "公司制度、公告、法务合规、技术规范、产品资料与知识库",
+          "actions": [
+            "view",
+            "create",
+            "edit",
+            "publish",
+            "export",
+            "admin"
+          ],
+          "sortOrder": 40,
+          "appCode": "codocs"
+        },
+        {
+          "code": "departments",
+          "name": "部门文档",
+          "description": "部门协同文档、会议记录、周报、部门文件柜",
+          "actions": [
+            "view",
+            "create",
+            "edit",
+            "export",
+            "admin"
+          ],
+          "sortOrder": 30,
+          "appCode": "codocs"
+        },
+        {
+          "code": "documents",
+          "name": "文档中心",
+          "description": "个人文档、共享文档、收藏、回收站与通用文档操作",
+          "actions": [
+            "view",
+            "create",
+            "edit",
+            "delete",
+            "export",
+            "admin"
+          ],
+          "sortOrder": 10,
+          "appCode": "codocs"
+        },
+        {
+          "code": "help",
+          "name": "使用指南",
+          "description": "Markdown 教程、Mermaid 语法",
+          "actions": [
+            "view"
+          ],
+          "sortOrder": 100,
+          "appCode": "codocs"
+        },
+        {
+          "code": "info",
+          "name": "资讯中心",
+          "description": "前沿资讯、推荐文章、资讯书签管理",
+          "actions": [
+            "view",
+            "edit",
+            "admin"
+          ],
+          "sortOrder": 60,
+          "appCode": "codocs"
+        },
+        {
+          "code": "product-document",
+          "name": "产品文档服务读取",
+          "description": "由受信 AIMS 产品文档命令触发，逐文档重新校验 Codocs ACL；不授予产品成员正文权限",
+          "actions": [
+            "read",
+            "create"
+          ],
+          "sortOrder": 190,
+          "appCode": "codocs"
+        },
+        {
+          "code": "project-document",
+          "name": "项目文档服务能力",
+          "description": "供 Aims 与统一企业宿主按签名命令读取项目文档内容；不授予普通用户角色",
+          "actions": [
+            "content:read"
+          ],
+          "sortOrder": 191,
+          "appCode": "codocs"
+        },
+        {
+          "code": "project-document-access",
+          "name": "项目文档服务访问控制",
+          "description": "Aims 已验签的项目文档查询、访问判定与策略治理",
+          "actions": [
+            "read",
+            "manage",
+            "create"
+          ],
+          "sortOrder": 9,
+          "appCode": "codocs"
+        },
+        {
+          "code": "projects",
+          "name": "项目文档",
+          "description": "项目组文档、代码库文档、需求与缺陷关联文档",
+          "actions": [
+            "view",
+            "create",
+            "edit",
+            "export",
+            "admin"
+          ],
+          "sortOrder": 20,
+          "appCode": "codocs"
+        },
+        {
+          "code": "reviews",
+          "name": "审阅中心",
+          "description": "Workflow 发文审批及归档、盖章、发送、接收执行",
+          "actions": [
+            "view",
+            "submit",
+            "approve",
+            "archive",
+            "admin"
+          ],
+          "sortOrder": 50,
+          "appCode": "codocs"
+        }
+      ],
+      "roles": [
+        {
+          "code": "aims:admin",
+          "name": "AIMS 管理员",
+          "description": "创建项目并管理 AIMS 全局配置与项目模板",
+          "suggestedPermissions": [
+            "aims:aims_overview:view",
+            "aims:portfolios:admin",
+            "aims:projects:create",
+            "aims:projects:admin",
+            "aims:requirements:admin",
+            "aims:work_items:edit",
+            "aims:timesheet:admin",
+            "aims:reports:view",
+            "aims:reports:admin",
+            "aims:weekly_reports:configure",
+            "aims:project_templates:admin",
+            "aims:integration_operations:view",
+            "aims:integration_operations:replay",
+            "aims:admin:admin"
+          ],
+          "appCode": "aims"
+        },
+        {
+          "code": "aims:dev",
+          "name": "AIMS 开发",
+          "description": "执行任务、提交工时、参与看板流转",
+          "suggestedPermissions": [
+            "aims:aims_overview:view",
+            "aims:projects:view",
+            "aims:requirements:view",
+            "aims:work_items:edit",
+            "aims:board:edit",
+            "aims:timesheet:submit",
+            "aims:weekly_reports:view",
+            "aims:notifications:view"
+          ],
+          "appCode": "aims"
+        },
+        {
+          "code": "aims:member",
+          "name": "AIMS 项目成员",
+          "description": "执行项目任务、提交工时、参与看板流转；用于替代历史 aims:dev 展示语义",
+          "suggestedPermissions": [
+            "aims:aims_overview:view",
+            "aims:projects:view",
+            "aims:requirements:view",
+            "aims:work_items:edit",
+            "aims:board:edit",
+            "aims:timesheet:submit",
+            "aims:weekly_reports:view",
+            "aims:notifications:view"
+          ],
+          "appCode": "aims"
+        },
+        {
+          "code": "aims:pm",
+          "name": "AIMS 项目经理",
+          "description": "管理项目计划、迭代、人员、工时审核和工作项确认；项目级管理范围主要由项目关系或授权范围决定，不默认获得全局项目管理员",
+          "suggestedPermissions": [
+            "aims:aims_overview:view",
+            "aims:portfolios:view",
+            "aims:projects:view",
+            "aims:projects:create",
+            "aims:projects:edit",
+            "aims:projects:close",
+            "aims:requirements:view",
+            "aims:requirements:edit",
+            "aims:work_items:view",
+            "aims:work_items:create",
+            "aims:work_items:edit",
+            "aims:work_items:delete",
+            "aims:work_items:assign",
+            "aims:work_items:confirm",
+            "aims:board:view",
+            "aims:board:edit",
+            "aims:timesheet:view",
+            "aims:timesheet:submit",
+            "aims:timesheet:approve",
+            "aims:weekly_reports:view",
+            "aims:weekly_reports:submit",
+            "aims:reports:view",
+            "aims:reports:export",
+            "aims:notifications:view"
+          ],
+          "appCode": "aims"
+        },
+        {
+          "code": "aims:pmo",
+          "name": "AIMS PMO",
+          "description": "管理项目组合、跨项目交付质量、项目状态、工时审核和研发报表，不包含项目审批、应用后台配置或全局项目管理员",
+          "suggestedPermissions": [
+            "aims:aims_overview:view",
+            "aims:portfolios:view",
+            "aims:portfolios:edit",
+            "aims:portfolios:admin",
+            "aims:projects:view",
+            "aims:projects:create",
+            "aims:projects:edit",
+            "aims:projects:close",
+            "aims:requirements:view",
+            "aims:requirements:edit",
+            "aims:work_items:view",
+            "aims:board:view",
+            "aims:timesheet:view",
+            "aims:timesheet:approve",
+            "aims:reports:view",
+            "aims:reports:export",
+            "aims:notifications:view"
+          ],
+          "appCode": "aims"
+        },
+        {
+          "code": "aims:product_contributor",
+          "name": "产品贡献者",
+          "description": "提交需求、补充证据和参与讨论；须配置产品成员范围",
+          "suggestedPermissions": [
+            "aims:products:view",
+            "aims:product_requests:view",
+            "aims:product_features:view",
+            "aims:product_components:view",
+            "aims:product_objectives:view",
+            "aims:product_priorities:view",
+            "aims:product_roadmaps:view",
+            "aims:product_versions:view",
+            "aims:product_requests:create",
+            "aims:product_requests:edit",
+            "aims:product_priorities:comment",
+            "aims:product_documents:view"
+          ],
+          "appCode": "aims"
+        },
+        {
+          "code": "aims:product_director",
+          "name": "产品总监",
+          "description": "治理全租户产品目录、空间、成员、目标、优先级、路线图与版本计划；企业角色须显式配置 tenant:global 范围。验收与发布由独立职责执行，不授予永久删除权限。",
+          "suggestedPermissions": [
+            "aims:products:view",
+            "aims:product_requests:view",
+            "aims:product_features:view",
+            "aims:product_components:view",
+            "aims:product_objectives:view",
+            "aims:product_priorities:view",
+            "aims:product_roadmaps:view",
+            "aims:product_roadmaps:edit",
+            "aims:product_versions:view",
+            "aims:products:onboard",
+            "aims:products:edit",
+            "aims:products:admin",
+            "aims:products:archive",
+            "aims:products:restore",
+            "aims:product_requests:create",
+            "aims:product_requests:edit",
+            "aims:product_requests:decide",
+            "aims:product_requests:handoff",
+            "aims:product_features:edit",
+            "aims:product_components:edit",
+            "aims:product_objectives:edit",
+            "aims:product_objectives:observe",
+            "aims:product_objectives:activate",
+            "aims:product_objectives:close",
+            "aims:product_objectives:reopen",
+            "aims:product_objectives:archive",
+            "aims:product_priorities:edit",
+            "aims:product_priorities:assess",
+            "aims:product_priorities:prioritize",
+            "aims:product_priorities:handoff",
+            "aims:product_priorities:comment",
+            "aims:product_priorities:observe",
+            "aims:product_versions:edit",
+            "aims:product_versions:archive",
+            "aims:product_documents:view",
+            "aims:product_documents:edit"
+          ],
+          "appCode": "aims"
+        },
+        {
+          "code": "aims:product_manager",
+          "name": "产品经理",
+          "description": "管理授权产品规划并负责验收；须配置 product:manager 范围，发布由独立发布者执行",
+          "suggestedPermissions": [
+            "aims:products:view",
+            "aims:product_requests:view",
+            "aims:product_features:view",
+            "aims:product_components:view",
+            "aims:product_objectives:view",
+            "aims:product_priorities:view",
+            "aims:product_roadmaps:view",
+            "aims:product_roadmaps:edit",
+            "aims:product_versions:view",
+            "aims:products:edit",
+            "aims:products:admin",
+            "aims:products:archive",
+            "aims:products:restore",
+            "aims:product_requests:create",
+            "aims:product_requests:edit",
+            "aims:product_requests:decide",
+            "aims:product_requests:handoff",
+            "aims:product_requests:delete",
+            "aims:product_features:edit",
+            "aims:product_components:edit",
+            "aims:product_objectives:edit",
+            "aims:product_objectives:observe",
+            "aims:product_objectives:activate",
+            "aims:product_objectives:close",
+            "aims:product_objectives:reopen",
+            "aims:product_objectives:archive",
+            "aims:product_components:delete",
+            "aims:product_features:delete",
+            "aims:product_priorities:edit",
+            "aims:product_priorities:assess",
+            "aims:product_priorities:prioritize",
+            "aims:product_priorities:handoff",
+            "aims:product_priorities:comment",
+            "aims:product_priorities:observe",
+            "aims:product_versions:edit",
+            "aims:product_versions:accept",
+            "aims:product_versions:archive",
+            "aims:product_versions:delete",
+            "aims:product_documents:view",
+            "aims:product_documents:edit"
+          ],
+          "appCode": "aims"
+        },
+        {
+          "code": "aims:product_publisher",
+          "name": "版本发布者",
+          "description": "独立发布与重新打开授权产品版本；须配置产品范围，不包含验收权",
+          "suggestedPermissions": [
+            "aims:products:view",
+            "aims:product_versions:view",
+            "aims:product_versions:publish",
+            "aims:product_versions:reopen",
+            "aims:product_documents:view"
+          ],
+          "appCode": "aims"
+        },
+        {
+          "code": "aims:product_viewer",
+          "name": "产品观察者",
+          "description": "查看授权产品；企业角色须配置 product:member 或显式产品范围",
+          "suggestedPermissions": [
+            "aims:products:view",
+            "aims:product_requests:view",
+            "aims:product_features:view",
+            "aims:product_components:view",
+            "aims:product_objectives:view",
+            "aims:product_priorities:view",
+            "aims:product_roadmaps:view",
+            "aims:product_versions:view",
+            "aims:product_documents:view"
+          ],
+          "appCode": "aims"
+        },
+        {
+          "code": "aims:project_approver",
+          "name": "AIMS 项目审批",
+          "description": "处理立项、项目变更、验收和重大里程碑等项目审批",
+          "suggestedPermissions": [
+            "aims:aims_overview:view",
+            "aims:projects:view",
+            "aims:projects:approve",
+            "aims:requirements:view",
+            "aims:reports:view"
+          ],
+          "appCode": "aims"
+        },
+        {
+          "code": "aims:project_director",
+          "name": "AIMS 项目总监",
+          "description": "独立审阅项目周报、发布公司汇总、处理 QA 豁免和里程碑完成审批，并管理全局项目与项目模板",
+          "suggestedPermissions": [
+            "aims:aims_overview:view",
+            "aims:projects:view",
+            "aims:projects:admin",
+            "aims:requirements:view",
+            "aims:requirements:edit",
+            "aims:timesheet:view",
+            "aims:weekly_reports:view",
+            "aims:weekly_reports:review",
+            "aims:weekly_reports:publish",
+            "aims:weekly_reports:export",
+            "aims:quality_reviews:view",
+            "aims:quality_reviews:waive",
+            "aims:project_templates:admin",
+            "aims:notifications:view"
+          ],
+          "appCode": "aims"
+        },
+        {
+          "code": "aims:qa",
+          "name": "AIMS QA",
+          "description": "维护项目文档检查清单并对必交文档确定版本进行完整性与质量检查",
+          "suggestedPermissions": [
+            "aims:aims_overview:view",
+            "aims:projects:view",
+            "aims:requirements:view",
+            "aims:quality_reviews:view",
+            "aims:quality_reviews:review",
+            "aims:quality_reviews:configure",
+            "aims:notifications:view"
+          ],
+          "appCode": "aims"
+        },
+        {
+          "code": "aims:viewer",
+          "name": "AIMS 只读",
+          "description": "查看分配给自己的项目与工作项",
+          "suggestedPermissions": [
+            "aims:aims_overview:view",
+            "aims:projects:view",
+            "aims:requirements:view",
+            "aims:work_items:view",
+            "aims:board:view",
+            "aims:timesheet:view",
+            "aims:reports:view"
+          ],
+          "appCode": "aims"
+        },
+        {
+          "code": "assets:admin",
+          "name": "Assets 管理员",
+          "description": "管理 Assets 全部资产资源、视图、采购、预警、报表和系统配置",
+          "suggestedPermissions": [
+            "assets:dashboard:view",
+            "assets:asset_items:admin",
+            "assets:asset_items:approve",
+            "assets:products:admin",
+            "assets:ip_assets:admin",
+            "assets:digital_assets:admin",
+            "assets:technology_bases:admin",
+            "assets:environments:admin",
+            "assets:deliveries:admin",
+            "assets:suppliers:admin",
+            "assets:purchase_orders:admin",
+            "assets:purchase_orders:approve",
+            "assets:receipts:admin",
+            "assets:assignments:admin",
+            "assets:assignments:approve",
+            "assets:offboarding_recoveries:admin",
+            "assets:alerts:admin",
+            "assets:reports:admin",
+            "assets:integration_operations:view",
+            "assets:integration_operations:replay",
+            "assets:admin:admin"
+          ],
+          "appCode": "assets"
+        },
+        {
+          "code": "assets:asset_approver",
+          "name": "资产审批人",
+          "description": "审批资产采购、领用、调拨、报废和关键资产变更",
+          "suggestedPermissions": [
+            "assets:dashboard:view",
+            "assets:asset_items:view",
+            "assets:asset_items:approve",
+            "assets:purchase_orders:view",
+            "assets:purchase_orders:approve",
+            "assets:assignments:view",
+            "assets:assignments:approve",
+            "assets:offboarding_recoveries:view",
+            "assets:alerts:view"
+          ],
+          "appCode": "assets"
+        },
+        {
+          "code": "assets:custodian",
+          "name": "资产保管人",
+          "description": "维护本人或被授权范围内的保管资产、资产操作和预警闭环",
+          "suggestedPermissions": [
+            "assets:dashboard:view",
+            "assets:asset_items:view",
+            "assets:asset_items:edit",
+            "assets:assignments:view",
+            "assets:assignments:edit",
+            "assets:offboarding_recoveries:view",
+            "assets:offboarding_recoveries:edit",
+            "assets:alerts:view",
+            "assets:alerts:edit",
+            "assets:reports:view"
+          ],
+          "appCode": "assets"
+        },
+        {
+          "code": "assets:employee",
+          "name": "资产使用人",
+          "description": "查看本人相关资产，发起领用、归还、释放等资产操作",
+          "suggestedPermissions": [
+            "assets:dashboard:view",
+            "assets:asset_items:view",
+            "assets:assignments:view",
+            "assets:assignments:request",
+            "assets:alerts:view"
+          ],
+          "appCode": "assets"
+        },
+        {
+          "code": "assets:finance",
+          "name": "资产财务",
+          "description": "查看采购金额、成本归因、客户交付成本和资产报表",
+          "suggestedPermissions": [
+            "assets:dashboard:view",
+            "assets:asset_items:view",
+            "assets:deliveries:view",
+            "assets:suppliers:view",
+            "assets:purchase_orders:view",
+            "assets:receipts:view",
+            "assets:reports:view"
+          ],
+          "appCode": "assets"
+        },
+        {
+          "code": "assets:inventory_manager",
+          "name": "资产台账管理员",
+          "description": "维护资产台账、产品资产、环境交付视图、入库记录和资产操作闭环，不包含资产审批",
+          "suggestedPermissions": [
+            "assets:dashboard:view",
+            "assets:asset_items:edit",
+            "assets:products:edit",
+            "assets:ip_assets:edit",
+            "assets:digital_assets:edit",
+            "assets:technology_bases:edit",
+            "assets:environments:edit",
+            "assets:deliveries:edit",
+            "assets:receipts:edit",
+            "assets:assignments:edit",
+            "assets:offboarding_recoveries:view",
+            "assets:offboarding_recoveries:edit",
+            "assets:alerts:edit",
+            "assets:reports:view"
+          ],
+          "appCode": "assets"
+        },
+        {
+          "code": "assets:owner",
+          "name": "部门/项目负责人",
+          "description": "管理本部门或项目相关资产、采购申请、环境交付视图和预警闭环",
+          "suggestedPermissions": [
+            "assets:dashboard:view",
+            "assets:asset_items:view",
+            "assets:asset_items:edit",
+            "assets:environments:view",
+            "assets:environments:edit",
+            "assets:deliveries:view",
+            "assets:purchase_orders:view",
+            "assets:purchase_orders:edit",
+            "assets:assignments:view",
+            "assets:assignments:edit",
+            "assets:offboarding_recoveries:view",
+            "assets:offboarding_recoveries:edit",
+            "assets:alerts:view",
+            "assets:alerts:edit",
+            "assets:reports:view"
+          ],
+          "appCode": "assets"
+        },
+        {
+          "code": "assets:procurement",
+          "name": "采购经办",
+          "description": "维护供应商、采购单和入库激活，不包含资产审批和资产台账管理",
+          "suggestedPermissions": [
+            "assets:dashboard:view",
+            "assets:asset_items:view",
+            "assets:suppliers:edit",
+            "assets:purchase_orders:edit",
+            "assets:receipts:edit",
+            "assets:reports:view"
+          ],
+          "appCode": "assets"
+        },
+        {
+          "code": "assets:requester",
+          "name": "资产申请人",
+          "description": "查看资产目录，发起采购、领用、归还、释放等申请",
+          "suggestedPermissions": [
+            "assets:dashboard:view",
+            "assets:asset_items:view",
+            "assets:purchase_orders:edit",
+            "assets:assignments:view",
+            "assets:assignments:request",
+            "assets:alerts:view"
+          ],
+          "appCode": "assets"
+        },
+        {
+          "code": "assets:viewer",
+          "name": "Assets 只读",
+          "description": "查看被授权范围内的资产、环境、交付、采购、预警和报表",
+          "suggestedPermissions": [
+            "assets:dashboard:view",
+            "assets:asset_items:view",
+            "assets:products:view",
+            "assets:ip_assets:view",
+            "assets:digital_assets:view",
+            "assets:technology_bases:view",
+            "assets:environments:view",
+            "assets:deliveries:view",
+            "assets:suppliers:view",
+            "assets:purchase_orders:view",
+            "assets:receipts:view",
+            "assets:assignments:view",
+            "assets:offboarding_recoveries:view",
+            "assets:alerts:view",
+            "assets:reports:view"
+          ],
+          "appCode": "assets"
+        },
+        {
+          "code": "codocs:admin",
+          "name": "Codocs 管理员",
+          "description": "管理 Codocs 应用配置、发文执行与全局文档能力",
+          "suggestedPermissions": [
+            "codocs:documents:admin",
+            "codocs:documents:delete",
+            "codocs:documents:export",
+            "codocs:projects:admin",
+            "codocs:projects:export",
+            "codocs:departments:admin",
+            "codocs:departments:export",
+            "codocs:company:admin",
+            "codocs:company:publish",
+            "codocs:company:export",
+            "codocs:reviews:admin",
+            "codocs:reviews:approve",
+            "codocs:reviews:archive",
+            "codocs:info:admin",
+            "codocs:admin:admin"
+          ],
+          "appCode": "codocs"
+        },
+        {
+          "code": "codocs:editor",
+          "name": "Codocs 编辑",
+          "description": "可创建、编辑被授权范围内的文档",
+          "suggestedPermissions": [
+            "codocs:documents:create",
+            "codocs:documents:edit",
+            "codocs:projects:create",
+            "codocs:projects:edit",
+            "codocs:departments:create",
+            "codocs:departments:edit",
+            "codocs:reviews:submit"
+          ],
+          "appCode": "codocs"
+        },
+        {
+          "code": "codocs:publisher",
+          "name": "Codocs 发布审阅",
+          "description": "可处理组织资产发布与审阅归档流程",
+          "suggestedPermissions": [
+            "codocs:departments:export",
+            "codocs:company:publish",
+            "codocs:reviews:approve",
+            "codocs:reviews:archive"
+          ],
+          "appCode": "codocs"
+        },
+        {
+          "code": "codocs:records_manager",
+          "name": "Codocs 档案管理员",
+          "description": "治理企业档案、项目档案、部门档案和审阅归档，不包含应用全局配置",
+          "suggestedPermissions": [
+            "codocs:documents:view",
+            "codocs:documents:export",
+            "codocs:projects:view",
+            "codocs:projects:export",
+            "codocs:departments:view",
+            "codocs:departments:export",
+            "codocs:company:view",
+            "codocs:reviews:view",
+            "codocs:reviews:archive",
+            "codocs:info:view"
+          ],
+          "appCode": "codocs"
+        },
+        {
+          "code": "codocs:space_admin",
+          "name": "Codocs 空间管理员",
+          "description": "管理文档空间、项目文档、部门文档、组织资产和资讯空间，不包含应用后台配置",
+          "suggestedPermissions": [
+            "codocs:documents:admin",
+            "codocs:projects:admin",
+            "codocs:departments:admin",
+            "codocs:company:admin",
+            "codocs:info:admin"
+          ],
+          "appCode": "codocs"
+        },
+        {
+          "code": "codocs:viewer",
+          "name": "Codocs 只读",
+          "description": "可进入 Codocs 并查看被授权的文档资源",
+          "suggestedPermissions": [
+            "codocs:documents:view",
+            "codocs:projects:view",
+            "codocs:departments:view",
+            "codocs:company:view",
+            "codocs:reviews:view",
+            "codocs:info:view",
+            "codocs:help:view"
+          ],
+          "appCode": "codocs"
+        }
+      ],
+      "modules": [
+        {
+          "appCode": "aims",
+          "actionImplications": {},
+          "supportedScopes": [
+            "tenant:global",
+            "product:code",
+            "product:member",
+            "product:manager",
+            "project:member",
+            "project:owner",
+            "department:tree",
+            "subject:self"
+          ]
+        },
+        {
+          "appCode": "assets",
+          "actionImplications": [
+            {
+              "resourceCode": "assignments",
+              "action": "edit",
+              "implies": [
+                "view",
+                "request"
+              ]
+            },
+            {
+              "resourceCode": "assignments",
+              "action": "admin",
+              "implies": [
+                "view",
+                "edit",
+                "request"
+              ]
+            }
+          ],
+          "supportedScopes": [
+            "tenant:global",
+            "department:tree",
+            "project:member",
+            "project:owner",
+            "subject:self",
+            "subject:owner",
+            "asset:owner",
+            "asset:keeper",
+            "asset:user"
+          ]
+        },
+        {
+          "appCode": "codocs",
+          "actionImplications": {},
+          "supportedScopes": [
+            "tenant:global",
+            "department:tree",
+            "project:member",
+            "subject:self"
+          ]
+        }
+      ]
+    },
+    "permissionCatalogHash": "0c61d685e0bc0caf801466ba69e12f60e9e867a4af5e7844875e90d402f2bf0b"
+  }
+}

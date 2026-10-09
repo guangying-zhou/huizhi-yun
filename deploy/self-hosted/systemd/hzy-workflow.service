@@ -1,0 +1,39 @@
+[Unit]
+Description=HZY self-hosted workflow node-server
+After=network-online.target mysqld.service hzy-data-runtime.service
+Wants=network-online.target
+Requires=hzy-data-runtime.service
+PartOf=hzy-data-runtime.service
+StartLimitIntervalSec=120
+StartLimitBurst=6
+
+[Service]
+Type=simple
+User=hzy-workflow
+Group=hzy-workflow
+WorkingDirectory=/home/hzy/apps/workflow/current
+EnvironmentFile=/etc/hzy/workflow.env
+ExecStartPre=/usr/local/bin/node /home/hzy/tools/verify.mjs --dir /home/hzy/apps/workflow/current --app workflow
+ExecStart=/usr/local/bin/node --max-http-header-size=65536 /home/hzy/apps/workflow/current/.output/server/index.mjs
+ExecStartPost=/usr/local/bin/node /home/hzy/tools/health.mjs --app workflow
+Restart=on-failure
+RestartSec=5
+TimeoutStartSec=45
+TimeoutStopSec=30
+KillSignal=SIGTERM
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=hzy-workflow
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+UMask=0077
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target

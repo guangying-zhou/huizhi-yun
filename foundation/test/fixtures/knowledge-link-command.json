@@ -1,0 +1,17 @@
+{
+  "command": {
+    "actorUid": "员工",
+    "action": "link",
+    "ticketCode": "T",
+    "documentUuid": "00000000-0000-4000-8000-000000000001",
+    "customerCode": "C",
+    "contractCode": "CT",
+    "projectCode": "P",
+    "deliveryCode": "D",
+    "deliveryAssetCode": "A",
+    "environmentCode": "E",
+    "targetDeployment": "assets-test"
+  },
+  "canonical": "{\"action\":\"link\",\"actorUid\":\"员工\",\"contractCode\":\"CT\",\"customerCode\":\"C\",\"deliveryAssetCode\":\"A\",\"deliveryCode\":\"D\",\"documentUuid\":\"00000000-0000-4000-8000-000000000001\",\"environmentCode\":\"E\",\"projectCode\":\"P\",\"targetDeployment\":\"assets-test\",\"ticketCode\":\"T\"}",
+  "sha256": "cfb783399f331fc624b5329390c3f59c7657161bbf7eabf3bb0a49f8e0c0927f"
+}

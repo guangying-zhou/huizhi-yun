@@ -1,0 +1,2520 @@
+<script setup lang="ts">
+/**
+ * 文档编辑页面
+ *
+ * 集成 Milkdown 编辑器和实时协同功能
+ */
+
+import { createCreationAttempt } from '../../../layer/creationAttempt.mjs'
+import { isRepositoryCopyDocType } from '../../../shared/utils/documentStorage'
+import { departmentCollaborationDisabledStatus, departmentCollaborationFailureText, departmentCollaborationView, hostCollaborationTicketRequest, versionHistoryRequests } from '../../../layer/departmentCollaboration.mjs'
+import { isPrivateUnsharedEditorCandidate, canStartPrivateCollaboration } from '../../../layer/documentEditingBoundary.mjs'
+import { documentLoadErrorMessage } from '../../utils/departmentDocumentWriteError'
+import { useCodocsModule } from '../../../layer/useCodocsModule'
+import { documentShareNotificationHint, persistedDocumentShareNotification } from '../../utils/documentShareNotification'
+import CollaborationPresence from '../../components/editor/CollaborationPresence.vue'
+import { useCollaboration } from '../../composables/useCollaboration'
+import { useDocumentPreviewBootstrap } from '../../composables/useDocumentPreviewBootstrap'
+import { useEditorTheme } from '../../composables/useEditorTheme'
+import { useViewerWatermark } from '../../composables/useViewerWatermark'
+
+usePageTitle('文档编辑')
+
+const route = useRoute()
+const router = useRouter()
+const toast = useToast()
+const { moduleUrl, cacheKey, hosted } = useCodocsModule()
+// Stage B: in the Enterprise Host, shared v2 documents co-edit through Collab
+// with a one-time ticket from the Host (docs/Codocs-Document-Write-Coordination.md).
+const hostedCollaborationV2 = hosted && useRuntimeConfig().public.codocsCollaborationV2 === true
+// Department documents co-edit only with their own switch on; the Host and
+// Runtime re-check it, this only decides whether the page offers the entry.
+const hostedDepartmentCollaborationV2 = hosted && useRuntimeConfig().public.codocsDepartmentCollaborationV2 === true
+const { getPayload: getDocumentPreviewBootstrap, consumePayload: consumeDocumentPreviewBootstrap, clearPayload: clearDocumentPreviewBootstrap } = useDocumentPreviewBootstrap()
+const { user: authUser, userRealname: authRealName } = useAuth()
+const annotationAttempt = createCreationAttempt()
+const documentAttempt = createCreationAttempt()
+// Saves have their own pending command; read/share actions must not evict its
+// key while a transport error leaves the save outcome uncertain.
+const saveAttempt = createCreationAttempt()
+const { watermarkText } = useViewerWatermark()
+const authUserId = computed(() => authUser.value || '')
+const disableShareTab = computed(() => route.query.fromShare === '1')
+
+type EditorSidebarTab = 'outline' | 'history' | 'share' | 'annotations' | 'ai'
+
+interface ApiSuccessResponse<T> {
+  success: boolean
+  data: T
+}
+
+interface ApiCodeResponse<T = undefined> {
+  code: number
+  message: string
+  data?: T
+}
+
+interface DocumentConflictInfo {
+  [key: string]: unknown
+}
+
+interface DocumentState {
+  id: string
+  title: string
+  content: string
+  doc_type: string
+  owner_uid: string
+  project_code: string
+  updated_at: string
+  readonly_flag: number
+  hasConflict: boolean
+  conflictInfo: DocumentConflictInfo | null
+  oss_path: string
+  publish_info: string
+  ai_abstract: string
+}
+
+interface AnnotationItem {
+  id: number
+  content: string
+  selected_text: string
+  author_id: string
+  author_name: string
+  created_at: string
+  status?: string
+  [key: string]: unknown
+}
+
+interface MilkdownEditorExpose {
+  setMarkdown: (value: string) => void
+  getMarkdown: () => string
+  refreshShares: () => Promise<void> | undefined
+  switchToTab: (tab: EditorSidebarTab) => void
+}
+
+interface DocumentResponseData {
+  id: string
+  title?: string
+  content?: string
+  doc_type?: string
+  owner_uid?: string
+  project_code?: string
+  updated_at?: string
+  readonly_flag?: number
+  hasConflict?: boolean
+  conflictInfo?: DocumentConflictInfo | null
+  oss_path?: string
+  publish_info?: string
+  ai_abstract?: string
+  snapshot_generation?: number
+  snapshot_epoch?: number
+  dept_code?: string
+  // Host hint for department documents: whether this user may open a session.
+  department_collaboration?: { can_edit?: boolean }
+}
+
+interface PublishReviewRecord {
+  id: number
+  review_type?: string | null
+  extra?: {
+    sendTo?: string
+  } | null
+  send_records?: Array<{
+    receiver_name?: string | null
+    sent_date?: string | null
+    confirmed_at?: string | null
+  }>
+}
+
+interface ProjectAccountData {
+  repoUrl?: string
+}
+
+interface VersionSummary {
+  id: number
+  versionNum: number
+  editorUid: string
+  editorName?: string
+  createdAt: string
+  contentSize?: number
+}
+
+interface VersionDetail extends VersionSummary {
+  content: string
+}
+
+interface DiffVersionData extends VersionDetail {
+  id: number
+}
+
+const getErrorMessage = (error: unknown, fallback: string) => {
+  if (error instanceof Error && error.message) {
+    return error.message
+  }
+
+  if (typeof error === 'object' && error !== null) {
+    if ('message' in error && typeof error.message === 'string' && error.message) {
+      return error.message
+    }
+
+    if ('data' in error && typeof error.data === 'object' && error.data !== null && 'message' in error.data) {
+      const message = error.data.message
+      if (typeof message === 'string' && message) {
+        return message
+      }
+    }
+  }
+
+  return fallback
+}
+
+const formatPublishDateText = (dateStr?: string | null) => {
+  if (!dateStr) return ''
+  const value = new Date(dateStr)
+  if (Number.isNaN(value.getTime())) return String(dateStr)
+  return `${value.getFullYear()}年${String(value.getMonth() + 1).padStart(2, '0')}月${String(value.getDate()).padStart(2, '0')}日`
+}
+
+const getPublishedInfoText = (publishInfo: string, record: PublishReviewRecord | null) => {
+  const latestSend = record?.send_records?.length
+    ? record.send_records[record.send_records.length - 1]
+    : null
+  const receiverName = String(
+    latestSend?.receiver_name
+    || record?.extra?.sendTo
+    || ''
+  ).trim()
+  const sentAt = latestSend?.sent_date || latestSend?.confirmed_at || null
+
+  if (record?.review_type === '对外发文' && receiverName) {
+    const dateLabel = formatPublishDateText(sentAt)
+    return dateLabel
+      ? `已于${dateLabel}发送给${receiverName}`
+      : `已发送给${receiverName}`
+  }
+
+  try {
+    const parsed = JSON.parse(publishInfo) as { label?: string, date?: string }
+    if (parsed?.label) {
+      const dateLabel = formatPublishDateText(parsed.date)
+      return dateLabel
+        ? `已于${dateLabel}发布至"${parsed.label}"`
+        : `已发布至"${parsed.label}"`
+    }
+  } catch {
+    return publishInfo
+  }
+
+  return publishInfo
+}
+
+// ────── 未保存变更离开拦截 ──────
+const unsavedGuardOpen = ref(false)
+let unsavedGuardResolve: ((action: 'save' | 'discard' | 'cancel') => void) | null = null
+let pendingNavigationPath: string | null = null
+
+const needsUnsavedGuard = computed(() => {
+  if (isLeavingDocumentPage.value) return false
+  if (docState.value.readonly_flag) return false
+  if (isEditingLockedByCollaborationFallback.value) return false
+  if (hosted && !isPrivateUnsharedDoc.value) return false
+  if (isRealtimeCollaboration.value) return false
+  if (!isPageReady.value) return false
+  return hasUnsavedChanges.value || hasPendingContentFlush.value
+})
+
+function promptUnsavedGuard(): Promise<'save' | 'discard' | 'cancel'> {
+  return new Promise((resolve) => {
+    unsavedGuardResolve = resolve
+    unsavedGuardOpen.value = true
+  })
+}
+
+async function handleUnsavedGuardAction(action: 'save' | 'discard' | 'cancel') {
+  unsavedGuardOpen.value = false
+  if (action === 'save') {
+    if (await saveDocument({ forceContent: true }) !== true) {
+      unsavedGuardOpen.value = true
+      return
+    }
+  }
+  if (unsavedGuardResolve) {
+    unsavedGuardResolve(action)
+    unsavedGuardResolve = null
+  }
+  if (action !== 'cancel' && pendingNavigationPath) {
+    const path = pendingNavigationPath
+    pendingNavigationPath = null
+    isLeavingDocumentPage.value = true
+    router.push(path)
+  }
+  pendingNavigationPath = null
+}
+
+onBeforeRouteLeave(async (to) => {
+  if (!needsUnsavedGuard.value) {
+    return await flushDocumentBeforeRouteLeave()
+  }
+  pendingNavigationPath = to.fullPath
+  const action = await promptUnsavedGuard()
+  return action !== 'cancel'
+})
+
+// 返回上一页
+const goBack = () => {
+  if (window.history.length > 1) {
+    router.back()
+  } else {
+    router.push(moduleUrl('/mydocs'))
+  }
+}
+
+// 文档 ID
+const documentId = computed(() => route.params.uuid as string)
+const routeQueryText = (value: unknown) => String(Array.isArray(value) ? value[0] : value || '').trim()
+// Entries without a department link (notifications, search, share links) load the
+// document through the generic read; the Host then resolves it as a department
+// document server-side and this response value takes over as the department scene.
+// It is only a routing hint: every department call is re-authorized by the server.
+const responseDept = ref({ uuid: '', code: '' })
+const responseDeptCode = computed(() => responseDept.value.uuid === documentId.value ? responseDept.value.code : '')
+const documentDeptCode = computed(() => routeQueryText(route.query.dept_code || route.query.deptCode) || responseDeptCode.value)
+// A department list link carries dept_code. It only selects the department read
+// route; the server re-derives the department relation and the person permission
+// on every call, so a forged code cannot widen access.
+const isDepartmentRead = computed(() => hosted && Boolean(documentDeptCode.value))
+const { hasPermission } = usePermissions()
+// Download and PDF export are client-side copies of the body, so they follow the
+// server-side departments:export action (UI hint; the department download route enforces).
+const canExportDepartmentBody = computed(() => !isDepartmentRead.value || hasPermission('departments', 'export'))
+
+// 是否是新建的工作日志（通过 ?new=1 标记，且文档类型为 private/工作日志）
+const isNewWorklog = computed(() => route.query.new === '1' && docState.value.doc_type === 'private' && (docState.value.title.startsWith('工作日志_') || docState.value.title.endsWith('工作日志')))
+// 用户是否做过编辑
+const userEdited = ref(false)
+
+const getWorklogDate = (title: string) => {
+  const newMatch = title.match(/^(\d{4})(\d{2})(\d{2})-/)
+  const oldMatch = title.match(/工作日志_(\d{4})(\d{2})(\d{2})/)
+  const dateMatch = newMatch || oldMatch
+
+  if (!dateMatch) {
+    return null
+  }
+
+  return `${dateMatch[1]}-${dateMatch[2]}-${dateMatch[3]}`
+}
+
+// 文档数据
+const docState = ref<DocumentState>({
+  id: '',
+  title: '未命名文档',
+  content: '',
+  doc_type: 'private',
+  owner_uid: '',
+  project_code: '',
+  updated_at: '',
+  readonly_flag: 0,
+  hasConflict: false,
+  conflictInfo: null,
+  oss_path: '',
+  publish_info: '',
+  ai_abstract: ''
+})
+
+// 项目元数据（用于项目文档）
+const projectMetadata = ref({
+  repoUrl: '',
+  docPath: ''
+})
+
+// 状态
+const { confirm } = useConfirm()
+const documentLoadFailure = ref<'forbidden' | 'unavailable' | null>(null)
+const documentLoadFailureMessage = ref('')
+// 首次读取完成前不渲染编辑器外壳，避免默认“未命名文档”与协作状态条闪现。
+const initialLoadPending = ref(true)
+const loading = ref(true)
+// OSS body reads can take seconds; show a hint on the skeleton after this delay.
+const slowLoadHint = ref(false)
+const slowLoadHintDelayMs = 2000
+const saving = ref(false)
+const lastSaved = ref<Date | null>(null)
+const isPageReady = ref(false)
+const hasLoadedDocument = ref(false)
+
+// 版本历史
+const showVersionHistory = ref(false)
+// 共享面板
+const showSharePanel = ref(false)
+const versionsLoading = ref(false)
+const versions = ref<VersionSummary[]>([])
+const versionsError = ref('')
+const showPublishRecord = ref(false)
+const publishReviewRecord = ref<PublishReviewRecord | null>(null)
+
+// 标注数据
+const annotations = ref<AnnotationItem[]>([])
+const fetchAnnotations = async () => {
+  // Annotations and shares are personal-document routes authorized by ownership or sharing.
+  if (isDepartmentRead.value) return
+  try {
+    const response = await $fetch<ApiSuccessResponse<AnnotationItem[]>>(moduleUrl(`/api/documents/${documentId.value}/annotations`))
+    if (response.success) {
+      annotations.value = response.data
+    }
+  } catch (error) {
+    console.error('Failed to fetch annotations:', error)
+  }
+}
+
+// 标注操作
+const handleCreateAnnotation = async (data: { selectedText: string, contextBefore: string, contextAfter: string, positionHint: number, content: string }) => {
+  try {
+    const payload = {
+      selected_text: data.selectedText,
+      context_before: data.contextBefore,
+      context_after: data.contextAfter,
+      position_hint: data.positionHint,
+      content: data.content,
+      mentioned_users: []
+    }
+    const attemptKey = annotationAttempt.keyFor(cacheKey('annotation-create'), payload)
+    const response = await $fetch<{ success: boolean, data: { id: number } }>(moduleUrl(`/api/documents/${documentId.value}/annotations`), {
+      method: 'POST',
+      body: payload,
+      headers: { 'Idempotency-Key': attemptKey }
+    })
+    if (response.success) {
+      annotationAttempt.complete(attemptKey)
+      await fetchAnnotations()
+      toast.add({ title: '标注已创建', color: 'success' })
+    }
+  } catch (error) {
+    console.error('Failed to create annotation:', error)
+    toast.add({ title: '创建失败', color: 'error' })
+  }
+}
+
+const handleReplyAnnotation = async (id: number, content: string) => {
+  try {
+    const payload = { content, mentioned_users: [] }
+    const attemptKey = annotationAttempt.keyFor(cacheKey('annotation-reply'), { annotationId: id, ...payload })
+    const response = await $fetch<ApiSuccessResponse<unknown>>(moduleUrl(`/api/documents/${documentId.value}/annotations/${id}/replies`), {
+      method: 'POST',
+      body: payload,
+      headers: { 'Idempotency-Key': attemptKey }
+    })
+    if (response?.success) {
+      annotationAttempt.complete(attemptKey)
+      await fetchAnnotations()
+    }
+  } catch (error) {
+    console.error('Failed to reply:', error)
+    toast.add({ title: '回复失败', color: 'error' })
+  }
+}
+
+const handleResolveAnnotation = async (id: number) => {
+  try {
+    const payload = { status: 'resolved' }
+    const attemptKey = annotationAttempt.keyFor(cacheKey('annotation-update'), { annotationId: id, ...payload })
+    const response = await $fetch<ApiSuccessResponse<unknown>>(moduleUrl(`/api/documents/${documentId.value}/annotations/${id}`), {
+      method: 'PATCH',
+      body: payload,
+      headers: { 'Idempotency-Key': attemptKey }
+    })
+    if (response?.success) {
+      annotationAttempt.complete(attemptKey)
+      await fetchAnnotations()
+    }
+  } catch (error) {
+    console.error('Failed to resolve:', error)
+  }
+}
+
+const handleDeleteAnnotation = async (id: number) => {
+  const document = documentId.value
+  const owner = authUserId.value
+  if (!await confirm({ title: '删除标注', message: `确认删除文档「${docState.value.title || '当前文档'}」的标注 #${id}？标注将从文档中移除，无法在标注面板恢复。`, tone: 'danger', confirmLabel: '删除' })) return
+  if (documentId.value !== document || authUserId.value !== owner) return
+  try {
+    const payload = { status: 'deleted' }
+    const attemptKey = annotationAttempt.keyFor(cacheKey('annotation-update'), { annotationId: id, ...payload })
+    const response = await $fetch<ApiSuccessResponse<unknown>>(moduleUrl(`/api/documents/${documentId.value}/annotations/${id}`), {
+      method: 'PATCH',
+      body: payload,
+      headers: { 'Idempotency-Key': attemptKey }
+    })
+    if (response?.success) {
+      annotationAttempt.complete(attemptKey)
+      await fetchAnnotations()
+      toast.add({ title: '标注已删除', color: 'success' })
+    }
+  } catch (error) {
+    console.error('Failed to delete:', error)
+  }
+}
+
+const handleDeleteReply = async (annotationId: number, replyId: number) => {
+  const document = documentId.value
+  const owner = authUserId.value
+  if (!await confirm({ title: '删除标注回复', message: `确认删除文档「${docState.value.title || '当前文档'}」的标注回复 #${replyId}？回复将从讨论中移除，无法在标注面板恢复。`, tone: 'danger', confirmLabel: '删除' })) return
+  if (documentId.value !== document || authUserId.value !== owner) return
+  try {
+    const attemptKey = annotationAttempt.keyFor(cacheKey('annotation-reply-delete'), { annotationId, replyId })
+    const response = await $fetch<ApiSuccessResponse<unknown>>(moduleUrl(`/api/documents/${documentId.value}/annotations/${annotationId}/replies/${replyId}`), {
+      method: 'DELETE',
+      headers: { 'Idempotency-Key': attemptKey }
+    })
+    if (response?.success) {
+      annotationAttempt.complete(attemptKey)
+      await fetchAnnotations()
+    }
+  } catch (error) {
+    console.error('Failed to delete reply:', error)
+  }
+}
+
+const handleClickAnnotation = (annotationId: number) => {
+  // Find the annotation and scroll to it in the sidebar
+  const annotation = annotations.value.find(annotationItem => annotationItem.id === annotationId)
+  if (annotation) {
+    // The sidebar should automatically scroll to and highlight this annotation
+    // For now, we can trigger a scroll by using DOM or just log
+    console.log('Annotation clicked:', annotationId)
+    // TODO: Implement sidebar scroll if needed
+  }
+}
+
+// 保存的文档状态（用于比较变更）
+const savedState = ref({
+  title: '',
+  content: ''
+})
+// The version of the bytes currently in the editor. A later head read must
+// never silently rebase this draft before its save command is decided.
+const snapshotBase = ref<{ generation: number, epoch: number } | null>(null)
+let pendingContentSave: { documentId: string, title: string, content: string, mode: string, payload: Record<string, unknown> } | null = null
+const needsCollaborationPreviewSnapshotFlush = ref(false)
+
+// 是否有未保存的变更
+const hasUnsavedChanges = computed(() => {
+  return docState.value.title !== savedState.value.title
+    || (shouldPersistContentViaHttp.value && editorContent.value !== savedState.value.content)
+})
+const hasPendingTitleChange = computed(() => docState.value.title !== savedState.value.title)
+const hasPendingContentFlush = computed(() => !(hosted && !isPrivateUnsharedDoc.value)
+  && (editorContent.value !== savedState.value.content || needsCollaborationPreviewSnapshotFlush.value))
+
+const shouldShowReadonlyWatermark = computed(() => {
+  if (!docState.value.readonly_flag && !viewingVersion.value) return false
+
+  return Boolean(docState.value.publish_info)
+    || ['company', 'knowledge', 'product'].includes(docState.value.doc_type)
+    || String(docState.value.oss_path || '').startsWith('codocs/company/')
+})
+
+// 协同状态
+// 编辑器内容和主题
+const editorContent = ref('')
+const viewMode = ref<'edit' | 'source'>('edit')
+const { editorTheme } = useEditorTheme()
+const milkdownEditorRef = ref<MilkdownEditorExpose | null>(null)
+const getCurrentEditorMarkdown = () => {
+  try {
+    return milkdownEditorRef.value?.getMarkdown?.() || editorContent.value
+  } catch {
+    return editorContent.value
+  }
+}
+// Department collaboration state (UI only; the server decides who may write).
+const departmentCanEdit = ref(false)
+const departmentConverted = ref(false)
+const departmentRequested = ref(false)
+const departmentPhase = ref<'idle' | 'converting' | 'ready' | 'failed'>('idle')
+const departmentFailure = ref('')
+const isDepartmentDoc = computed(() => hostedDepartmentCollaborationV2 && docState.value.doc_type === 'department')
+const collaboration = useCollaboration({
+  documentId,
+  deptCode: documentDeptCode,
+  ...(hostedCollaborationV2 || hostedDepartmentCollaborationV2
+    ? {
+        resolveToken: async () => {
+          const request = hostCollaborationTicketRequest(isDepartmentDoc.value ? 'department' : 'private', documentId.value, documentDeptCode.value)
+          try {
+            const response = await $fetch<{ data?: { token?: string } }>(moduleUrl(request.path), { method: 'POST', ...(request.query ? { query: request.query } : {}) })
+            return String(response.data?.token || '')
+          } catch (error) {
+            // Keep the reason (not a writer, session full, ...) for the status bar.
+            if (isDepartmentDoc.value) departmentFailure.value = departmentCollaborationFailureText(error)
+            throw error
+          }
+        }
+      }
+    : {}),
+  user: computed(() => ({
+    id: authUserId.value || 'anonymous',
+    name: authRealName.value || authUserId.value || '匿名用户'
+  }))
+})
+const isDocumentOwner = computed(() => Boolean(authUserId.value) && authUserId.value === docState.value.owner_uid)
+const isRepositorySyncDoc = computed(() => isRepositoryCopyDocType(docState.value.doc_type))
+// 企业/知识库/产品文档是只读发布物：不加入协作，也不展示协作状态。
+const isStaticReadonlyDoc = computed(() => ['company', 'knowledge', 'product'].includes(docState.value.doc_type))
+const supportsCollaboration = computed(() => (!hosted || hostedCollaborationV2 || isDepartmentDoc.value) && !isRepositorySyncDoc.value && !isStaticReadonlyDoc.value)
+const isRealtimeCollaboration = computed(() => collaboration.isConnected.value && !viewingVersion.value && (!hosted || collaboration.synced.value))
+const isCollaborationConnecting = computed(() => collaboration.isConnecting.value)
+const isPrivateUnsharedDoc = computed(() => isPrivateUnsharedEditorCandidate({
+  hosted,
+  docType: docState.value.doc_type,
+  ownerUid: docState.value.owner_uid,
+  actorUid: authUserId.value,
+  sharesVerified: shareMembersLoaded.value,
+  shareCount: shareMembers.value.length
+}))
+// A department session starts only after the user asks for it (reading never
+// converts or connects) and stops for good once Collab withdraws access.
+const departmentSessionWanted = computed(() => isDepartmentDoc.value && departmentCanEdit.value && departmentRequested.value
+  && departmentPhase.value === 'ready' && !collaboration.closeKind.value)
+const privateDocumentAclVerified = ref<{ uuid: string, actorUid: string } | null>(null)
+const privateCollaborationWanted = computed(() => canStartPrivateCollaboration({
+  docType: docState.value.doc_type, ownerUid: docState.value.owner_uid, actorUid: authUserId.value,
+  aclVerified: privateDocumentAclVerified.value?.uuid === documentId.value && privateDocumentAclVerified.value?.actorUid === authUserId.value, readonlyFlag: docState.value.readonly_flag,
+  sharesVerified: shareMembersLoaded.value, shareCount: shareMembers.value.length,
+  accessWithdrawn: Boolean(collaboration.closeKind.value)
+}))
+// Owner-only share lists cannot decide a sharee's effective write ACL.
+const shouldLoadFromCollaboration = computed(() => supportsCollaboration.value && !documentLoadFailure.value && Boolean(authUserId.value) && !viewingVersion.value && !isPrivateUnsharedDoc.value
+  && (!hosted || privateCollaborationWanted.value || departmentSessionWanted.value))
+const isLeavingDocumentPage = ref(false)
+const collaborationFallbackMode = ref<'none' | 'owner-edit' | 'viewer-readonly'>('none')
+const collaborationFallbackLoaded = ref(false)
+const hasSyncedCollaboration = ref(false)
+const isOwnerHttpFallbackMode = computed(() => collaborationFallbackMode.value === 'owner-edit')
+const isViewerReadonlyFallbackMode = computed(() => collaborationFallbackMode.value === 'viewer-readonly')
+const isWaitingForCollaborationSync = computed(() =>
+  shouldLoadFromCollaboration.value
+  && !collaboration.synced.value
+  && !collaboration.error.value
+  && !collaborationFallbackLoaded.value
+)
+const hasRemoteCollaborators = computed(() => collaboration.collaborators.value.length > 0)
+const isCollaborationReadonlyScope = computed(() => collaboration.scope.value === 'readonly')
+const isEditingLockedByCollaborationFallback = computed(() => isViewerReadonlyFallbackMode.value)
+// Runtime reports a document as read-only for anyone who is neither owner nor a
+// write sharee, which would hide a manager's edit right; the Host hint is exact.
+const isDocumentReadonlyForEditing = computed(() => !!docState.value.readonly_flag && !(isDepartmentDoc.value && departmentCanEdit.value))
+const isEditingDisabled = computed(() =>
+  isDocumentReadonlyForEditing.value
+  || !!viewingVersion.value
+  // Host: shared documents are editable only inside a synced v2 collaboration session.
+  || (hosted && !isPrivateUnsharedDoc.value && !(shouldLoadFromCollaboration.value && collaboration.isConnected.value && collaboration.synced.value && collaboration.scope.value === 'read-write' && !collaboration.error.value))
+  || isWaitingForCollaborationSync.value
+  || isEditingLockedByCollaborationFallback.value
+)
+// The nested shares list is owner-only in Runtime. A sharee can read the
+// document and mark their own share as opened, but cannot list other sharees.
+// Department scenes never use the personal share APIs (list/create/update/delete).
+const canViewShares = computed(() => !isRepositorySyncDoc.value && !disableShareTab.value && isDocumentOwner.value && !isDepartmentScene.value)
+const canManageShares = computed(() => canViewShares.value && !docState.value.readonly_flag && isDocumentOwner.value)
+const collaborationEditorEnabled = computed(() => !isLeavingDocumentPage.value && collaboration.synced.value && !viewingVersion.value)
+const editorInstanceKey = computed(() => {
+  // Crepe 的 BlockEdit/Toolbar 等 feature 只在 create() 时决定。
+  // 文档页会先经历一次“协同未同步完成”的临时只读态，因此这里必须在
+  // 编辑能力切换后强制 remount，否则编辑器会停留在首次初始化的只读 feature 集里。
+  return [
+    documentId.value,
+    Number(isEditingDisabled.value),
+    Number(collaborationEditorEnabled.value)
+  ].join(':')
+})
+
+// 共享成员信息（用于协同状态栏展示）
+interface ShareMemberInfo {
+  uid: string
+  realName: string
+  permission: 'read' | 'write'
+}
+const shareMembers = ref<ShareMemberInfo[]>([])
+const shareMembersLoaded = ref(false)
+const isSharedDoc = computed(() => authUserId.value !== docState.value.owner_uid && authUserId.value !== '')
+const ownerName = ref('')
+const documentSourceDisplayName = computed(() => {
+  const ownerUid = String(docState.value.owner_uid || '').trim()
+  if (!ownerUid) return ''
+  if (ownerUid === authUserId.value) return '我'
+  return ownerName.value || ownerUid
+})
+
+const fetchShareMembers = async () => {
+  if (!documentId.value || !isDocumentOwner.value || isDepartmentScene.value) {
+    shareMembers.value = []
+    shareMembersLoaded.value = false
+    return
+  }
+  if (hosted) shareMembersLoaded.value = false
+  try {
+    const res = await $fetch<{ code: number, data?: Array<{ shared_to_uid: string, real_name: string, permission: string }> }>(
+      moduleUrl(`/api/documents/${documentId.value}/shares`)
+    )
+    if (res.code === 0 && Array.isArray(res.data)) {
+      // 收集所有需要查询姓名的 uid（共享成员 + 文档所有者）
+      const uidsToResolve = new Set<string>()
+      for (const s of res.data) uidsToResolve.add(s.shared_to_uid)
+      if (docState.value.owner_uid) uidsToResolve.add(docState.value.owner_uid)
+      // 排除当前用户（已知姓名）
+      uidsToResolve.delete(authUserId.value)
+
+      // 批量查询真实姓名
+      const nameMap = new Map<string, string>()
+      if (uidsToResolve.size > 0) {
+        try {
+          const userRes = await $fetch<{ code: number, data?: Array<{ uid: string, realName?: string }> }>(
+            hosted ? sharedApiPath('/api/directory/users/batch') : '/api/account/users/batch',
+            { method: 'POST', body: { uids: [...uidsToResolve] } }
+          )
+          if (userRes.data) {
+            for (const u of userRes.data) {
+              if (u.realName) nameMap.set(u.uid, u.realName)
+            }
+          }
+        } catch { /* ignore */ }
+      }
+
+      shareMembers.value = res.data.map(s => ({
+        uid: s.shared_to_uid,
+        realName: nameMap.get(s.shared_to_uid) || s.real_name || s.shared_to_uid,
+        permission: s.permission as 'read' | 'write'
+      }))
+      shareMembersLoaded.value = true
+
+      // 设置文档所有者姓名
+      if (docState.value.owner_uid && docState.value.owner_uid !== authUserId.value) {
+        ownerName.value = nameMap.get(docState.value.owner_uid) || docState.value.owner_uid
+      }
+    }
+  } catch { /* ignore */ }
+}
+
+const shouldShowCollaborationStatusBar = computed(() => !isStaticReadonlyDoc.value && !documentLoadFailure.value && (
+  (hosted && !isPrivateUnsharedDoc.value) || (supportsCollaboration.value && (
+    isCollaborationReadonlyScope.value
+    || isCollaborationConnecting.value
+    || Boolean(collaboration.error.value)
+    || hasRemoteCollaborators.value
+    || isSharedDoc.value
+    || shareMembers.value.length > 0
+    || collaboration.isConnected.value
+  ))
+))
+const departmentView = computed(() => departmentCollaborationView({
+  enabled: isDepartmentDoc.value && hasLoadedDocument.value,
+  canEdit: departmentCanEdit.value,
+  converted: departmentConverted.value,
+  requested: departmentRequested.value,
+  phase: departmentPhase.value === 'ready' ? 'idle' : departmentPhase.value,
+  failure: departmentFailure.value,
+  connecting: collaboration.isConnecting.value,
+  connected: collaboration.isConnected.value,
+  synced: collaboration.synced.value,
+  scope: collaboration.scope.value,
+  hasError: Boolean(collaboration.error.value),
+  closeKind: collaboration.closeKind.value,
+  collaborators: collaboration.collaborators.value.length
+}))
+const isDepartmentCollaborationScene = computed(() => departmentView.value.status !== null)
+const departmentEntryLabel = computed(() => {
+  if (departmentView.value.entry === 'busy') return departmentPhase.value === 'converting' ? '正在转换…' : '连接中…'
+  return departmentView.value.entry === 'retry' ? '重试' : '协作编辑'
+})
+
+const startDepartmentCollaboration = async () => {
+  if (departmentPhase.value === 'converting' || !departmentCanEdit.value) return
+  departmentFailure.value = ''
+  departmentRequested.value = true
+  if (!departmentConverted.value) {
+    departmentPhase.value = 'converting'
+    try {
+      // The Host converts a v1 document once (generation 0 -> 1) and answers
+      // with the new generation; reading a document never reaches this call.
+      const response = await $fetch<{ data?: { converted?: boolean } }>(
+        moduleUrl(`/api/departments/documents/${documentId.value}/collaboration/convert`),
+        { method: 'POST', query: { dept_code: documentDeptCode.value } }
+      )
+      if (response.data?.converted !== true) throw new Error('conversion not confirmed')
+      departmentConverted.value = true
+      // Re-read the published body so the editor starts from the converted version.
+      await fetchDocument({ forceContent: true })
+    } catch (error) {
+      departmentPhase.value = 'failed'
+      departmentFailure.value = departmentCollaborationFailureText(error)
+      return
+    }
+  }
+  departmentPhase.value = 'ready'
+  if (collaboration.error.value || (!collaboration.isConnected.value && !collaboration.isConnecting.value)) collaboration.connect()
+}
+
+// Department documents never enter the personal share-verification flow: in the
+// Host their editing goes only through department collaboration.
+const isDepartmentScene = computed(() => isDepartmentRead.value || (hosted && docState.value.doc_type === 'department'))
+const collaborationStatus = computed(() => {
+  if (departmentView.value.status) return departmentView.value.status
+  if (isDepartmentScene.value && !hostedDepartmentCollaborationV2) return departmentCollaborationDisabledStatus()
+  if (docState.value.readonly_flag) {
+    return {
+      tone: 'neutral' as const,
+      label: '只读文档',
+      description: '当前文档不可编辑'
+    }
+  }
+
+  if (hosted && !isDepartmentScene.value && !shareMembersLoaded.value && isDocumentOwner.value) {
+    return {
+      tone: 'warning' as const,
+      label: '共享状态待核验',
+      description: '暂时无法确认文档是否已共享，编辑已暂停；请重试核验'
+    }
+  }
+
+  if (hosted && !isDepartmentScene.value && !isPrivateUnsharedDoc.value && !shouldLoadFromCollaboration.value) {
+    return {
+      tone: 'warning' as const,
+      label: '协作不可用',
+      description: '当前文档仅可查看；共享文档编辑需使用协作通道'
+    }
+  }
+
+  if (collaboration.error.value) {
+    return {
+      tone: 'warning' as const,
+      label: '协同异常',
+      description: isOwnerHttpFallbackMode.value
+        ? '已回退为直接编辑 OSS，可继续编辑；重连成功后会恢复共享编辑'
+        : '实时连接异常，当前仅可查看，可点击重连继续尝试'
+    }
+  }
+
+  if (collaboration.isConnecting.value) {
+    if (isOwnerHttpFallbackMode.value) {
+      return {
+        tone: 'info' as const,
+        label: '协同重连中',
+        description: '当前仍可直接编辑 OSS，恢复后会自动切回共享编辑'
+      }
+    }
+
+    if (isViewerReadonlyFallbackMode.value) {
+      return {
+        tone: 'info' as const,
+        label: '协同重连中',
+        description: '当前仅可查看，连接恢复后会自动切回共享编辑'
+      }
+    }
+
+    return {
+      tone: 'info' as const,
+      label: '协同连接中',
+      description: '正在建立实时连接'
+    }
+  }
+
+  if (!collaboration.synced.value && isOwnerHttpFallbackMode.value) {
+    return {
+      tone: 'warning' as const,
+      label: '协同恢复中',
+      description: '当前仍可直接编辑 OSS，恢复后将把当前内容同步到协同服务器'
+    }
+  }
+
+  if (!collaboration.synced.value && isViewerReadonlyFallbackMode.value) {
+    return {
+      tone: 'warning' as const,
+      label: '协同恢复中',
+      description: '当前仅可查看，连接恢复后可重新进入共享编辑'
+    }
+  }
+
+  if (isWaitingForCollaborationSync.value || (isRealtimeCollaboration.value && !collaboration.synced.value)) {
+    return {
+      tone: 'warning' as const,
+      label: '同步中',
+      description: '等待协同内容完成同步'
+    }
+  }
+
+  if (isRealtimeCollaboration.value) {
+    return {
+      tone: 'success' as const,
+      label: '协同中',
+      description: '实时修改会自动同步保存，编辑完毕直接关闭文档即可'
+    }
+  }
+
+  return {
+    tone: 'neutral' as const,
+    label: '本地保存',
+    description: '当前使用页面保存作为兜底'
+  }
+})
+const hasShownCollaborationConnectedToast = ref(false)
+const hasShownCollaborationErrorToast = ref(false)
+const shouldPersistContentViaHttp = computed(() => !(hosted && !isPrivateUnsharedDoc.value)
+  && (!shouldLoadFromCollaboration.value || isOwnerHttpFallbackMode.value))
+const shouldMirrorMarkdownToCollaboration = computed(() =>
+  supportsCollaboration.value
+  && collaboration.synced.value
+  && !viewingVersion.value
+  && !docState.value.readonly_flag
+  && (viewMode.value === 'source' || isOwnerHttpFallbackMode.value)
+)
+let collaborationMirrorTimer: ReturnType<typeof setTimeout> | null = null
+
+const clearCollaborationMirrorTimer = () => {
+  if (!collaborationMirrorTimer) return
+  clearTimeout(collaborationMirrorTimer)
+  collaborationMirrorTimer = null
+}
+
+const flushCollaborationMarkdownMirror = (content = editorContent.value) => {
+  clearCollaborationMirrorTimer()
+  if (!shouldMirrorMarkdownToCollaboration.value) return
+  collaboration.setTextContent(content)
+}
+
+const mirrorCollaborationMarkdown = (content: string) => {
+  clearCollaborationMirrorTimer()
+  if (!shouldMirrorMarkdownToCollaboration.value) return
+
+  const nextContent = String(content || '')
+  collaborationMirrorTimer = setTimeout(() => {
+    collaborationMirrorTimer = null
+    collaboration.setTextContent(nextContent)
+  }, 800)
+}
+
+const loadPublishReviewRecord = async () => {
+  publishReviewRecord.value = null
+
+  if (!docState.value.oss_path) return
+
+  try {
+    if (docState.value.publish_info) {
+      const response = await $fetch<ApiCodeResponse<PublishReviewRecord | null>>(moduleUrl(`/api/reviews/by-document/${documentId.value}`))
+      publishReviewRecord.value = response.data || null
+      return
+    }
+
+    if (docState.value.readonly_flag) {
+      const response = await $fetch<ApiCodeResponse<PublishReviewRecord | null>>(moduleUrl('/api/reviews/by-oss-path'), {
+        params: { path: docState.value.oss_path }
+      })
+      publishReviewRecord.value = response.data || null
+    }
+  } catch (error) {
+    console.warn('[Document] Failed to load publish review record:', error)
+    publishReviewRecord.value = null
+  }
+}
+
+// 防抖保存定时器
+let saveTimer: ReturnType<typeof setTimeout> | null = null
+
+// 加载文档
+const fetchDocument = async (options?: { forceContent?: boolean }) => {
+  loading.value = true
+  hasLoadedDocument.value = false
+  privateDocumentAclVerified.value = null
+  const aclDocumentId = documentId.value
+  const aclActorUid = authUserId.value
+  documentLoadFailure.value = null
+  slowLoadHint.value = false
+  const slowLoadTimer = setTimeout(() => {
+    slowLoadHint.value = true
+  }, slowLoadHintDelayMs)
+  try {
+    const previewBootstrap = !options?.forceContent ? getDocumentPreviewBootstrap(documentId.value) : undefined
+    const query: Record<string, string> = {}
+    if (previewBootstrap && !hosted) query.skip_content = '1'
+    if (documentDeptCode.value) query.dept_code = documentDeptCode.value
+    // In the Host a department document has its own read route: the department
+    // relation, not personal ownership, authorizes it, and its body comes from
+    // the exact published snapshot once it has been converted.
+    const departmentRead = isDepartmentRead.value
+    const response = await $fetch<ApiSuccessResponse<DocumentResponseData>>(
+      moduleUrl(departmentRead ? `/api/departments/documents/${documentId.value}` : `/api/documents/${documentId.value}`),
+      { query: departmentRead ? { dept_code: documentDeptCode.value } : query }
+    )
+
+    if (response.success && response.data) {
+      // Derive the department scene from the response, never from client input.
+      if (!departmentRead) {
+        responseDept.value = { uuid: documentId.value, code: hosted && response.data.doc_type === 'department' ? String(response.data.dept_code || '').trim() : '' }
+      }
+      const bootstrapContent = hosted ? '' : previewBootstrap?.content || ''
+      const responseContent = response.data.content || ''
+      const baseContent = bootstrapContent || responseContent
+      const resolvedContent = shouldLoadFromCollaboration.value && collaboration.synced.value && !options?.forceContent
+        ? (collaboration.getTextContent() || baseContent)
+        : baseContent
+
+      privateDocumentAclVerified.value = response.data.doc_type === 'private' && response.data.readonly_flag === 0
+        && aclDocumentId === documentId.value && aclActorUid === authUserId.value
+        ? { uuid: aclDocumentId, actorUid: aclActorUid }
+        : null
+      docState.value = {
+        id: response.data.id,
+        title: response.data.title || '未命名文档',
+        content: resolvedContent,
+        doc_type: response.data.doc_type || 'private',
+        owner_uid: response.data.owner_uid || '',
+        project_code: response.data.project_code || '',
+        updated_at: response.data.updated_at || '',
+        readonly_flag: response.data.readonly_flag || 0,
+        hasConflict: response.data.hasConflict || false,
+        conflictInfo: response.data.conflictInfo || null,
+        oss_path: response.data.oss_path || '',
+        publish_info: response.data.publish_info || '',
+        ai_abstract: response.data.ai_abstract || previewBootstrap?.aiAbstract || ''
+      }
+      if (!supportsCollaboration.value && (collaboration.isConnected.value || collaboration.isConnecting.value)) {
+        collaboration.disconnect()
+      }
+      await loadPublishReviewRecord()
+      // 需要协同的文档：先不设置编辑器内容，等协同同步完成后再填充，避免抖动
+      // 仅将 OSS 内容存入 docState.content 作为协同失败时的兜底
+      // forceContent 为 true 时（如协同失败回退）必须立即填充
+      if (!options?.forceContent && shouldLoadFromCollaboration.value && !collaboration.synced.value) {
+        // 不设置 editorContent，编辑器会等待协同同步
+      } else {
+        editorContent.value = resolvedContent
+      }
+      if (previewBootstrap) {
+        consumeDocumentPreviewBootstrap(documentId.value)
+      }
+
+      // 如果是项目文档，获取项目信息
+      if (docState.value.doc_type === 'project' && docState.value.project_code) {
+        try {
+          const config = useRuntimeConfig()
+          const projectResponse = await $fetch<ApiSuccessResponse<ProjectAccountData>>(
+            `/api/account/projects/${docState.value.project_code}`
+          )
+          if (projectResponse.success && projectResponse.data?.repoUrl) {
+            projectMetadata.value.repoUrl = projectResponse.data.repoUrl
+            // 从 oss_path 提取文档相对路径
+            if (docState.value.oss_path && !docState.value.oss_path.startsWith('codocs/projects/')) {
+              const gitlabBaseUrl = (config.public.gitlabBaseUrl || 'https://gitlab.wiztek.cn').replace(/\/$/, '')
+              const repoPath = projectResponse.data.repoUrl
+                .replace(gitlabBaseUrl, '')
+                .replace(/^\/+/, '')
+                .replace(/\.git$/, '')
+              const prefix = `${repoPath}/`
+              if (docState.value.oss_path.startsWith(prefix)) {
+                projectMetadata.value.docPath = docState.value.oss_path.substring(prefix.length)
+              }
+            }
+          }
+        } catch (error) {
+          console.error('Failed to fetch project metadata:', error)
+        }
+      }
+
+      // 如果有未处理的冲突，显示警告
+      if (docState.value.hasConflict) {
+        toast.add({
+          title: '发现同步冲突',
+          description: '此文档在 GitLab 有更新，请先前往项目文档页面解决冲突',
+          color: 'warning',
+          duration: 10000
+        })
+      }
+
+      // 只读文档使用编辑模式（readonly 属性控制只读状态）
+
+      // 初始化保存状态
+      savedState.value = {
+        title: docState.value.title,
+        content: resolvedContent
+      }
+      departmentCanEdit.value = response.data.department_collaboration?.can_edit === true
+      departmentConverted.value = Number(response.data.snapshot_generation) > 0
+      snapshotBase.value = hosted && Number.isSafeInteger(response.data.snapshot_generation)
+        && Number.isSafeInteger(response.data.snapshot_epoch)
+        ? { generation: response.data.snapshot_generation!, epoch: response.data.snapshot_epoch! }
+        : null
+      hasLoadedDocument.value = true
+
+      // 初始化最后保存时间
+      if (docState.value.updated_at) {
+        lastSaved.value = new Date(docState.value.updated_at)
+      }
+
+      // Fallback: mark shared doc as read when opened from any entry.
+      if (!isDepartmentRead.value && authUserId.value && authUserId.value !== docState.value.owner_uid) {
+        try {
+          const attemptKey = documentAttempt.keyFor(cacheKey(`document-read:${documentId.value}`), { documentId: documentId.value })
+          await $fetch(moduleUrl(`/api/documents/${documentId.value}/read`), {
+            method: 'POST',
+            headers: { 'Idempotency-Key': attemptKey }
+          })
+          documentAttempt.complete(attemptKey)
+        } catch (error) {
+          console.error('Failed to mark document as read on open:', error)
+        }
+      }
+    }
+  } catch (error: unknown) {
+    clearDocumentPreviewBootstrap(documentId.value)
+    const failure = error as { statusCode?: number, status?: number, response?: { status?: number } }
+    const failureStatus = failure?.statusCode || failure?.status || failure?.response?.status
+    if (![401, 403, 404].includes(failureStatus || 0)) console.error('Failed to fetch document:', error)
+    documentLoadFailure.value = failureStatus === 403 ? 'forbidden' : 'unavailable'
+    documentLoadFailureMessage.value = documentLoadErrorMessage({ ...(error as object), statusCode: failureStatus })
+    collaboration.disconnect()
+  } finally {
+    clearTimeout(slowLoadTimer)
+    slowLoadHint.value = false
+    loading.value = false
+    initialLoadPending.value = false
+    // 注意：这里不设为 ready，等待编辑器 Ready 事件
+  }
+}
+
+// 保存文档
+const documentSavePayload = (title: string, content?: string, saveMode: 'overwrite' | 'recovery' | 'import' = 'overwrite') => {
+  if (content !== undefined && pendingContentSave?.documentId === documentId.value
+    && pendingContentSave.title === title && pendingContentSave.content === content && pendingContentSave.mode === saveMode) {
+    return pendingContentSave.payload
+  }
+  const payload: Record<string, unknown> = { title }
+  if (content !== undefined) {
+    Object.assign(payload, { content, saveMode })
+    if (hosted && isPrivateUnsharedDoc.value) {
+      if (snapshotBase.value) Object.assign(payload, { expectedGeneration: snapshotBase.value.generation, expectedEpoch: snapshotBase.value.epoch })
+      payload.titleChanged = title !== savedState.value.title
+    }
+  }
+  if (content !== undefined) pendingContentSave = { documentId: documentId.value, title, content, mode: saveMode, payload }
+  return payload
+}
+
+const saveDocument = async (options?: {
+  contentOverride?: string
+  saveMode?: 'metadata' | 'overwrite' | 'recovery' | 'import'
+  forceContent?: boolean
+}) => {
+  // 如果页面还没准备好（加载中或编辑器初始化中），不保存
+  if (!hasLoadedDocument.value || !isPageReady.value || saving.value) return
+  if (hosted && !isPrivateUnsharedDoc.value) return false
+  if (isEditingLockedByCollaborationFallback.value) return
+  if (isCollaborationReadonlyScope.value) return false
+
+  const contentToSave = options?.contentOverride ?? getCurrentEditorMarkdown()
+  if (contentToSave !== editorContent.value) {
+    editorContent.value = contentToSave
+  }
+  const shouldSaveContent = options?.forceContent || shouldPersistContentViaHttp.value || needsCollaborationPreviewSnapshotFlush.value
+
+  // 安全检查：防止意外清空文档
+  // 如果当前编辑器内容为空，但之前保存的内容不为空，则拒绝保存并警告
+  if (shouldSaveContent && !contentToSave && savedState.value.content) {
+    console.warn('检测到可能的初始化异常：试图将非空文档保存为空。已拦截。')
+    return false
+  }
+
+  saving.value = true
+  try {
+    const payload = documentSavePayload(docState.value.title, shouldSaveContent ? contentToSave : undefined,
+      options?.saveMode === 'recovery' || options?.saveMode === 'import' ? options.saveMode : 'overwrite')
+    const attempt = shouldSaveContent ? saveAttempt : documentAttempt
+    const attemptKey = attempt.keyFor(cacheKey(`document-save:${documentId.value}`), payload)
+    const result = await $fetch<ApiSuccessResponse<{ generation?: number, epoch?: number }>>(moduleUrl(`/api/documents/${documentId.value}`), {
+      method: 'PUT',
+      headers: { 'Idempotency-Key': attemptKey },
+      body: payload
+    })
+    if (result?.success !== true) throw new Error('文档保存结果无效')
+    if (hosted && isPrivateUnsharedDoc.value && shouldSaveContent && snapshotBase.value) {
+      if (!Number.isSafeInteger(result.data?.generation) || result.data.generation! < snapshotBase.value.generation + 1
+        || result.data.epoch !== snapshotBase.value.epoch) throw new Error('文档保存版本回执无效')
+      snapshotBase.value = { generation: result.data.generation!, epoch: result.data.epoch! }
+    }
+    attempt.complete(attemptKey)
+    if (shouldSaveContent && pendingContentSave?.payload === payload) pendingContentSave = null
+
+    lastSaved.value = new Date()
+
+    // 更新保存状态
+    savedState.value = {
+      title: docState.value.title,
+      content: shouldSaveContent ? contentToSave : savedState.value.content
+    }
+    if (shouldSaveContent) {
+      needsCollaborationPreviewSnapshotFlush.value = false
+    }
+    return true
+  } catch (error: unknown) {
+    console.error('Failed to save document:', error)
+    if (isDocumentChangedElsewhere(error)) {
+      toast.add({
+        title: '文档已在别处更新',
+        description: '本次修改未保存，内容仍保留在编辑器中。请先复制需要的内容，刷新页面后再保存。',
+        color: 'warning'
+      })
+      return false
+    }
+    toast.add({
+      title: '保存失败',
+      description: getErrorMessage(error, '无法保存文档，请稍后重试'),
+      color: 'error'
+    })
+    return false
+  } finally {
+    saving.value = false
+  }
+}
+
+async function flushDocumentBeforeRouteLeave(): Promise<boolean> {
+  if (!documentId.value || !hasLoadedDocument.value || !isPageReady.value) return true
+  if (hosted && !isPrivateUnsharedDoc.value) {
+    flushCollaborationMarkdownMirror(getCurrentEditorMarkdown())
+    return true
+  }
+  if (viewingVersion.value || docState.value.readonly_flag || isEditingLockedByCollaborationFallback.value || isCollaborationReadonlyScope.value) return true
+  // Milkdown can serialize the loaded Markdown differently without an edit.
+  // Do not turn a plain "close" into an unauthorized write in that case.
+  if (!hasPendingTitleChange.value && !hasPendingContentFlush.value) return true
+
+  const contentToSave = getCurrentEditorMarkdown()
+  if (contentToSave !== editorContent.value) {
+    editorContent.value = contentToSave
+  }
+
+  if (!hasPendingTitleChange.value && !hasPendingContentFlush.value && contentToSave === savedState.value.content) {
+    return true
+  }
+
+  if (hasPendingContentFlush.value && !contentToSave && savedState.value.content) {
+    console.warn('检测到离开页面前 flush 试图将非空文档保存为空，已拦截。')
+    return false
+  }
+
+  flushCollaborationMarkdownMirror(contentToSave)
+  return await saveDocument({
+    contentOverride: contentToSave,
+    forceContent: hasPendingContentFlush.value,
+    saveMode: 'overwrite'
+  }) === true
+}
+
+const flushDocumentOnExit = () => {
+  if (!import.meta.client || !documentId.value || !hasLoadedDocument.value || !isPageReady.value) return
+  if (hosted && !isPrivateUnsharedDoc.value) {
+    flushCollaborationMarkdownMirror(getCurrentEditorMarkdown())
+    return
+  }
+  if (viewingVersion.value || docState.value.readonly_flag || isEditingLockedByCollaborationFallback.value || isCollaborationReadonlyScope.value) return
+  if (isNewWorklog.value && !userEdited.value) return
+
+  const titleToSave = docState.value.title
+  const contentToSave = getCurrentEditorMarkdown()
+  if (contentToSave !== editorContent.value) {
+    editorContent.value = contentToSave
+  }
+  const shouldSaveTitle = hasPendingTitleChange.value
+  const shouldSaveContent = hasPendingContentFlush.value
+
+  flushCollaborationMarkdownMirror(contentToSave)
+
+  if (!shouldSaveTitle && !shouldSaveContent) return
+
+  if (shouldSaveContent && !contentToSave && savedState.value.content) {
+    console.warn('检测到离页 flush 试图将非空文档保存为空，已拦截。')
+    return
+  }
+
+  const payload = documentSavePayload(titleToSave, shouldSaveContent ? contentToSave : undefined)
+  const body = JSON.stringify(payload)
+  const url = moduleUrl(`/api/documents/${documentId.value}`)
+  const attempt = shouldSaveContent ? saveAttempt : documentAttempt
+  const attemptKey = attempt.keyFor(cacheKey(`document-save:${documentId.value}`), payload)
+
+  try {
+    void fetch(url, {
+      method: 'PUT',
+      body,
+      headers: {
+        'Content-Type': 'application/json',
+        'Idempotency-Key': attemptKey
+      },
+      credentials: 'same-origin',
+      keepalive: true
+    }).then(async (response) => {
+      if (!response.ok) return
+      const result = await response.json().catch(() => null) as ApiSuccessResponse<{ generation?: number, epoch?: number }> | null
+      if (result?.success !== true) return
+      if (hosted && isPrivateUnsharedDoc.value && shouldSaveContent && snapshotBase.value) {
+        if (!Number.isSafeInteger(result?.data?.generation) || result?.data?.epoch !== snapshotBase.value.epoch) return
+        snapshotBase.value = { generation: result!.data.generation!, epoch: result!.data.epoch! }
+      }
+      attempt.complete(attemptKey)
+      if (shouldSaveContent && pendingContentSave?.payload === payload) pendingContentSave = null
+      savedState.value = { title: titleToSave, content: shouldSaveContent ? contentToSave : savedState.value.content }
+      if (shouldSaveContent) needsCollaborationPreviewSnapshotFlush.value = false
+    }).catch((error) => {
+      console.error('Failed to flush document on exit:', error)
+    })
+  } catch (error) {
+    console.error('Failed to flush document on exit:', error)
+  }
+}
+
+const handlePageHide = () => {
+  flushDocumentOnExit()
+}
+
+const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+  if (needsUnsavedGuard.value) {
+    e.preventDefault()
+  }
+}
+
+const handleVisibilityChange = () => {
+  if (document.visibilityState === 'hidden') {
+    flushDocumentOnExit()
+  }
+}
+
+// 内容变化处理（防抖 5 秒自动保存）
+const handleContentChange = (content: string) => {
+  if (isEditingLockedByCollaborationFallback.value) {
+    return
+  }
+
+  editorContent.value = content
+  mirrorCollaborationMarkdown(content)
+  if (!hosted && shouldLoadFromCollaboration.value && collaboration.synced.value && !shouldPersistContentViaHttp.value && content !== savedState.value.content) {
+    needsCollaborationPreviewSnapshotFlush.value = true
+  }
+
+  // 标记用户已编辑（用于新建工作日志的空白删除逻辑）
+  if (isNewWorklog.value && !userEdited.value && isPageReady.value) {
+    // 只有内容真正与初始模板不同时才标记
+    if (content !== savedState.value.content) {
+      userEdited.value = true
+    }
+  }
+
+  // 如果是只读文档，不仅不自动保存，理论上也不应该触发这里（除非代码更改）
+  // 但为了安全起见，直接返回，不启动定时器
+  if (docState.value.readonly_flag) {
+    return
+  }
+  if (hosted && !isPrivateUnsharedDoc.value) {
+    if (saveTimer) clearTimeout(saveTimer)
+    saveTimer = null
+    return
+  }
+
+  // 源码模式下强制启用 HTTP 保存（协同可能未连接）
+  const shouldSaveViaHttp = shouldPersistContentViaHttp.value || viewMode.value === 'source' || needsCollaborationPreviewSnapshotFlush.value
+
+  if (!shouldSaveViaHttp) {
+    return
+  }
+
+  // 清除之前的定时器
+  if (saveTimer) {
+    clearTimeout(saveTimer)
+  }
+
+  // 30 秒后自动保存
+  saveTimer = setTimeout(() => {
+    // 只有真正有变更时才保存
+    if (editorContent.value !== savedState.value.content || hasPendingTitleChange.value) {
+      saveDocument({ forceContent: viewMode.value === 'source' })
+    }
+  }, 30000)
+}
+
+// 标题编辑
+const handleTitleChange = (event: Event) => {
+  if (isEditingLockedByCollaborationFallback.value) {
+    return
+  }
+
+  const target = event.target as HTMLInputElement
+  docState.value.title = target.value
+  // hasUnsavedChanges is now computed
+}
+
+// 格式化时间
+const formatSaveTime = (date: Date | null) => {
+  if (!date) return ''
+  return `${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`
+}
+
+// Department documents have a read-only history (list + exact version) on their
+// own Host endpoints; no restore, delete or diff.
+const historyRequests = computed(() => versionHistoryRequests(isDepartmentDoc.value ? 'department' : 'private', documentId.value, documentDeptCode.value))
+
+// 获取版本历史
+const fetchVersionHistory = async () => {
+  versionsLoading.value = true
+  versionsError.value = ''
+  try {
+    const response = await $fetch<ApiSuccessResponse<VersionSummary[]>>(moduleUrl(historyRequests.value.list.path), { query: historyRequests.value.list.query })
+    if (response.success) {
+      versions.value = response.data
+    }
+  } catch (error: unknown) {
+    console.error('Failed to fetch version history:', error)
+    const status = (error as { status?: number, statusCode?: number }).status
+      || (error as { status?: number, statusCode?: number }).statusCode
+    versionsError.value = status === 403
+      ? '当前无法读取版本历史；请确认版本服务授权后重试'
+      : status === 503 ? '版本服务暂不可用，请稍后重试' : '版本历史加载失败，请重试'
+  } finally {
+    versionsLoading.value = false
+  }
+}
+
+// 切换版本历史显示
+const toggleVersionHistory = async () => {
+  showVersionHistory.value = !showVersionHistory.value
+  if (showVersionHistory.value && versions.value.length === 0) {
+    await fetchVersionHistory()
+  }
+}
+
+// 查看历史版本
+const viewingVersion = ref<VersionDetail | null>(null)
+const originalContent = ref('')
+
+// A save based on an older generation, or an old-style save of a document that
+// moved to snapshot saving, is refused with one of these codes (HTTP 409).
+const isDocumentChangedElsewhere = (error: unknown) => {
+  const body = (error as { data?: { code?: string, data?: { code?: string } } })?.data
+  const code = body?.data?.code ?? body?.code
+  return code === 'snapshot_generation_conflict' || code === 'snapshot_key_conflict'
+    || code === 'snapshot_precondition_required' || code === 'document_on_snapshot_v2'
+}
+
+// Storage keeps superseded versions for 30 days after they are replaced; the
+// server answers 410 codocs_version_expired for older ones.
+const isVersionExpired = (error: unknown) => {
+  const body = (error as { data?: { code?: string, data?: { code?: string } } })?.data
+  return (body?.data?.code ?? body?.code) === 'codocs_version_expired'
+}
+const versionFetchFailed = (error: unknown) => {
+  if (isVersionExpired(error)) {
+    toast.add({ title: '该历史版本已不可用', description: '超过 30 天的历史版本已按存储保留策略清理，无法查看或恢复。', color: 'warning' })
+    return
+  }
+  toast.add({ title: '获取版本内容失败', color: 'error' })
+}
+
+const handleViewVersion = async (versionId: number) => {
+  if (isEditingDisabled.value && !historyRequests.value.readOnly) {
+    toast.add({
+      title: '当前文档为只读',
+      description: '只读状态下不可查看历史版本内容',
+      color: 'warning'
+    })
+    return
+  }
+
+  try {
+    const request = historyRequests.value.view(versionId)
+    const response = await $fetch<ApiSuccessResponse<VersionDetail>>(moduleUrl(request.path), { query: request.query })
+    if (response.success && response.data) {
+      // 首次进入版本预览时保存当前内容
+      if (!viewingVersion.value) {
+        originalContent.value = editorContent.value
+      }
+      viewingVersion.value = response.data
+      editorContent.value = response.data.content
+      milkdownEditorRef.value?.setMarkdown(response.data.content)
+    }
+  } catch (error: unknown) {
+    console.error('Failed to view version:', error)
+    versionFetchFailed(error)
+  }
+}
+
+const exitVersionPreview = () => {
+  if (!viewingVersion.value) return
+  editorContent.value = originalContent.value
+  milkdownEditorRef.value?.setMarkdown(originalContent.value)
+  viewingVersion.value = null
+  originalContent.value = ''
+}
+
+// 差异对比弹窗
+const showDiffModal = ref(false)
+const diffVersionData = ref<DiffVersionData | null>(null)
+
+const handleDiffVersion = async (versionId: number) => {
+  // The department history is view-only (the sidebar offers no diff).
+  if (historyRequests.value.readOnly) return
+  if (isEditingDisabled.value) {
+    toast.add({
+      title: '当前文档为只读',
+      description: '只读状态下不可查看历史版本差异',
+      color: 'warning'
+    })
+    return
+  }
+
+  try {
+    const response = await $fetch<ApiSuccessResponse<VersionDetail>>(moduleUrl(`/api/documents/${documentId.value}/versions/${versionId}`))
+    if (response.success && response.data) {
+      // Keep the selected version id: the detail DTO does not have to carry it.
+      diffVersionData.value = { ...response.data, id: versionId }
+      showDiffModal.value = true
+    }
+  } catch (error: unknown) {
+    console.error('Failed to fetch version for diff:', error)
+    versionFetchFailed(error)
+  }
+}
+
+const handleRestoreFromDiff = async () => {
+  if (isEditingDisabled.value) {
+    toast.add({
+      title: '当前文档为只读',
+      description: '只读状态下不可恢复历史版本',
+      color: 'warning'
+    })
+    return
+  }
+
+  if (!diffVersionData.value) return
+  const versionId = diffVersionData.value.id
+  const content = diffVersionData.value.content
+  editorContent.value = content
+  milkdownEditorRef.value?.setMarkdown(content)
+  // 如果在版本预览中，退出预览
+  viewingVersion.value = null
+  originalContent.value = ''
+  showDiffModal.value = false
+  mirrorCollaborationMarkdown(content)
+
+  if (!isRealtimeCollaboration.value) {
+    const saved = await saveDocument({
+      contentOverride: content,
+      saveMode: 'recovery'
+    })
+    // saveDocument already reported a conflict/failure and kept the draft;
+    // an unsaved restore must neither delete history nor claim success.
+    if (saved !== true) return
+  }
+
+  // 删除已恢复的历史版本
+  try {
+    await $fetch(moduleUrl(`/api/documents/${documentId.value}/versions/${versionId}`), {
+      method: 'DELETE',
+      headers: { 'Idempotency-Key': `codocs:version-delete:${documentId.value}:${versionId}` }
+    })
+  } catch (error) {
+    console.error('Failed to delete version:', error)
+  }
+
+  // 刷新版本列表
+  await fetchVersionHistory()
+  toast.add({ title: '已恢复到该版本', color: 'success' })
+}
+
+// ============ 共享功能 ============
+
+// 添加共享
+const handleShare = async (data: { uid: string, permission: 'read' | 'write' }) => {
+  if (!canManageShares.value) {
+    toast.add({
+      title: '无权限管理共享',
+      description: '仅文档创建者可以新增或调整共享设置',
+      color: 'warning'
+    })
+    return
+  }
+
+  try {
+    const payload = { sharedToUid: data.uid, permission: data.permission, message: null }
+    const attemptKey = documentAttempt.keyFor(cacheKey(`document-share:${documentId.value}:${data.uid}`), payload)
+    const response = await $fetch<ApiCodeResponse<{ notifiedOnly?: boolean, notification?: unknown }>>(moduleUrl(`/api/documents/${documentId.value}/shares`), {
+      method: 'POST',
+      headers: { 'Idempotency-Key': attemptKey },
+      body: payload
+    })
+    documentAttempt.complete(attemptKey)
+
+    if (response.code === 0) {
+      if (response.data?.notifiedOnly) {
+        toast.add({
+          title: '已发送协同提醒',
+          description: `${data.uid} 属于本部门，未新增共享记录`,
+          color: 'info'
+        })
+      } else {
+        toast.add({
+          title: '共享成功',
+          description: documentShareNotificationHint(response.data) || `已将文档共享给 ${data.uid}`,
+          color: 'success'
+        })
+      }
+    } else {
+      throw new Error(response.message)
+    }
+    await fetchShareMembers()
+    await milkdownEditorRef.value?.refreshShares()
+  } catch (error: unknown) {
+    const persisted = persistedDocumentShareNotification(error)
+    if (persisted) {
+      toast.add({ title: '已共享', description: persisted, color: 'success' })
+      await fetchShareMembers()
+      await milkdownEditorRef.value?.refreshShares()
+      return
+    }
+    console.error('Share failed:', error)
+    toast.add({
+      title: '共享失败',
+      description: getErrorMessage(error, '请稍后重试'),
+      color: 'error'
+    })
+  }
+}
+
+// 移除共享
+const handleRemoveShare = async (shareId: number) => {
+  if (!canManageShares.value) {
+    toast.add({
+      title: '无权限管理共享',
+      description: '仅文档创建者可以新增或调整共享设置',
+      color: 'warning'
+    })
+    return
+  }
+
+  try {
+    const payload = { documentId: documentId.value, shareId }
+    const attemptKey = documentAttempt.keyFor(cacheKey(`document-share-revoke:${documentId.value}:${shareId}`), payload)
+    const response = await $fetch<ApiCodeResponse>(moduleUrl(`/api/documents/${documentId.value}/shares/${shareId}`), {
+      method: 'DELETE', headers: { 'Idempotency-Key': attemptKey }
+    })
+    documentAttempt.complete(attemptKey)
+
+    if (response.code === 0) {
+      toast.add({
+        title: '已移除共享',
+        color: 'success'
+      })
+    } else {
+      throw new Error(response.message)
+    }
+  } catch (error: unknown) {
+    console.error('Remove share failed:', error)
+    toast.add({
+      title: '移除失败',
+      description: getErrorMessage(error, '请稍后重试'),
+      color: 'error'
+    })
+  }
+}
+
+// 更新共享权限
+const handleUpdatePermission = async (data: { shareId: number, permission: 'read' | 'write' }) => {
+  if (!canManageShares.value) {
+    toast.add({
+      title: '无权限管理共享',
+      description: '仅文档创建者可以新增或调整共享设置',
+      color: 'warning'
+    })
+    return
+  }
+
+  try {
+    const payload = { permission: data.permission }
+    const attemptKey = documentAttempt.keyFor(cacheKey(`document-share-update:${documentId.value}:${data.shareId}`), payload)
+    const response = await $fetch<ApiCodeResponse>(moduleUrl(`/api/documents/${documentId.value}/shares/${data.shareId}`), {
+      method: 'PATCH',
+      headers: { 'Idempotency-Key': attemptKey }, body: payload
+    })
+    documentAttempt.complete(attemptKey)
+
+    if (response.code === 0) {
+      toast.add({
+        title: '权限已更新',
+        color: 'success'
+      })
+    } else {
+      throw new Error(response.message)
+    }
+  } catch (error: unknown) {
+    console.error('Update permission failed:', error)
+    toast.add({
+      title: '更新失败',
+      description: getErrorMessage(error, '请稍后重试'),
+      color: 'error'
+    })
+  }
+}
+
+// 格式化版本时间
+const formatVersionTime = (dateStr: string) => {
+  const date = new Date(dateStr)
+  const now = new Date()
+  const diffMs = now.getTime() - date.getTime()
+  const diffMins = Math.floor(diffMs / 60000)
+  const diffHours = Math.floor(diffMs / 3600000)
+  const diffDays = Math.floor(diffMs / 86400000)
+
+  if (diffMins < 1) return '刚刚'
+  if (diffMins < 60) return `${diffMins}分钟前`
+  if (diffHours < 24) return `${diffHours}小时前`
+  if (diffDays < 7) return `${diffDays}天前`
+
+  return date.toLocaleDateString('zh-CN', {
+    month: 'long',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  })
+}
+
+// 编辑器就绪
+const handleEditorReady = () => {
+  if (isLeavingDocumentPage.value) return
+  if (!hasLoadedDocument.value) return
+  console.log('Editor ready, setting page to ready state')
+  isPageReady.value = true
+}
+
+// 监听视图模式切换，同步编辑器内容
+// 监听视图模式切换，同步编辑器内容
+// watch(viewMode, (newMode, oldMode) => {
+//     内部组件现在处理同步
+// })
+
+// 键盘按键处理
+const handleKeydown = (e: KeyboardEvent) => {
+  if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+    e.preventDefault()
+    if (hosted && !isPrivateUnsharedDoc.value) return
+    if (isEditingLockedByCollaborationFallback.value) return
+    // 源码模式下强制保存内容（协同可能未连接）
+    if (viewMode.value === 'source') {
+      saveDocument({ forceContent: true })
+    } else {
+      saveDocument()
+    }
+  }
+}
+
+const handleManualSave = () => {
+  if (hosted && !isPrivateUnsharedDoc.value) return
+  if (viewMode.value === 'source') {
+    saveDocument({ forceContent: true })
+  } else {
+    saveDocument()
+  }
+}
+
+// 初始化
+onMounted(async () => {
+  isLeavingDocumentPage.value = false
+  await fetchDocument()
+  await fetchShareMembers()
+  fetchAnnotations()
+  // 私人且未共享的文档不启动协同，直接走 HTTP 保存
+  if (shouldLoadFromCollaboration.value) {
+    collaboration.connect()
+  }
+  window.addEventListener('keydown', handleKeydown)
+  window.addEventListener('pagehide', handlePageHide)
+  window.addEventListener('beforeunload', handleBeforeUnload)
+  document.addEventListener('visibilitychange', handleVisibilityChange)
+})
+
+watch(shouldLoadFromCollaboration, (shouldConnect) => {
+  if (isLeavingDocumentPage.value) return
+  if (!shouldConnect) {
+    collaboration.disconnect()
+    return
+  }
+  if (hasLoadedDocument.value && !collaboration.isConnected.value && !collaboration.isConnecting.value) {
+    collaboration.connect()
+  }
+})
+
+watch(
+  () => docState.value.readonly_flag,
+  (readonlyFlag) => {
+    if (readonlyFlag) {
+      showSharePanel.value = false
+    }
+  }
+)
+
+watch(shouldShowReadonlyWatermark, (published) => {
+  if (published) viewMode.value = 'edit'
+})
+
+watch(
+  () => collaboration.synced.value,
+  (synced) => {
+    if (isLeavingDocumentPage.value) return
+    if (!supportsCollaboration.value) return
+    if (!synced || viewingVersion.value) return
+    hasSyncedCollaboration.value = true
+
+    if (isOwnerHttpFallbackMode.value) {
+      const localContent = editorContent.value
+      collaboration.setTextContent(localContent)
+      docState.value.content = localContent
+      if (!hosted && localContent !== savedState.value.content && !isCollaborationReadonlyScope.value) {
+        needsCollaborationPreviewSnapshotFlush.value = true
+      }
+      collaborationFallbackMode.value = 'none'
+      collaborationFallbackLoaded.value = false
+      return
+    }
+
+    collaborationFallbackMode.value = 'none'
+    collaborationFallbackLoaded.value = false
+    const syncedContent = collaboration.getTextContent()
+    if (!syncedContent && savedState.value.content) {
+      // 新的协同房间可能还没有 Y.Doc 内容；先把 HTTP/OSS 正文交给编辑器，
+      // 由 Milkdown 的协同 bootstrap 写入 ProseMirror fragment。
+      editorContent.value = savedState.value.content
+      docState.value.content = savedState.value.content
+      return
+    }
+    editorContent.value = syncedContent
+    docState.value.content = syncedContent
+    if (!hosted && syncedContent !== savedState.value.content && !isCollaborationReadonlyScope.value) {
+      needsCollaborationPreviewSnapshotFlush.value = true
+    }
+  }
+)
+
+watch(
+  () => shouldMirrorMarkdownToCollaboration.value,
+  (enabled) => {
+    if (!enabled) {
+      clearCollaborationMirrorTimer()
+      return
+    }
+
+    mirrorCollaborationMarkdown(editorContent.value)
+  }
+)
+
+watch(
+  () => collaboration.isConnected.value,
+  (connected, wasConnected) => {
+    if (isLeavingDocumentPage.value) return
+    if (!supportsCollaboration.value) return
+    if (connected && hasRemoteCollaborators.value && !hasShownCollaborationConnectedToast.value) {
+      hasShownCollaborationConnectedToast.value = true
+      toast.add({
+        title: '实时协同已连接',
+        description: '后续内容将通过协同通道自动持久化',
+        color: 'success'
+      })
+    }
+
+    if (!connected && wasConnected && hasShownCollaborationConnectedToast.value) {
+      toast.add({
+        title: '协同连接已断开',
+        description: '系统会自动重连，当前可继续本地编辑',
+        color: 'warning'
+      })
+    }
+  }
+)
+
+watch(
+  () => collaboration.error.value?.message || '',
+  async (message) => {
+    if (isLeavingDocumentPage.value) return
+    if (!supportsCollaboration.value) return
+    if (!message) {
+      hasShownCollaborationErrorToast.value = false
+      return
+    }
+
+    if (!hasShownCollaborationErrorToast.value) {
+      hasShownCollaborationErrorToast.value = true
+      toast.add({
+        title: '协同不可用',
+        description: message,
+        color: 'warning'
+      })
+    }
+
+    if (!collaboration.synced.value && !collaborationFallbackLoaded.value) {
+      // Preserve the local Y.Doc on a Host disconnect; HTTP content may be stale.
+      if (hosted) {
+        // Initial admission may fail before the editor receives its content.
+        // A later disconnect must leave local Y.Doc edits intact for recovery.
+        if (!hasSyncedCollaboration.value) editorContent.value = docState.value.content
+        return
+      }
+      collaborationFallbackMode.value = isDocumentOwner.value ? 'owner-edit' : 'viewer-readonly'
+      collaborationFallbackLoaded.value = true
+      await fetchDocument({ forceContent: true })
+    }
+  }
+)
+
+// 清理
+onUnmounted(() => {
+  isLeavingDocumentPage.value = true
+  collaboration.disconnect()
+  clearCollaborationMirrorTimer()
+  if (saveTimer) {
+    clearTimeout(saveTimer)
+  }
+  window.removeEventListener('keydown', handleKeydown)
+  window.removeEventListener('pagehide', handlePageHide)
+  window.removeEventListener('beforeunload', handleBeforeUnload)
+  document.removeEventListener('visibilitychange', handleVisibilityChange)
+})
+
+// 导出 Markdown
+const handleExportMarkdown = () => {
+  const blob = new Blob([editorContent.value], { type: 'text/markdown;charset=utf-8;' })
+  const link = document.createElement('a')
+  const url = URL.createObjectURL(blob)
+  link.setAttribute('href', url)
+  const filename = docState.value.title.endsWith('.md') ? docState.value.title : `${docState.value.title}.md`
+  console.log('Exporting Markdown:', filename)
+  link.setAttribute('download', filename)
+  link.style.visibility = 'hidden'
+  document.body.appendChild(link)
+  link.click()
+
+  setTimeout(() => {
+    document.body.removeChild(link)
+    window.URL.revokeObjectURL(url)
+  }, 100)
+}
+
+// 导出 PDF（直接从当前模式打印，编辑模式即所见即所得）
+const handleExportPdf = () => {
+  window.print()
+}
+
+// 设置页面元数据
+useHead({
+  title: () => docState.value.title
+})
+
+// 离开页面前确认
+onBeforeUnmount(async () => {
+  isLeavingDocumentPage.value = true
+  // 不在此处调用 collaboration.disconnect()
+  // 因为父组件的 onBeforeUnmount 在子组件之前执行，
+  // 此时 MilkdownEditor 的 collab 插件仍活跃，
+  // 过早销毁 provider 会导致 collab 插件 dispatch 时找不到 editorState 上下文
+  // 实际断开在 onUnmounted 中进行（子组件先销毁编辑器，父组件再断开连接）
+
+  // 新建的工作日志，如果用户未做任何编辑，则删除
+  if (isNewWorklog.value && !userEdited.value) {
+    const deletedDate = getWorklogDate(docState.value.title)
+    try {
+      if (import.meta.client) {
+        sessionStorage.setItem('worklog_deleted', JSON.stringify({
+          uuid: documentId.value,
+          date: deletedDate
+        }))
+      }
+      const attemptKey = documentAttempt.keyFor(cacheKey(`document-delete:${documentId.value}`), { documentId: documentId.value })
+      await $fetch(moduleUrl(`/api/documents/${documentId.value}`), { method: 'DELETE', headers: { 'Idempotency-Key': attemptKey } })
+      documentAttempt.complete(attemptKey)
+      console.log('已自动删除未编辑的空白工作日志')
+    } catch (e) {
+      if (import.meta.client) {
+        sessionStorage.removeItem('worklog_deleted')
+      }
+      console.error('删除空白工作日志失败:', e)
+    }
+    return
+  }
+  // 只有在页面已经 ready 的情况下才在离开前尝试保存
+  if (hasLoadedDocument.value && isPageReady.value && (hasUnsavedChanges.value || hasPendingContentFlush.value || hasPendingTitleChange.value)) {
+    flushDocumentOnExit()
+  }
+})
+</script>
+
+<template>
+  <UDashboardPanel v-if="documentLoadFailure" grow>
+    <template #body>
+      <CommonEmptyState
+        :icon="documentLoadFailure === 'forbidden' ? 'i-lucide-lock-keyhole' : 'i-lucide-file-warning'"
+        :title="documentLoadFailure === 'forbidden' ? '无权限查看此文档' : '文档暂时不可用'"
+        :description="documentLoadFailureMessage || (documentLoadFailure === 'forbidden' ? '你没有查看此文档正文的权限，请返回文档列表' : '文档加载失败，请稍后重试')"
+      />
+      <div class="flex justify-center gap-2">
+        <UButton
+          label="返回"
+          icon="i-lucide-arrow-left"
+          color="neutral"
+          variant="outline"
+          @click="goBack"
+        />
+        <UButton
+          v-if="documentLoadFailure === 'unavailable'"
+          label="重试"
+          icon="i-lucide-refresh-cw"
+          :loading="loading"
+          @click="fetchDocument()"
+        />
+      </div>
+    </template>
+  </UDashboardPanel>
+  <UDashboardPanel v-else-if="initialLoadPending" grow>
+    <template #body>
+      <div class="space-y-3 p-2">
+        <USkeleton class="h-8 w-1/3" />
+        <USkeleton class="h-64 w-full" />
+        <p v-if="slowLoadHint" class="text-sm text-muted" data-testid="document-slow-load-hint">
+          正在加载文档正文…
+        </p>
+      </div>
+    </template>
+  </UDashboardPanel>
+  <UDashboardPanel v-else grow>
+    <!-- 顶部工具栏 -->
+    <div class="flex items-center gap-1.5 px-4 py-2 border-b border-default bg-default">
+      <div class="flex items-center gap-2 min-w-0 flex-1">
+        <div class="flex-1 min-w-0 flex flex-col gap-1">
+          <input
+            :value="docState.title"
+            type="text"
+            class="flex-1 min-w-0 text-base sm:text-lg font-semibold bg-transparent border-none outline-none text-highlighted placeholder:text-muted focus:ring-0 px-0 disabled:opacity-50 disabled:cursor-not-allowed"
+            placeholder="输入文档标题..."
+            :disabled="isEditingDisabled || (hosted && !isPrivateUnsharedDoc)"
+            @input="handleTitleChange"
+          >
+          <div
+            v-if="docState.publish_info || publishReviewRecord"
+            class="flex items-center gap-1.5 text-xs text-info"
+          >
+            <UIcon name="i-lucide-archive" class="w-3 h-3" />
+            <span>{{ getPublishedInfoText(docState.publish_info, publishReviewRecord) }}</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-1.5">
+        <!-- 保存状态 -->
+        <div class="hidden lg:flex items-center gap-1.5 text-sm text-muted mr-1">
+          <template v-if="docState.readonly_flag || isEditingLockedByCollaborationFallback || (hosted && !isPrivateUnsharedDoc && !isRealtimeCollaboration)">
+            <UIcon name="i-lucide-lock" class="w-4 h-4 text-muted" />
+            <span class="hidden xl:inline">{{ hosted && !isPrivateUnsharedDoc && !isDepartmentScene && !docState.readonly_flag && !isStaticReadonlyDoc ? '协作未连接' : '只读' }}</span>
+          </template>
+          <template v-else-if="isRealtimeCollaboration">
+            <UIcon name="i-lucide-cloud" class="w-4 h-4 text-success" />
+            <span class="hidden xl:inline">自动同步保存</span>
+          </template>
+          <template v-else-if="saving">
+            <UIcon name="i-lucide-loader-2" class="w-4 h-4 animate-spin" />
+            <span class="hidden xl:inline">保存中...</span>
+          </template>
+          <template v-else-if="hasUnsavedChanges">
+            <UIcon name="i-lucide-circle" class="w-2 h-2 text-warning" />
+            <span class="hidden xl:inline">未保存</span>
+          </template>
+          <template v-else>
+            <UIcon name="i-lucide-check" class="w-4 h-4 text-success" />
+            <span class="hidden xl:inline">已保存 {{ formatSaveTime(lastSaved) }}</span>
+          </template>
+        </div>
+
+        <!-- 视图切换 -->
+        <div class="hidden sm:flex items-center bg-elevated rounded-lg p-0.5 mr-1 gap-0.5">
+          <UButton
+            size="xs"
+            :variant="viewMode === 'edit' ? 'solid' : 'ghost'"
+            color="neutral"
+            class="rounded-md"
+            @click="viewMode = 'edit'"
+          >
+            <UIcon :name="isEditingDisabled ? 'i-lucide-eye' : 'i-lucide-pencil'" class="w-4 h-4" />{{ isEditingDisabled ? '查看' : '图文' }}
+          </UButton>
+          <UButton
+            size="xs"
+            :variant="viewMode === 'source' ? 'solid' : 'ghost'"
+            color="neutral"
+            class="rounded-md"
+            :disabled="isEditingDisabled"
+            @click="viewMode = 'source'"
+          >
+            <UIcon name="i-lucide-code" class="w-4 h-4" />源码
+          </UButton>
+        </div>
+
+        <!-- AI 助手入口 -->
+        <UButton
+          v-if="!hosted && !isEditingDisabled"
+          icon="i-lucide-sparkles"
+          variant="ghost"
+          size="xs"
+          title="AI 助手"
+          @click="milkdownEditorRef?.switchToTab('ai')"
+        />
+
+        <UButton
+          v-if="publishReviewRecord"
+          icon="i-lucide-list-checks"
+          variant="ghost"
+          size="xs"
+          title="发布审批与执行过程"
+          @click="showPublishRecord = true"
+        >
+          <span class="hidden xl:inline">发布流程</span>
+        </UButton>
+
+        <!-- 操作按钮（协同模式下内容自动同步，无需手动保存；源码模式始终显示） -->
+        <UButton
+          v-if="!isEditingDisabled && !(hosted && !isPrivateUnsharedDoc) && (!isRealtimeCollaboration || viewMode === 'source')"
+          icon="i-lucide-save"
+          :loading="saving"
+          :disabled="!hasPendingTitleChange && editorContent === savedState.content"
+          size="xs"
+          @click="handleManualSave"
+        >
+          <span class="hidden xl:inline">保存</span>
+        </UButton>
+
+        <UDropdownMenu
+          :items="[
+            ...(canExportDepartmentBody
+              ? [
+                { label: '下载', icon: 'i-lucide-download', onSelect: handleExportMarkdown },
+                { label: '导出 PDF', icon: 'i-lucide-printer', onSelect: handleExportPdf }
+              ]
+              : [{ label: '下载（缺少部门文档导出权限）', icon: 'i-lucide-download', disabled: true }]),
+            ...(canManageShares ? [{ label: '共享', icon: 'i-lucide-share-2', onSelect: () => { showSharePanel = !showSharePanel } }] : []),
+            { label: '历史版本', icon: 'i-lucide-history', onSelect: toggleVersionHistory }
+          ]"
+        >
+          <UButton
+            aria-label="文档操作"
+            icon="i-lucide-more-vertical"
+            variant="ghost"
+            class="pr-0"
+          />
+          <UButton
+            icon="i-lucide-x"
+            aria-label="返回文档列表"
+            variant="ghost"
+            class="pl-0"
+            @click="goBack"
+          />
+        </UDropdownMenu>
+      </div>
+    </div>
+
+    <div
+      v-if="!loading && !viewingVersion && shouldShowCollaborationStatusBar"
+      class="border-b border-default/60 bg-default/70 px-4 py-2 backdrop-blur"
+    >
+      <div class="flex flex-wrap items-center justify-between gap-3 text-sm">
+        <!-- 左侧：协同状态 -->
+        <div class="flex items-center gap-2">
+          <UBadge :color="collaborationStatus.tone" variant="soft">
+            {{ collaborationStatus.label }}
+          </UBadge>
+          <span class="text-muted">{{ collaborationStatus.description }}</span>
+          <span
+            v-if="isCollaborationReadonlyScope"
+            class="text-warning-600 dark:text-warning-400"
+          >
+            当前账号仅可查看
+          </span>
+          <UButton
+            v-if="hosted && !isDepartmentScene && !shareMembersLoaded && isDocumentOwner && !docState.readonly_flag"
+            icon="i-lucide-refresh-cw"
+            color="neutral"
+            variant="ghost"
+            size="xs"
+            @click="fetchShareMembers()"
+          >
+            重试核验
+          </UButton>
+          <UButton
+            v-if="shouldLoadFromCollaboration && !isRealtimeCollaboration && !isCollaborationConnecting && !docState.readonly_flag && !isDepartmentCollaborationScene"
+            icon="i-lucide-refresh-cw"
+            color="neutral"
+            variant="ghost"
+            size="xs"
+            @click="collaboration.connect()"
+          >
+            重连协同
+          </UButton>
+          <UButton
+            v-if="departmentView.entry !== 'hidden'"
+            :icon="departmentView.entry === 'retry' ? 'i-lucide-refresh-cw' : 'i-lucide-users'"
+            color="primary"
+            :variant="departmentView.entry === 'start' ? 'solid' : 'soft'"
+            size="xs"
+            :loading="departmentView.entry === 'busy'"
+            :disabled="departmentView.entry === 'busy'"
+            data-test="department-collaboration-entry"
+            @click="startDepartmentCollaboration"
+          >
+            {{ departmentEntryLabel }}
+          </UButton>
+        </div>
+
+        <!-- 右侧：共享信息 + 在线成员 -->
+        <div class="flex min-w-0 flex-wrap items-center gap-3">
+          <span v-if="documentSourceDisplayName" class="max-w-48 truncate text-xs text-muted" :title="documentSourceDisplayName">
+            由 <strong class="text-default">{{ documentSourceDisplayName }}</strong> 创建/共享
+          </span>
+          <span v-if="!isSharedDoc && shareMembers.length > 0" class="text-xs text-muted">
+            已共享给 {{ shareMembers.length }} 人
+          </span>
+          <CollaborationPresence :members="collaboration.members.value" :self-id="authUserId" :connected="collaboration.isConnected.value" />
+        </div>
+      </div>
+    </div>
+
+    <div
+      v-if="!loading && !viewingVersion && departmentView.notice"
+      class="border-b border-default/60 px-4 py-2"
+    >
+      <UAlert
+        :color="departmentView.notice.tone"
+        variant="soft"
+        icon="i-lucide-triangle-alert"
+        :title="departmentView.notice.title"
+        :description="departmentView.notice.description"
+        data-test="department-collaboration-notice"
+      />
+    </div>
+
+    <!-- 版本预览提示栏 -->
+    <div
+      v-if="viewingVersion"
+      class="flex items-center justify-between px-4 py-2 bg-warning-50 dark:bg-warning-900/20 border-b border-warning-200 dark:border-warning-800 shrink-0"
+    >
+      <div class="flex items-center gap-2 text-sm text-warning-700 dark:text-warning-300">
+        <UIcon name="i-lucide-history" class="w-4 h-4" />
+        <span>正在查看历史版本 <strong>v{{ viewingVersion.versionNum }}</strong></span>
+        <span class="text-warning-500">·</span>
+        <span>{{ viewingVersion.editorUid }}</span>
+        <span class="text-warning-500">·</span>
+        <span>{{ formatVersionTime(viewingVersion.createdAt) }}</span>
+      </div>
+      <UButton
+        icon="i-lucide-x"
+        size="xs"
+        color="warning"
+        variant="soft"
+        @click="exitVersionPreview"
+      >
+        退出预览
+      </UButton>
+    </div>
+
+    <!-- 源码模式提示栏 -->
+    <div
+      v-if="viewMode === 'source' && isRealtimeCollaboration"
+      class="flex items-center justify-between px-4 py-2 bg-warning-50 dark:bg-warning-900/20 border-b border-warning-200 dark:border-warning-800 shrink-0"
+    >
+      <div class="flex items-center gap-2 text-sm text-warning-700 dark:text-warning-300">
+        <UIcon name="i-lucide-triangle-alert" class="w-4 h-4" />
+        <span>{{ hosted ? '源码模式修改会通过协作通道同步' : '源码模式下保存会直接覆盖文档内容，可能影响其他正在协同编辑的用户' }}</span>
+      </div>
+      <UButton
+        size="xs"
+        color="warning"
+        variant="soft"
+        @click="viewMode = 'edit'"
+      >
+        返回编辑模式
+      </UButton>
+    </div>
+
+    <!-- 编辑器主体 -->
+    <main class="flex min-h-0 w-full flex-1 overflow-hidden bg-default">
+      <!-- 加载中 -->
+      <div v-if="loading" class="flex min-h-0 flex-1 items-center justify-center">
+        <div class="flex flex-col items-center gap-2">
+          <UIcon name="i-lucide-loader-2" class="w-8 h-8 animate-spin text-primary" />
+          <p v-if="slowLoadHint" class="text-sm text-muted">
+            正在加载文档正文…
+          </p>
+        </div>
+      </div>
+
+      <!-- 编辑器区域 -->
+      <div v-else class="flex min-h-0 w-full flex-1 overflow-hidden px-0 sm:px-4">
+        <div v-show="true" class="min-h-0 flex-1 w-full sm:w-a4 sm:max-w-full overflow-auto pt-4 pb-4">
+          <EditorMilkdownEditor
+            :key="editorInstanceKey"
+            ref="milkdownEditorRef"
+            v-model="editorContent"
+            :readonly="isEditingDisabled"
+            :disable-selection="shouldShowReadonlyWatermark"
+            :watermark-text="shouldShowReadonlyWatermark ? watermarkText : ''"
+            :theme="editorTheme"
+            :view-mode="viewMode"
+            :document-id="documentId"
+            :versions="versions"
+            :versions-loading="versionsLoading"
+            :versions-error="versionsError"
+            :show-version-history="showVersionHistory"
+            :show-share-panel="showSharePanel"
+            :doc-type="docState.doc_type"
+            :project-repo-url="projectMetadata.repoUrl"
+            :doc-path="projectMetadata.docPath"
+            :annotations="annotations"
+            :current-user-id="authUserId || undefined"
+            :allow-share="canViewShares"
+            :can-manage-shares="canManageShares"
+            :active-version-num="viewingVersion?.versionNum ?? null"
+            :version-history-read-only="historyRequests.readOnly"
+            :ai-abstract="docState.ai_abstract"
+            :ai-enabled="!hosted"
+            :cloud-clipboard-enabled="!hosted"
+            :collaboration-doc="collaboration.getYDoc()"
+            :collaboration-awareness="collaboration.getAwareness() || null"
+            :collaboration-enabled="collaborationEditorEnabled"
+            container-height="100%"
+            @change="handleContentChange"
+            @ready="handleEditorReady"
+            @close-sidebar="showVersionHistory = false; showSharePanel = false"
+            @load-versions="fetchVersionHistory"
+            @view-version="handleViewVersion"
+            @diff-version="handleDiffVersion"
+            @share="handleShare"
+            @remove-share="handleRemoveShare"
+            @update-permission="handleUpdatePermission"
+            @create-annotation="handleCreateAnnotation"
+            @reply-annotation="handleReplyAnnotation"
+            @resolve-annotation="handleResolveAnnotation"
+            @delete-annotation="handleDeleteAnnotation"
+            @delete-reply="handleDeleteReply"
+            @click-annotation="handleClickAnnotation"
+            @update-abstract="(text: string) => { docState.ai_abstract = text }"
+          />
+        </div>
+      </div>
+    </main>
+
+    <!-- 版本差异对比弹窗 -->
+    <DocumentVersionDiffModal
+      v-if="diffVersionData"
+      :open="showDiffModal"
+      :version-num="diffVersionData.versionNum"
+      :editor-uid="diffVersionData.editorUid"
+      :created-at="diffVersionData.createdAt"
+      :history-content="diffVersionData.content"
+      :current-content="originalContent || savedState.content"
+      @update:open="showDiffModal = $event"
+      @restore="handleRestoreFromDiff"
+    />
+    <ReviewPublishRecordModal
+      v-model:open="showPublishRecord"
+      :oss-path="docState.oss_path"
+      :document-uuid="documentId"
+    />
+    <!-- 未保存变更提示 -->
+    <UModal v-model:open="unsavedGuardOpen" :ui="{ content: 'sm:w-lg h-auto' }">
+      <template #content>
+        <UCard>
+          <template #header>
+            <div class="flex items-center gap-2 pt-4">
+              <UIcon name="i-lucide-alert-triangle" class="w-5 h-5 text-warning" />
+              <h3 class="text-base font-semibold">
+                文档尚未保存
+              </h3>
+            </div>
+          </template>
+          <p class="text-sm text-muted py-8">
+            当前文档有未保存的修改，离开后修改将会丢失。
+          </p>
+          <template #footer>
+            <div class="flex justify-end gap-2 py-2">
+              <UButton
+                label="放弃修改"
+                color="error"
+                variant="ghost"
+                @click="handleUnsavedGuardAction('discard')"
+              />
+              <UButton
+                label="继续编辑"
+                color="neutral"
+                variant="soft"
+                @click="handleUnsavedGuardAction('cancel')"
+              />
+              <UButton
+                label="保存并离开"
+                color="primary"
+                :loading="saving"
+                @click="handleUnsavedGuardAction('save')"
+              />
+            </div>
+          </template>
+        </UCard>
+      </template>
+    </UModal>
+  </UDashboardPanel>
+</template>
+
+<style>
+@media print {
+
+  /* Hide all non-content UI: sidebar, toolbar, buttons, handles */
+  header,
+  nav,
+  aside,
+  .ud-dashboard-navbar,
+  .ud-dashboard-sidebar,
+  .ud-sidebar,
+  [id^="dashboard-sidebar-"],
+  .sidebar-preview-shell,
+  button,
+  .ud-icon,
+  .hidden.md\:flex,
+  input[type="text"],
+  .rounded-full,
+  .milkdown-block-handle,
+  hr,
+  .border-b,
+  .border-t {
+    display: none !important;
+  }
+
+  /* Reset layout constraints */
+  body,
+  html,
+  main,
+  .ud-dashboard-panel,
+  .ud-dashboard-layout,
+  #__nuxt {
+    display: block !important;
+    width: 100% !important;
+    height: auto !important;
+    overflow: visible !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    position: static !important;
+  }
+
+  /* Main container adjustments */
+  main {
+    padding-top: 0 !important;
+  }
+
+  /* Target specific editor content */
+  .w-a4 {
+    width: 100% !important;
+    max-width: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    box-shadow: none !important;
+  }
+
+  /* Ensure all content containers are visible and auto-height */
+  .crepe-container,
+  .crepe-wrapper,
+  .crepe-editor,
+  .crepe-editor .milkdown,
+  .crepe-editor .PbronzeMirror,
+  .crepe-editor .ProseMirror,
+  .crepe-editor .editor {
+    display: block !important;
+    width: 100% !important;
+    height: auto !important;
+    min-height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+  }
+
+  /* Reset editor padding for print: remove the large 120px "paper" padding */
+  .crepe-editor .ProseMirror,
+  .crepe-editor .editor {
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+
+  /* Ensure all paragraphs, headings, lists are visible */
+  .crepe-editor p,
+  .crepe-editor h1,
+  .crepe-editor h2,
+  .crepe-editor h3,
+  .crepe-editor h4,
+  .crepe-editor h5,
+  .crepe-editor h6,
+  .crepe-editor blockquote,
+  .crepe-editor pre,
+  .crepe-editor code,
+  .crepe-editor table {
+    visibility: visible !important;
+    opacity: 1 !important;
+  }
+
+  /* Lists: preserve Milkdown's flex layout for correct indentation */
+  .crepe-editor ul,
+  .crepe-editor ol {
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+  }
+
+  .crepe-editor li,
+  .crepe-editor .milkdown-list-item-block {
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+  }
+
+  .crepe-editor .milkdown-list-item-block > .list-item {
+    display: flex !important;
+    align-items: flex-start !important;
+  }
+
+  .crepe-editor .milkdown-list-item-block > .list-item > .children {
+    min-width: 0 !important;
+    flex: 1 !important;
+  }
+
+  /* Adjust page margins */
+  @page {
+    margin: 20mm;
+    size: A4;
+  }
+
+  /* Remove browser default header/footer */
+  @page {
+    margin-top: 10mm;
+    margin-bottom: 10mm;
+  }
+
+  /* Hide page title in header */
+  body::before {
+    content: none !important;
+  }
+
+  /* Better page breaks */
+  h1,
+  h2,
+  h3 {
+    page-break-after: avoid;
+  }
+
+  pre,
+  blockquote,
+  table {
+    page-break-inside: avoid;
+  }
+}
+</style>

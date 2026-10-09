@@ -1,0 +1,16 @@
+[Unit]
+Description=CodeInsight Stage B - Ingest commit files (GitLab+SVN)
+After=network.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/Dev/WizOA/codeinsight
+EnvironmentFile=-/etc/codeinsight-ingestion.env
+ExecStart=/usr/bin/flock -n /var/lock/codeinsight-ingest-files.lock bash -lc 'PYTHONUNBUFFERED=1 ${PYTHON_BIN:-python3} server/scripts/ingest_commit_files.py --batch-size ${FILES_BATCH_SIZE:-100} ${INCLUDE_INVALID:+--include-invalid} ${GITLAB_TOKEN:+--gitlab-token "$GITLAB_TOKEN"} ${GITLAB_URL:+--gitlab-url "$GITLAB_URL"} --svn-max-diff-bytes ${SVN_MAX_DIFF_BYTES:-262144} --triggered-by systemd'
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7
+MemorySwapMax=infinity
+
+[Install]
+WantedBy=multi-user.target

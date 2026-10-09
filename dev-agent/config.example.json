@@ -1,0 +1,99 @@
+{
+  "agentId": "gavin-mac",
+  "server": {
+    "host": "127.0.0.1",
+    "port": 19090
+  },
+  "auth": {
+    "staticToken": "change-me"
+  },
+  "repos": [
+    {
+      "id": "huizhi-yun",
+      "path": "..",
+      "defaultBranch": "main"
+    }
+  ],
+  "templates": [
+    {
+      "id": "root.git-status",
+      "type": "git_diff",
+      "repoId": "huizhi-yun",
+      "cwd": ".",
+      "argv": ["git", "status", "--short"],
+      "timeoutSec": 60
+    },
+    {
+      "id": "root.git-diff-stat",
+      "type": "git_diff",
+      "repoId": "huizhi-yun",
+      "cwd": ".",
+      "argv": ["git", "diff", "--stat"],
+      "timeoutSec": 60
+    },
+    {
+      "id": "finance.typecheck",
+      "type": "test",
+      "repoId": "huizhi-yun",
+      "cwd": "finance",
+      "argv": ["pnpm", "run", "typecheck"],
+      "timeoutSec": 600
+    },
+    {
+      "id": "workflow.typecheck",
+      "type": "test",
+      "repoId": "huizhi-yun",
+      "cwd": "workflow",
+      "argv": ["pnpm", "run", "typecheck"],
+      "timeoutSec": 600
+    },
+    {
+      "id": "finance.deploy.cloudflare",
+      "type": "deploy_preview",
+      "repoId": "huizhi-yun",
+      "cwd": "finance",
+      "argv": ["pnpm", "run", "deploy:cloudflare"],
+      "timeoutSec": 1800
+    },
+    {
+      "id": "workflow.deploy.cloudflare",
+      "type": "deploy_preview",
+      "repoId": "huizhi-yun",
+      "cwd": "workflow",
+      "argv": ["pnpm", "run", "deploy:cloudflare"],
+      "timeoutSec": 1800
+    },
+    {
+      "id": "codex.app-server",
+      "type": "codex_task",
+      "repoId": "huizhi-yun",
+      "cwd": ".",
+      "runner": "codex_app_server",
+      "codexSandboxPolicy": "workspaceWrite",
+      "argv": [
+        "codex",
+        "app-server",
+        "--listen",
+        "stdio://"
+      ],
+      "timeoutSec": 3600
+    },
+    {
+      "id": "codex.exec",
+      "type": "codex_task",
+      "repoId": "huizhi-yun",
+      "cwd": ".",
+      "runner": "command",
+      "argv": [
+        "codex",
+        "exec",
+        "--sandbox",
+        "workspace-write",
+        "--config",
+        "sandbox_workspace_write.network_access=true",
+        "{{prompt}}"
+      ],
+      "timeoutSec": 3600
+    }
+  ]
+}

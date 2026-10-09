@@ -1,0 +1,63 @@
+# WeCom (qyapi.weixin.qq.com) egress proxy on the PUBLIC gitlab.wiztek.cn host.
+# Purpose: the WeCom "trusted IP" is 8.130.81.31 (this host). The Platform server
+# (100.64.72.59, non-fixed public egress) calls WeCom server APIs through this
+# listener so WeCom sees 8.130.81.31. Install only after approval.
+#
+# Hop 1 (Platform -> 100.98.120.65:8790) is plain HTTP INSIDE the tailnet;
+# Tailscale/WireGuard encrypts and authenticates it. Hop 2 is HTTPS with full
+# certificate verification against the system CA bundle.
+#
+# Platform side: NUXT_AUTH_WECOM_API_BASE=http://100.98.120.65:8790
+# (the Platform validates this value: only tailnet 100.64.0.0/10 + explicit port).
+#
+# Secrets: the query strings carry access_token and corpsecret. Neither the
+# access log nor the error log may record them.
+
+# http context. No $request, $request_uri or $args: $uri has no query string.
+log_format wecom_egress '$time_iso8601 $remote_addr $request_method $uri $status $upstream_response_time';
+
+server {
+    listen 100.98.120.65:8790;
+    server_name _;
+    allow 100.64.72.59;
+    deny all;
+
+    access_log /var/log/nginx/wecom-egress.access.log wecom_egress;
+    # nginx error entries print the full request line (with query) for upstream
+    # errors at level "error"; keep only crit and above for this server.
+    error_log /var/log/nginx/wecom-egress.error.log crit;
+
+    client_max_body_size 1k;
+
+    # Everything except the exact paths below returns 404.
+    location / { return 404; }
+
+    # Exact paths only (the three calls in platform/server/utils/wecomPlatformAuth.ts),
+    # GET only. The original URI and query pass to the upstream unchanged.
+    # The upstream name is resolved when nginx starts/reloads; reload nginx if
+    # WeCom's DNS answers change and calls start timing out.
+    location ~ ^/cgi-bin/(gettoken|auth/getuserinfo|user/get)$ {
+        limit_except GET { deny all; }
+
+        proxy_pass https://qyapi.weixin.qq.com;
+        proxy_http_version 1.1;
+        proxy_set_header Host qyapi.weixin.qq.com;
+        proxy_set_header Connection "";
+        proxy_set_header X-Forwarded-For "";
+        proxy_set_header X-Real-IP "";
+        proxy_set_header Forwarded "";
+
+        proxy_ssl_server_name on;
+        proxy_ssl_name qyapi.weixin.qq.com;
+        proxy_ssl_verify on;
+        proxy_ssl_verify_depth 3;
+        # RHEL/Anolis: /etc/pki/tls/certs/ca-bundle.crt; Debian/Ubuntu: /etc/ssl/certs/ca-certificates.crt
+        proxy_ssl_trusted_certificate /etc/pki/tls/certs/ca-bundle.crt;
+        proxy_ssl_protocols TLSv1.2 TLSv1.3;
+
+        proxy_connect_timeout 5s;
+        proxy_send_timeout 10s;
+        proxy_read_timeout 10s;
+        proxy_next_upstream off;
+    }
+}

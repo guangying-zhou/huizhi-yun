@@ -1,0 +1,203 @@
+{
+  "method": "POST",
+  "cases": [
+    {
+      "target": "/v1/enterprise/altoc/migration-exceptions:page",
+      "body": {
+        "id": "",
+        "code": "MARKED",
+        "name": "中文<& ",
+        "rowVersion": 0,
+        "page": 0,
+        "pageSize": 0,
+        "search": "",
+        "authorization": {
+          "actorUid": "Person",
+          "tenant": "C000001",
+          "deployment": "Host",
+          "resource": "bank_accounts",
+          "action": "admin",
+          "operation": "save",
+          "objectId": "",
+          "allowed": true,
+          "expiresAt": 123,
+          "bundleVersion": "1",
+          "bundleHash": "hash",
+          "policyRevision": 38,
+          "scope": {
+            "access": "all",
+            "departmentCodes": []
+          }
+        },
+        "migrationQuery": {
+          "objectSearch": "CT-W",
+          "createdFrom": "2026-01-01",
+          "createdTo": "2026-10-05",
+          "sort": "created_desc"
+        }
+      },
+      "canonical": "[\"hzy-enterprise-apf-permit.v1\",\"POST\",\"/v1/enterprise/altoc/migration-exceptions:page\",\"Person\",\"C000001\",\"Host\",\"bank_accounts\",\"admin\",\"save\",\"\",true,123,\"1\",\"hash\",38,\"all\",[],\"\",\"MARKED\",\"中文<&\\u2028\",0,0,0,\"\",[\"CT-W\",\"2026-01-01\",\"2026-10-05\",\"created_desc\",\"\"]]"
+    },
+    {
+      "target": "/v1/enterprise/altoc/migration-exceptions:page",
+      "body": {
+        "id": "",
+        "code": "MARKED",
+        "name": "中文<& ",
+        "rowVersion": 0,
+        "page": 0,
+        "pageSize": 0,
+        "search": "",
+        "authorization": {
+          "actorUid": "Person",
+          "tenant": "C000001",
+          "deployment": "Host",
+          "resource": "bank_accounts",
+          "action": "admin",
+          "operation": "save",
+          "objectId": "",
+          "allowed": true,
+          "expiresAt": 123,
+          "bundleVersion": "1",
+          "bundleHash": "hash",
+          "policyRevision": 38,
+          "scope": {
+            "access": "all",
+            "departmentCodes": []
+          }
+        },
+        "migrationQuery": {
+          "eventsFor": "exception:9"
+        }
+      },
+      "canonical": "[\"hzy-enterprise-apf-permit.v1\",\"POST\",\"/v1/enterprise/altoc/migration-exceptions:page\",\"Person\",\"C000001\",\"Host\",\"bank_accounts\",\"admin\",\"save\",\"\",true,123,\"1\",\"hash\",38,\"all\",[],\"\",\"MARKED\",\"中文<&\\u2028\",0,0,0,\"\",[\"\",\"\",\"\",\"\",\"exception:9\"]]"
+    },
+    {
+      "target": "/v1/enterprise/altoc/migration-exceptions:page",
+      "body": {
+        "id": "",
+        "code": "MARKED",
+        "name": "中文<& ",
+        "rowVersion": 0,
+        "page": 0,
+        "pageSize": 0,
+        "search": "",
+        "authorization": {
+          "actorUid": "Person",
+          "tenant": "C000001",
+          "deployment": "Host",
+          "resource": "bank_accounts",
+          "action": "admin",
+          "operation": "save",
+          "objectId": "",
+          "allowed": true,
+          "expiresAt": 123,
+          "bundleVersion": "1",
+          "bundleHash": "hash",
+          "policyRevision": 38,
+          "scope": {
+            "access": "all",
+            "departmentCodes": []
+          }
+        },
+        "migrationQuery": {
+          "eventsFor": "identity:employee:7"
+        }
+      },
+      "canonical": "[\"hzy-enterprise-apf-permit.v1\",\"POST\",\"/v1/enterprise/altoc/migration-exceptions:page\",\"Person\",\"C000001\",\"Host\",\"bank_accounts\",\"admin\",\"save\",\"\",true,123,\"1\",\"hash\",38,\"all\",[],\"\",\"MARKED\",\"中文<&\\u2028\",0,0,0,\"\",[\"\",\"\",\"\",\"\",\"identity:employee:7\"]]"
+    },
+    {
+      "target": "/v1/enterprise/finance/bank-accounts:list",
+      "body": {
+        "id": "",
+        "code": "MARKED",
+        "name": "中文<& ",
+        "rowVersion": 0,
+        "page": 0,
+        "pageSize": 0,
+        "search": "",
+        "authorization": {
+          "actorUid": "Person",
+          "tenant": "C000001",
+          "deployment": "Host",
+          "resource": "bank_accounts",
+          "action": "admin",
+          "operation": "save",
+          "objectId": "",
+          "allowed": true,
+          "expiresAt": 123,
+          "bundleVersion": "1",
+          "bundleHash": "hash",
+          "policyRevision": 38,
+          "scope": {
+            "access": "all",
+            "departmentCodes": []
+          }
+        },
+        "finance": {
+          "id": "",
+          "code": "",
+          "page": 2,
+          "pageSize": 50,
+          "search": "合成",
+          "status": "",
+          "accountType": "",
+          "legalEntityCode": "",
+          "asOfDate": "2026-10-05",
+          "accountCode": "",
+          "startDate": "",
+          "endDate": ""
+        }
+      },
+      "canonical": "[\"hzy-enterprise-apf-permit.v1\",\"POST\",\"/v1/enterprise/finance/bank-accounts:list\",\"Person\",\"C000001\",\"Host\",\"bank_accounts\",\"admin\",\"save\",\"\",true,123,\"1\",\"hash\",38,\"all\",[],\"\",\"MARKED\",\"中文<&\\u2028\",0,0,0,\"\",[\"\",2,50,\"合成\",\"\",\"\",\"\",\"\",[],[\"asOfDate\",\"2026-10-05\"]]]"
+    },
+    {
+      "target": "/v1/enterprise/finance/bank-accounts:list",
+      "body": {
+        "id": "",
+        "code": "MARKED",
+        "name": "中文<& ",
+        "rowVersion": 0,
+        "page": 0,
+        "pageSize": 0,
+        "search": "",
+        "authorization": {
+          "actorUid": "Person",
+          "tenant": "C000001",
+          "deployment": "Host",
+          "resource": "bank_accounts",
+          "action": "admin",
+          "operation": "save",
+          "objectId": "",
+          "allowed": true,
+          "expiresAt": 123,
+          "bundleVersion": "1",
+          "bundleHash": "hash",
+          "policyRevision": 38,
+          "scope": {
+            "access": "all",
+            "departmentCodes": []
+          }
+        },
+        "finance": {
+          "id": "",
+          "code": "",
+          "page": 2,
+          "pageSize": 50,
+          "search": "合成",
+          "status": "",
+          "accountType": "",
+          "legalEntityCode": "",
+          "asOfDate": "2026-10-05",
+          "staleBefore": "2026-09-01",
+          "balanceState": "stale",
+          "currencyCode": "CNY",
+          "accountCode": "",
+          "startDate": "",
+          "endDate": ""
+        }
+      },
+      "canonical": "[\"hzy-enterprise-apf-permit.v1\",\"POST\",\"/v1/enterprise/finance/bank-accounts:list\",\"Person\",\"C000001\",\"Host\",\"bank_accounts\",\"admin\",\"save\",\"\",true,123,\"1\",\"hash\",38,\"all\",[],\"\",\"MARKED\",\"中文<&\\u2028\",0,0,0,\"\",[\"\",2,50,\"合成\",\"\",\"\",\"\",\"\",[],[\"asOfDate\",\"2026-10-05\"],[\"staleBefore\",\"2026-09-01\"],[\"balanceState\",\"stale\"],[\"currencyCode\",\"CNY\"]]]"
+    }
+  ]
+}
