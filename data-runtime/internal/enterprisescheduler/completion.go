@@ -30,7 +30,7 @@ func (s *Service) complete(ctx context.Context, identity enterprise.SchedulerIde
 	}
 	defer tx.Rollback()
 	tables := s.source.Tables()
-	trusted := integrationoperation.TrustedContext{TenantCode: identity.Tenant, DeploymentCode: identity.Deployment, SourceApp: identity.SourceApp, ServiceClientID: identity.ClientID, OutboxTables: &tables}
+	trusted := integrationoperation.TrustedContext{TenantCode: identity.Tenant, DeploymentCode: identity.Deployment, SourceApp: "aims", ServiceClientID: identity.ClientID, OutboxTables: &tables}
 	var result map[string]any
 	if success {
 		result, err = aimsapp.SucceedIntegrationOperationInTransaction(ctx, resolved.DB, tx, trusted, worker, operationKey, body, now)

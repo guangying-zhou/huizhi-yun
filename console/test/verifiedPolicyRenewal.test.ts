@@ -35,7 +35,8 @@ async function signed(options: { environment?: 'prod' | 'test', issuedAt?: numbe
 
 test('only Platform evidence is classified: refusal, outage or invalid response; local failures record nothing', () => {
   const platform = (fields: Record<string, unknown>) => ({ policyStage: 'platform', ...fields })
-  for (const status of [400, 401, 403, 404, 409]) assert.equal(classifyPolicyRenewalFailure(platform({ statusCode: status })), 'refused')
+  for (const status of [400, 401, 403, 404, 409])
+    assert.equal(classifyPolicyRenewalFailure(platform({ statusCode: status })), 'refused')
   assert.equal(classifyPolicyRenewalFailure(platform({ response: { status: 401 } })), 'refused')
   for (const cause of [platform({ statusCode: 408 }), platform({ statusCode: 429 }), platform({ statusCode: 500 }), platform({ status: 503 }), Object.assign(Error('fetch failed'), { policyStage: 'platform' })]) {
     assert.equal(classifyPolicyRenewalFailure(cause), 'platform_unavailable')
@@ -91,7 +92,9 @@ test('a signed suspension is stored by the syncer but never authorizes, even dur
   const suspended = await signed({ issuedAt: 1_000_500, status: 'suspended' })
   let stored: VerifiedPolicySnapshot = active.snapshot(null)
   const store = {
-    async get() { return stored },
+    async get() {
+      return stored
+    },
     async put(envelope: unknown, etag: string) {
       assert.equal(envelope, suspended.envelope)
       assert.equal(etag, stored.etag)
@@ -121,8 +124,12 @@ function deps(overrides: Partial<VerifiedPolicySyncDependencies> & { calls?: str
       body = { ...body, issuedAt: 2_000_000, expiresAt: 2_000_000 + HOUR } as PolicyEnvelopeBody // the renewed envelope is what current() now returns
       return { ok: true, bundle: { generatedAt: new Date(2_000_000).toISOString(), expiresAt: new Date(2_000_000 + HOUR).toISOString() } as never, status: {} as never, error: null }
     },
-    record: async (state, etag) => { calls.push(`record:${state}:${etag}`) },
-    warn: () => { calls.push('warn') },
+    record: async (state, etag) => {
+      calls.push(`record:${state}:${etag}`)
+    },
+    warn: () => {
+      calls.push('warn')
+    },
     ...overrides
   }
 }
@@ -138,7 +145,9 @@ test('changed revision, status, due renewal or a failed probe all fetch the full
     { probe: async () => ({ policyRevision: 4, payloadHash: 'sha256_b', status: 'active' }) },
     { probe: async () => ({ policyRevision: 3, payloadHash: 'sha256_a', status: 'suspended' }) },
     { now: () => 1_000_000 + POLICY_RENEWAL_INTERVAL_MS },
-    { probe: async () => { throw Error('unapproved destination') } }
+    { probe: async () => {
+      throw Error('unapproved destination')
+    } }
   ]
   for (const variant of variants) {
     const d = deps(variant)
@@ -165,7 +174,8 @@ test('failed renewal records the classified Platform evidence; local failures re
     const result = await syncVerifiedPolicy(d)
     assert.deepEqual(result, { ok: false, mode: 'failed', renewal: state, error: 'failed' })
     assert.equal(d.calls.some(call => call.startsWith('record:')), state !== null)
-    if (state) assert.ok(d.calls.includes(`record:${state}:etag-1`))
+    if (state)
+      assert.ok(d.calls.includes(`record:${state}:etag-1`))
   }
   const first = deps({ current: async () => null, refresh: async () => ({ ok: false, bundle: null, status: {} as never, error: 'failed', cause: { policyStage: 'platform', statusCode: 503 } }) })
   assert.equal((await syncVerifiedPolicy(first)).ok, false)
@@ -261,9 +271,13 @@ test('a signed key with enough lifetime left is not re-registered; one near notA
 test('registration problems never change the renewal outcome', async () => {
   const key = { kid: 'csk_0123456789abcdef', publicKey: 'A'.repeat(43) }
   for (const variant of [
-    { registerServiceKey: async () => { throw Object.assign(Error('down'), { statusCode: 503 }) } },
+    { registerServiceKey: async () => {
+      throw Object.assign(Error('down'), { statusCode: 503 })
+    } },
     { registerServiceKey: async () => false },
-    { serviceKey: async () => { throw Error('bad key file') } },
+    { serviceKey: async () => {
+      throw Error('bad key file')
+    } },
     { serviceKey: async () => null }
   ] as Partial<VerifiedPolicySyncDependencies>[]) {
     resetServiceKeyAttempts()
@@ -326,7 +340,9 @@ test('the renewal interval follows the signed lease: half of it, never above 15 
 
 test('missing or invalid lease data falls back to the fixed interval and logs it', () => {
   const warned: string[] = []
-  const warn = (message: string) => { warned.push(message) }
+  const warn = (message: string) => {
+    warned.push(message)
+  }
   for (const [issuedAt, expiresAt] of [[1_000_000, null], [1_000_000, undefined], [null, 2_000_000], [Number.NaN, 2_000_000], [2_000_000, 1_000_000], [1_000_000, 1_000_000]] as const) {
     assert.equal(policyRenewalIntervalMs(issuedAt, expiresAt, warn), POLICY_RENEWAL_INTERVAL_MS)
   }
@@ -363,12 +379,18 @@ test('after a renewal, renewAfter comes from the new stored envelope (issuedAt +
   // the envelope cannot be read back: the bundle view is the fallback (here a valid lease)
   const fallback = deps({
     now: () => 1_000_000 + 160_000,
-    current: async () => { throw Error('store unavailable') },
+    current: async () => {
+      throw Error('store unavailable')
+    },
     probe: async () => ({ policyRevision: 4, payloadHash: 'sha256_b', status: 'active' }),
     refresh: async () => ({ ok: true, bundle: { generatedAt: new Date(1_160_000).toISOString(), expiresAt: new Date(1_160_000 + 300_000).toISOString() } as never, status: {} as never, error: null })
   })
   // current() throwing on the very first read is a failure of the sync itself; model it as read-back failure only
   let reads = 0
-  fallback.current = async () => (reads++ === 0 ? { etag: 'etag-1', body: stored } : (() => { throw Error('store unavailable') })())
+  fallback.current = async () => (reads++ === 0
+    ? { etag: 'etag-1', body: stored }
+    : (() => {
+        throw Error('store unavailable')
+      })())
   assert.deepEqual(await syncVerifiedPolicy(fallback), { ok: true, mode: 'renewed', renewAfter: 1_160_000 + 150_000 })
 })

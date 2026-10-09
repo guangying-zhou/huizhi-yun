@@ -449,8 +449,8 @@ func ensureDocumentTitleAvailableFrom(ctx context.Context, db documentReadDB, uu
 	docType := stringValue(doc["doc_type"])
 	where := []string{"title = ?", "owner_uid = ?", "uuid != ?", "status != 0"}
 	args := []any{title, stringValue(doc["owner_uid"]), uuid}
-	if docType == "project" || docType == "git-project" {
-		where = append(where, `doc_type IN ("project", "git-project")`)
+	if isProjectFamilyDocType(docType) {
+		where = append(where, projectFamilyCondition("doc_type"))
 	} else {
 		where = append(where, "doc_type = ?")
 		args = append(args, docType)

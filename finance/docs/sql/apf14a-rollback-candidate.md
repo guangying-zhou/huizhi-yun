@@ -1,0 +1,3 @@
+# APF-14a 显式回滚候选
+
+不直接DROP表。维护冻结、加密备份、Runtime停止事实和原generation/baseline成立时，使用ForFinanceCost原installer与原0600 receipt调用Rollback。只回滚receipt创建的六张空表；batch_item对batch的内部FK按installer依赖逆序处理。任何业务数据、外部FK或漂移立即停止，不禁FK，不改receipt，不强删。成功后恢复本段之前config/mapping，generation/schemaVersion和其他域不变。已开始14b业务写入后不得自动回滚安装，另审完整恢复方案。

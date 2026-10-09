@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { withdrawalConsumption } from '../app/utils/productWithdrawalConsumption.ts'
+
 const cycleId = '00000000-0000-4000-8000-000000000001', itemId = '00000000-0000-4000-8000-000000000002'
 const expected = { cycleId, itemId, workspaceRevision: 4, cycleRevision: 3, queueRevision: 3, itemRevision: 1, scopeRevision: 1, lifecycle: 'in_delivery' }
 const pending = { confirmation_id: cycleId, cycle_biz_id: cycleId, item_biz_id: itemId, item_revision: 1, scope_revision: 1, spent_person_days: '3.25', confirmed_by: 'engineer', confirmed_at: '2026-09-08T12:00:00Z', reason: '核验投入' }

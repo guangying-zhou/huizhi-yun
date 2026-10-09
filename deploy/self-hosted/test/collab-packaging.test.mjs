@@ -78,7 +78,7 @@ test('collab unit is hardened at least as strictly as the other application unit
   assert.match(unit, /^NoNewPrivileges=true$/m)
   assert.match(unit, /^ProtectSystem=strict$/m)
   assert.match(unit, /^ProtectHome=read-only$/m)
-  assert.match(unit, /^RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX$/m)
+  assert.match(unit, /^RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX AF_NETLINK$/m)
   assert.match(unit, /^CapabilityBoundingSet=$/m)
   assert.match(unit, /^Environment=DOTENV_CONFIG_PATH=\/dev\/null$/m)
   assert.match(unit, /^Requires=hzy-data-runtime\.service$/m)

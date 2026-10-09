@@ -10,7 +10,8 @@
  * 的主 client 协议实现。后续若构建统一平台 client，应在新目录中独立实现。
  */
 
-import { getHeader, type H3Event } from 'h3'
+import type { H3Event } from 'h3'
+import { trustedClientAddress } from './trustedClientAddress'
 import type { AccountUser } from '../../app/types/account'
 import { resolveConsoleRuntimeBaseUrl } from './consoleRuntime'
 import { requestServiceAccessToken } from './serviceOidc'
@@ -145,13 +146,7 @@ export function getAccountApiAuthHeaders() {
 }
 
 export function getRequestIp(event: H3Event): string | null {
-  const forwardedFor = getHeader(event, 'x-forwarded-for')
-  if (forwardedFor) {
-    return forwardedFor.split(',')[0]?.trim() || null
-  }
-  const realIp = getHeader(event, 'x-real-ip')
-  if (realIp) return realIp
-  return event.node.req.socket.remoteAddress || null
+  return trustedClientAddress(event) || null
 }
 
 /**

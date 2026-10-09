@@ -10,7 +10,7 @@
 
 1. **数据模型已基本可用，授权层不能复用。** 快照头、候选、会话、票据、参与者四类表都以文档 UUID 为键、不含文档类型，部门文档可以直接落行；但 `lockSnapshotDocument` 硬编码 `doc_type='private'` 与 owner/share 写检查（`data-runtime/internal/apps/codocs/document_snapshot.go:106-131`），且会话写入以**会话发起人**的写权限为准（`collaboration_session.go:172-186`）。部门授权取决于 Directory 中随时会变的关系 R，**不会像分享变更那样在 Codocs 事务内推进 epoch**，所以部门版必须在准入、续租、发布三个点重验 R，并对**每位参与者**分别判断，不能沿用“发起人代表整个会话”。
 2. **不新增服务 capability，也不新增 grant。** Host→Runtime 复用 `codocs:enterprise-host:execute`；Collab→Runtime 复用 `collab.runtime` 的 `codocs:collaboration-snapshots:read/publish`（按会话绑定文档，不按文档类型授权）。新增内容是 Runtime API 合同里的固定操作、permit 资源动作、schema 列、以及部署/环境事项（第 3、4 节逐项列出，均待批）。
-3. **只有可写者获得会话。** R∈{member, manager} 且满足与 `edit-metadata` 相同的编辑规则才签写票据。leader / parent / 无写权限的成员**不开会话**，通过 HTTP 读取最新已发布正文（首版；只读实时旁观列为可选增量，见 Q2）。
+3. **只有可写者获得会话。** R∈{leader, member, manager} 且满足本文正文文档状态限制才签写票据（不要求 owner 或写分享）。parent / 无写权限者**不开会话**，通过 HTTP 读取最新已发布正文（首版；只读实时旁观列为可选增量，见 Q2）。
 4. **撤权语义分两类。** 文档状态变化（只读、回收、移交、分享变更、部门变更）在 Codocs 事务内同步推进 epoch 并撤销会话——与现有个人路径一致；Directory 关系变化（移出部门、经理变更）无法同步推送，改为 Collab 每 ≤30 秒续租、Runtime 在续租中重验每位参与者，**最大暴露窗口 = 续租周期 + 网络往返，租期缩短到 90 秒兜底**。
 5. **v1→v2 转换在“点击编辑”时发生，不在打开阅读时发生。** 阅读不产生写副作用；首次点击“协作编辑”时由 Host 以 CAS（期望 generation=0）把 v1 正文发布为 generation 1，随后开会话。
 6. **共享个人文档协作代码已具备**，上线还差环境（独立 Collab 进程、`collab.runtime` 生产注册与 grant 核验、Runtime 双开关与 schema 安装、WS 路由/nginx）与双人验收；这些环境项与部门协作**共用**，应先做（第 5、7 节）。
@@ -64,18 +64,18 @@
 
 ### 2.1 谁可以打开可写会话
 
-与 `EditEnterpriseDepartmentDocumentMetadata` 的编辑规则一致（`enterprise_department_document_metadata.go`），并按“正文编辑”补全：
+2026-10-07 用户裁定：部门正文协作按当前直接负责人/成员/经理默认可写，不再要求owner或写分享。标题/移动/回收等管理操作仍沿原规则。
 
 ```
-可写 = R ∈ {member, manager}                       # Directory 现算，CanWrite()
+可写 = R ∈ {leader, member, manager}                       # Directory 现算，CanWrite()
    ∧ doc_type='department' ∧ dept_code = 路由 dept ∧ project_code=''
    ∧ status = 1（未回收、未删除） ∧ readonly_flag = 0
-   ∧ ( R = manager ∨ owner_uid = actor ∨ document_shares.permission = 'write' )
+   # 不要求 owner 或写分享；分享不替代当前部门关系
 ```
 
-- **leader / parent：不开会话**，`collaboration-open` 返回 403 `department_writer_required`。leader 优先于 manager（迁入合同 D1 已按原样保留）：同时是 leader 与 manager 的人只读，这是既定语义的直接后果，本设计不改。
-- **只读成员**（R=member 但非 owner/无写分享）：无会话。
-- **owner 已离开部门**：R 不再是 member/manager，无会话（与 D4 一致）。
+- **本部门 leader：可写会话**；parent / none 不可写。leader 优先级不变，即使同时是 manager，CanManage 仍为 false；不扩大管理权限。
+- **当前成员**（R=member）：默认可协作编辑他人文档，包含无分享或仅只读分享。
+- **owner 已离开部门**：R 不再是 leader/member/manager，无会话（与 D4 一致）。
 - **manager 编辑他人部门文档**：允许（与 `edit-metadata` 的“经理可管理本部门任何文档”一致）。
 - **只读文档**：manager 也不能开写会话，须先取消只读（与 `edit-metadata` 拒绝一致）。
 - **只读实时旁观**：首版不做。`document_collaboration_tickets.access` 已有 `read`，Collab 端 `readOnly` 已支持，增量成本小；是否上线由 Q2 决定。读者通过 `department-documents:view` 读取最新发布版本（需 H1 使部门正文读取按精确快照版本返回，并给出 generation 供“可能已过期”提示）。
@@ -103,7 +103,7 @@ Foundation 操作表新增 `codocs.department-documents-collaboration-open|snaps
 
 1. Runtime 认证 Enterprise 凭据、签名 actor、permit（`validateEnterpriseDelegatedPermit`）。
 2. `lockEnterpriseCodocsDepartment(actor, dept)`：Directory 库只读事务，`FOR SHARE` 锁部门行、父部门行、用户行、成员行，**保持打开**。
-3. 开 Codocs 库事务（Serializable 与现有部门写一致）：文档行 `FOR UPDATE`（校验类型/部门/状态/只读）→ 头行锁 → owner / 写分享（`FOR UPDATE`）→ 若非 manager 且非 owner 且无写分享则 403 → 会话与票据写入 → 提交。
+3. 开 Codocs 库事务（Serializable 与现有部门写一致）：文档行 `FOR UPDATE`（校验类型/部门/状态/只读）→ 头行锁 → Directory当前member/manager判定 → 会话与票据写入 → 提交。
 4. 提交后才释放 Directory 锁。Directory 与 Codocs 位于**不同库/schema**，Codocs 事务内不查询 `directory_*`。
 5. 加锁顺序固定为 Directory → Codocs 文档 → 头 → 候选，避免与 `edit-metadata` / `readonly` / `recycle` 互相死锁。
 
@@ -182,7 +182,7 @@ Collab 兑换响应（新增字段）：`deptCode`、`participantAccess`；Colla
 | **A-3** | 新增 Runtime 固定操作 `department-documents:{collaboration-open, snapshot-read, snapshot-prepare, snapshot-publish}` 及 permit（`department-documents` + `edit`/`read`） | Runtime API 合同 | 不改 manifest 资源；需更新 `MODULE_CONTRACTS.md`，Foundation 操作表 |
 | **A-4** | Schema：`document_collaboration_sessions` 增 `policy ENUM('private','department')`、`dept_code`；`document_collaboration_participants` 增 `status`、`checked_at`；新增迁移文件并同步 `codocs/docs/*_schema.sql`。**目标库安装为 DDL，不可事务回滚** | schema | 新库/生产须在环境批准后安装（见第 4 节），且生产尚未安装任何快照/协作表 |
 | **A-5** | Collab→Runtime 协议变更：`renew` 请求体 `connectedUids`，`renew/publish` 响应/错误 `revokedUids`；部门会话租期 90 秒 | Runtime API 合同 | 同 capability，不改 grant |
-| **A-6** | 授权语义：部门会话由“每位已连接参与者的 R 重验”决定；leader/parent/只读成员不开会话；经理只读/回收撤销活动会话 | 授权语义 | Q1/Q2/Q3 需用户确认 |
+| **A-6** | 授权语义：部门会话由“每位已连接参与者的 R 重验”决定；parent/无写权限者不开会话；经理只读/回收撤销活动会话 | 授权语义 | Q1/Q2/Q3 需用户确认 |
 | **A-7** | `enterprise_department_document_manage` / `personal_document_department_transfer` 等事务内新增 `invalidateCollaboration` 调用 | 代码变更 | 影响现有部门写路径，需回归 |
 
 `collab.runtime` 在生产环境的**注册与 grant 核验**属于环境动作，见 4.1，不在本表重复。
@@ -247,7 +247,7 @@ Collab 兑换响应（新增字段）：`deptCode`、`participantAccess`；Colla
 
 | 编号 | 范围 | 用例 |
 | --- | --- | --- |
-| T-U1 | Go：R×规则矩阵 | leader / manager / member / parent / none × owner / 写分享 / 只读分享 / 无分享 × readonly / recycled / 错部门 / 错类型；leader+manager 同人 → 只读 |
+| T-U1 | Go：R×规则矩阵 | leader / manager / member / parent / none × owner / 写分享 / 只读分享 / 无分享 × readonly / recycled / 错部门 / 错类型；leader+manager 同人 → 可写但不可管理 |
 | T-U2 | Go：permit | 精确 `department-documents` + `edit`；缺失、错资源、过期、错 actor、含 body 均拒；操作仅在部门开关开启时登记 |
 | T-U3 | Go：路由 | `collaboration-open` 严格空体、`dept_code` 与文档不符 403、非法 UUID 400、Directory 不可用 503（非 403） |
 | T-U4 | Collab（vitest） | 兑换失败不加载；续租 `revokedUids` 仅断开对应连接；文档级 409 关整房；租期 90 秒过期即关；迟到响应忽略；发布 409 后重试 |
@@ -271,17 +271,17 @@ Collab 兑换响应（新增字段）：`deptCode`、`participantAccess`；Colla
 
 ### 6.3 浏览器端到端（hzy0，真实 Host → Gateway → Collab → Runtime）
 
-需要两个部门成员账号（含一个 owner、一个写分享成员）、一个经理、一个非成员/leader 账号，参照 C000001 负向授权测试账号的做法（管理员账号验不出越权）。
+需要两个部门成员账号（含一个 owner、一个无写分享成员）、一个经理、一个非成员/parent 账号，参照 C000001 负向授权测试账号的做法（管理员账号验不出越权）。
 
 | 编号 | 场景 | 通过标准 |
 | --- | --- | --- |
 | E-1 | 两用户同时编辑同一部门文档 | 双方看到对方光标与更改；发布后 generation 递增；参与者集合含两人 |
 | E-2 | 断线重连 | 断网/杀 WS 后自动换新票据重连；未发布内容不丢；票据不复用 |
 | E-3 | 撤权（Directory）：管理员把成员 B 移出部门 | ≤1 个续租周期内 B 被断开且输入失效；A 不受影响；B 页面提示 |
-| E-4 | 撤权（经理变更 / owner 离部门 / 写分享撤销） | 同上；分享撤销即时（epoch） |
+| E-4 | 撤权（成员离部门 / 用户停用 / 经理失去部门关系） | 同上；分享变更关闭旧会话，但当前成员可重新准入 |
 | E-5 | 经理设只读 / 回收 | 房间关闭；迟到发布被拒；恢复后可重开 |
 | E-6 | 迟到发布 | 撤权后用旧会话手工调用 `:publish`（服务端夹具）被拒 |
-| E-7 | 非授权者 | leader / parent / 非成员点击编辑得到明确 403；只读成员看到最新已发布版本且无编辑入口 |
+| E-7 | 非授权者 | parent / 非成员点击编辑得到明确 403；只读成员看到最新已发布版本且无编辑入口 |
 | E-8 | 版本历史 | 协作发布行进入历史，查看/对比按精确版本核对摘要；未发布候选不可见 |
 | E-9 | 镜像与旧读取者 | 下载、发文、部门柜转换等消费者读到最新发布版本（或明确的“同步中”状态）；镜像失败不影响已提交结果 |
 | E-10 | 转换 | 首次点击编辑后旧独立 Codocs 对该文档的写入 409，提示文案正确；阅读页打开不改变存储 |
@@ -320,7 +320,7 @@ Collab 兑换响应（新增字段）：`deptCode`、`participantAccess`；Colla
 | 编号 | 问题 | 建议 |
 | --- | --- | --- |
 | **Q1** | 经理对有活动协作的文档设只读 / 回收：**撤销会话**（推荐，在线用户丢失最多一个保存窗口，页面提示）还是**先被会话阻塞、再提供强制选项** | 撤销，确认框显示在线人数 |
-| **Q2** | leader / parent / 只读成员：首版**不开会话**（推荐）还是同时提供只读实时旁观（读票据，增量约 8–12 工时） | 首版不开，增量另议 |
+| **Q2** | parent / 无写权限者：首版**不开会话**（推荐）还是同时提供只读实时旁观（读票据，增量约 8–12 工时） | 首版不开，增量另议 |
 | **Q3** | 接受 Directory 撤权的暴露窗口（续租周期 ≤30 秒 + 租期兜底 90 秒），及“已进入 Y.Doc 的失权者编辑无法剔除”的 CRDT 固有限制 | 接受；如需更短，可把续租降到 15 秒（Directory 读压力翻倍） |
 | **Q4** | 转换时机：**点击“协作编辑”时**转换（推荐，阅读无副作用）；旧独立 Codocs 对该文档的写入随之 409，需确认旧入口对部门文档已退出或接受 | 点击时转换 |
 | **Q5** | 规则解读：`collaboration-open` 以“稳定业务键（会话）+ 一次性票据作废重签”满足“跨应用写幂等”，不额外要求 `Idempotency-Key` | 接受该解读 |
@@ -365,3 +365,7 @@ Collab 兑换响应（新增字段）：`deptCode`、`participantAccess`；Colla
 3. 部门文档只读版本历史（Q3 首版）：Runtime `department-documents:{versions,version-view}`、Host 路由与页面只读面板；未新增 capability/grant/schema，随三开关注册，hzy0 egress 投影排除。
 4. 环境模板：`deploy/self-hosted/env/enterprise.env.example` 增加 `HZY_ENTERPRISE_CODOCS_DEPARTMENT_COLLABORATION_V2` 与 `NUXT_PUBLIC_CODOCS_DEPARTMENT_COLLABORATION_V2`（默认 `false`）；`runtime.env.example` 注释 Runtime `config.json` 中的三个开关；hzy0 运行器增加 profile 键 `features.codocsDepartmentCollaborationV2`（E-9 的代码部分，已交付，默认关闭）。
 5. hzy0 启用顺序与双人验收脚本见 [启用计划](./Codocs-Collaboration-hzy0-Enablement-Plan.md)；仍未做任何环境写入或浏览器验收。
+
+分享变更仍按已有机制撤销旧会话与推进epoch；当前同部门成员可重新准入，不把删除写分享视为永久撤销部门成员的默认正文权利。非成员即使持有分享也不能进入部门写会话；个人文档owner/share规则不变。
+
+2026-10-07 补充裁定覆盖本文旧 leader 只读描述：仅直接 active 部门负责人加入 CanWrite；CanManage 仍仅 manager。创建/上传/复制目标准入随 CanWrite 开放，元数据标题仍要求经理、owner 或写分享，移动仍要求经理或 owner；只读、回收、目录管理、恢复等 CanManage 操作不扩大。

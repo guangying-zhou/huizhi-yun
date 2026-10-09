@@ -131,7 +131,7 @@ func (a *Adapter) executeAimsCompletionApprovalTx(ctx context.Context, tx *sql.T
 	if err != nil {
 		return InstanceAPIResponse{}, workflowServiceCommandError(err)
 	}
-	if receiptInput.TrustedContext.SourceApp != "aims" {
+	if !((receiptInput.TrustedContext.SourceApp == "aims" && receiptInput.TrustedContext.ServiceClientID == "aims.runtime") || (receiptInput.TrustedContext.SourceApp == "enterprise" && receiptInput.TrustedContext.ServiceClientID == "enterprise.runtime")) {
 		return InstanceAPIResponse{}, httperror.New(http.StatusForbidden, "service_command_source_forbidden", "service command source must be aims")
 	}
 	runtimeContext, err := integrationoperation.TrustedContextFromMap(body, "workflow")

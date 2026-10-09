@@ -1,0 +1,82 @@
+{
+  "method": "POST",
+  "target": "/v1/enterprise/altoc/contract-projects:bind",
+  "body": {
+    "id": "",
+    "code": "",
+    "name": "",
+    "rowVersion": 0,
+    "page": 0,
+    "pageSize": 0,
+    "search": "",
+    "authorization": {
+      "actorUid": "Person",
+      "tenant": "C000001",
+      "deployment": "Host",
+      "resource": "contract",
+      "action": "edit",
+      "operation": "contract-projects-bind",
+      "objectId": "1||",
+      "allowed": true,
+      "expiresAt": 123,
+      "bundleVersion": "1",
+      "bundleHash": "hash",
+      "policyRevision": 38,
+      "scope": {
+        "access": "self",
+        "departmentCodes": []
+      }
+    },
+    "contract": {
+      "id": "1",
+      "customerId": "",
+      "quotationId": "",
+      "page": 0,
+      "pageSize": 0,
+      "payload": {
+        "expectedVersion": 2
+      },
+      "rows": [],
+      "projects": [
+        {
+          "projectCode": "MARKED-P",
+          "name": "中文项目",
+          "deptCode": "D1",
+          "create": true,
+          "lineCodes": [
+            "CL-1"
+          ],
+          "obligationCodes": [],
+          "billingScheduleCodes": [
+            "BS-1"
+          ]
+        }
+      ],
+      "aimsPermits": [
+        {
+          "actorUid": "Person",
+          "tenant": "C000001",
+          "deployment": "Host",
+          "projectCode": "MARKED-P",
+          "resource": "projects",
+          "action": "create",
+          "allowed": true,
+          "expiresAt": 123,
+          "bundleVersion": "1",
+          "bundleHash": "hash",
+          "policyRevision": 38,
+          "scope": {
+            "version": 1,
+            "project_codes": [],
+            "department_codes": [],
+            "department_tree_roots": [],
+            "masks": [
+              65535
+            ]
+          }
+        }
+      ]
+    }
+  },
+  "canonical": "[\"hzy-enterprise-apf-permit.v1\",\"POST\",\"/v1/enterprise/altoc/contract-projects:bind\",\"Person\",\"C000001\",\"Host\",\"contract\",\"edit\",\"contract-projects-bind\",\"1||\",true,123,\"1\",\"hash\",38,\"self\",[],\"\",\"\",\"\",0,0,0,\"\",[\"1\",\"\",\"\",0,0,[[\"expectedVersion\",2]],[],[[[\"billingScheduleCodes\",[\"BS-1\"]],[\"create\",true],[\"deptCode\",\"D1\"],[\"lineCodes\",[\"CL-1\"]],[\"name\",\"中文项目\"],[\"obligationCodes\",[]],[\"projectCode\",\"MARKED-P\"]]],[[[\"action\",\"create\"],[\"actorUid\",\"Person\"],[\"allowed\",true],[\"bundleHash\",\"hash\"],[\"bundleVersion\",\"1\"],[\"deployment\",\"Host\"],[\"expiresAt\",123],[\"policyRevision\",38],[\"projectCode\",\"MARKED-P\"],[\"resource\",\"projects\"],[\"scope\",[[\"department_codes\",[]],[\"department_tree_roots\",[]],[\"masks\",[65535]],[\"project_codes\",[]],[\"version\",1]]],[\"tenant\",\"C000001\"]]]]]"
+}

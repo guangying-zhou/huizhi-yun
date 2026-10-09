@@ -1,6 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
+
 const read = p => readFileSync(new URL(`../${p}`, import.meta.url), 'utf8')
 
 test('project create binds the proposed code and department to its own scoped grant', () => {

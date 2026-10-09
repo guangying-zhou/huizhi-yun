@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { useAimsModule } from '../../../layer/useAimsModule'
-const { moduleUrl } = useAimsModule()
 import type { ProductLineGroup, ProductTreeItem, ProductTreePage } from '../../types/productTree'
+import { useAimsModule } from '../../../layer/useAimsModule'
+
+const { moduleUrl } = useAimsModule()
 
 const emit = defineEmits<{ onboarded: [] }>()
 interface PreviewItem { product_code: string, product_name: string, onboardable: boolean }

@@ -1,0 +1,35 @@
+{
+  "repositoryMember": {
+    "code": 0,
+    "data": {
+      "allowed": true,
+      "permission": "view",
+      "readonly": false,
+      "reason": "source_project_member",
+      "lifecycleStage": "draft",
+      "confidentialityLevel": "L2"
+    }
+  },
+  "repositoryOutsider": {
+    "code": 0,
+    "data": {
+      "allowed": false,
+      "permission": "none",
+      "readonly": false,
+      "reason": "draft_requires_project_member",
+      "lifecycleStage": "draft",
+      "confidentialityLevel": "L2"
+    }
+  },
+  "missingDocument": {
+    "code": 0,
+    "data": {
+      "allowed": false,
+      "permission": "none",
+      "readonly": true,
+      "reason": "document_not_found",
+      "lifecycleStage": "",
+      "confidentialityLevel": ""
+    }
+  }
+}

@@ -1,0 +1,44 @@
+{
+  "method": "GET",
+  "target": "/v1/enterprise/finance/legal-entities:list",
+  "body": {
+    "id": "",
+    "code": "",
+    "name": "",
+    "rowVersion": 0,
+    "page": 0,
+    "pageSize": 0,
+    "search": "",
+    "authorization": {
+      "actorUid": "Person",
+      "tenant": "C000001",
+      "deployment": "Host",
+      "resource": "legal_entities",
+      "action": "view",
+      "operation": "legal-entities-list",
+      "objectId": "",
+      "allowed": true,
+      "expiresAt": 123,
+      "bundleVersion": "1",
+      "bundleHash": "hash",
+      "policyRevision": 38,
+      "scope": {
+        "access": "all",
+        "departmentCodes": []
+      }
+    },
+    "finance": {
+      "code": "",
+      "page": 1,
+      "pageSize": 20,
+      "search": "",
+      "status": "",
+      "accountCode": "",
+      "startDate": "",
+      "endDate": "",
+      "payload": {},
+      "accountCountAllowed": true
+    }
+  },
+  "canonical": "[\"hzy-enterprise-apf-permit.v1\",\"GET\",\"/v1/enterprise/finance/legal-entities:list\",\"Person\",\"C000001\",\"Host\",\"legal_entities\",\"view\",\"legal-entities-list\",\"\",true,123,\"1\",\"hash\",38,\"all\",[],\"\",\"\",\"\",0,0,0,\"\",[\"\",1,20,\"\",\"\",\"\",\"\",\"\",[],[\"accountCountAllowed\",true]]]"
+}

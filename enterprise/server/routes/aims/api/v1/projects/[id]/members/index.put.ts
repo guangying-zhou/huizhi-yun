@@ -1,1 +1,4 @@
-import{defineEventHandler}from'h3';import{enterpriseAimsProjectMemberWrite}from'../../../../../../../utils/enterpriseAimsProjectMemberWrite';export default defineEventHandler(e=>enterpriseAimsProjectMemberWrite(e,'role'))
+import { defineEventHandler } from 'h3'
+import { enterpriseAimsProjectMemberWrite } from '../../../../../../../utils/enterpriseAimsProjectMemberWrite'
+
+export default defineEventHandler(e => enterpriseAimsProjectMemberWrite(e, 'role'))

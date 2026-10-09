@@ -1,3 +1,4 @@
+import { redactFeedbackDiagnostic } from '../../shared/utils/feedbackPrivacy'
 // WebDev Issue 报告组件的采集 / 脱敏 / 提交逻辑（阶段 3）
 // 详见 webdev/docs/WebDev-Issue-Inbox-Design.md §9
 
@@ -80,16 +81,24 @@ export function resolveIssueReporterPageUrl(targetPageUrl: unknown, origin: stri
 function stringifyArg(value: unknown): string {
   if (typeof value === 'string') return value
   if (value instanceof Error) return value.message
-  try {
-    return JSON.stringify(value)
-  } catch {
-    return String(value)
-  }
+  return '[非文本错误，未采集对象内容]'
 }
 
 function pushError(level: string, message: string, at?: string) {
-  consoleErrors.push({ level, message: String(message).slice(0, MAX_MESSAGE), at, ts: Date.now() })
+  consoleErrors.push({ level, message: redactFeedbackDiagnostic(String(message)).slice(0, MAX_MESSAGE), at: at ? redactFeedbackDiagnostic(at).slice(0, MAX_MESSAGE) : undefined, ts: Date.now() })
   while (consoleErrors.length > MAX_BUFFER) consoleErrors.shift()
+}
+
+let feedbackIdentity = ''
+export function resetFeedbackCapture(identity: string) {
+  if (identity !== feedbackIdentity) {
+    consoleErrors.length = 0
+    feedbackIdentity = identity
+  }
+}
+export function collectFeedbackErrors(now = Date.now()) {
+  while (consoleErrors[0] && consoleErrors[0].ts < now - 300_000) consoleErrors.shift()
+  return consoleErrors.slice(-10).map(e => redactFeedbackDiagnostic(`${e.message}${e.at ? ` · ${e.at}` : ''}`).slice(0, MAX_MESSAGE))
 }
 
 // 由 client plugin 调用：安装全局错误捕获（环形缓冲）

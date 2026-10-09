@@ -1,3 +1,4 @@
+import { isDirectoryProjectedUser } from '~~/server/utils/directorySubjectStatus'
 import type { H3Event } from 'h3'
 import type { ResultSetHeader, RowDataPacket } from 'mysql2/promise'
 import { execute, queryRow } from '~~/server/utils/db'
@@ -102,7 +103,13 @@ export default defineEventHandler(async (event) => {
     })
   }
 
-  if (body.status !== undefined) {
+  const directoryManaged = isDirectoryProjectedUser(existing.uid, existing.external_ref)
+  if (directoryManaged && ((body.status !== undefined && body.status !== existing.status)
+    || (body.username !== undefined && username !== existing.external_ref))) {
+    throw createError({ statusCode: 409, message: '账号状态由 Console Directory 管理，请在目录中修改', data: { code: 'directory_subject_managed' } })
+  }
+
+  if (body.status !== undefined && !directoryManaged) {
     subjectUpdates.push('status = ?')
     subjectParams.push(requireAllowed(String(body.status), 'status', ALLOWED_STATUSES))
   }
@@ -112,7 +119,7 @@ export default defineEventHandler(async (event) => {
     subjectParams.push(displayName)
   }
 
-  if (body.username !== undefined) {
+  if (body.username !== undefined && !directoryManaged) {
     subjectUpdates.push('external_ref = ?')
     subjectParams.push(username)
   }
@@ -153,6 +160,7 @@ export default defineEventHandler(async (event) => {
     mobile: null,
     avatarUrl: null,
     status: user.status,
+    directoryManaged: isDirectoryProjectedUser(user.uid, user.external_ref),
     sourceType: user.source_type,
     lastLoginAt: user.last_login_at,
     createdAt: user.created_at,

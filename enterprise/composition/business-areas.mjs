@@ -3,10 +3,12 @@
 // modules contribute the third-level pages, and an area or group with no
 // contributed page is dropped rather than shown as an empty entry.
 export const businessAreas = Object.freeze([
-  { code: 'workspace', label: '工作台', icon: 'i-lucide-layout-dashboard', groups: [
+  { code: 'workspace', label: '工作台', icon: 'i-lucide-layout-dashboard', heading: false, groups: [
+    { code: 'home', label: '工作台', icon: 'i-lucide-layout-dashboard' },
     { code: 'today', label: '今日工作', icon: 'i-lucide-sun' },
     { code: 'approval', label: '审批办理', icon: 'i-lucide-stamp' },
-    { code: 'self', label: '我的工作', icon: 'i-lucide-user' },
+    { code: 'todos', label: '我的待办', icon: 'i-lucide-list-todo' },
+    { code: 'reports', label: '工作汇报', icon: 'i-lucide-notebook-pen' },
     { code: 'collab', label: '日常协作', icon: 'i-lucide-messages-square' }
   ] },
   { code: 'product', label: '产品', icon: 'i-lucide-package', groups: [
@@ -24,8 +26,10 @@ export const businessAreas = Object.freeze([
     { code: 'contract', label: '合同管理', icon: 'i-lucide-file-signature' },
     { code: 'settlement', label: '结算与回款', icon: 'i-lucide-wallet' }
   ] },
-  { code: 'delivery', label: '交付与服务', icon: 'i-lucide-truck', groups: [
-    { code: 'project', label: '项目管理', icon: 'i-lucide-folder-kanban' },
+  { code: 'delivery', label: '项目', icon: 'i-lucide-truck', groups: [
+    { code: 'project', label: '项目总览', icon: 'i-lucide-folder-kanban' },
+    { code: 'documents', label: '项目文档', icon: 'i-lucide-files' },
+    { code: 'management', label: '项目管理', icon: 'i-lucide-settings' },
     { code: 'execution', label: '执行协同', icon: 'i-lucide-list-checks' },
     { code: 'quality', label: '成果与质量', icon: 'i-lucide-badge-check' },
     { code: 'customer-assets', label: '客户资产', icon: 'i-lucide-server' },

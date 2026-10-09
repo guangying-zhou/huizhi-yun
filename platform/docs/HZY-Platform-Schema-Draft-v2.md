@@ -1022,3 +1022,14 @@ site_code 查 active deployment site，再冻结 code/tenant/environment，不�
 `tenant_environment_policy_revisions`：唯一键 tenant_code+environment；policy_revision BIGINT UNSIGNED，policy_hash nullable；tenant FK。保留旧 tenant_policy_revisions 以回填既有消费者水位。回填规则 MAX(本环境历史revision,旧租户revision)，仅最新bundle与旧当前revision/hash一致时保留hash，否则NULL、下一次发布升版。
 
 `tenant_runtime_instances.release_update_mode`：VARCHAR(16) NOT NULL DEFAULT pinned；pinned/tracking/retired，未知值运行时503。没有更改版本发布表；已有 channel_code 承载 stable-prod/test/dev，旧stable不自动映射。候选DDL、backfill、verify、隔离回滚在 sql/migrations/20261002-*；现场执行规则见 Environment-Policy-Runtime-Release-Rollout.md。均未apply。
+
+### 应用角色范围来源迁移候选
+
+`platform_app_role_scopes.source_type ENUM('manual','manifest_default') NOT NULL DEFAULT 'manual'` 标识写入来源。已有行统一为 manual；治理页显式写 manual。来源不加入 tuple 唯一键，避免同一范围重复计入；manifest 默认与手工 tuple 冲突时保留手工行。只有 manifest_default 可由 manifest 同步替换或删除。
+
+安装、只读核验及回滚候选分别见 `sql/HZY-Platform-SQL-{Migration,Verify,Rollback}-finance-manifest-default-scopes-candidate.sql`。本文和 DDL 草案不代表已安装。部署审批应先安装列，再启用新代码及导入 manifest；缺列时默认范围同步失败关闭。回滚仅删除默认来源，手工行保留，完成策略重签与回读后再审批删除列。
+
+
+## 环境应用 release pin（2026-10-07 候选）
+
+新增 tenant/environment 选择集、逐应用 release 选择与同事务审计。租户详情提供独立环境选择、只读完整差异预览和 CAS 保存；签包按选择解析 manifest/推荐角色，prod 未初始化时阻止新签包，test/dev 保持兼容。DDL/部署/生产初始化与签包尚待批准。数据关系、权限、迁移和验收见 [环境版本说明](../../docs/Platform-Environment-App-Release-Pins.md)。

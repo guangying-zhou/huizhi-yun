@@ -25,21 +25,34 @@ test('Enterprise Codocs document reads use the four explicit runtime operations 
     calls.push({ path, options })
     return { handled: true, data: path.endsWith(':view') ? { success: true, data: { uuid: 'doc-1', doc_type: 'private', oss_path: null } } : { success: true, data: { items: [], total: 0 } } }
   }
-  globalThis.__codocsReadPrepare = async (_event, options) => { preparations.push(options); return true }
+  globalThis.__codocsReadPrepare = async (_event, options) => {
+    preparations.push(options)
+    return true
+  }
 
   const hooks = registerHooks({
     resolve(specifier, context, next) {
       let source
-      if (specifier.endsWith('/objectStorage')) source = 'export const createAliOssCompatibleClient=()=>{throw Error("Unexpected storage access in metadata transport test")}'
-      if (specifier.endsWith('/consoleSessionBridge')) source = 'export const resolveConsoleAuthWithSessionBridge=async()=>globalThis.__codocsReadSession'
-      if (specifier.endsWith('/tenantRuntimeClient')) source = 'export const prepareTenantRuntime=async(...args)=>globalThis.__codocsReadPrepare(...args);export const maybeCallTenantRuntime=(...args)=>globalThis.__codocsReadTransport(...args)'
-      if (specifier.endsWith('/platformBundleAuthorization')) source = 'export const loadAuthorizationSnapshotFromConsoleRuntime=async()=>globalThis.__codocsReadAuthorization'
-      if (specifier.endsWith('/tenantGatewayTrust')) source = 'export const resolveTrustedTenantGatewayContext=()=>undefined'
-      if (source) return { url: `data:text/javascript,${encodeURIComponent(source)}`, shortCircuit: true }
+      if (specifier.endsWith('/objectStorage'))
+        source = 'export const createAliOssCompatibleClient=()=>{throw Error("Unexpected storage access in metadata transport test")}'
+      if (specifier.endsWith('/consoleSessionBridge'))
+        source = 'export const resolveConsoleAuthWithSessionBridge=async()=>globalThis.__codocsReadSession'
+      if (specifier.endsWith('/tenantRuntimeClient'))
+        source = 'export const prepareTenantRuntime=async(...args)=>globalThis.__codocsReadPrepare(...args);export const maybeCallTenantRuntime=(...args)=>globalThis.__codocsReadTransport(...args)'
+      if (specifier.endsWith('/platformBundleAuthorization'))
+        source = 'export const loadAuthorizationSnapshotFromConsoleRuntime=async()=>globalThis.__codocsReadAuthorization'
+      if (specifier.endsWith('/tenantGatewayTrust'))
+        source = 'export const resolveTrustedTenantGatewayContext=()=>undefined'
+      if (source)
+        return { url: `data:text/javascript,${encodeURIComponent(source)}`, shortCircuit: true }
       let candidate
-      if (specifier.startsWith('@hzy/foundation/')) candidate = resolve(root, 'foundation', specifier.slice('@hzy/foundation/'.length))
-      else if (specifier.startsWith('.') && context.parentURL?.startsWith('file:')) candidate = resolve(dirname(fileURLToPath(context.parentURL)), specifier)
-      if (candidate && !existsSync(candidate) && existsSync(`${candidate}.ts`)) return { url: pathToFileURL(`${candidate}.ts`).href, shortCircuit: true }
+      if (specifier.startsWith('@hzy/foundation/'))
+        candidate = resolve(root, 'foundation', specifier.slice('@hzy/foundation/'.length))
+      else
+        if (specifier.startsWith('.') && context.parentURL?.startsWith('file:'))
+          candidate = resolve(dirname(fileURLToPath(context.parentURL)), specifier)
+      if (candidate && !existsSync(candidate) && existsSync(`${candidate}.ts`))
+        return { url: pathToFileURL(`${candidate}.ts`).href, shortCircuit: true }
       return next(specifier, context)
     }
   })
@@ -52,7 +65,9 @@ test('Enterprise Codocs document reads use the four explicit runtime operations 
     router.get('/documents/check-name', (await import('../server/routes/codocs/api/documents/check-name.get.ts')).default)
     router.get('/documents/:uuid', (await import('../server/routes/codocs/api/documents/[uuid].get.ts')).default)
     router.get('/folders', (await import('../server/routes/codocs/api/folders/index.get.ts')).default)
-    app.use(defineEventHandler(event => { event.context.consoleAuth = globalThis.__codocsReadSession }))
+    app.use(defineEventHandler((event) => {
+      event.context.consoleAuth = globalThis.__codocsReadSession
+    }))
     app.use(router)
     server = createServer(toNodeListener(app))
     await new Promise(done => server.listen(0, '127.0.0.1', done))
@@ -76,7 +91,8 @@ test('Enterprise Codocs document reads use the four explicit runtime operations 
       assert.ok(call.options.body.authorization.expiresAt <= Date.now() + 15_000)
       assert.equal(preparations.at(-1).scope, 'codocs:enterprise-host:execute')
       assert.equal(preparations.at(-1).method, 'POST')
-      for (const [key, value] of Object.entries(query)) assert.equal(call.options.body.query[key], value, `${path} query ${key}`)
+      for (const [key, value] of Object.entries(query))
+        assert.equal(call.options.body.query[key], value, `${path} query ${key}`)
       return call
     }
 
@@ -87,9 +103,11 @@ test('Enterprise Codocs document reads use the four explicit runtime operations 
     assert.equal(view.options.body.code, 'doc-1')
     const trash = await expectRead('/documents/trash?type=private&owner_uid=person-a', 'codocs.personal-document-trash', '/v1/enterprise/codocs/personal-documents:trash', { type: 'private' })
     assert.equal(trash.options.body.query.owner_uid, undefined)
-    await expectRead('/documents/trash?type=private&page=2&pageSize=20', 'codocs.personal-document-trash', '/v1/enterprise/codocs/personal-documents:trash', {type:'private',page:'2',pageSize:'20'})
-    for (const query of ['page=0','page=01','page=1.5','pageSize=101','page=1&page=2','pageSize=']) {
-      const before=calls.length; assert.equal((await fetch(base+'/documents/trash?'+query)).status,400);assert.equal(calls.length,before)
+    await expectRead('/documents/trash?type=private&page=2&pageSize=20', 'codocs.personal-document-trash', '/v1/enterprise/codocs/personal-documents:trash', { type: 'private', page: '2', pageSize: '20' })
+    for (const query of ['page=0', 'page=01', 'page=1.5', 'pageSize=101', 'page=1&page=2', 'pageSize=']) {
+      const before = calls.length
+      assert.equal((await fetch(base + '/documents/trash?' + query)).status, 400)
+      assert.equal(calls.length, before)
     }
     const checkName = await expectRead('/documents/check-name?title=Draft&doc_type=private&folder_id=7&exclude_uuid=doc-1&owner_uid=person-a', 'codocs.personal-document-check-name', '/v1/enterprise/codocs/personal-documents:check-name', {
       title: 'Draft', doc_type: 'private', folder_id: '7', exclude_uuid: 'doc-1'
@@ -137,7 +155,8 @@ test('Enterprise Codocs document reads use the four explicit runtime operations 
     globalThis.__codocsReadTransport = async () => ({ handled: false })
     assert.equal((await fetch(base + '/documents/check-name?title=Draft')).status, 503)
   } finally {
-    if (server) await new Promise(done => server.close(done))
+    if (server)
+      await new Promise(done => server.close(done))
     hooks.deregister()
     globalThis.useRuntimeConfig = oldConfig
     globalThis.defineEventHandler = oldDefineEventHandler

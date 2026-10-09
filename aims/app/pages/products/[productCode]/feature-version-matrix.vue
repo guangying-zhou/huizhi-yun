@@ -2,7 +2,7 @@
 import type { TableColumn } from '@nuxt/ui'
 import { validFeatureReleaseEvidence, type FeatureReleaseEvidence } from '~/utils/productFeatureReleaseEvidence'
 
-definePageMeta({ layoutHeader: true, layoutHeaderTitle: '功能版本矩阵', layoutHeaderProjectSwitcher: false })
+definePageMeta({ hostContentWidth: 'full', layoutHeader: true, layoutHeaderTitle: '功能版本矩阵', layoutHeaderProjectSwitcher: false })
 const route = useRoute()
 const versionPerspectiveQuery = computed(() => route.query.view === 'gtm' ? { view: 'gtm' } : {})
 const code = computed(() => String(route.params.productCode || ''))

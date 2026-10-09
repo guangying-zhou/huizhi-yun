@@ -72,7 +72,7 @@ describe('integration operation dead-letter notifications', () => {
     assert.match(contract, /actionableState: 'pending'/)
     assert.match(contract, /actionableKey: input\.actionableKey/)
     assert.match(contract, /targetAppCode: input\.sourceApp/)
-    assert.match(contract, /authorizationDescriptor: \{ resource: 'integration_operation', id: input\.operationId \}/)
+    assert.deepEqual(integrationOperationActionableMetadata(validateIntegrationOperationFailureNotificationInput(validInput(), actor)).authorizationDescriptor, { resource: 'integration_operation', id: validInput().operationId })
     assert.match(content, /actionTargetCatalogBinding: NOTIFICATION_ACTION_TARGET_CATALOG_BINDING/)
     assert.doesNotMatch(content, /operationKey: input\.operationKey/)
     assert.doesNotMatch(content, /metadata:\s*\{[^}]*commandSha256/s)
@@ -139,4 +139,18 @@ describe('integration operation dead-letter notifications', () => {
       'https://tenant.example/people/integration-operations?status=dead_letter&operationId=op-5'
     )
   })
+})
+
+test('Enterprise dead-letter uses verified Enterprise identity, closed domain and source-frozen metadata', () => {
+  for (const domain of ['altoc', 'finance', 'people'] as const) {
+    const a = { ...actor, actorId: 'enterprise.runtime', appCode: 'enterprise', deploymentCode: 'host-test' }
+    const input = { ...validInput(), sourceApp: 'enterprise', moduleAppCode: domain, deploymentCode: 'host-test', generation: 4, operationVersion: 4, actionableKey: `integration-operation:${domain === 'people' ? 'enterprise' : domain}:${validInput().operationId}:dead-letter:g4`, objectVersion: 'dead-letter:g4:operation-v4' }
+    const v = validateIntegrationOperationFailureNotificationInput(input, a)
+    assert.equal(integrationOperationActionUrl(v), '/enterprise/notifications')
+    assert.deepEqual(integrationOperationActionableMetadata(v).authorizationDescriptor, { resource: `apf_${domain}_dead_letter`, id: input.operationId })
+    assert.equal(integrationOperationActionableMetadata(v).targetAppCode, 'enterprise')
+    for (const bad of [{ ...a, actorId: 'altoc.runtime' }, { ...a, appCode: 'altoc' }, { ...a, tenantCode: 'wrong' }, { ...a, deploymentCode: 'wrong' }]) assert.throws(() => validateIntegrationOperationFailureNotificationInput(input, bad))
+    assert.throws(() => validateIntegrationOperationFailureNotificationInput({ ...input, moduleAppCode: 'workflow' }, a))
+    assert.throws(() => validateIntegrationOperationFailureNotificationInput({ ...input, generation: undefined }, a))
+  }
 })

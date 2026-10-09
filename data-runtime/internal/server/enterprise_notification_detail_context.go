@@ -43,11 +43,15 @@ func (s *Server) routeEnterpriseNotificationDetail(r *http.Request, domain strin
 }
 
 func authenticateEnterpriseNotificationDetail(r *http.Request, cfg config.Config, authenticator *auth.Authenticator, verify enterpriseCredentialVerifier, domain string) (auth.Context, error) {
-	if domain != "aims" && domain != "assets" {
+	legacyDomain := domain == "aims" || domain == "assets"
+	if !legacyDomain && domain != "altoc" && domain != "people" && domain != "finance" {
 		return auth.Context{}, httperror.New(403, "notification_detail_domain_invalid", "Notification domain invalid")
 	}
+	if authenticator == nil {
+		return auth.Context{}, httperror.New(503, "notification_detail_credential_unavailable", "Notification credential state unavailable")
+	}
 	identity, err := authenticator.Authenticate(r, auth.Requirement{Scope: domain + ":notification-detail:authorize", SourceAppCode: "enterprise", StrictServiceClaims: true, RequireDeploymentBinding: true})
-	if enterpriseSourceMismatch(err) && cfg.Enterprise.AllowLegacyNotificationDetails {
+	if enterpriseSourceMismatch(err) && legacyDomain && cfg.Enterprise.AllowLegacyNotificationDetails {
 		identity, err = authenticator.Authenticate(r, auth.Requirement{Scope: domain + ".read", SourceAppCode: domain, StrictServiceClaims: true, RequireDeploymentBinding: true})
 	}
 	if err != nil {
@@ -55,7 +59,7 @@ func authenticateEnterpriseNotificationDetail(r *http.Request, cfg config.Config
 	}
 	scope := domain + ":notification-detail:authorize"
 	if identity.AppCode != "enterprise" || identity.ClientID != "enterprise.runtime" {
-		if !cfg.Enterprise.AllowLegacyNotificationDetails || identity.AppCode != domain || identity.ClientID != domain+".runtime" {
+		if !legacyDomain || !cfg.Enterprise.AllowLegacyNotificationDetails || identity.AppCode != domain || identity.ClientID != domain+".runtime" {
 			return identity, httperror.New(403, "notification_detail_source_invalid", "Notification inspection source is invalid")
 		}
 		scope = domain + ".read"

@@ -3,7 +3,9 @@ package altoc
 import (
 	"context"
 	"database/sql/driver"
+	"errors"
 	"github.com/DATA-DOG/go-sqlmock"
+	"github.com/huizhi-yun/data-runtime/internal/httperror"
 	"regexp"
 	"strings"
 	"testing"
@@ -108,5 +110,72 @@ func TestBasicQueryRejectsInvalidIDsAndBounds(t *testing.T) {
 		if q.Validate("customer") == nil {
 			t.Fatal("bad query accepted")
 		}
+	}
+}
+
+func TestBasicReaderDoesNotIgnoreW3Filters(t *testing.T) {
+	for _, tc := range []struct {
+		resource string
+		query    BasicReadQuery
+	}{
+		{"customer", BasicReadQuery{ParentID: "1"}}, {"customer", BasicReadQuery{RootsOnly: true}}, {"customer", BasicReadQuery{OwnerUnassigned: true}},
+		{"contract", BasicReadQuery{Origin: "historical_import"}}, {"contract", BasicReadQuery{Category: "software_sales"}},
+	} {
+		db, mock, e := sqlmock.New()
+		if e != nil {
+			t.Fatal(e)
+		}
+		mock.ExpectBegin()
+		tx, e := db.Begin()
+		if e != nil {
+			t.Fatal(e)
+		}
+		q := tc.query
+		q.Page = 1
+		q.PageSize = 20
+		_, e = basicReaderFixture(t).ReadInTransaction(context.Background(), tx, tc.resource, "", "actor", BasicReadScope{Access: "all"}, q)
+		var failure httperror.Error
+		if !errors.As(e, &failure) || failure.Status != 503 || failure.Code != "altoc_basic_fields_unavailable" {
+			t.Fatal("legacy reader ignored signed filter or wrong failure", q, e)
+		}
+		mock.ExpectRollback()
+		tx.Rollback()
+		if e := mock.ExpectationsWereMet(); e != nil {
+			t.Fatal(e)
+		}
+		db.Close()
+	}
+}
+
+func TestW3Batch6QueriesAreClosed(t *testing.T) {
+	for _, q := range []BasicReadQuery{{Page: 1, PageSize: 20, ParentContractID: "7"}, {Page: 1, PageSize: 20, CustomerIDs: "2,3"}} {
+		if err := q.Validate("contract"); err != nil {
+			t.Fatal(err)
+		}
+		if q.Validate("customer") == nil {
+			t.Fatal("contract query accepted by customer permit")
+		}
+	}
+	for _, q := range []BasicReadQuery{{Page: 1, PageSize: 20, ParentContractID: "07"}, {Page: 1, PageSize: 20, CustomerIDs: "2,2"}, {Page: 1, PageSize: 20, CustomerIDs: "2,3", CustomerID: "7"}, {Page: 1, PageSize: 20, CustomerIDs: "2,3", IncludeDescendants: true}, {Page: 1, PageSize: 20, CustomerIDs: "0,1"}} {
+		if q.Validate("contract") == nil {
+			t.Fatal("invalid contract query accepted", q)
+		}
+	}
+}
+
+func TestContractSignedDateQueryValidation(t *testing.T) {
+	for _, q := range []BasicReadQuery{{SignedDateFrom: "2026-02-30"}, {SignedDateFrom: "2026-1-01"}, {SignedDateFrom: "2026-02-02", SignedDateTo: "2026-02-01"}, {SignedDateTo: "0000-01-01"}} {
+		q.Page = 1
+		q.PageSize = 20
+		if q.Validate("contract") == nil {
+			t.Fatal("invalid date accepted", q)
+		}
+	}
+	q := BasicReadQuery{Page: 1, PageSize: 20, SignedDateFrom: "2024-02-29"}
+	if e := q.Validate("contract"); e != nil {
+		t.Fatal(e)
+	}
+	if q.Validate("customer") == nil {
+		t.Fatal("date accepted for customer")
 	}
 }

@@ -37,7 +37,7 @@ func NewSchedulerBinding(registry *Registry, request ResolveRequest, source Outb
 // Begin rejects mismatched service identities before any transaction starts.
 // The caller commits claim/ack work before performing external delivery.
 func (s *SchedulerBinding) Begin(ctx context.Context, identity SchedulerIdentity) (*sql.Tx, Resolved, error) {
-	if s == nil || s.registry == nil || identity.Tenant != s.request.Key.Tenant || identity.Deployment != s.source.WorkerDeployment() || identity.SourceApp != "aims" || identity.ClientID != s.source.WorkerClient() || identity.Subject != s.source.WorkerClient() {
+	if s == nil || s.registry == nil || identity.Tenant != s.request.Key.Tenant || identity.Deployment != s.source.WorkerDeployment() || identity.SourceApp != schedulerSourceApp(s.source.WorkerClient()) || identity.ClientID != s.source.WorkerClient() || identity.Subject != s.source.WorkerClient() {
 		return nil, Resolved{}, ErrBindingMismatch
 	}
 	tx, resolved, err := s.registry.BeginSchedulerTransaction(ctx, s.request)
@@ -78,4 +78,12 @@ func (s *WorkerSchedulerBinding) Begin(ctx context.Context, identity SchedulerId
 	}
 	tx, _, err := s.registry.BeginSchedulerTransaction(ctx, s.request)
 	return tx, err
+}
+
+// Physical executor is selected by the registered worker, never by request claims.
+func schedulerSourceApp(client string) string {
+	if client == "enterprise.runtime" {
+		return "enterprise"
+	}
+	return "aims"
 }

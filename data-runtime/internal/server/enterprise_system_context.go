@@ -16,6 +16,9 @@ func (s *Server) authenticateEnterpriseSystem(r *http.Request, domain, legacySco
 }
 
 func authenticateEnterpriseSystemRequest(r *http.Request, cfg config.Config, authenticator *auth.Authenticator, verify enterpriseCredentialVerifier, domain, legacyScope string) (auth.Context, error) {
+	if authenticator == nil {
+		return auth.Context{}, httperror.New(503, "enterprise_system_credential_unavailable", "Credential state unavailable")
+	}
 	identity, err := authenticator.Authenticate(r, auth.Requirement{Scope: domain + ":scheduler:execute", SourceAppCode: "enterprise", StrictServiceClaims: true, RequireDeploymentBinding: true})
 	if enterpriseSourceMismatch(err) && domain == "aims" && legacyScope != "" && cfg.Enterprise.AllowLegacyAimsCallbacks {
 		identity, err = authenticator.Authenticate(r, auth.Requirement{Scope: legacyScope, SourceAppCode: "aims", StrictServiceClaims: true, RequireDeploymentBinding: true})

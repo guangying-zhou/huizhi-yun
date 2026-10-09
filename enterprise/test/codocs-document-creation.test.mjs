@@ -31,13 +31,17 @@ test('Enterprise Codocs document creation binds actor, runtime idempotency, and 
   globalThis.__codocsCreationSession = session
   globalThis.__codocsCreationAuthorization = { resources: { documents: ['create'] }, actionPolicies: {} }
   globalThis.__codocsCreationResponse = { success: true, data: validDoc }
-  globalThis.__codocsCreationPrepare = async (_event, options) => { preparations.push(options); return true }
+  globalThis.__codocsCreationPrepare = async (_event, options) => {
+    preparations.push(options)
+    return true
+  }
   globalThis.__codocsCreationTransport = async (_event, path, options) => {
     runtimeCalls.push({ path, options })
-    if (globalThis.__codocsCreationResponse instanceof Error) throw globalThis.__codocsCreationResponse
+    if (globalThis.__codocsCreationResponse instanceof Error)
+      throw globalThis.__codocsCreationResponse
     return { handled: true, data: globalThis.__codocsCreationResponse }
   }
-  globalThis.__codocsCreationOss = async options => {
+  globalThis.__codocsCreationOss = async (options) => {
     ossFactories.push(options)
     const mode = globalThis.__codocsCreationOssMode || 'missing'
     let heads = 0
@@ -45,7 +49,8 @@ test('Enterprise Codocs document creation binds actor, runtime idempotency, and 
       async head(path) {
         ossCalls.push({ method: 'head', path, options })
         heads += 1
-        if (mode === 'existing' || mode === 'conflict-won') return { etag: 'existing' }
+        if (mode === 'existing' || mode === 'conflict-won')
+          return { etag: 'existing' }
         if (mode === 'head-fails') {
           const error = new Error('head storage unavailable')
           error.statusCode = 500
@@ -54,14 +59,16 @@ test('Enterprise Codocs document creation binds actor, runtime idempotency, and 
         if (mode === 'put-fails' || mode === 'missing' || mode === 'conflict' || mode === 'conflict-missing') {
           const error = new Error('NoSuchKey')
           error.code = 'NoSuchKey'
-          if (mode === 'conflict' && heads > 1) return { etag: 'winner' }
+          if (mode === 'conflict' && heads > 1)
+            return { etag: 'winner' }
           throw error
         }
         throw new Error('unexpected head mode')
       },
       async put(path, bytes, options) {
         ossCalls.push({ method: 'put', path, bytes, options })
-        if (mode === 'put-fails') throw new Error('secret storage failure')
+        if (mode === 'put-fails')
+          throw new Error('secret storage failure')
         if (mode === 'conflict' || mode === 'conflict-missing') {
           const error = new Error('already exists')
           error.statusCode = 409
@@ -75,16 +82,26 @@ test('Enterprise Codocs document creation binds actor, runtime idempotency, and 
   const hooks = registerHooks({
     resolve(specifier, context, next) {
       let source
-      if (specifier.endsWith('/oss')) source = 'export const createRuntimeOSSClient=async(...args)=>globalThis.__codocsCreationOss(...args)'
-      if (specifier.endsWith('/consoleSessionBridge')) source = 'export const resolveConsoleAuthWithSessionBridge=async()=>globalThis.__codocsCreationSession'
-      if (specifier.endsWith('/tenantRuntimeClient')) source = 'export const prepareTenantRuntime=async(...args)=>globalThis.__codocsCreationPrepare(...args);export const maybeCallTenantRuntime=(...args)=>globalThis.__codocsCreationTransport(...args)'
-      if (specifier.endsWith('/platformBundleAuthorization')) source = 'export const loadAuthorizationSnapshotFromConsoleRuntime=async()=>globalThis.__codocsCreationAuthorization'
-      if (specifier.endsWith('/tenantGatewayTrust')) source = 'export const resolveTrustedTenantGatewayContext=()=>undefined'
-      if (source) return { url: `data:text/javascript,${encodeURIComponent(source)}`, shortCircuit: true }
+      if (specifier.endsWith('/oss'))
+        source = 'export const createRuntimeOSSClient=async(...args)=>globalThis.__codocsCreationOss(...args)'
+      if (specifier.endsWith('/consoleSessionBridge'))
+        source = 'export const resolveConsoleAuthWithSessionBridge=async()=>globalThis.__codocsCreationSession'
+      if (specifier.endsWith('/tenantRuntimeClient'))
+        source = 'export const prepareTenantRuntime=async(...args)=>globalThis.__codocsCreationPrepare(...args);export const maybeCallTenantRuntime=(...args)=>globalThis.__codocsCreationTransport(...args)'
+      if (specifier.endsWith('/platformBundleAuthorization'))
+        source = 'export const loadAuthorizationSnapshotFromConsoleRuntime=async()=>globalThis.__codocsCreationAuthorization'
+      if (specifier.endsWith('/tenantGatewayTrust'))
+        source = 'export const resolveTrustedTenantGatewayContext=()=>undefined'
+      if (source)
+        return { url: `data:text/javascript,${encodeURIComponent(source)}`, shortCircuit: true }
       let candidate
-      if (specifier.startsWith('@hzy/foundation/')) candidate = resolve(root, 'foundation', specifier.slice('@hzy/foundation/'.length))
-      else if (specifier.startsWith('.') && context.parentURL?.startsWith('file:')) candidate = resolve(dirname(fileURLToPath(context.parentURL)), specifier)
-      if (candidate && !existsSync(candidate) && existsSync(`${candidate}.ts`)) return { url: pathToFileURL(`${candidate}.ts`).href, shortCircuit: true }
+      if (specifier.startsWith('@hzy/foundation/'))
+        candidate = resolve(root, 'foundation', specifier.slice('@hzy/foundation/'.length))
+      else
+        if (specifier.startsWith('.') && context.parentURL?.startsWith('file:'))
+          candidate = resolve(dirname(fileURLToPath(context.parentURL)), specifier)
+      if (candidate && !existsSync(candidate) && existsSync(`${candidate}.ts`))
+        return { url: pathToFileURL(`${candidate}.ts`).href, shortCircuit: true }
       return next(specifier, context)
     }
   })
@@ -94,7 +111,9 @@ test('Enterprise Codocs document creation binds actor, runtime idempotency, and 
     const app = createApp()
     const router = createRouter()
     router.post('/documents', (await import('../server/routes/codocs/api/documents/index.post.ts')).default)
-    app.use(defineEventHandler(event => { event.context.consoleAuth = globalThis.__codocsCreationSession }))
+    app.use(defineEventHandler((event) => {
+      event.context.consoleAuth = globalThis.__codocsCreationSession
+    }))
     app.use(router)
     server = createServer(toNodeListener(app))
     await new Promise(done => server.listen(0, '127.0.0.1', done))
@@ -243,7 +262,8 @@ test('Enterprise Codocs document creation binds actor, runtime idempotency, and 
     assert.equal((await fetch(`${base}/documents`, { method: 'POST', headers, body: JSON.stringify(body) })).status, 401)
     assert.equal(runtimeCalls.length, beforeUnauthRuntime)
   } finally {
-    if (server) await new Promise(done => server.close(done))
+    if (server)
+      await new Promise(done => server.close(done))
     hooks.deregister()
     globalThis.useRuntimeConfig = oldConfig
     globalThis.defineEventHandler = oldDefineEventHandler

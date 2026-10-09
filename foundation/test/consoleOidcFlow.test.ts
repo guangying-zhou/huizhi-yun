@@ -2,6 +2,8 @@ import { describe, test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
   createConsoleOidcTransientCookieNames,
+  consoleOidcTransientCookiesToPrune,
+  consoleOidcTransientPath,
   isConsoleOidcReauthenticationRequired
 } from '../server/utils/consoleOidcFlow'
 
@@ -66,4 +68,22 @@ describe('Console OIDC flow helpers', () => {
       data: { message: 'invalid_client' }
     }), false)
   })
+})
+
+test('repeated logins retain at most one prior state without touching other apps or sessions', () => {
+  const states = ['A', 'B', 'C'].map(c => c.repeat(32))
+  const groups = states.map(state => Object.values(createConsoleOidcTransientCookieNames('enterprise', state)))
+  const others = [...Object.values(createConsoleOidcTransientCookieNames('codocs', states[0])), 'hzy_enterprise_access_token']
+  const names = [...groups.flat(), ...others, ...Object.values(createConsoleOidcTransientCookieNames('enterprise'))]
+  const prune = consoleOidcTransientCookiesToPrune('enterprise', names)
+  assert.deepEqual(names.filter(name => !prune.includes(name)), [...groups[2], ...others])
+  assert.deepEqual(consoleOidcTransientCookiesToPrune('enterprise', names, false), names.filter(name => !others.includes(name)))
+})
+
+test('transient path is exact application prefix for self-hosted, CF and hzy0 callbacks', () => {
+  for (const host of ['https://aidcp.wiztek.cn', 'https://hzy0.isme.dev', 'https://tenant.huizhi.yun']) {
+    assert.equal(consoleOidcTransientPath(`${host}/enterprise/api/auth/callback`), '/enterprise')
+    assert.equal(consoleOidcTransientPath(`${host}/codocs/api/auth/callback`), '/codocs')
+    assert.equal(consoleOidcTransientPath(`${host}/api/auth/callback`), '/')
+  }
 })

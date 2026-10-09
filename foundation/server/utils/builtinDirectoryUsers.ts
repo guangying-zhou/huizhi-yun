@@ -1,3 +1,5 @@
+import { UNASSIGNED_OWNER_LABEL, UNASSIGNED_OWNER_UID } from '../../shared/utils/reservedDirectorySubject'
+
 export interface BuiltinDirectoryUser {
   id: number
   uid: string
@@ -13,7 +15,24 @@ export interface BuiltinDirectoryUser {
   deptName: string | null
 }
 
+// Built-in users are resolved locally for display only and are never sent to
+// Console Directory. They are not identities: see reservedDirectorySubject.
 const BUILTIN_DIRECTORY_USERS: Record<string, BuiltinDirectoryUser> = {
+  [UNASSIGNED_OWNER_UID]: {
+    id: 0,
+    uid: UNASSIGNED_OWNER_UID,
+    username: UNASSIGNED_OWNER_UID,
+    displayName: UNASSIGNED_OWNER_LABEL,
+    realName: UNASSIGNED_OWNER_LABEL,
+    nickname: null,
+    email: '',
+    mobile: null,
+    avatar: null,
+    // 0: not a usable account. Selectors skip status 0 users.
+    status: 0,
+    deptCode: null,
+    deptName: null
+  },
   system: {
     id: 0,
     uid: 'system',

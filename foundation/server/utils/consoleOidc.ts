@@ -4,6 +4,7 @@ import {
   createError,
   deleteCookie,
   getCookie,
+  parseCookies,
   getHeader,
   getQuery,
   getRequestURL,
@@ -30,6 +31,8 @@ import {
 } from './consoleServiceBinding'
 import {
   createConsoleOidcTransientCookieNames,
+  consoleOidcTransientCookiesToPrune,
+  consoleOidcTransientPath,
   isConsoleOidcReauthenticationRequired
 } from './consoleOidcFlow'
 
@@ -560,7 +563,7 @@ function getConsoleOidcTransientMaxAge(event: H3Event) {
     'consoleOidc.transientTtlSeconds'
   ]) || process.env.HZY_CONSOLE_OIDC_TRANSIENT_TTL_SECONDS || ''
 
-  return getTokenMaxAge(configured, 1800)
+  return Math.min(getTokenMaxAge(configured, 600), 600)
 }
 
 function setNoStoreHeaders(event: H3Event) {
@@ -575,6 +578,18 @@ function getCookieBaseOptions(event: H3Event, maxAge?: number, httpOnly = false)
     httpOnly,
     secure: getRequestURL(event).protocol === 'https:'
   })
+}
+
+function transientOptions(event: H3Event, maxAge?: number) {
+  return { ...getCookieBaseOptions(event, maxAge, true), path: consoleOidcTransientPath(getConsoleOidcConfig(event).redirectUri) }
+}
+
+function clearTransientNames(event: H3Event, names: string[]) {
+  for (const name of new Set(names)) {
+    // Delete both the historic root cookie and the exact current application path.
+    deleteCookie(event, name, getCookieBaseOptions(event))
+    if (transientOptions(event).path !== '/') deleteCookie(event, name, transientOptions(event))
+  }
 }
 
 function setNullableCookie(event: H3Event, name: string, value: string | undefined | null, maxAge: number, httpOnly = false) {
@@ -599,6 +614,10 @@ export function clearConsoleOidcCookies(event: H3Event, options: { preserveRefre
     ...Object.values(transientCookies)
   ]
   const cookieOptions = getCookieBaseOptions(event)
+  clearTransientNames(event, [
+    ...consoleOidcTransientCookiesToPrune(resolveCookieScope(event), Object.keys(parseCookies(event)), false),
+    ...Object.values(getTransientCookieNames(event)), ...Object.values(transientCookies)
+  ])
 
   for (const name of new Set(names)) {
     if (options.preserveRefreshToken && refreshTokenNames.has(name)) continue
@@ -697,18 +716,23 @@ export async function startConsoleOidcLogin(event: H3Event) {
   setNoStoreHeaders(event)
 
   const query = getQuery(event)
-  const redirect = sanitizeOidcRedirect(event, firstQueryValue(query.redirect))
+  const candidateRedirect = sanitizeOidcRedirect(event, firstQueryValue(query.redirect))
+  const redirect = Buffer.byteLength(candidateRedirect) <= 1024 ? candidateRedirect : '/'
   const state = randomToken()
   const nonce = randomToken()
   const verifier = randomToken(48)
   const challenge = createPkceChallenge(verifier)
-  const transientOptions = getCookieBaseOptions(event, getConsoleOidcTransientMaxAge(event), true)
+  clearTransientNames(event, [
+    ...consoleOidcTransientCookiesToPrune(resolveCookieScope(event), Object.keys(parseCookies(event))),
+    ...Object.values(transientCookies)
+  ])
+  const cookieOptions = transientOptions(event, getConsoleOidcTransientMaxAge(event))
   const transientCookieNames = getTransientCookieNames(event, state)
 
-  setCookie(event, transientCookieNames.state, state, transientOptions)
-  setCookie(event, transientCookieNames.nonce, nonce, transientOptions)
-  setCookie(event, transientCookieNames.codeVerifier, verifier, transientOptions)
-  setCookie(event, transientCookieNames.redirect, redirect, transientOptions)
+  setCookie(event, transientCookieNames.state, state, cookieOptions)
+  setCookie(event, transientCookieNames.nonce, nonce, cookieOptions)
+  setCookie(event, transientCookieNames.codeVerifier, verifier, cookieOptions)
+  setCookie(event, transientCookieNames.redirect, redirect, cookieOptions)
 
   return sendRedirect(event, getAuthorizeUrl(config, state, nonce, challenge))
 }
@@ -819,6 +843,12 @@ export async function handleConsoleOidcCallback(event: H3Event) {
   )
   const nonce = getCookie(event, selectedTransientCookieNames.nonce)
 
+  clearTransientNames(event, [
+    ...Object.values(transientCookieNames),
+    ...Object.values(legacyTransientCookieNames),
+    ...Object.values(transientCookies)
+  ])
+
   if (!code || !state || !storedState || state !== storedState || !codeVerifier) {
     throw createError({ statusCode: 400, message: 'Invalid Console OIDC callback state' })
   }
@@ -833,15 +863,6 @@ export async function handleConsoleOidcCallback(event: H3Event) {
   }
 
   setConsoleOidcTokenCookies(event, tokenSet)
-
-  const transientOptions = getCookieBaseOptions(event)
-  for (const name of [
-    ...Object.values(transientCookieNames),
-    ...Object.values(legacyTransientCookieNames),
-    ...Object.values(transientCookies)
-  ]) {
-    deleteCookie(event, name, transientOptions)
-  }
 
   return sendRedirect(event, redirect || '/')
 }
@@ -1222,4 +1243,36 @@ export function handleConsoleOidcPostLogout(event: H3Event) {
   const state = firstQueryValue(query.state) || 'logged_out'
   clearConsoleOidcCookies(event)
   return sendRedirect(event, appendLoggedOutState(redirect, state))
+}
+
+/** Scoped legacy Service API receiver in Host. Does not change the Host user
+ * client ID or accept a caller-provided audience. Console remains authoritative
+ * for signature, live credential and grant revocation. */
+export async function requireConsoleAltocServiceAuth(event: H3Event) {
+  const config = { ...getConsoleOidcConfig(event), clientId: 'altoc' }
+  const token = getBearerToken(event)
+  if (!config.enabled || !token) throw createError({ statusCode: 401 })
+  let claims: ConsoleOidcClaims
+  try {
+    claims = decodeJwt(token) as ConsoleOidcClaims
+  } catch {
+    throw createError({ statusCode: 401 })
+  }
+  try {
+    await validateConsoleOidcServiceToken(event, config, token)
+  } catch (error) {
+    const status = Number((error as { statusCode?: number, status?: number }).statusCode || (error as { status?: number }).status)
+    throw createError({ statusCode: status === 401 || status === 403 ? status : 503, message: 'Service token verification unavailable or rejected' })
+  }
+  try {
+    validateIntrospectedServiceTokenClaims({ claims, issuers: issuerCandidates(event, config.issuer), audience: 'altoc' })
+  } catch {
+    throw createError({ statusCode: 403 })
+  }
+  const c = claims as ConsoleOidcClaims & { source_app?: string, target_app?: string, client_id?: string }
+  if (c.source_app !== c.hzy?.appCode || c.client_id !== c.hzy?.clientCode || c.target_app !== 'altoc' || c.hzy?.subjectType !== 'service' || !c.tenant || !c.deployment) throw createError({ statusCode: 403 })
+  const verified: ConsoleAuthRequestContext = { authenticated: true, claims, tokenUse: 'service', subjectType: 'service', appCode: c.source_app, clientCode: c.client_id, tenant: String(c.tenant), deployment: String(c.deployment), scopes: String(c.scope || '').split(/\s+/).filter(Boolean) }
+  // Only the verified result, never inbound identity headers, is propagated.
+  event.context.consoleAuth = verified
+  return verified
 }

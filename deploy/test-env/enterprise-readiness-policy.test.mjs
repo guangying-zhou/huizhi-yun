@@ -30,15 +30,15 @@ function fixture({ omitAimsCapability = false, omitAssetsCapability = false } = 
   write(root, 'console/server/api/v1/console/service/directory/project-access.get.ts', "requireConsoleServiceActor(event, 'console', 'console:directory-project-access:read')\n")
   write(root, 'console/server/api/v1/console/service/business-domains.get.ts', "requireConsoleServiceActor(event, 'console', 'console:business-domain:view')\n")
   write(root, 'console/server/api/v1/console/service/directory/users/index.get.ts', "requireConsoleServiceActor(event, 'console', 'console:directory-users:read')\n")
-  write(root, 'enterprise/server/utils/enterpriseAimsProjectDocuments.ts', "const capability = 'aims:project-documents:read'\n")
-  // 预览沿用读取能力，下载是独立的导出性质能力；两条都要进 aims 授权条目
-  write(root, 'enterprise/server/utils/enterpriseAimsProjectDocumentFiles.ts', "const capabilities = Object.freeze({ preview: 'aims:project-documents:read', download: 'aims:project-documents:download' })\n")
-  // 候选来源只读代理：键是被引号包住的资源名，只有值才是能力
-  write(root, 'enterprise/server/utils/enterpriseAimsProjectDocumentSources.ts', "const capabilities = Object.freeze({ 'project-document-sources': 'aims:project-document-sources:read' })\n")
-  // 写入能力独立声明：read 不蕴含 write
-  write(root, 'enterprise/server/utils/enterpriseAimsProjectDocumentWrites.ts', "const capabilities = Object.freeze({ write: 'aims:project-documents:write' })\n")
-  // 访问策略读与改分列：read 不蕴含 manage
-  write(root, 'enterprise/server/utils/enterpriseAimsProjectDocumentAccess.ts', "const capabilities = Object.freeze({ read: 'aims:project-document-access:read', manage: 'aims:project-document-access:manage' })\n")
+  const bridges = {
+    enterpriseAimsProjectDocuments: ['readHostProjectDocuments'],
+    enterpriseAimsProjectDocumentFiles: ['readHostProjectDocumentFile'],
+    enterpriseAimsProjectDocumentSources: ['readHostProjectDocumentSource'],
+    enterpriseAimsProjectDocumentWrites: ['writeHostProjectDocument'],
+    enterpriseAimsProjectDocumentAccess: ['readProjectDocumentAccessPolicy', 'checkProjectDocumentAccess', 'listProjectDocumentAccessAudit', 'updateProjectDocumentAccessPolicy']
+  }
+  for (const [file, names] of Object.entries(bridges)) write(root, `enterprise/server/utils/${file}.ts`,
+    `import { ${names.join(', ')} } from '../../../aims/layer/server/index'\n${names.map(name => `${name}()`).join('\n')}`)
   write(root, 'assets/server/utils/assetProductDocumentTransport.ts', "const request = { audience: 'codocs', requiredCapability: 'codocs:product-document:read' }\n")
   // 宿主自己的 codocs 能力事实源：同一 audience 下与 Assets 那条合并
   write(root, 'enterprise/server/utils/enterpriseCodocsProjectDocument.ts', "const requiredCapability = 'codocs:project-document:content:read'\nconst audience = 'codocs'\n")
@@ -55,8 +55,6 @@ test('derives exact Runtime and independent external policies from checked-in co
       clientCode: 'enterprise.runtime', appCode: 'enterprise', capabilities: ['aims:enterprise-host:execute', 'assets:enterprise-host:execute'], audiences: ['data-runtime']
     })
     assert.deepEqual(policy.externalServicePolicies, [
-      // 同一 audience 下读取与下载两条能力合并，逐条精确
-      { audience: 'aims', capabilities: ['aims:project-document-access:manage', 'aims:project-document-access:read', 'aims:project-document-sources:read', 'aims:project-documents:download', 'aims:project-documents:read', 'aims:project-documents:write'] },
         // 同一 audience 下 Assets 与宿主两条能力合并，逐条精确
         { audience: 'codocs', capabilities: ['codocs:product-document:read', 'codocs:project-document:content:read'] },
       { audience: 'console', capabilities: ['console:business-domain:view', 'console:directory-project-access:read', 'console:directory-users:read'] }
@@ -67,7 +65,7 @@ test('derives exact Runtime and independent external policies from checked-in co
   } finally { rmSync(root, { recursive: true, force: true }) }
 })
 
-test('fails closed for template drift, wildcard capability and undeclared Aims operation', () => {
+test('fails closed for template drift, wildcard capability and invalid native Aims bridge', () => {
   const root = fixture()
   try {
     const rendered = renderReadinessTemplate(template(), root)
@@ -78,19 +76,22 @@ test('fails closed for template drift, wildcard capability and undeclared Aims o
     assert.throws(() => checkReadinessTemplate(rendered, root), /READINESS_POLICY_DRIFT/)
   } finally { rmSync(root, { recursive: true, force: true }) }
 
-  // 下载能力必须在 Aims manifest 里显式声明；只在传输层写死不足以成为授权。
-  const undeclaredDownload = fixture()
+  for (const source of [
+    "import { readHostProjectDocumentFile } from '../../../aims/server/utils/legacy'\nreadHostProjectDocumentFile()",
+    "import { readHostProjectDocumentFile } from '../../../aims/layer/server/index'",
+    "import { readHostProjectDocumentFile } from '../../../aims/layer/server/index'\nreadHostProjectDocumentFile(); const scope = 'aims.read'"
+  ]) {
+    const invalid = fixture()
+    try {
+      write(invalid, 'enterprise/server/utils/enterpriseAimsProjectDocumentFiles.ts', source)
+      assert.throws(() => generateReadinessPolicies(invalid), /READINESS_POLICY_NATIVE_BRIDGE_INVALID/)
+    } finally { rmSync(invalid, { recursive: true, force: true }) }
+  }
+  const aliased = fixture()
   try {
-    writeFileSync(resolve(undeclaredDownload, 'aims/app.manifest.json'), JSON.stringify({ appCode: 'aims', resources: [{ code: 'project-documents', actions: ['read', 'write'] }, { code: 'project-document-sources', actions: ['read'] }, { code: 'project-document-access', actions: ['read', 'manage'] }] }))
-    assert.throws(() => generateReadinessPolicies(undeclaredDownload), /READINESS_POLICY_EXTERNAL_INVALID/)
-  } finally { rmSync(undeclaredDownload, { recursive: true, force: true }) }
-
-  // 传输层不得凭空扩能力：capabilities 块里出现未声明的动作同样失败关闭。
-  const inventedCapability = fixture()
-  try {
-    writeFileSync(resolve(inventedCapability, 'enterprise/server/utils/enterpriseAimsProjectDocumentFiles.ts'), "const capabilities = Object.freeze({ preview: 'aims:project-documents:read', download: 'aims:project-documents:export' })\n")
-    assert.throws(() => generateReadinessPolicies(inventedCapability), /READINESS_POLICY_EXTERNAL_INVALID/)
-  } finally { rmSync(inventedCapability, { recursive: true, force: true }) }
+    write(aliased, 'enterprise/server/utils/enterpriseAimsProjectDocumentFiles.ts', "import { readHostProjectDocumentFile as readFile } from '../../../aims/layer/server/index'\nreadFile()")
+    assert.doesNotThrow(() => generateReadinessPolicies(aliased))
+  } finally { rmSync(aliased, { recursive: true, force: true }) }
 })
 
 test('refuses secret-bearing templates and does not read process environment', () => {
@@ -114,10 +115,10 @@ test('refuses an undeclared or mismatched Console directory service capability',
   } finally { rmSync(root, { recursive: true, force: true }) }
 })
 
-// 固定操作必须来自 owning manifest；生成物不可代替源声明。
-test('IP asset link-product capability is declared by Assets and composed into readiness', () => {
-  const assets = JSON.parse(readFileSync(new URL('../../assets/app.manifest.json', import.meta.url), 'utf8'))
-  assert.ok(assets.resources.find(resource => resource.code === 'ip-asset').actions.includes('link-product'))
+// 固定 U 操作来自 Foundation 登记；退役服务资源不再借人员 manifest 证明。
+test('IP asset link-product fixed U operation is registered and composed into readiness', () => {
+  const operationsSource = readFileSync(new URL('../../foundation/server/utils/enterpriseRuntimeClient.ts', import.meta.url), 'utf8')
+  assert.match(operationsSource, /'assets\.ip-assets-link-product':\s*\{\s*path: '\/v1\/enterprise\/assets\/ip-assets:link-product'/)
   const policy = generateReadinessPolicies()
   assert.ok(policy.servicePolicy.capabilities.includes('assets:enterprise-host:execute'))
   const root = fixture()

@@ -54,10 +54,9 @@ describe('Console directory sync permissions', () => {
   test('sync optional pagination is validated only after the current Console permission gate', () => {
     for (const path of ['server/api/v1/console/directory/sync-jobs/index.get.ts', 'server/api/v1/console/directory/sync-jobs/[jobCode]/events/index.get.ts']) {
       const content = source(path)
-      assertBefore(content.slice(content.indexOf('export default')), "requirePermission(event, 'directory_sync', 'view')", 'consoleSyncReadQuery(getQuery(event))')
+      assertBefore(content.slice(content.indexOf('export default')), 'requirePermission(event, \'directory_sync\', \'view\')', 'consoleSyncReadQuery(getQuery(event))')
       assert.match(content, /consoleSyncReadQuery.*foundation\/shared\/utils\/consoleSyncReadQuery/)
       assert.match(content, /statusCode: 400/)
     }
   })
-
 })

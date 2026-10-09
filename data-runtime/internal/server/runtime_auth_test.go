@@ -752,9 +752,27 @@ func TestConsoleGitLabFixedOperationsRequireExactCapabilityAndIdempotency(t *tes
 		"Authorization",
 		"Bearer "+signTestRuntimeJWTForApp(t, privateKey, "codocs", "integration_operations:execute"),
 	)
+	request.Header.Set("Idempotency-Key", "doc-01-commit-probe")
 	_, err = server.route(request)
-	if !errors.As(err, &httpErr) || httpErr.Code != "idempotency_key_required" {
-		t.Fatalf("GitLab commit without idempotency key error=%T %v", err, err)
+	if !errors.As(err, &httpErr) || httpErr.Code != "console_gitlab_operation_not_found" {
+		t.Fatalf("removed GitLab commit operation error=%T %v", err, err)
+	}
+
+	// A caller holding the exact capability and an idempotency key still
+	// cannot reach either removed repository write operation.
+	request = httptest.NewRequest(
+		http.MethodPost,
+		"/v1/console/service/integrations/gitlab.default/gitlab/resolve-actions",
+		strings.NewReader(`{"repoPath":"group/project","docs":[]}`),
+	)
+	request.Header.Set(
+		"Authorization",
+		"Bearer "+signTestRuntimeJWTForApp(t, privateKey, "codocs", "integration_operations:execute"),
+	)
+	request.Header.Set("Idempotency-Key", "doc-01-resolve-probe")
+	_, err = server.route(request)
+	if !errors.As(err, &httpErr) || httpErr.Code != "console_gitlab_operation_not_found" {
+		t.Fatalf("removed GitLab resolve-actions operation error=%T %v", err, err)
 	}
 }
 

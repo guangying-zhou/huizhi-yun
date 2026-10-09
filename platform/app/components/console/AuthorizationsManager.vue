@@ -123,6 +123,7 @@ interface SubjectRoleItem {
   subjectType: string
   subjectCode: string
   subjectDisplayName: string
+  subjectStatus?: string
   roleId: number
   roleCode: string
   roleName: string
@@ -521,7 +522,7 @@ const selectedSubjects = computed(() => {
   const subjectMap = new Map(subjects.value.map(item => [String(item.id), item]))
   return selectedSubjectIds.value
     .map(id => subjectMap.get(id))
-    .filter((item): item is SubjectItem => item?.subjectType === 'user')
+    .filter((item): item is SubjectItem => item?.subjectType === 'user' && item.status === 'active')
 })
 const selectedSubjectSummary = computed(() => {
   const count = selectedSubjects.value.length
@@ -588,7 +589,7 @@ const rolePermissionGroups = computed<RolePermissionGroup[]>(() => {
 const subjectTreeItems = computed<SubjectTreeItem[]>(() => {
   const keyword = subjectKeyword.value.trim().toLowerCase()
   const departmentNodeMap = new Map<number, SubjectTreeItem>()
-  const users = subjects.value.filter(item => item.subjectType === 'user')
+  const users = subjects.value.filter(item => item.subjectType === 'user' && item.status === 'active')
   const departments = subjects.value.filter(item => item.subjectType === 'department')
 
   for (const subject of departments) {

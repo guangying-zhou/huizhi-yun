@@ -1,0 +1,20 @@
+[
+  {
+    "Logical": "people_employee_private_facts",
+    "Physical": "people_employee_private_facts",
+    "Columns": [
+      "id",
+      "employee_uid",
+      "field_code",
+      "source_code",
+      "value_text",
+      "source_biz_id",
+      "source_updated_at",
+      "created_by",
+      "updated_by",
+      "created_at",
+      "updated_at"
+    ],
+    "DDL": "CREATE TABLE `people_employee_private_facts` (\n  `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,\n  `employee_uid` VARCHAR(64) NOT NULL,\n  `field_code` ENUM('id_number', 'birth_date', 'education_level', 'major', 'graduation_school', 'graduation_date') NOT NULL,\n  `source_code` ENUM('dingtalk', 'oa_archive', 'manual') NOT NULL,\n  `value_text` VARCHAR(255) NOT NULL COMMENT '规范化字段值；身份证号属于高度敏感数据，仅限 employees/admin 接口读取且只返回掩码',\n  `source_biz_id` VARCHAR(128) DEFAULT NULL,\n  `source_updated_at` DATETIME DEFAULT NULL,\n  `created_by` VARCHAR(64) DEFAULT NULL,\n  `updated_by` VARCHAR(64) DEFAULT NULL,\n  `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,\n  `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,\n  PRIMARY KEY (`id`),\n  UNIQUE KEY `uk_people_employee_private_fact` (`employee_uid`, `field_code`, `source_code`),\n  KEY `idx_people_employee_private_source` (`source_code`, `source_updated_at`),\n  KEY `idx_people_employee_private_employee` (`employee_uid`, `field_code`)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='People 员工私密档案分来源事实；有效值按钉钉、人工、OA 优先级解析';"
+  }
+]

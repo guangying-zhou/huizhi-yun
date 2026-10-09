@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	ticket "github.com/huizhi-yun/data-runtime/internal/enterpriseticket"
 	"net/http"
 	"strings"
 	"time"
@@ -61,6 +62,25 @@ func (a *Adapter) enqueueServiceTicketDeliveryOperationTx(
 	itemKey := strings.TrimSpace(aimsMapText(item, "item_key"))
 	generation := int64(serviceBodyInt(item, "delivery_generation"))
 	lastStatus := strings.TrimSpace(aimsMapText(item, "last_delivery_status"))
+	ctx = ticketResultContext(ctx)
+	if ticket.Has(ctx) {
+		generation++
+		if _, err := tx.ExecContext(ctx, "UPDATE work_item_service_ext SET first_responded_at=CASE WHEN ?=1 THEN COALESCE(first_responded_at,CURRENT_TIMESTAMP) ELSE first_responded_at END,resolved_at=CASE WHEN ?=1 THEN COALESCE(resolved_at,CURRENT_TIMESTAMP) ELSE resolved_at END,delivery_generation=?,last_delivery_status=? WHERE work_item_id = ?", captureResponse, captureResolution, generation, deliveryStatus, workItemID); err != nil {
+			return nil, err
+		}
+		command, err := a.serviceTicketDeliveryCommandTx(ctx, tx, workItemID, item, ticketCode, deliveryStatus, "", body)
+		if err != nil {
+			return nil, err
+		}
+		command["deliveryGeneration"] = generation
+		if _, err = ticket.Apply(ctx, tx, rawWorkItemID, command); err != nil {
+			return nil, err
+		}
+		return map[string]any{"serviceTicketDelivery": map[string]any{"linked": true, "operationStatus": "succeeded", "storage": "unified"}}, nil
+	}
+	if a.retireAPFCommands {
+		return map[string]any{"serviceTicketDelivery": map[string]any{"linked": true, "retired": true}}, nil
+	}
 	trusted, err := integrationoperation.TrustedContextFromMap(body, "aims")
 	if err != nil {
 		return nil, httperror.New(http.StatusForbidden, "integration_operation_context_invalid", "trusted integration operation context is missing or invalid")

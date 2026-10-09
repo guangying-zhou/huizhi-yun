@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { useAccountStore } from '~/stores/account'
+import { REPOSITORY_COPY_DOC_TYPE } from '../../../shared/utils/documentStorage'
 import ConflictResolveModal from '~/components/project/ConflictResolveModal.vue'
 import type { Project, ConflictDoc, GitlabFileInfo } from '~/types/account'
 import type { ProjectFileItem } from '~/types/index'
@@ -195,7 +196,7 @@ const loadDocumentPreview = async (docData: ProjectFileItem) => {
         method: 'POST',
         body: {
           oss_path: docData.path,
-          doc_type: 'git-project',
+          doc_type: REPOSITORY_COPY_DOC_TYPE,
           project_code: currentProject.value?.projectCode
         }
       })
@@ -244,35 +245,6 @@ const syncDocs = async () => {
     toast.add({
       title: '同步失败',
       description: err instanceof Error ? err.message : '同步项目文档失败',
-      color: 'error'
-    })
-  }
-}
-
-// 提交文档
-const submitDocs = async () => {
-  if (!currentProject.value) return
-  const uid = user.value
-  if (!uid) {
-    toast.add({
-      title: '提交失败',
-      description: '未获取到当前用户信息',
-      color: 'error'
-    })
-    return
-  }
-
-  try {
-    await accountStore.submitDocuments(uid)
-    toast.add({
-      title: '提交成功',
-      description: '已提交到 GitLab',
-      color: 'success'
-    })
-  } catch (err: unknown) {
-    toast.add({
-      title: '提交失败',
-      description: err instanceof Error ? err.message : '提交项目文档失败',
       color: 'error'
     })
   }
@@ -575,19 +547,7 @@ const refreshProjectTree = async () => {
                         >
                           从 GitLab 同步
                         </UButton>
-                        <UButton
-                          icon="i-lucide-upload"
-                          size="sm"
-                          color="primary"
-                          :loading="accountStore.submitting"
-                          :disabled="currentProject.filesModifiedCount === 0"
-                          @click="submitDocs"
-                        >
-                          提交到 GitLab
-                          <template v-if="currentProject.filesModifiedCount && currentProject.filesModifiedCount > 0">
-                            ({{ currentProject.filesModifiedCount }})
-                          </template>
-                        </UButton>
+                        <span class="text-xs text-muted">仓库文档在平台内只读，修改请在 GitLab 中完成</span>
                       </template>
                     </div>
                   </div>

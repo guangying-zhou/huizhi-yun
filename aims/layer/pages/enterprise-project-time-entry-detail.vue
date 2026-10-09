@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { projectPageFailure } from '../../app/utils/projectPageFailure'
 import { reviewStatusLabel, reviewStatusColor, type TimeEntryReviewStatus } from '../../app/utils/timeEntryPresentation'
 import ProjectNavbar from '../../app/components/project/ProjectNavbar.vue'
 import { useAimsModule } from '../useAimsModule'
@@ -35,7 +36,7 @@ async function refresh() {
       throw Error('工时详情暂不可用')
     item.value = response.data
   } catch (cause) {
-    error.value = cause instanceof Error ? cause.message : '工时详情暂不可用'
+    error.value = projectPageFailure(cause, '工时详情暂不可用')
   } finally {
     loading.value = false
   }

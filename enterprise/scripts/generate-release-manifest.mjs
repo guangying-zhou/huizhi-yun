@@ -4,6 +4,7 @@ import { execFileSync } from 'node:child_process'
 import { resolve, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { buildReleaseManifest, composeManifest, digest, releaseSourcePaths, releaseBuildFiles } from './manifest-artifacts.mjs'
+
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..')
 const [inputPath, outputPath] = process.argv.slice(2)
 if (!inputPath || !outputPath) throw Error('Usage: node generate-release-manifest.mjs <build-input.json> <output.json>')
@@ -22,7 +23,7 @@ for (const file of releaseBuildFiles) {
 const appManifest = JSON.parse(readFileSync(resolve(root, 'enterprise/app.manifest.json'), 'utf8'))
 const expected = composeManifest(['aims', 'assets', 'codocs'].map(app => JSON.parse(readFileSync(resolve(root, app, 'app.manifest.json'), 'utf8'))))
 if (digest(expected) !== digest(appManifest)) throw Error('Generated application manifest is stale')
-for (const [section, pathField, hashField] of [['runtime','artifactPath','artifactSha256'], ['schema','manifestPath','manifestSha256'], ['paths','registryPath','registrySha256']]) {
+for (const [section, pathField, hashField] of [['runtime', 'artifactPath', 'artifactSha256'], ['schema', 'manifestPath', 'manifestSha256'], ['paths', 'registryPath', 'registrySha256']]) {
   const path = input[section]?.[pathField]
   if (typeof path !== 'string' || !path) throw Error(`Missing ${section}.${pathField}`)
   const hash = createHash('sha256').update(readFileSync(resolve(path))).digest('hex')

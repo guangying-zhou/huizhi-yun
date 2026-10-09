@@ -12,7 +12,7 @@ function transport(mode = '') {
   runInNewContext(compiled, { exports, URL, AbortSignal, crypto: { randomUUID: () => 'request-1' }, require: (name: string) => {
     if (name === 'h3') return { createError }
     if (name.endsWith('/consoleServiceBinding')) return { cloudflareEnvFromEvent: (event: any) => event.context.cloudflare?.env || event.context._platform?.cloudflare?.env || {} }
-    if (name.endsWith('/tenantGatewayTrust')) return { resolveTrustedTenantGatewayContext: () => mode === 'wrong-source' ? { tenant: 'T1', deployment: 'ENTERPRISE', appCode: 'enterprise' } : { tenant: 'T1', deployment: 'AIMS', appCode: 'aims' } }
+    if (name.endsWith('/tenantGatewayTrust')) return { resolveTrustedTenantGatewayContext: () => mode === 'host' ? { tenant: 'T1', deployment: 'AIMS', appCode: 'enterprise' } : mode === 'wrong-source' ? { tenant: 'T1', deployment: 'ENTERPRISE', appCode: 'enterprise' } : { tenant: 'T1', deployment: 'AIMS', appCode: 'aims' } }
     if (name.endsWith('/serviceAppUrl')) return { resolveTrustedServiceAppRoute: () => mode === 'missing-route' ? null : { deploymentCode: 'WORKFLOW' }, resolveServiceAppBaseUrl: () => 'https://workflow.invalid' }
     if (name.endsWith('/tenantRuntimeClient')) return { buildServiceCommandRuntimeHeaders: async (args: any) => {
       calls.push({ signed: args })
@@ -145,4 +145,12 @@ test('scheduled Gateway failures preserve authorization/conflict/unavailable sta
   } } }
   await assert.rejects(exports.sendWorkItemCompletion(null, operation, {}, 'WORKFLOW', { cloudflare: { env } }), (error: any) => error.name === 'TimeoutError')
   assert.equal(calls.length, 2)
+})
+
+test('Host completion transport signs the original frozen command as enterprise.runtime', async () => {
+  const { exports, calls } = transport('host')
+  await exports.sendWorkItemCompletion({ context: {} }, operation, { serviceCommand: { command: { actorUid: 'U1' } } })
+  assert.equal(calls[1].signed.sourceApp, 'enterprise')
+  assert.equal(calls[1].signed.sourceClientId, 'enterprise.runtime')
+  assert.equal(calls[1].signed.sourceDeploymentCode, 'AIMS')
 })

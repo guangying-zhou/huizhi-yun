@@ -3,12 +3,16 @@ package aims
 import (
 	"github.com/huizhi-yun/data-runtime/internal/apps/compat"
 	"github.com/huizhi-yun/data-runtime/internal/config"
+	"github.com/huizhi-yun/data-runtime/internal/enterpriseticket"
 )
 
 type Adapter struct {
+	ticketResultPrepare enterpriseticket.Prepare
 	*compat.Adapter
 	enterpriseWrites       *enterpriseWriteBinding
+	retireAPFCommands      bool
 	workflowInstanceReader AimsWorkflowInstanceReader
+	documentCatalogSync    DocumentCatalogSync
 }
 
 var requiredTables = []string{

@@ -46,14 +46,18 @@ func authenticateEnterpriseSchedulerCapability(r *http.Request, authenticator *a
 	deny := func(status int, code, message string) (auth.Context, enterprise.SchedulerIdentity, error) {
 		return auth.Context{}, enterprise.SchedulerIdentity{}, httperror.New(status, code, message)
 	}
-	if authenticator == nil || verify == nil || route.Binding.Tenant == "" || route.Binding.Environment == "" || route.Binding.RuntimeDeployment == "" || route.WorkerDeployment == "" || route.App == "" || route.WorkerClient != route.App+".runtime" {
+	if authenticator == nil || verify == nil || route.Binding.Tenant == "" || route.Binding.Environment == "" || route.Binding.RuntimeDeployment == "" || route.WorkerDeployment == "" || route.App == "" || (route.WorkerClient != route.App+".runtime" && !(route.App == "aims" && route.WorkerClient == "enterprise.runtime")) {
 		return deny(503, "enterprise_scheduler_unavailable", "Scheduler service binding is unavailable")
 	}
-	service, err := authenticator.Authenticate(r, auth.Requirement{AppCode: route.App, SourceAppCode: route.App, Scope: capability, StrictServiceClaims: true, RequireDeploymentBinding: true})
+	executor := route.App
+	if route.WorkerClient == "enterprise.runtime" {
+		executor = "enterprise"
+	}
+	service, err := authenticator.Authenticate(r, auth.Requirement{AppCode: executor, SourceAppCode: executor, Scope: capability, StrictServiceClaims: true, RequireDeploymentBinding: true})
 	if err != nil {
 		return auth.Context{}, enterprise.SchedulerIdentity{}, err
 	}
-	if service.Mode != string(config.AuthJWT) || service.Tenant != route.Binding.Tenant || service.Deployment != route.WorkerDeployment || service.AppCode != route.App || service.ClientID != route.WorkerClient || service.Subject != "client:"+route.WorkerClient || service.CredentialID <= 0 {
+	if service.Mode != string(config.AuthJWT) || service.Tenant != route.Binding.Tenant || service.Deployment != route.WorkerDeployment || service.AppCode != executor || service.ClientID != route.WorkerClient || service.Subject != "client:"+route.WorkerClient || service.CredentialID <= 0 {
 		return deny(403, "enterprise_scheduler_identity_mismatch", "Scheduler identity does not match its registered binding")
 	}
 	exact := false

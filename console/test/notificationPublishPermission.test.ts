@@ -147,7 +147,7 @@ describe('Console notification publish permissions', () => {
     assert.match(issuerBlock, /scope:\s*target\.scope/)
     assert.doesNotMatch(issuerBlock, /loadNotificationRuntimeServiceClient|issueServiceAccessToken/)
     assert.match(block, /sourceAppCode:\s*'console'/)
-    assert.match(block, /url:\s*notificationTestActionUrl\(input\.event\)/)
+    assert.match(block, /url:\s*await notificationTestActionUrl\(input\.event\)/)
     assert.match(block, /provider === 'wecom'[\s\S]*`console:notification-runtime:wecom-test:\$\{requestKey\}`/)
     assert.match(block, /idempotencyKey\s*\n/)
     assert.match(block, /if \(!target\.runtimeUrl\)[\s\S]*notification-runtime is not configured/)
@@ -173,15 +173,8 @@ describe('Console notification publish permissions', () => {
     assert.doesNotMatch(page, /幂等重放已验证/)
     assert.match(page, /requestKey:\s*globalThis\.crypto\.randomUUID\(\)/)
 
-    assert.match(integrations, /resolveTenantGatewayServiceAppBaseUrl\(event, 'console', \{ basePath: '\/' \}\)/)
-    assert.match(integrations, /if \(trustedTenantBaseUrl\)[\s\S]*new URL\('\/notifications', trustedTenantBaseUrl\)/)
-    assert.match(integrations, /getHeader\(event, 'x-hzy-gateway'\)[\s\S]*Trusted tenant gateway URL is required for notification links/)
-    assert.match(integrations, /new URL\('\/notifications', getRequestURL\(event\)\.origin\)/)
-    assertBefore(
-      integrations,
-      'Trusted tenant gateway URL is required for notification links',
-      'new URL(\'/notifications\', getRequestURL(event).origin)'
-    )
+    assert.match(integrations, /resolveExternalNotificationActionUrl\('\/notifications', event\)/)
+    assert.doesNotMatch(integrations, /getRequestURL|getHeader|resolveTenantGatewayServiceAppBaseUrl/)
   })
 
   test('active notification delivery target configuration check validates JWT without delivering a message', () => {

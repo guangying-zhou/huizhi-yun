@@ -20,10 +20,14 @@ test('Enterprise Codocs multipart upload preserves per-file idempotency, audit, 
   globalThis.__codocsUploadSession = session
   globalThis.__codocsUploadAuthorization = { resources: { documents: ['create'] }, actionPolicies: {} }
   globalThis.__codocsUploadPrepare = async () => true
-  globalThis.__codocsUploadAudit = (...args) => { audits.push({ payload: args[0], options: args[1] }); return Promise.resolve() }
+  globalThis.__codocsUploadAudit = (...args) => {
+    audits.push({ payload: args[0], options: args[1] })
+    return Promise.resolve()
+  }
   globalThis.__codocsUploadTransport = async (_event, path, options) => {
     runtimeCalls.push({ path, options })
-    if (globalThis.__codocsUploadTransportError) throw globalThis.__codocsUploadTransportError
+    if (globalThis.__codocsUploadTransportError)
+      throw globalThis.__codocsUploadTransportError
     const title = options.body.payload.title
     const itemKey = options.idempotencyKey
     const uuid = runtimeResults.get(itemKey) || `123e4567-e89b-12d3-a456-42661417400${String(runtimeResults.size + 1)}`
@@ -33,12 +37,18 @@ test('Enterprise Codocs multipart upload preserves per-file idempotency, audit, 
   globalThis.__codocsUploadOss = async () => ({
     async head(path) {
       ossCalls.push({ method: 'head', path })
-      if (globalThis.__codocsUploadExisting?.has(path)) return { etag: 'existing' }
-      const error = new Error('NoSuchKey'); error.code = 'NoSuchKey'; throw error
+      if (globalThis.__codocsUploadExisting?.has(path))
+        return { etag: 'existing' }
+      const error = new Error('NoSuchKey')
+      error.code = 'NoSuchKey'
+      throw error
     },
     async put(path, bytes, options) {
       ossCalls.push({ method: 'put', path, bytes, options })
-      if (globalThis.__codocsUploadFailNext) { globalThis.__codocsUploadFailNext = false; throw new Error('storage down') }
+      if (globalThis.__codocsUploadFailNext) {
+        globalThis.__codocsUploadFailNext = false
+        throw new Error('storage down')
+      }
       globalThis.__codocsUploadExisting ||= new Set()
       globalThis.__codocsUploadExisting.add(path)
       return { etag: 'created' }
@@ -48,26 +58,39 @@ test('Enterprise Codocs multipart upload preserves per-file idempotency, audit, 
   const hooks = registerHooks({
     resolve(specifier, context, next) {
       let source
-      if (specifier.endsWith('/consoleSessionBridge')) source = 'export const resolveConsoleAuthWithSessionBridge=async()=>globalThis.__codocsUploadSession'
-      if (specifier.endsWith('/platformBundleAuthorization')) source = 'export const loadAuthorizationSnapshotFromConsoleRuntime=async()=>globalThis.__codocsUploadAuthorization'
-      if (specifier.endsWith('/tenantRuntimeClient')) source = 'export const prepareTenantRuntime=async(...args)=>globalThis.__codocsUploadPrepare(...args);export const maybeCallTenantRuntime=(...args)=>globalThis.__codocsUploadTransport(...args)'
-      if (specifier.endsWith('/oss')) source = 'export const createRuntimeOSSClient=async(...args)=>globalThis.__codocsUploadOss(...args)'
-      if (specifier.endsWith('/accountApi')) source = 'export const reportOperationAudit=(...args)=>globalThis.__codocsUploadAudit(...args)'
-      if (source) return { url: `data:text/javascript,${encodeURIComponent(source)}`, shortCircuit: true }
+      if (specifier.endsWith('/consoleSessionBridge'))
+        source = 'export const resolveConsoleAuthWithSessionBridge=async()=>globalThis.__codocsUploadSession'
+      if (specifier.endsWith('/platformBundleAuthorization'))
+        source = 'export const loadAuthorizationSnapshotFromConsoleRuntime=async()=>globalThis.__codocsUploadAuthorization'
+      if (specifier.endsWith('/tenantRuntimeClient'))
+        source = 'export const prepareTenantRuntime=async(...args)=>globalThis.__codocsUploadPrepare(...args);export const maybeCallTenantRuntime=(...args)=>globalThis.__codocsUploadTransport(...args)'
+      if (specifier.endsWith('/oss'))
+        source = 'export const createRuntimeOSSClient=async(...args)=>globalThis.__codocsUploadOss(...args)'
+      if (specifier.endsWith('/accountApi'))
+        source = 'export const reportOperationAudit=(...args)=>globalThis.__codocsUploadAudit(...args)'
+      if (source)
+        return { url: `data:text/javascript,${encodeURIComponent(source)}`, shortCircuit: true }
       let candidate
-      if (specifier.startsWith('@hzy/foundation/')) candidate = resolve(root, 'foundation', specifier.slice('@hzy/foundation/'.length))
-      else if (specifier.startsWith('.') && context.parentURL?.startsWith('file:')) candidate = resolve(dirname(fileURLToPath(context.parentURL)), specifier)
-      if (candidate && !existsSync(candidate) && existsSync(`${candidate}.ts`)) return { url: pathToFileURL(`${candidate}.ts`).href, shortCircuit: true }
+      if (specifier.startsWith('@hzy/foundation/'))
+        candidate = resolve(root, 'foundation', specifier.slice('@hzy/foundation/'.length))
+      else
+        if (specifier.startsWith('.') && context.parentURL?.startsWith('file:'))
+          candidate = resolve(dirname(fileURLToPath(context.parentURL)), specifier)
+      if (candidate && !existsSync(candidate) && existsSync(`${candidate}.ts`))
+        return { url: pathToFileURL(`${candidate}.ts`).href, shortCircuit: true }
       return next(specifier, context)
     }
   })
 
   const upload = async (base, files, headers = {}) => {
     const form = new FormData()
-    for (const [name, value] of headers.fieldEntries || Object.entries(headers.fields || {})) form.append(name, value)
-    for (const file of files) form.append('files', new Blob([file.data], { type: 'text/markdown' }), file.name)
+    for (const [name, value] of headers.fieldEntries || Object.entries(headers.fields || {}))
+      form.append(name, value)
+    for (const file of files)
+      form.append('files', new Blob([file.data], { type: 'text/markdown' }), file.name)
     const requestHeaders = {}
-    if (Object.hasOwn(headers, 'key') ? headers.key : true) requestHeaders['Idempotency-Key'] = Object.hasOwn(headers, 'key') ? headers.key : 'upload-key-1'
+    if (Object.hasOwn(headers, 'key') ? headers.key : true)
+      requestHeaders['Idempotency-Key'] = Object.hasOwn(headers, 'key') ? headers.key : 'upload-key-1'
     return fetch(`${base}/upload${headers.query || ''}`, { method: 'POST', headers: requestHeaders, body: form })
   }
 
@@ -76,7 +99,9 @@ test('Enterprise Codocs multipart upload preserves per-file idempotency, audit, 
     const app = createApp()
     const router = createRouter()
     router.post('/upload', (await import('../server/routes/codocs/api/documents/upload.post.ts')).default)
-    app.use(defineEventHandler(event => { event.context.consoleAuth = globalThis.__codocsUploadSession }))
+    app.use(defineEventHandler((event) => {
+      event.context.consoleAuth = globalThis.__codocsUploadSession
+    }))
     app.use(router)
     server = createServer(toNodeListener(app))
     await new Promise(done => server.listen(0, '127.0.0.1', done))
@@ -175,8 +200,10 @@ test('Enterprise Codocs multipart upload preserves per-file idempotency, audit, 
     response = await upload(base, [1, 2, 3, 4].map(i => ({ name: `batch-${i}.md`, data: chunk })), { key: 'too-large-batch-1' })
     assert.equal(response.status, 413)
   } finally {
-    if (server) await new Promise(done => server.close(done))
+    if (server)
+      await new Promise(done => server.close(done))
     hooks.deregister()
-    for (const [key, value] of Object.entries(old)) globalThis[key] = value
+    for (const [key, value] of Object.entries(old))
+      globalThis[key] = value
   }
 })

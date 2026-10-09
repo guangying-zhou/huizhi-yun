@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import CommonEmptyState from '@hzy/foundation/app/components/common/EmptyState.vue'
+import { documentLoadErrorMessage } from '../../utils/departmentDocumentWriteError'
 import MyDocumentSpaceHeader from '../../components/MyDocumentSpaceHeader.vue'
 import type { ProjectDocument } from '../../types'
 import { useRecycleBin } from '../../composables/useRecycleBin'
@@ -20,9 +22,12 @@ interface DocumentPreviewData {
   content?: string
 }
 
-const toast = useToast()
 const { user } = useAuth()
 const { moduleUrl, hosted, cacheKey } = useCodocsModule()
+const { hasPermission } = usePermissions()
+const canRestore = computed(() => hasPermission('documents', 'edit'))
+const trashError = ref('')
+const previewError = ref('')
 const uid = computed(() => user.value || 'user1')
 
 usePageTitle('回收站')
@@ -63,6 +68,7 @@ const loadTrashDocuments = async () => {
   trashController?.abort()
   trashController = new AbortController()
   trashLoading.value = true
+  trashError.value = ''
   trashDocuments.value = []
   if (!user.value) {
     total.value = 0
@@ -80,10 +86,10 @@ const loadTrashDocuments = async () => {
       return
     }
     trashDocuments.value = result.items
-  } catch {
+  } catch (error: unknown) {
     if (epoch === loadGeneration) {
       total.value = 0
-      toast.add({ title: '回收站加载失败，请重试', color: 'error' })
+      trashError.value = documentLoadErrorMessage(error)
     }
   } finally {
     if (epoch === loadGeneration) trashLoading.value = false
@@ -99,6 +105,7 @@ const loadDocumentPreview = async (doc: ProjectDocument) => {
   selectedDoc.value = doc
   previewLoading.value = true
   previewContent.value = ''
+  previewError.value = ''
 
   try {
     const response = await $fetch<{ success: boolean, data: DocumentPreviewData }>(moduleUrl(`/api/documents/${doc.uuid}?include_deleted=1`), { signal: previewController.signal })
@@ -106,13 +113,9 @@ const loadDocumentPreview = async (doc: ProjectDocument) => {
     if (response.success && response.data) {
       previewContent.value = response.data.content || ''
     }
-  } catch {
+  } catch (error: unknown) {
     if (epoch !== previewGeneration) return
-    toast.add({
-      title: '加载失败',
-      description: '无法加载文档内容',
-      color: 'error'
-    })
+    previewError.value = documentLoadErrorMessage(error)
   } finally {
     if (epoch === previewGeneration) previewLoading.value = false
   }
@@ -145,6 +148,12 @@ const backToList = () => {
   previewContent.value = ''
 }
 
+function openRestore() {
+  if (!canRestore.value || !selectedDoc.value) return
+  restoreDoc.value = toRestoreRecord(selectedDoc.value)
+  showRestoreModal.value = true
+}
+
 // On restore success
 const onRestored = () => {
   showRestoreModal.value = false
@@ -175,17 +184,27 @@ watch(() => cacheKey('recycle-page'), () => {
 </script>
 
 <template>
-  <UDashboardPanel grow>
+  <UDashboardPanel grow :class="hosted ? 'min-h-0' : ''">
     <div class="px-4 pt-4 sm:px-6 sm:pt-6">
       <MyDocumentSpaceHeader description="查看并恢复已删除的文档。" />
     </div>
     <div class="flex flex-1 overflow-hidden">
       <!-- Left: Trash Document List -->
-      <aside class="w-60 border-r border-default bg-default flex flex-col overflow-y-auto">
+      <aside class="w-full md:w-60 md:shrink-0 border-r border-default bg-default flex flex-col overflow-y-auto" :class="selectedDoc ? 'hidden md:flex' : 'flex'">
         <div class="flex-1 p-2">
           <div v-if="trashLoading" class="px-2 py-4 text-sm text-muted text-center">
             加载中...
           </div>
+          <CommonEmptyState
+            v-else-if="trashError"
+            icon="i-lucide-lock-keyhole"
+            title="无法加载回收站"
+            :description="trashError"
+          >
+            <UButton color="neutral" variant="outline" @click="loadTrashDocuments">
+              重试
+            </UButton>
+          </CommonEmptyState>
           <div
             v-else-if="trashDocuments.length === 0"
             class="flex flex-col items-center justify-center py-12"
@@ -196,10 +215,11 @@ watch(() => cacheKey('recycle-page'), () => {
             </p>
           </div>
           <div v-else class="space-y-0.5">
-            <div
+            <button
               v-for="doc in trashDocuments"
               :key="doc.uuid || doc.id"
-              class="group flex items-center gap-2 px-2 py-1.5 rounded-md cursor-pointer hover:bg-elevated transition-colors"
+              type="button"
+              class="group w-full text-left flex items-center gap-2 px-2 py-1.5 rounded-md cursor-pointer hover:bg-elevated transition-colors"
               :class="{ 'bg-primary/10 text-secondary font-medium': selectedDoc?.uuid === doc.uuid }"
               @click="selectDocument(doc)"
             >
@@ -212,7 +232,7 @@ watch(() => cacheKey('recycle-page'), () => {
                   {{ formatDeletedAt(String(doc.deletedAt || '')) }}
                 </p>
               </div>
-            </div>
+            </button>
           </div>
         </div>
         <div class="border-t border-default p-2 space-y-2">
@@ -230,12 +250,20 @@ watch(() => cacheKey('recycle-page'), () => {
       </aside>
 
       <!-- Right: Preview Panel -->
-      <main class="flex-1 flex flex-col overflow-hidden bg-default">
+      <main class="min-w-0 flex-1 flex-col overflow-hidden bg-default" :class="selectedDoc ? 'flex' : 'hidden md:flex'">
         <!-- Toolbar -->
         <div
           v-if="selectedDoc"
           class="flex items-center justify-between px-4 py-3 border-b border-default bg-default"
         >
+          <UButton
+            class="md:hidden shrink-0"
+            icon="i-lucide-arrow-left"
+            aria-label="返回回收站列表"
+            color="neutral"
+            variant="ghost"
+            @click="backToList"
+          />
           <div class="flex flex-col gap-1 min-w-0 flex-1">
             <div class="flex items-center gap-2 min-w-0">
               <UIcon name="i-lucide-file-x-2" class="w-5 h-5 text-dimmed shrink-0" />
@@ -250,10 +278,11 @@ watch(() => cacheKey('recycle-page'), () => {
             </div>
           </div>
           <UButton
+            v-if="canRestore"
             icon="i-lucide-archive-restore"
             size="sm"
             color="primary"
-            @click="restoreDoc = toRestoreRecord(selectedDoc); showRestoreModal = true"
+            @click="openRestore"
           >
             恢复
           </UButton>
@@ -278,6 +307,12 @@ watch(() => cacheKey('recycle-page'), () => {
               </div>
             </div>
           </div>
+
+          <CommonEmptyState v-else-if="previewError" title="无法预览文档" :description="previewError">
+            <UButton color="neutral" variant="outline" @click="selectedDoc && loadDocumentPreview(selectedDoc)">
+              重试
+            </UButton>
+          </CommonEmptyState>
 
           <!-- Document preview -->
           <div

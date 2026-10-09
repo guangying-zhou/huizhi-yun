@@ -1,0 +1,39 @@
+{
+  "method": "POST",
+  "target": "/v1/enterprise/altoc/product-feedback-submit",
+  "body": {
+    "id": "",
+    "code": "",
+    "name": "",
+    "rowVersion": 0,
+    "page": 0,
+    "pageSize": 0,
+    "search": "",
+    "authorization": {
+      "actorUid": "Person",
+      "tenant": "C000001",
+      "deployment": "Host",
+      "resource": "service_ticket",
+      "action": "edit",
+      "operation": "product-feedback-submit",
+      "objectId": "7",
+      "allowed": true,
+      "expiresAt": 123,
+      "bundleVersion": "1",
+      "bundleHash": "hash",
+      "policyRevision": 38,
+      "scope": {
+        "access": "self",
+        "departmentCodes": []
+      }
+    },
+    "sales": {
+      "id": "7",
+      "payload": {
+        "expectedSourceSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "productAuthorization": "{\"actorUid\":\"Person\",\"productCode\":\"产品P\",\"resource\":\"product_requests\",\"action\":\"create\",\"allowed\":true,\"expiresAt\":123}"
+      }
+    }
+  },
+  "canonical": "[\"hzy-enterprise-apf-permit.v1\",\"POST\",\"/v1/enterprise/altoc/product-feedback-submit\",\"Person\",\"C000001\",\"Host\",\"service_ticket\",\"edit\",\"product-feedback-submit\",\"7\",true,123,\"1\",\"hash\",38,\"self\",[],\"\",\"\",\"\",0,0,0,\"\",[\"7\",[[\"expectedSourceSha256\",\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"],[\"productAuthorization\",\"{\\\"actorUid\\\":\\\"Person\\\",\\\"productCode\\\":\\\"产品P\\\",\\\"resource\\\":\\\"product_requests\\\",\\\"action\\\":\\\"create\\\",\\\"allowed\\\":true,\\\"expiresAt\\\":123}\"]]]]"
+}

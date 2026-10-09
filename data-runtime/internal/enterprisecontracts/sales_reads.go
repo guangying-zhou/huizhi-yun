@@ -5,6 +5,7 @@ import (
 
 	"github.com/huizhi-yun/data-runtime/internal/apps/altoc"
 	e "github.com/huizhi-yun/data-runtime/internal/enterprise"
+	"github.com/huizhi-yun/data-runtime/internal/enterprise/domaininstall"
 )
 
 // SalesReadService has only Altoc Read authority. Registry owns the pool and
@@ -29,13 +30,21 @@ func NewSalesReadService(registry *e.Registry, binding e.Binding) (*SalesReadSer
 		return nil, err
 	}
 	tables := map[string]string{}
+	apf := domaininstall.IsAltocSalesDomain(domain)
 	for _, logical := range altoc.SalesReadTables {
-		if _, err = resolved.Table(logical); err != nil {
+		key := logical
+		if apf {
+			key = "altoc_" + logical
+		}
+		if _, err = resolved.Table(key); err != nil {
 			return nil, err
 		}
-		tables[logical] = domain.Tables[logical]
+		tables[logical] = domain.Tables[key]
 	}
 	reader, err := altoc.NewSalesReader(tables)
+	if apf {
+		reader, err = altoc.NewEnterpriseSalesReader(tables)
+	}
 	if err != nil {
 		return nil, err
 	}

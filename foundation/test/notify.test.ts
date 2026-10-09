@@ -266,3 +266,40 @@ describe('dual-channel notification orchestrator', () => {
     assert.doesNotMatch(source, /idempotencyKey:[^\n]*(Date\.now|Math\.random)/)
   })
 })
+
+test('publication-bound missing channel identity skips external send after durable in-app success', async () => {
+  let sends = 0
+  const result = await orchestrateNotificationDelivery(params({ resolveExternalIdentities: true }), dependencies({
+    publish: async (input) => {
+      assert.equal(input.resolveExternalChannel, 'wecom')
+      return { notificationId: 'n1', externalIdentityResolution: { channel: 'wecom', recipients: [], skipped: [
+        { uid: 'user-a', reason: 'external_identity_missing' }, { uid: 'user-b', reason: 'external_identity_missing' }
+      ] } }
+    }, external: async () => {
+      sends++
+      return {}
+    }
+  }))
+  assert.equal(result.inApp.status, 'fulfilled')
+  assert.equal(result.external.status, 'skipped')
+  assert.deepEqual(result.externalSkipped, { count: 2, reasons: ['external_identity_missing'] })
+  assert.equal(sends, 0)
+})
+
+test('mixed channel identities send only authoritative provider subjects and preserve transient failure', async () => {
+  const publish = async () => ({ externalIdentityResolution: { channel: 'wecom', recipients: [{ uid: 'user-a', subject: 'bound-user' }], skipped: [{ uid: 'user-b', reason: 'external_identity_missing' }] } })
+  const result = await orchestrateNotificationDelivery(params({ resolveExternalIdentities: true }), dependencies({ publish, external: async (_input, to) => {
+    assert.equal(to, 'bound-user')
+    return {}
+  } }))
+  assert.equal(result.external.status, 'fulfilled')
+  await assert.rejects(orchestrateNotificationDelivery(params({ resolveExternalIdentities: true }), dependencies({ publish, external: async () => {
+    throw new Error('temporary')
+  } })), error => error instanceof NotificationDeliveryError && error.result.inApp.status === 'fulfilled' && error.result.external.status === 'rejected')
+})
+
+test('missing or forged resolution is a dependency failure, never an identity-missing skip', async () => {
+  for (const response of [{}, { externalIdentityResolution: { channel: 'wecom', recipients: [], skipped: [{ uid: 'victim', reason: 'external_identity_missing' }] } }]) {
+    await assert.rejects(orchestrateNotificationDelivery(params({ resolveExternalIdentities: true }), dependencies({ publish: async () => response })), NotificationDeliveryError)
+  }
+})

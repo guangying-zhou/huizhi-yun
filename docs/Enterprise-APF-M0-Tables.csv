@@ -1,0 +1,140 @@
+domain,logical,source,repo_fixed_physical,target_proposal,registry_state,collision
+altoc,activity_ai_summary,altoc/docs/altoc_schema.sql:2519,,altoc_activity_ai_summary,未见本域完整统一安装规格；此列只是命名候选，非已安装事实,同名跨域须人工核验，不覆盖
+altoc,altoc_receivable_notification_checkpoint,altoc/docs/altoc_schema.sql:1798;altoc/docs/migrations/041_receivable_due_notifications.sql:21,,altoc_receivable_notification_checkpoint,未见本域完整统一安装规格；此列只是命名候选，非已安装事实,同名跨域须人工核验，不覆盖
+altoc,approval_rule,altoc/docs/altoc_schema.sql:109,,altoc_approval_rule,未见本域完整统一安装规格；此列只是命名候选，非已安装事实,同名跨域须人工核验，不覆盖
+altoc,assets_delivery_status_projection,altoc/docs/migrations/042_assets_delivery_status_projection.sql:2,,altoc_assets_delivery_status_projection,未见本域完整统一安装规格；此列只是命名候选，非已安装事实,同名跨域须人工核验，不覆盖
+altoc,attachment,altoc/docs/altoc_schema.sql:2184,,altoc_attachment,未见本域完整统一安装规格；此列只是命名候选，非已安装事实,同名跨域须人工核验，不覆盖
+altoc,audit_log,altoc/docs/altoc_schema.sql:2438,,altoc_audit_log,未见本域完整统一安装规格；此列只是命名候选，非已安装事实,同名跨域须人工核验，不覆盖
+altoc,contact,altoc/docs/altoc_schema.sql:250,altoc_contact,altoc_contact,13表固定规格/read unified、write/scheduler disabled；实际环境待查,同名跨域须人工核验，不覆盖
+altoc,contract,altoc/docs/altoc_schema.sql:719,altoc_contract,altoc_contract,13表固定规格/read unified、write/scheduler disabled；实际环境待查,同名跨域须人工核验，不覆盖
+altoc,contract_billing_schedule,altoc/docs/altoc_schema.sql:972;altoc/docs/migrations/027_contract_obligation_and_billing.sql:59,altoc_contract_billing_schedule,altoc_contract_billing_schedule,13表固定规格/read unified、write/scheduler disabled；实际环境待查,同名跨域须人工核验，不覆盖
+altoc,contract_business_template,altoc/docs/altoc_schema.sql:813;altoc/docs/migrations/026_contract_line_core.sql:77,,altoc_contract_business_template,未见本域完整统一安装规格；此列只是命名候选，非已安装事实,同名跨域须人工核验，不覆盖
+altoc,contract_delivery_asset_plan,altoc/docs/altoc_schema.sql:1280;altoc/docs/migrations/030_contract_delivery_asset_and_service_agreement.sql:8,,altoc_contract_delivery_asset_plan,未见本域完整统一安装规格；此列只是命名候选，非已安装事实,同名跨域须人工核验，不覆盖
+altoc,contract_line,altoc/docs/altoc_schema.sql:866;altoc/docs/migrations/026_contract_line_core.sql:120,altoc_contract_line,altoc_contract_line,13表固定规格/read unified、write/scheduler disabled；实际环境待查,同名跨域须人工核验，不覆盖
+altoc,contract_line_cost_allocation,altoc/docs/altoc_schema.sql:1100;altoc/docs/migrations/036_cost_profit_accounting.sql:5,,altoc_contract_line_cost_allocation,未见本域完整统一安装规格；此列只是命名候选，非已安装事实,同名跨域须人工核验，不覆盖
+altoc,contract_line_profit_summary,altoc/docs/altoc_schema.sql:1135;altoc/docs/migrations/036_cost_profit_accounting.sql:40,,altoc_contract_line_profit_summary,未见本域完整统一安装规格；此列只是命名候选，非已安装事实,同名跨域须人工核验，不覆盖
+altoc,contract_obligation,altoc/docs/altoc_schema.sql:924;altoc/docs/migrations/027_contract_obligation_and_billing.sql:16,altoc_contract_obligation,altoc_contract_obligation,13表固定规格/read unified、write/scheduler disabled；实际环境待查,同名跨域须人工核验，不覆盖
+altoc,contract_orchestration_job,altoc/docs/altoc_schema.sql:1201;altoc/docs/migrations/029_contract_activation_orchestration.sql:39,,altoc_contract_orchestration_job,未见本域完整统一安装规格；此列只是命名候选，非已安装事实,同名跨域须人工核验，不覆盖
+altoc,contract_orchestration_step,altoc/docs/altoc_schema.sql:1236;altoc/docs/migrations/029_contract_activation_orchestration.sql:69,,altoc_contract_orchestration_step,未见本域完整统一安装规格；此列只是命名候选，非已安装事实,同名跨域须人工核验，不覆盖
+altoc,contract_party,altoc/docs/altoc_schema.sql:838;altoc/docs/migrations/026_contract_line_core.sql:97,,altoc_contract_party,未见本域完整统一安装规格；此列只是命名候选，非已安装事实,同名跨域须人工核验，不覆盖
+altoc,contract_payment_term,altoc/docs/altoc_schema.sql:1485,altoc_contract_payment_term,altoc_contract_payment_term,13表固定规格/read unified、write/scheduler disabled；实际环境待查,同名跨域须人工核验，不覆盖
+altoc,contract_project_line_rel,altoc/docs/altoc_schema.sql:1057;altoc/docs/migrations/034_structured_fulfillment_project_relations.sql:13,,altoc_contract_project_line_rel,未见本域完整统一安装规格；此列只是命名候选，非已安装事实,同名跨域须人工核验，不覆盖
+altoc,contract_project_link,altoc/docs/altoc_schema.sql:1025;altoc/docs/migrations/029_contract_activation_orchestration.sql:8,,altoc_contract_project_link,未见本域完整统一安装规格；此列只是命名候选，非已安装事实,同名跨域须人工核验，不覆盖
+altoc,contract_project_obligation_rel,altoc/docs/altoc_schema.sql:1083;altoc/docs/migrations/034_structured_fulfillment_project_relations.sql:38,,altoc_contract_project_obligation_rel,未见本域完整统一安装规格；此列只是命名候选，非已安装事实,同名跨域须人工核验，不覆盖
+altoc,contract_stage,altoc/docs/altoc_schema.sql:1513;altoc/docs/migrations/005_contract_lifecycle_and_payment_terms.sql:4,,altoc_contract_stage,未见本域完整统一安装规格；此列只是命名候选，非已安装事实,同名跨域须人工核验，不覆盖
+altoc,customer,altoc/docs/altoc_schema.sql:193,altoc_customer,altoc_customer,13表固定规格/read unified、write/scheduler disabled；实际环境待查,同名跨域须人工核验，不覆盖
+altoc,customer_ai_summary,altoc/docs/altoc_schema.sql:2485,,altoc_customer_ai_summary,未见本域完整统一安装规格；此列只是命名候选，非已安装事实,同名跨域须人工核验，不覆盖
+altoc,customer_invoice_info,altoc/docs/altoc_schema.sql:293;altoc/docs/migrations/010_customer_invoice_info.sql:6,,altoc_customer_invoice_info,未见本域完整统一安装规格；此列只是命名候选，非已安装事实,同名跨域须人工核验，不覆盖
+altoc,customer_level,altoc/docs/altoc_schema.sql:35,,altoc_customer_level,未见本域完整统一安装规格；此列只是命名候选，非已安装事实,同名跨域须人工核验，不覆盖
+altoc,customer_type,altoc/docs/altoc_schema.sql:51,,altoc_customer_type,未见本域完整统一安装规格；此列只是命名候选，非已安装事实,同名跨域须人工核验，不覆盖
+altoc,dashboard_snapshot,altoc/docs/altoc_schema.sql:1967,,altoc_dashboard_snapshot,未见本域完整统一安装规格；此列只是命名候选，非已安装事实,同名跨域须人工核验，不覆盖
+altoc,document_link,altoc/docs/altoc_schema.sql:2037,,altoc_document_link,未见本域完整统一安装规格；此列只是命名候选，非已安装事实,同名跨域须人工核验，不覆盖
+altoc,domain_event_outbox,altoc/docs/altoc_schema.sql:2204;altoc/docs/migrations/019_domain_event_outbox.sql:4,,altoc_domain_event_outbox,未见本域完整统一安装规格；此列只是命名候选，非已安装事实,同名跨域须人工核验，不覆盖
+altoc,integration_operation,altoc/docs/altoc_schema.sql:2236;altoc/docs/migrations/039_integration_operation_outbox.sql:22,,altoc_integration_operation,未见本域完整统一安装规格；此列只是命名候选，非已安装事实,SharedPhysicalNames：须Resolved.Table，不建逻辑视图
+altoc,integration_operation_attempt,altoc/docs/altoc_schema.sql:2348;altoc/docs/migrations/039_integration_operation_outbox.sql:93,,altoc_integration_operation_attempt,未见本域完整统一安装规格；此列只是命名候选，非已安装事实,SharedPhysicalNames：须Resolved.Table，不建逻辑视图
+altoc,integration_operation_dead_letter_actionable,altoc/docs/altoc_schema.sql:2307;altoc/docs/migrations/044_dead_letter_actionable_lifecycle.sql:2,,altoc_integration_operation_dead_letter_actionable,未见本域完整统一安装规格；此列只是命名候选，非已安装事实,SharedPhysicalNames：须Resolved.Table，不建逻辑视图
+altoc,invoice,altoc/docs/altoc_schema.sql:1848,,altoc_invoice,未见本域完整统一安装规格；此列只是命名候选，非已安装事实,同名跨域须人工核验，不覆盖
+altoc,lead,altoc/docs/altoc_schema.sql:330,altoc_lead,altoc_lead,13表固定规格/read unified、write/scheduler disabled；实际环境待查,同名跨域须人工核验，不覆盖
+altoc,lead_conversion,altoc/docs/altoc_schema.sql:451;altoc/docs/migrations/013_lead_opportunity_commands.sql:6,,altoc_lead_conversion,未见本域完整统一安装规格；此列只是命名候选，非已安装事实,同名跨域须人工核验，不覆盖
+altoc,legacy_migration_map,altoc/docs/altoc_schema.sql:1918;altoc/docs/migrations/002_wizbizdb_marketing_compat.sql:80,,altoc_legacy_migration_map,未见本域完整统一安装规格；此列只是命名候选，非已安装事实,同名跨域须人工核验，不覆盖
+altoc,legacy_unmapped_income,altoc/docs/altoc_schema.sql:1939;altoc/docs/migrations/002_wizbizdb_marketing_compat.sql:97,,altoc_legacy_unmapped_income,未见本域完整统一安装规格；此列只是命名候选，非已安装事实,同名跨域须人工核验，不覆盖
+altoc,maintenance_contract,altoc/docs/altoc_schema.sql:1545;altoc/docs/migrations/008_phase4_service_ops.sql:6,,altoc_maintenance_contract,未见本域完整统一安装规格；此列只是命名候选，非已安装事实,同名跨域须人工核验，不覆盖
+altoc,notification,altoc/docs/altoc_schema.sql:2459,,altoc_notification,未见本域完整统一安装规格；此列只是命名候选，非已安装事实,同名跨域须人工核验，不覆盖
+altoc,opportunity,altoc/docs/altoc_schema.sql:383,altoc_opportunity,altoc_opportunity,13表固定规格/read unified、write/scheduler disabled；实际环境待查,同名跨域须人工核验，不覆盖
+altoc,opportunity_ai_risk,altoc/docs/altoc_schema.sql:2501,,altoc_opportunity_ai_risk,未见本域完整统一安装规格；此列只是命名候选，非已安装事实,同名跨域须人工核验，不覆盖
+altoc,opportunity_contact_role,altoc/docs/altoc_schema.sql:477;altoc/docs/migrations/016_duplicate_matching_and_stakeholders.sql:82,,altoc_opportunity_contact_role,未见本域完整统一安装规格；此列只是命名候选，非已安装事实,同名跨域须人工核验，不覆盖
+altoc,opportunity_stage,altoc/docs/altoc_schema.sql:67,altoc_opportunity_stage,altoc_opportunity_stage,13表固定规格/read unified、write/scheduler disabled；实际环境待查,同名跨域须人工核验，不覆盖
+altoc,opportunity_stage_log,altoc/docs/altoc_schema.sql:505,,altoc_opportunity_stage_log,未见本域完整统一安装规格；此列只是命名候选，非已安装事实,同名跨域须人工核验，不覆盖
+altoc,payment_record,altoc/docs/altoc_schema.sql:1883,,altoc_payment_record,未见本域完整统一安装规格；此列只是命名候选，非已安装事实,同名跨域须人工核验，不覆盖
+altoc,payment_term_template,altoc/docs/altoc_schema.sql:93,,altoc_payment_term_template,未见本域完整统一安装规格；此列只是命名候选，非已安装事实,同名跨域须人工核验，不覆盖
+altoc,permission,altoc/docs/altoc_schema.sql:143,,altoc_permission,未见本域完整统一安装规格；此列只是命名候选，非已安装事实,同名跨域须人工核验，不覆盖
+altoc,product,altoc/docs/altoc_schema.sql:593,,altoc_product,未见本域完整统一安装规格；此列只是命名候选，非已安装事实,同名跨域须人工核验，不覆盖
+altoc,product_feedback_progress_projection,altoc/docs/altoc_schema.sql:2949;altoc/docs/migrations/048_product_feedback_progress_projection.sql:2,,altoc_product_feedback_progress_projection,未见本域完整统一安装规格；此列只是命名候选，非已安装事实,同名跨域须人工核验，不覆盖
+altoc,product_feedback_status_projection,altoc/docs/altoc_schema.sql:2936;altoc/docs/migrations/047_product_feedback_status_projection.sql:2,,altoc_product_feedback_status_projection,未见本域完整统一安装规格；此列只是命名候选，非已安装事实,同名跨域须人工核验，不覆盖
+altoc,quotation,altoc/docs/altoc_schema.sql:628,altoc_quotation,altoc_quotation,13表固定规格/read unified、write/scheduler disabled；实际环境待查,同名跨域须人工核验，不覆盖
+altoc,quotation_item,altoc/docs/altoc_schema.sql:677,altoc_quotation_item,altoc_quotation_item,13表固定规格/read unified、write/scheduler disabled；实际环境待查,同名跨域须人工核验，不覆盖
+altoc,quotation_version,altoc/docs/altoc_schema.sql:703,,altoc_quotation_version,未见本域完整统一安装规格；此列只是命名候选，非已安装事实,同名跨域须人工核验，不覆盖
+altoc,receivable_plan,altoc/docs/altoc_schema.sql:1751,altoc_receivable_plan,altoc_receivable_plan,13表固定规格/read unified、write/scheduler disabled；实际环境待查,同名跨域须人工核验，不覆盖
+altoc,renewal_opportunity,altoc/docs/altoc_schema.sql:1704;altoc/docs/migrations/008_phase4_service_ops.sql:131,,altoc_renewal_opportunity,未见本域完整统一安装规格；此列只是命名候选，非已安装事实,同名跨域须人工核验，不覆盖
+altoc,role,altoc/docs/altoc_schema.sql:127,,altoc_role,未见本域完整统一安装规格；此列只是命名候选，非已安装事实,同名跨域须人工核验，不覆盖
+altoc,role_permission,altoc/docs/altoc_schema.sql:157,,altoc_role_permission,未见本域完整统一安装规格；此列只是命名候选，非已安装事实,同名跨域须人工核验，不覆盖
+altoc,sales_activity,altoc/docs/altoc_schema.sql:528,,altoc_sales_activity,未见本域完整统一安装规格；此列只是命名候选，非已安装事实,同名跨域须人工核验，不覆盖
+altoc,sales_task,altoc/docs/altoc_schema.sql:564,,altoc_sales_task,未见本域完整统一安装规格；此列只是命名候选，非已安装事实,同名跨域须人工核验，不覆盖
+altoc,sales_team,altoc/docs/altoc_schema.sql:1990,,altoc_sales_team,未见本域完整统一安装规格；此列只是命名候选，非已安装事实,同名跨域须人工核验，不覆盖
+altoc,sales_team_member,altoc/docs/altoc_schema.sql:2013,,altoc_sales_team_member,未见本域完整统一安装规格；此列只是命名候选，非已安装事实,同名跨域须人工核验，不覆盖
+altoc,service_agreement,altoc/docs/altoc_schema.sql:1337;altoc/docs/migrations/030_contract_delivery_asset_and_service_agreement.sql:61,,altoc_service_agreement,未见本域完整统一安装规格；此列只是命名候选，非已安装事实,同名跨域须人工核验，不覆盖
+altoc,service_agreement_asset,altoc/docs/altoc_schema.sql:1381;altoc/docs/migrations/030_contract_delivery_asset_and_service_agreement.sql:101,,altoc_service_agreement_asset,未见本域完整统一安装规格；此列只是命名候选，非已安装事实,同名跨域须人工核验，不覆盖
+altoc,service_agreement_coverage,altoc/docs/altoc_schema.sql:1404;altoc/docs/migrations/035_service_agreement_coverage_identity.sql:12,,altoc_service_agreement_coverage,未见本域完整统一安装规格；此列只是命名候选，非已安装事实,同名跨域须人工核验，不覆盖
+altoc,service_agreement_project_rel,altoc/docs/altoc_schema.sql:1458;altoc/docs/migrations/034_structured_fulfillment_project_relations.sql:54,,altoc_service_agreement_project_rel,未见本域完整统一安装规格；此列只是命名候选，非已安装事实,同名跨域须人工核验，不覆盖
+altoc,service_command_receipt,altoc/docs/altoc_schema.sql:2385;altoc/docs/migrations/039_integration_operation_outbox.sql:127,,altoc_service_command_receipt,未见本域完整统一安装规格；此列只是命名候选，非已安装事实,SharedPhysicalNames：须Resolved.Table，不建逻辑视图
+altoc,service_cost_summary,altoc/docs/altoc_schema.sql:1169;altoc/docs/migrations/036_cost_profit_accounting.sql:70,,altoc_service_cost_summary,未见本域完整统一安装规格；此列只是命名候选，非已安装事实,同名跨域须人工核验，不覆盖
+altoc,service_entitlement,altoc/docs/altoc_schema.sql:1592;altoc/docs/migrations/008_phase4_service_ops.sql:49,,altoc_service_entitlement,未见本域完整统一安装规格；此列只是命名候选，非已安装事实,同名跨域须人工核验，不覆盖
+altoc,service_ticket,altoc/docs/altoc_schema.sql:1626;altoc/docs/migrations/008_phase4_service_ops.sql:76,,altoc_service_ticket,未见本域完整统一安装规格；此列只是命名候选，非已安装事实,同名跨域须人工核验，不覆盖
+altoc,service_ticket_product_feedback,altoc/docs/altoc_schema.sql:2918;altoc/docs/migrations/046_service_ticket_product_feedback.sql:2,,altoc_service_ticket_product_feedback,未见本域完整统一安装规格；此列只是命名候选，非已安装事实,同名跨域须人工核验，不覆盖
+altoc,tender,altoc/docs/altoc_schema.sql:2085,,altoc_tender,未见本域完整统一安装规格；此列只是命名候选，非已安装事实,同名跨域须人工核验，不覆盖
+altoc,tender_agency,altoc/docs/altoc_schema.sql:2067,,altoc_tender_agency,未见本域完整统一安装规格；此列只是命名候选，非已安装事实,同名跨域须人工核验，不覆盖
+altoc,tender_member,altoc/docs/altoc_schema.sql:2164,,altoc_tender_member,未见本域完整统一安装规格；此列只是命名候选，非已安装事实,同名跨域须人工核验，不覆盖
+altoc,tender_milestone,altoc/docs/altoc_schema.sql:2141,,altoc_tender_milestone,未见本域完整统一安装规格；此列只是命名候选，非已安装事实,同名跨域须人工核验，不覆盖
+altoc,user_role,altoc/docs/altoc_schema.sql:172,,altoc_user_role,未见本域完整统一安装规格；此列只是命名候选，非已安装事实,同名跨域须人工核验，不覆盖
+people,integration_operation,people/docs/people_assets_offboarding_projection_20260710.sql:6;people/docs/people_schema.sql:710,,people_integration_operation,未见本域完整统一安装规格；此列只是命名候选，非已安装事实,SharedPhysicalNames：须Resolved.Table，不建逻辑视图
+people,integration_operation_attempt,people/docs/people_assets_offboarding_projection_20260710.sql:69;people/docs/people_schema.sql:773,,people_integration_operation_attempt,未见本域完整统一安装规格；此列只是命名候选，非已安装事实,SharedPhysicalNames：须Resolved.Table，不建逻辑视图
+people,integration_operation_dead_letter_actionable,people/docs/migrations/20260711_people_dead_letter_actionable_lifecycle.sql:4;people/docs/people_schema.sql:804,,people_integration_operation_dead_letter_actionable,未见本域完整统一安装规格；此列只是命名候选，非已安装事实,SharedPhysicalNames：须Resolved.Table，不建逻辑视图
+people,people_assignments,people/docs/people_schema.sql:189,,people_assignments,未见本域完整统一安装规格；此列只是命名候选，非已安装事实,同名跨域须人工核验，不覆盖
+people,people_connector_sync_receipts,people/docs/people_connector_sync_incremental.sql:2;people/docs/people_schema.sql:167,,people_connector_sync_receipts,未见本域完整统一安装规格；此列只是命名候选，非已安装事实,同名跨域须人工核验，不覆盖
+people,people_contribution_scope_versions,people/docs/migrations/20260710_contribution_scope_versions.sql:1;people/docs/people_schema.sql:608,,people_contribution_scope_versions,未见本域完整统一安装规格；此列只是命名候选，非已安装事实,同名跨域须人工核验，不覆盖
+people,people_contribution_snapshots,people/docs/people_schema.sql:578,,people_contribution_snapshots,未见本域完整统一安装规格；此列只是命名候选，非已安装事实,同名跨域须人工核验，不覆盖
+people,people_cost_snapshots,people/docs/people_schema.sql:518,,people_cost_snapshots,未见本域完整统一安装规格；此列只是命名候选，非已安装事实,同名跨域须人工核验，不覆盖
+people,people_directory_lifecycle_versions,people/docs/migrations/20260710_directory_lifecycle_versions.sql:1;people/docs/people_schema.sql:620,,people_directory_lifecycle_versions,未见本域完整统一安装规格；此列只是命名候选，非已安装事实,同名跨域须人工核验，不覆盖
+people,people_documents,people/docs/people_schema.sql:629,,people_documents,未见本域完整统一安装规格；此列只是命名候选，非已安装事实,同名跨域须人工核验，不覆盖
+people,people_employee_number_reassignment_history,people/docs/migrations/20260904_employee_number_sequence.sql:21,,people_employee_number_reassignment_history,未见本域完整统一安装规格；此列只是命名候选，非已安装事实,同名跨域须人工核验，不覆盖
+people,people_employee_number_sequences,people/docs/migrations/20260904_employee_number_sequence.sql:12;people/docs/people_schema.sql:96,,people_employee_number_sequences,未见本域完整统一安装规格；此列只是命名候选，非已安装事实,同名跨域须人工核验，不覆盖
+people,people_employee_private_facts,people/docs/migrations/20260904_employee_private_facts.sql:4;people/docs/people_schema.sql:149,,people_employee_private_facts,未见本域完整统一安装规格；此列只是命名候选，非已安装事实,同名跨域须人工核验，不覆盖
+people,people_employees,people/docs/people_schema.sql:109,,people_employees,未见本域完整统一安装规格；此列只是命名候选，非已安装事实,同名跨域须人工核验，不覆盖
+people,people_offboarding_cases,people/docs/people_offboarding_tasks_20260710.sql:6;people/docs/people_schema.sql:345,,people_offboarding_cases,未见本域完整统一安装规格；此列只是命名候选，非已安装事实,同名跨域须人工核验，不覆盖
+people,people_offboarding_notification_checkpoint,people/docs/people_offboarding_tasks_20260710.sql:117;people/docs/people_schema.sql:456,,people_offboarding_notification_checkpoint,未见本域完整统一安装规格；此列只是命名候选，非已安装事实,同名跨域须人工核验，不覆盖
+people,people_offboarding_tasks,people/docs/people_offboarding_tasks_20260710.sql:59;people/docs/people_schema.sql:398,,people_offboarding_tasks,未见本域完整统一安装规格；此列只是命名候选，非已安装事实,同名跨域须人工核验，不覆盖
+people,people_onboarding_cases,people/docs/migrations/20260902_onboarding_cases.sql:11;people/docs/people_schema.sql:225,,people_onboarding_cases,未见本域完整统一安装规格；此列只是命名候选，非已安装事实,同名跨域须人工核验，不覆盖
+people,people_performance_cycles,people/docs/people_schema.sql:555,,people_performance_cycles,未见本域完整统一安装规格；此列只是命名候选，非已安装事实,同名跨域须人工核验，不覆盖
+people,people_positions,people/docs/people_schema.sql:15,,people_positions,未见本域完整统一安装规格；此列只是命名候选，非已安装事实,同名跨域须人工核验，不覆盖
+people,people_ranks,people/docs/people_schema.sql:32,,people_ranks,未见本域完整统一安装规格；此列只是命名候选，非已安装事实,同名跨域须人工核验，不覆盖
+people,people_standard_cost_rates,people/docs/people_schema.sql:53;people/docs/people_standard_cost_incremental.sql:12,,people_standard_cost_rates,未见本域完整统一安装规格；此列只是命名候选，非已安装事实,同名跨域须人工核验，不覆盖
+people,service_command_receipt,people/docs/migrations/20260914_service_command_receipt.sql:3;people/docs/people_schema.sql:843,,people_service_command_receipt,未见本域完整统一安装规格；此列只是命名候选，非已安装事实,SharedPhysicalNames：须Resolved.Table，不建逻辑视图
+finance,approval_callback_log,finance/docs/finance_schema.sql:919,,finance_approval_callback_log,未见本域完整统一安装规格；此列只是命名候选，非已安装事实,同名跨域须人工核验，不覆盖
+finance,employee_cost_snapshot,finance/docs/finance_schema.sql:1012,,finance_employee_cost_snapshot,未见本域完整统一安装规格；此列只是命名候选，非已安装事实,同名跨域须人工核验，不覆盖
+finance,employee_finance_contribution,finance/docs/finance_schema.sql:1035,,finance_employee_finance_contribution,未见本域完整统一安装规格；此列只是命名候选，非已安装事实,同名跨域须人工核验，不覆盖
+finance,employee_finance_performance,finance/docs/finance_schema.sql:1089,,finance_employee_finance_performance,未见本域完整统一安装规格；此列只是命名候选，非已安装事实,同名跨域须人工核验，不覆盖
+finance,expense_claim,finance/docs/finance_schema.sql:711,,finance_expense_claim,未见本域完整统一安装规格；此列只是命名候选，非已安装事实,同名跨域须人工核验，不覆盖
+finance,expense_claim_item,finance/docs/finance_schema.sql:754,,finance_expense_claim_item,未见本域完整统一安装规格；此列只是命名候选，非已安装事实,同名跨域须人工核验，不覆盖
+finance,external_approval_instance,finance/docs/finance_schema.sql:894,,finance_external_approval_instance,未见本域完整统一安装规格；此列只是命名候选，非已安装事实,同名跨域须人工核验，不覆盖
+finance,finance_account_balance_snapshot,finance/docs/finance_schema.sql:271,,finance_account_balance_snapshot,未见本域完整统一安装规格；此列只是命名候选，非已安装事实,同名跨域须人工核验，不覆盖
+finance,finance_accounting_object,finance/docs/finance_schema.sql:156;finance/docs/migrations/20260518_business_accounting_integration_p1.sql:63,,finance_accounting_object,未见本域完整统一安装规格；此列只是命名候选，非已安装事实,同名跨域须人工核验，不覆盖
+finance,finance_attachment,finance/docs/finance_schema.sql:1150,,finance_attachment,未见本域完整统一安装规格；此列只是命名候选，非已安装事实,同名跨域须人工核验，不覆盖
+finance,finance_audit_log,finance/docs/finance_schema.sql:1168,,finance_audit_log,未见本域完整统一安装规格；此列只是命名候选，非已安装事实,同名跨域须人工核验，不覆盖
+finance,finance_bank_account,finance/docs/finance_schema.sql:239,,finance_bank_account,未见本域完整统一安装规格；此列只是命名候选，非已安装事实,同名跨域须人工核验，不覆盖
+finance,finance_contract_summary,finance/docs/finance_schema.sql:676,,finance_contract_summary,未见本域完整统一安装规格；此列只是命名候选，非已安装事实,同名跨域须人工核验，不覆盖
+finance,finance_expense,finance/docs/finance_schema.sql:566,,finance_expense,未见本域完整统一安装规格；此列只是命名候选，非已安装事实,同名跨域须人工核验，不覆盖
+finance,finance_expense_type,finance/docs/finance_schema.sql:109,,finance_expense_type,未见本域完整统一安装规格；此列只是命名候选，非已安装事实,同名跨域须人工核验，不覆盖
+finance,finance_income_type,finance/docs/finance_schema.sql:89,,finance_income_type,未见本域完整统一安装规格；此列只是命名候选，非已安装事实,同名跨域须人工核验，不覆盖
+finance,finance_invoice,finance/docs/finance_schema.sql:351,,finance_invoice,未见本域完整统一安装规格；此列只是命名候选，非已安装事实,同名跨域须人工核验，不覆盖
+finance,finance_migration_map,finance/docs/finance_schema.sql:217,,finance_migration_map,未见本域完整统一安装规格；此列只是命名候选，非已安装事实,同名跨域须人工核验，不覆盖
+finance,finance_notification_checkpoint,finance/docs/finance_schema.sql:506;finance/docs/migrations/20260710_finance_due_notifications.sql:75,,finance_notification_checkpoint,未见本域完整统一安装规格；此列只是命名候选，非已安装事实,同名跨域须人工核验，不覆盖
+finance,finance_people_cost_parameter,finance/docs/finance_people_cost_parameter_incremental.sql:12;finance/docs/finance_schema.sql:131,,finance_people_cost_parameter,未见本域完整统一安装规格；此列只是命名候选，非已安装事实,同名跨域须人工核验，不覆盖
+finance,finance_receipt,finance/docs/finance_schema.sql:404,,finance_receipt,未见本域完整统一安装规格；此列只是命名候选，非已安装事实,同名跨域须人工核验，不覆盖
+finance,finance_reconciliation,finance/docs/finance_schema.sql:471,,finance_reconciliation,未见本域完整统一安装规格；此列只是命名候选，非已安装事实,同名跨域须人工核验，不覆盖
+finance,finance_subject,finance/docs/finance_schema.sql:69,,finance_subject,未见本域完整统一安装规格；此列只是命名候选，非已安装事实,同名跨域须人工核验，不覆盖
+finance,finance_subject_mapping,finance/docs/finance_schema.sql:190;finance/docs/migrations/20260518_business_accounting_integration_p1.sql:94,,finance_subject_mapping,未见本域完整统一安装规格；此列只是命名候选，非已安装事实,同名跨域须人工核验，不覆盖
+finance,finance_unclassified_income,finance/docs/finance_schema.sql:627,,finance_unclassified_income,未见本域完整统一安装规格；此列只是命名候选，非已安装事实,同名跨域须人工核验，不覆盖
+finance,integration_operation,finance/docs/migrations/20260710_finance_integration_operations.sql:4,,finance_integration_operation,未见本域完整统一安装规格；此列只是命名候选，非已安装事实,SharedPhysicalNames：须Resolved.Table，不建逻辑视图
+finance,integration_operation_attempt,finance/docs/migrations/20260710_finance_integration_operations.sql:71,,finance_integration_operation_attempt,未见本域完整统一安装规格；此列只是命名候选，非已安装事实,SharedPhysicalNames：须Resolved.Table，不建逻辑视图
+finance,integration_operation_dead_letter_actionable,finance/docs/finance_schema.sql:1301;finance/docs/migrations/20260711_finance_dead_letter_actionable_lifecycle.sql:4,,finance_integration_operation_dead_letter_actionable,未见本域完整统一安装规格；此列只是命名候选，非已安装事实,SharedPhysicalNames：须Resolved.Table，不建逻辑视图
+finance,invoice_request,finance/docs/finance_schema.sql:292,,finance_invoice_request,未见本域完整统一安装规格；此列只是命名候选，非已安装事实,同名跨域须人工核验，不覆盖
+finance,payment_request,finance/docs/finance_schema.sql:843,,finance_payment_request,未见本域完整统一安装规格；此列只是命名候选，非已安装事实,同名跨域须人工核验，不覆盖
+finance,performance_calculation_snapshot,finance/docs/finance_schema.sql:1123,,finance_performance_calculation_snapshot,未见本域完整统一安装规格；此列只是命名候选，非已安装事实,同名跨域须人工核验，不覆盖
+finance,performance_rule,finance/docs/finance_schema.sql:1064,,finance_performance_rule,未见本域完整统一安装规格；此列只是命名候选，非已安装事实,同名跨域须人工核验，不覆盖
+finance,product_cost_attribution_head,finance/docs/finance_schema.sql:1388;finance/docs/migrations/20260909_product_cost_attribution.sql:2,,finance_product_cost_attribution_head,未见本域完整统一安装规格；此列只是命名候选，非已安装事实,同名跨域须人工核验，不覆盖
+finance,product_cost_attribution_revision,finance/docs/finance_schema.sql:1396;finance/docs/migrations/20260909_product_cost_attribution.sql:10,,finance_product_cost_attribution_revision,未见本域完整统一安装规格；此列只是命名候选，非已安装事实,同名跨域须人工核验，不覆盖
+finance,project_cost_allocation,finance/docs/finance_schema.sql:982,,finance_project_cost_allocation,未见本域完整统一安装规格；此列只是命名候选，非已安装事实,同名跨域须人工核验，不覆盖
+finance,project_expense_request,finance/docs/finance_schema.sql:779,,finance_project_expense_request,未见本域完整统一安装规格；此列只是命名候选，非已安装事实,同名跨域须人工核验，不覆盖
+finance,project_expense_request_item,finance/docs/finance_schema.sql:818,,finance_project_expense_request_item,未见本域完整统一安装规格；此列只是命名候选，非已安装事实,同名跨域须人工核验，不覆盖
+finance,project_finance_summary,finance/docs/finance_schema.sql:946,,finance_project_finance_summary,未见本域完整统一安装规格；此列只是命名候选，非已安装事实,同名跨域须人工核验，不覆盖
+finance,service_command_receipt,finance/docs/finance_schema.sql:1339;finance/docs/migrations/20260710_service_command_receipt.sql:2,,finance_service_command_receipt,未见本域完整统一安装规格；此列只是命名候选，非已安装事实,SharedPhysicalNames：须Resolved.Table，不建逻辑视图

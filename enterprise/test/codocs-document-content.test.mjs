@@ -154,6 +154,42 @@ test('Enterprise Codocs document content uses actor-bound metadata and isolated 
     assert.equal(departmentHeads.length, 0, 'a Runtime body reference is the single authorization point')
     assert.equal(globalThis.__codocsSnapshotReads.length, 1)
 
+    // The same rule for a private document read by somebody who is not its
+    // owner (portfolio documents): never the actor-bound personal head.
+    const personalSwitch = process.env.HZY_ENTERPRISE_CODOCS_SNAPSHOT_V2
+    const personalHead = globalThis.__codocsSnapshotHead
+    process.env.HZY_ENTERPRISE_CODOCS_SNAPSHOT_V2 = 'true'
+    globalThis.__codocsSnapshotHead = { generation: 9, epoch: 9 }
+    try {
+      const foreign = { uuid: 'doc-1', oss_path: 'codocs/private/other/doc-1.md', doc_type: 'private', title: 'Linked' }
+      globalThis.__codocsSnapshotReads.length = 0
+      const viaForeignReference = await withEnterpriseCodocsDocumentContent(
+        event, { success: true, data: { ...foreign, snapshot_generation: 4, snapshot_ref: { generation: 4, epoch: 2 } } }, 'doc-1', false, 'view', { bodyRef: 'required' })
+      assert.deepEqual([viaForeignReference.data.content, viaForeignReference.data.snapshot_generation], ['# v2', 4])
+      assert.equal(globalThis.__codocsSnapshotReads.length, 1)
+      const downloaded = downloads.length
+      const unconverted = await withEnterpriseCodocsDocumentContent(
+        event, { success: true, data: { ...foreign, snapshot_generation: 0 } }, 'doc-1', false, 'view', { bodyRef: 'required' })
+      assert.deepEqual(downloads.at(-1).slice(0, 2), ['codocs/private/other/doc-1.md', 'private'], 'an unconverted document reads its own path')
+      assert.notEqual(unconverted.data.content, '# v2')
+      assert.notEqual(unconverted.data.snapshot_generation, 9, 'the reader\'s own personal head is never consulted')
+      assert.equal(downloads.length, downloaded + 1)
+      for (const generation of [undefined, 4]) {
+        await assert.rejects(
+          withEnterpriseCodocsDocumentContent(event, { success: true, data: { ...foreign, snapshot_generation: generation } }, 'doc-1', false, 'view', { bodyRef: 'required' }),
+          error => error.statusCode === 503 && error.data.code === 'enterprise_document_body_ref_required'
+        )
+      }
+      assert.equal(downloads.length, downloaded + 1, 'a converted or unannotated document without a reference releases nothing')
+      // Without the option the owner's own read is unchanged: it asks the owning domain.
+      const own = await withEnterpriseCodocsDocumentContent(event, { success: true, data: foreign }, 'doc-1', false)
+      assert.deepEqual([own.data.content, own.data.snapshot_generation], ['# v2', 9])
+    } finally {
+      globalThis.__codocsSnapshotHead = personalHead
+      if (personalSwitch === undefined) delete process.env.HZY_ENTERPRISE_CODOCS_SNAPSHOT_V2
+      else process.env.HZY_ENTERPRISE_CODOCS_SNAPSHOT_V2 = personalSwitch
+    }
+
     const skippedDepartment = await withEnterpriseCodocsDocumentContent(event, { success: true, data: departmentDoc }, 'doc-1', true)
     assert.equal(skippedDepartment.data.content, '')
     assert.equal(departmentHeads.length, 0)

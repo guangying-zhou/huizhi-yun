@@ -34,7 +34,7 @@ test('computed dynamic imports fail closed', async () => {
 
 test('Vue virtual script and macro requests are treated as JavaScript', async () => {
   const importer = resolve(root, 'aims/app/pages/products/[productCode]/adoption.vue')
-  const result = await businessModuleAliasPlugin().transform("import { productAdoptionRoles } from '~/utils/productReadLabels'", `${importer}?macro=true&vue&type=script&setup=true&lang.ts`)
+  const result = await businessModuleAliasPlugin().transform('import { productAdoptionRoles } from \'~/utils/productReadLabels\'', `${importer}?macro=true&vue&type=script&setup=true&lang.ts`)
   assert.match(result.code, /aims\/app\/utils\/productReadLabels/)
   const macro = await businessModuleAliasPlugin().transform('<script setup>import { productAdoptionRoles } from \'~/utils/productReadLabels\'</script>', `${importer}?macro=true`)
   assert.match(macro.code, /aims\/app\/utils\/productReadLabels/)
@@ -44,4 +44,19 @@ test('missing or escaping module aliases fail before Nuxt global alias can captu
   const importer = resolve(root, 'aims/app/pages/products/[productCode]/adoption.vue')
   assert.throws(() => resolveBusinessModuleAlias('~/utils/missingReleaseModule', importer), /Unresolved aims module import/)
   assert.throws(() => resolveBusinessModuleAlias('~/../../enterprise/private', importer), /Invalid aims module import/)
+})
+
+test('composed page metadata is extracted separately and never runs in the component', async () => {
+  const importer = resolve(root, 'codocs/app/pages/mydocs/shared.vue')
+  const source = '<script setup lang="ts">\ndefinePageMeta({ hostContentInset: false })\nconst label = "definePageMeta()"\n</script>'
+  const runtime = await businessModuleAliasPlugin().transform(source, importer)
+  assert.doesNotMatch(runtime.code, /definePageMeta\(\{/)
+  assert.match(runtime.code, /const label = "definePageMeta\(\)"/)
+  const macro = await businessModuleAliasPlugin().transform(source, `${importer}?macro=true`)
+  assert.match(macro?.code || source, /definePageMeta\(\{ hostContentInset: false \}\)/)
+})
+
+test('manual-refresh Host prevents late dependency rediscovery from splitting Vue contexts', () => {
+  const config = readFileSync(resolve(root, 'enterprise/nuxt.config.ts'), 'utf8')
+  assert.match(config, /config\.optimizeDeps\.noDiscovery = true/)
 })

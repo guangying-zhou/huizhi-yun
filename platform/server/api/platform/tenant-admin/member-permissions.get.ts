@@ -413,7 +413,8 @@ async function listMembers(query: Record<string, unknown>) {
   const tenantCode = requireString(query.tenantCode, 'tenantCode')
   const keyword = normalizeNullableString(query.keyword)
   const { page, pageSize, offset } = parsePagination(query)
-  const where = ['ts.tenant_code = ?', 'ts.subject_type = \'user\'', 'ts.status = \'active\'']
+  const where = ['ts.tenant_code = ?', 'ts.subject_type = \'user\'']
+  if (query.showInactive !== 'true') where.push('ts.status = \'active\'')
   const params: Array<string | number> = [tenantCode]
 
   if (keyword) {
@@ -438,7 +439,7 @@ async function listMembers(query: Record<string, unknown>) {
     params
   )
 
-  const activeRoleCounts = await loadActiveRoleCounts(tenantCode, rows)
+  const activeRoleCounts = await loadActiveRoleCounts(tenantCode, rows.filter(row => row.status === 'active'))
   const items = rows.map((row) => {
     const uid = row.external_ref || row.subject_code
 

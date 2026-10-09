@@ -22,7 +22,6 @@ import { useAccessibleDepartments } from '../../composables/useAccessibleDepartm
 import { usePortfolioStore } from '../../stores/portfolio'
 import { useProjectStore } from '../../stores/project'
 
-
 // 同一份代码供独立应用与企业宿主使用：非宿主模式下 moduleUrl 原样返回路径。
 const { moduleUrl } = useAimsModule()
 definePageMeta({
@@ -106,7 +105,7 @@ async function loadDepartmentUsers(deptCode: string) {
       data: { items?: AccountUser[] } | AccountUser[]
     // Foundation 提供的共享端点挂在根路径，两种模式下都不加模块前缀；
       // 包进 moduleUrl 会变成 /aims/api/directory/users 而打不中。
-      }>('/api/directory/users', {
+    }>('/api/directory/users', {
       params: { dept_code: deptCode, pageSize: 500 }
     })
     if (requestId !== departmentUsersRequestId) return

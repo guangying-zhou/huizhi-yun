@@ -11,13 +11,13 @@ const code = ts.transpileModule(readFileSync(new URL('../app/composables/useView
 }).outputText
 
 type Profile = { uid: string, realName?: string, mobileTail4?: string | null }
-function harness(fetcher: () => Promise<{ code: number, data: Profile }>, appCode = 'codocs', sharedApiBase?: string) {
+function harness(fetcher: () => Promise<{ code: number, data: Profile }>, appCode = 'codocs', sharedApiBase?: string, includeTime = false) {
   const auth = { user: ref('u1'), tenant: ref('tenant-1'), userRealname: ref('查看者'), userMobileTail: ref<string | null>(null) }
   const data = ref<unknown>(null)
   const paths: string[] = []
   let loader: () => Promise<unknown>
   let cacheKey: { value: string }
-  const exports: Record<string, () => { watermarkText: { value: string } }> = {}
+  const exports: Record<string, (options?: { includeTime?: boolean }) => { watermarkText: { value: string } }> = {}
   runInNewContext(code, {
     exports, computed,
     useAuth: () => auth,
@@ -34,7 +34,7 @@ function harness(fetcher: () => Promise<{ code: number, data: Profile }>, appCod
       return { data }
     }
   })
-  const result = exports.useViewerWatermark!()
+  const result = exports.useViewerWatermark!({ includeTime })
   return {
     ...result, auth, paths,
     key: () => cacheKey.value,
@@ -110,4 +110,12 @@ test('a late response from the previous tenant cannot update the new viewer', as
   resolve({ code: 0, data: { uid: 'u1', realName: '租户一', mobileTail4: '1111' } })
   await pending
   assert.equal(app.watermarkText.value, '查看者 ****')
+})
+
+test('published preview watermark includes a stable viewing timestamp without changing editor defaults', async () => {
+  const app = harness(async () => ({ code: 0, data: { uid: 'u1', realName: '目录姓名', mobileTail4: '0123' } }), 'enterprise', '/enterprise/api/foundation', true)
+  await app.load()
+  assert.match(app.watermarkText.value, /^目录姓名 0123 .+/)
+  const before = app.watermarkText.value
+  assert.equal(app.watermarkText.value, before)
 })

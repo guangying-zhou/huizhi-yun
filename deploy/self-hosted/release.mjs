@@ -71,12 +71,12 @@ export async function publishIndex({ indexPath, root, restart, health, keep = 5 
   return applied
 }
 
-export async function localHealth(app, { port: portOverride, attempts = 20 } = {}) {
+export async function localHealth(app, { port: portOverride, attempts = 20, fetch: request = globalThis.fetch } = {}) {
   const port = portOverride ?? (app === 'gateway' ? PORTS.gatewayHealth : PORTS[app])
-  const path = app === 'gateway' ? '/readyz' : app === 'collab' ? '/healthz' : app === 'aims' ? '/aims/api/internal/integration-operations/drain' : app === 'platform' ? '/admin' : `/${app}/`
+  const path = app === 'gateway' ? '/readyz' : app === 'collab' ? '/healthz' : app === 'aims' ? '/aims/' : app === 'platform' ? '/admin' : `/${app}/`
   for (let attempt = 0; attempt < attempts; attempt++) {
     try {
-      const response = await fetch(`http://127.0.0.1:${port}${path}`, { redirect: 'manual', signal: AbortSignal.timeout(3000) })
+      const response = await request(`http://127.0.0.1:${port}${path}`, { redirect: 'manual', signal: AbortSignal.timeout(3000) })
       // Collab's root and unknown paths answer 200 too; only its own health document counts.
       if (app === 'collab') {
         const body = await response.json().catch(() => null)

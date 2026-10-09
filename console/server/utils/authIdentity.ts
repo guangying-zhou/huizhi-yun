@@ -52,7 +52,8 @@ export async function resolveOrBindDirectoryIdentity(
   if (!user) {
     throw createError({
       statusCode: 403,
-      message: `No active directory user found for uid=${resolved.data.uid}`
+      message: 'No active directory user found',
+      data: { code: 'directory_identity_user_not_found' }
     })
   }
   return {

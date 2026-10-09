@@ -98,9 +98,21 @@ export function g7ExpectedGrants(bindings) {
     ]),
     ...g7CollabGrants(bindings)
   ]
-  assert.equal(items.length, 34 + (bindings.deployments.collab === undefined ? 0 : 2))
+  // P1 (56bf0d1e), readiness repair (7e5b803c): the six Aims HTTP
+  // document scopes disappeared; their Host requests now use the existing U lane.
+  // Keep the reviewed five-domain G-7 grant boundary; APF additions need a decision.
+  assert.deepEqual(readiness.externalServicePolicies, [
+    { audience: 'codocs', capabilities: ['codocs:product-document:read', 'codocs:project-document:content:read'] },
+    { audience: 'console', capabilities: ['console:business-domain:view', 'console:directory-project-access:read', 'console:directory-users:read'] }
+  ], 'G7_EXTERNAL_CONTRACT_REVIEW_REQUIRED')
+  assert.deepEqual(Object.fromEntries(['enterprise.runtime', 'workflow.runtime', 'aims.runtime', 'codocs.runtime', 'collab.runtime']
+    .map(client => [client, items.filter(item => item.client === client).length])), {
+    'enterprise.runtime': 14, 'workflow.runtime': 2, 'aims.runtime': 5, 'codocs.runtime': 7,
+    'collab.runtime': bindings.deployments.collab === undefined ? 0 : 2
+  })
+  assert.equal(items.length, 28 + (bindings.deployments.collab === undefined ? 0 : 2))
   assert.equal(new Set(items.map(item => `${item.client}|${item.resource}|${item.action}`)).size, items.length)
-  assert.equal(items.filter(item => item.client === 'enterprise.runtime').length, 20)
+  assert.deepEqual(items.filter(item => item.client === 'enterprise.runtime' && item.audience === 'data-runtime' && item.scope.endsWith(':enterprise-host:execute')).map(item => item.scope), G7_DOMAINS.map(domain => `${domain}:enterprise-host:execute`))
   assert.ok(!items.some(item => item.scope === 'aims:notifications-due:execute'))
   return items
 }

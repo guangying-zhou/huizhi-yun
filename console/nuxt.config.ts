@@ -152,6 +152,7 @@ export default defineNuxtConfig({
     },
     // 测试模式：通知重定向（留空则正常发送）
     notifyRedirectTo: process.env.NOTIFY_REDIRECT_TO || '',
+    feedbackDeliveryEnabled: process.env.HZY_CONSOLE_FEEDBACK_DELIVERY_ENABLED === 'true',
     // 企业微信 OAuth（免登录）
     wecom: {
       corpid: process.env.WECOM_CORPID || '',

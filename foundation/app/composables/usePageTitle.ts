@@ -2,6 +2,7 @@ const pageTitle = ref('')
 
 export function usePageTitle(title?: string | Ref<string>) {
   if (title !== undefined) {
+    useHead(() => ({ title: isRef(title) ? title.value : title }))
     if (isRef(title)) {
       const stop = watch(title, (v) => {
         pageTitle.value = v

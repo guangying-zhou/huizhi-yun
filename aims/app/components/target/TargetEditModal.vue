@@ -118,16 +118,17 @@ watch(
   async ([open, id]) => {
     if (open && props.workItem && id) {
       await openModal(props.workItem)
-    } else if (!open) {
+    } else
+      if (!open) {
       // 重置
-      deliverableIntents.clear()
-      showAddDeliverable.value = false
-      editingDeliverableId.value = null
-      newDeliverableName.value = ''
-      newDeliverableCriteria.value = ''
-      newDeliverableDescription.value = ''
-      newDeliverableType.value = 'document'
-    }
+        deliverableIntents.clear()
+        showAddDeliverable.value = false
+        editingDeliverableId.value = null
+        newDeliverableName.value = ''
+        newDeliverableCriteria.value = ''
+        newDeliverableDescription.value = ''
+        newDeliverableType.value = 'document'
+      }
   },
   { immediate: true }
 )
@@ -141,7 +142,8 @@ function startEdit(d: DeliverableItem) {
 }
 
 function cancelEdit() {
-	if (editingDeliverableId.value) deliverableIntents.abandon(`update:${editingDeliverableId.value}`)
+  if (editingDeliverableId.value)
+    deliverableIntents.abandon(`update:${editingDeliverableId.value}`)
   editingDeliverableId.value = null
 }
 
@@ -169,7 +171,8 @@ async function saveEditDeliverable(id: number) {
     })
     deliverableIntents.complete(`update:${id}`)
     editingDeliverableId.value = null
-    if (props.workItem) await loadDeliverables(props.workItem.id)
+    if (props.workItem)
+      await loadDeliverables(props.workItem.id)
   } catch (err: unknown) {
     const msg = (err as { data?: { message?: string } })?.data?.message || '保存失败'
     toast.add({ title: msg, color: 'error' })
@@ -177,8 +180,10 @@ async function saveEditDeliverable(id: number) {
 }
 
 async function addDeliverable() {
-  if (!props.workItem) return
-  if (!newDeliverableName.value.trim()) return
+  if (!props.workItem)
+    return
+  if (!newDeliverableName.value.trim())
+    return
   if (hasDuplicateDeliverableName(deliverables.value, newDeliverableName.value)) {
     toast.add({ title: '已存在同名成果，无需重复添加', color: 'warning' })
     return
@@ -219,11 +224,15 @@ async function removeDeliverable(d: DeliverableItem) {
     title: '删除成果要求',
     message: `确定删除成果要求「${d.name}」？删除后不可恢复。`,
     tone: 'danger'
-  }))) { deliverableIntents.abandon(`delete:${d.id}`); return }
+  }))) {
+    deliverableIntents.abandon(`delete:${d.id}`)
+    return
+  }
   try {
     await $fetch(moduleUrl(`/api/v1/deliverables/${d.id}`), { method: 'DELETE', headers: deliverableIntents.headers(`delete:${d.id}`), retry: 0 })
     deliverableIntents.complete(`delete:${d.id}`)
-    if (props.workItem) await loadDeliverables(props.workItem.id)
+    if (props.workItem)
+      await loadDeliverables(props.workItem.id)
   } catch (err: unknown) {
     const msg = (err as { data?: { message?: string } })?.data?.message || '删除失败'
     toast.add({ title: msg, color: 'error' })
@@ -232,11 +241,16 @@ async function removeDeliverable(d: DeliverableItem) {
 
 const formErrors = computed(() => {
   const errors: Record<string, string> = {}
-  if (!form.title.trim()) errors.title = '请输入标题'
-  if (!form.milestoneId) errors.milestone = '请选择里程碑'
-  if (!form.estimatedHours) errors.hours = '请填写控制工时'
-  if (!form.startDate) errors.startDate = '请选择开始日期'
-  if (!form.dueDate) errors.dueDate = '请选择结束日期'
+  if (!form.title.trim())
+    errors.title = '请输入标题'
+  if (!form.milestoneId)
+    errors.milestone = '请选择里程碑'
+  if (!form.estimatedHours)
+    errors.hours = '请填写控制工时'
+  if (!form.startDate)
+    errors.startDate = '请选择开始日期'
+  if (!form.dueDate)
+    errors.dueDate = '请选择结束日期'
   if (form.startDate && form.dueDate && new Date(form.startDate) > new Date(form.dueDate)) {
     errors.dueDate = '结束日期不能早于开始日期'
   }
@@ -245,15 +259,21 @@ const formErrors = computed(() => {
 
 const assignmentIssues = computed(() => {
   const issues: string[] = []
-  if (!form.title.trim()) issues.push('缺少标题')
-  if (!form.milestoneId) issues.push('缺少里程碑')
-  if (!form.estimatedHours || Number(form.estimatedHours) <= 0) issues.push('缺少控制工时')
-  if (!form.startDate) issues.push('缺少开始日期')
-  if (!form.dueDate) issues.push('缺少结束日期')
+  if (!form.title.trim())
+    issues.push('缺少标题')
+  if (!form.milestoneId)
+    issues.push('缺少里程碑')
+  if (!form.estimatedHours || Number(form.estimatedHours) <= 0)
+    issues.push('缺少控制工时')
+  if (!form.startDate)
+    issues.push('缺少开始日期')
+  if (!form.dueDate)
+    issues.push('缺少结束日期')
   if (form.startDate && form.dueDate && new Date(form.startDate) > new Date(form.dueDate)) {
     issues.push('起止日期不合法')
   }
-  if (deliverables.value.length === 0) issues.push('至少需要 1 条成果要求')
+  if (deliverables.value.length === 0)
+    issues.push('至少需要 1 条成果要求')
   return issues
 })
 
@@ -280,17 +300,20 @@ async function handleSave() {
     toast.add({ title: '请完善必填项', color: 'warning' })
     return
   }
-  if (!props.workItem) return
+  if (!props.workItem)
+    return
   saving.value = true
   try {
     const body = buildUpdatePayload()
     let headers: Record<string, string> | undefined
     if (hosted) {
       const detail = await $fetch<{ code: number, data: { id: number, editSnapshot: { project_id: number }, editVersion: string } }>(moduleUrl(`/api/v1/work-items/${props.workItem.id}`))
-      if (detail.code !== 0 || detail.data?.id !== props.workItem.id || Number(detail.data.editSnapshot?.project_id) !== props.workItem.projectId || !/^[a-f0-9]{64}$/i.test(detail.data.editVersion)) throw new Error('工作目标版本信息不完整')
+      if (detail.code !== 0 || detail.data?.id !== props.workItem.id || Number(detail.data.editSnapshot?.project_id) !== props.workItem.projectId || !/^[a-f0-9]{64}$/i.test(detail.data.editVersion))
+        throw new Error('工作目标版本信息不完整')
       Object.assign(body, { projectId: props.workItem.projectId, expectedVersion: detail.data.editVersion })
       const payload = JSON.stringify(body)
-      if (hostedEditRetry?.payload !== payload) hostedEditRetry = { payload, key: crypto.randomUUID() }
+      if (hostedEditRetry?.payload !== payload)
+        hostedEditRetry = { payload, key: crypto.randomUUID() }
       headers = { 'Idempotency-Key': hostedEditRetry.key }
     }
     await $fetch(moduleUrl(`/api/v1/work-items/${props.workItem.id}`), {
@@ -312,7 +335,8 @@ async function handleSave() {
 }
 
 async function handleAssign() {
-  if (!props.workItem || assigning.value) return
+  if (!props.workItem || assigning.value)
+    return
   if (assignmentIssues.value.length > 0) {
     toast.add({
       title: '目标信息不完整',

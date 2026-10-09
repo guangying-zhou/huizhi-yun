@@ -43,7 +43,7 @@ const columns: TableColumn<ConsoleDirectoryCommitteeMember>[] = [
     class="directory-mobile-table min-w-[720px] rounded-lg border border-default"
   >
     <template #uid-cell="{ row }">
-      <div class="flex items-center gap-2">
+      <div class="flex items-center gap-2" :class="row.original.userStatus !== 'active' ? 'opacity-60' : ''">
         <UAvatar
           :src="resolveAvatarSrc(row.original.avatar) || undefined"
           :alt="row.original.displayName"
@@ -60,7 +60,7 @@ const columns: TableColumn<ConsoleDirectoryCommitteeMember>[] = [
               variant="soft"
               size="xs"
             >
-              用户已停用
+              账号已停用、授权不生效
             </UBadge>
           </div>
           <p class="text-xs text-muted">
@@ -77,7 +77,7 @@ const columns: TableColumn<ConsoleDirectoryCommitteeMember>[] = [
         :model-value="row.original.role"
         :items="roleOptions"
         class="w-28"
-        :disabled="mutating || memberUpdatingUid === row.original.uid"
+        :disabled="mutating || memberUpdatingUid === row.original.uid || row.original.userStatus !== 'active'"
         @update:model-value="emit('updateRole', row.original, $event as ConsoleCommitteeMemberRole)"
       />
       <UBadge v-else color="neutral" variant="soft">

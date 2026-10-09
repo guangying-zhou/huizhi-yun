@@ -42,7 +42,7 @@ describe('tenant gateway scheduler registry', () => {
     assert.deepEqual(second.items.map(item => item.tenantCode), ['tenant-b'])
     assert.equal(second.nextCursor, null)
     assert.match(sql.join('\n'), /t\.status = 'active'/)
-    assert.match(sql.join('\n'), /eligible\.app_code IN \('aims', 'altoc', 'assets', 'console', 'finance', 'people', 'workflow'\)/)
+    assert.match(sql.join('\n'), /eligible\.app_code IN \('aims', 'altoc', 'assets', 'console', 'finance', 'people', 'workflow', 'enterprise'\)/)
     assert.doesNotMatch(JSON.stringify({ first, second }), /token|runtime|secret/i)
   })
 
@@ -117,4 +117,14 @@ describe('scheduler app list stays in sync with the tenant gateway', () => {
     )
     assert.match(registry, /app_code IN \(\$\{SCHEDULER_APP_CODE_SQL_LIST\}\)/)
   })
+})
+
+test('Enterprise-only tenants remain eligible for the default-off APF owner', async () => {
+  const sql: string[] = []
+  const page = await listTenantGatewaySchedulerPageWithQueries({ async queryRows<T extends RowDataPacket[]>(query: string) {
+    sql.push(query)
+    return (query.includes('COUNT(*)') ? [{ total: 1 }] : [{ id: 1, tenant_code: 'fixture', environment: 'test', public_url: 'https://fixture.example.test', app_codes: 'enterprise' }]) as unknown as T
+  } }, { slot: 0, shardIndex: 0, shardCount: 1, limit: 1, windowSize: 1 })
+  assert.deepEqual(page.items[0]?.appCodes, ['enterprise'])
+  assert.match(sql.join('\n'), /'enterprise'/)
 })

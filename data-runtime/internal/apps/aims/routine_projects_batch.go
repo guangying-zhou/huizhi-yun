@@ -76,6 +76,17 @@ func (a *Adapter) batchCreateRoutineDepartmentProjects(
 	}
 	defer tx.Rollback()
 
+	result, err := a.createRoutineDepartmentProjectsTx(ctx, tx, uid, year, departments)
+	if err != nil {
+		return nil, err
+	}
+	if err = tx.Commit(); err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
+func (a *Adapter) createRoutineDepartmentProjectsTx(ctx context.Context, tx *sql.Tx, uid string, year int, departments []routineProjectDepartment) (map[string]any, error) {
 	portfolioID, portfolioCreated, portfolioReactivated, err := ensureRoutinePortfolioTx(ctx, tx, uid)
 	if err != nil {
 		return nil, err
@@ -162,10 +173,6 @@ func (a *Adapter) batchCreateRoutineDepartmentProjects(
 		item["status"] = "created"
 		createdCount++
 		items = append(items, item)
-	}
-
-	if err := tx.Commit(); err != nil {
-		return nil, err
 	}
 
 	return map[string]any{

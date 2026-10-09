@@ -61,12 +61,14 @@ func TrustedServiceCommandContextFromMap(values map[string]any) (TrustedServiceC
 }
 
 type TrustedContext struct {
-	OutboxTables    *OutboxTables
-	TenantCode      string
-	DeploymentCode  string
-	SourceApp       string
-	ServiceClientID string
-	RequestID       string
+	// Set only by the registered owning source, never by HTTP/map input.
+	RetireAPFCommands bool
+	OutboxTables      *OutboxTables
+	TenantCode        string
+	DeploymentCode    string
+	SourceApp         string
+	ServiceClientID   string
+	RequestID         string
 }
 
 // TrustedContextFromMap reads only the reserved values injected by the

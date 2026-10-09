@@ -20,7 +20,11 @@ export async function enterpriseCodocsCollaborationList(event: H3Event) {
   query.scope ||= 'all'
   if (!['shared', 'original', 'outside'].includes(query.category) || !['all', 'todo', 'initiated', 'participated', 'done'].includes(query.scope)) throw createError({ statusCode: 400, message: '协同文档筛选参数无效' })
 
-  try { optionalReadPagination(query) } catch { throw createError({ statusCode: 400, message: '分页参数无效' }) }
+  try {
+    optionalReadPagination(query)
+  } catch {
+    throw createError({ statusCode: 400, message: '分页参数无效' })
+  }
   if ('sharedTab' in query && (query.category !== 'shared' || !['received', 'sent'].includes(query.sharedTab!))) throw createError({ statusCode: 400, message: '协同文档筛选参数无效' })
 
   await prepareEnterpriseRuntime(event, 'codocs.collab-document-list')
@@ -64,10 +68,24 @@ export async function enterpriseCodocsCollaborationOpen(event: H3Event) {
   const snapshot = await loadAuthorizationSnapshotFromConsoleRuntime(user.uid, 'codocs', event)
   if (!authorizationResourcesAllow(snapshot.resources, 'documents', 'edit', snapshot.actionPolicies?.documents)) throw createError({ statusCode: 403, message: '缺少文档编辑权限' })
   await prepareEnterpriseRuntime(event, operation)
-  const response = await callEnterpriseRuntime<{ success?: boolean, data?: { sessionId?: unknown, ticket?: unknown, expiresAt?: unknown } }>(event, operation, {
+  const requestTicket = () => callEnterpriseRuntime<{ success?: boolean, data?: { sessionId?: unknown, ticket?: unknown, expiresAt?: unknown } }>(event, operation, {
     tenant: user.tenant, deployment: user.deployment, code: uuid,
     authorization: { actorUid: user.uid, tenant: user.tenant, deployment: user.deployment, resource: 'personal-documents', action: 'edit', expiresAt: enterpriseRuntimePermitExpiresAt() }
   })
+  let response
+  try {
+    response = await requestTicket()
+  } catch (error) {
+    const failure = error as { statusCode?: number, data?: { code?: string, data?: { code?: string } } }
+    const code = failure.data?.data?.code ?? failure.data?.code
+    // Runtime checks the current document write ACL before this exact refusal.
+    // No ordinary read, ACL denial or other conflict may initiate conversion.
+    if (failure.statusCode !== 409 || code !== 'document_not_on_snapshot_v2') throw error
+    const { ensurePersonalCollaborationSnapshot } = await import('./enterpriseCodocsPersonalCollaborationConvert')
+    await ensurePersonalCollaborationSnapshot(event, user, uuid)
+    await prepareEnterpriseRuntime(event, operation)
+    response = await requestTicket()
+  }
   const data = response?.data
   if (response?.success !== true || typeof data?.sessionId !== 'string' || typeof data.ticket !== 'string' || !/^[a-f0-9]{64}$/.test(data.ticket)) {
     throw createError({ statusCode: 503, message: '协作会话响应无效' })

@@ -63,17 +63,17 @@ export async function testEnterprisePolicyBoundary({ rootDir, context, pool, wit
       if (options.method === 'GET') {
         assert.equal(options.scope, 'console:policy-bundle:read')
         const [rows] = await pool.execute('SELECT body, CAST(etag AS CHAR) AS etag FROM enterprise_e2e_policy_store WHERE object_key=?', [options.query.key])
-        return {code:0,data:rows[0] || null}
+        return { code: 0, data: rows[0] || null }
       }
       assert.equal(options.scope, 'console:policy-bundle:write')
       assert.match(options.idempotencyKey, /^[a-f0-9]{64}$/)
-      const {key,body,expectedEtag}=options.body
+      const { key, body, expectedEtag } = options.body
       if (expectedEtag) {
-        const [result]=await pool.execute('UPDATE enterprise_e2e_policy_store SET body=?, etag=etag+1 WHERE object_key=? AND etag=?',[body,key,expectedEtag])
-        return {code:0,data:{stored:result.affectedRows===1}}
+        const [result] = await pool.execute('UPDATE enterprise_e2e_policy_store SET body=?, etag=etag+1 WHERE object_key=? AND etag=?', [body, key, expectedEtag])
+        return { code: 0, data: { stored: result.affectedRows === 1 } }
       }
-      const [result]=await pool.execute('INSERT IGNORE INTO enterprise_e2e_policy_store VALUES (?,?,1)',[key,body])
-      return {code:0,data:{stored:result.affectedRows===1}}
+      const [result] = await pool.execute('INSERT IGNORE INTO enterprise_e2e_policy_store VALUES (?,?,1)', [key, body])
+      return { code: 0, data: { stored: result.affectedRows === 1 } }
     })
     globalThis.__enterprisePolicyStore = makePolicyStore()
     const authorization = await import('../../../console/server/utils/policyAuthorization.ts')
@@ -89,30 +89,30 @@ export async function testEnterprisePolicyBoundary({ rootDir, context, pool, wit
     let requests = 0
     let moduleRouting = false
     let routingRevision = 100
-    const payloadFor = async tenantCode => {
+    const payloadFor = async (tenantCode) => {
       const payload = {
-      schemaVersion: 'policy-bundle.v2', policyRevision: await pool.query('SELECT revision FROM tenant_enterprise_entitlement_current WHERE tenant_code=?',[tenantCode]).then(([rows]) => Number(rows[0].revision)), environment: 'test', tenant: { tenantCode, status: 'active' },
-      enterpriseEntitlement: await loadBundleEnterpriseEntitlement(async (sql, params) => (await pool.query(sql, params))[0][0] || null, tenantCode, 'active', now()),
-      applications: [{ appCode: 'console', status: 'active' }, { appCode: 'people', status: 'active' }, { appCode: 'finance', status: 'active' }],
-      subjects: [{ subjectType: 'user', subjectCode: 'subject-u1', externalRef: 'u1', status: 'active' }],
-      roles: [{ roleCode: 'custom-viewer', roleName: 'Custom scoped viewer', appCode: null, status: 'active', isAssignable: 1 }],
-      roleAssignments: [{ assignmentId: 51, subjectType: 'user', subjectCode: 'subject-u1', roleCode: 'custom-viewer', status: 'active' }],
-      rolePermissionGrants: [
-        { grantId: 'console-view', roleCode: 'custom-viewer', appCode: 'console', resourceCode: 'org_profile', action: 'view', status: 'active' },
-        { grantId: 'people-view', roleCode: 'custom-viewer', appCode: 'people', resourceCode: 'employees', action: 'view', status: 'active' }
-      ],
-      assignmentScopes: [{ assignmentId: 51, appCode: 'people', resourceCode: 'employees', action: 'view', scopeDimension: 'department', scopePredicate: 'self', scopeValue: 'dept-a', scopeMode: 'replace', status: 'active' }],
-      baselineGrants: [], actionImplications: []
+        schemaVersion: 'policy-bundle.v2', policyRevision: await pool.query('SELECT revision FROM tenant_enterprise_entitlement_current WHERE tenant_code=?', [tenantCode]).then(([rows]) => Number(rows[0].revision)), environment: 'test', tenant: { tenantCode, status: 'active' },
+        enterpriseEntitlement: await loadBundleEnterpriseEntitlement(async (sql, params) => (await pool.query(sql, params))[0][0] || null, tenantCode, 'active', now()),
+        applications: [{ appCode: 'console', status: 'active' }, { appCode: 'people', status: 'active' }, { appCode: 'finance', status: 'active' }],
+        subjects: [{ subjectType: 'user', subjectCode: 'subject-u1', externalRef: 'u1', status: 'active' }],
+        roles: [{ roleCode: 'custom-viewer', roleName: 'Custom scoped viewer', appCode: null, status: 'active', isAssignable: 1 }],
+        roleAssignments: [{ assignmentId: 51, subjectType: 'user', subjectCode: 'subject-u1', roleCode: 'custom-viewer', status: 'active' }],
+        rolePermissionGrants: [
+          { grantId: 'console-view', roleCode: 'custom-viewer', appCode: 'console', resourceCode: 'org_profile', action: 'view', status: 'active' },
+          { grantId: 'people-view', roleCode: 'custom-viewer', appCode: 'people', resourceCode: 'employees', action: 'view', status: 'active' }
+        ],
+        assignmentScopes: [{ assignmentId: 51, appCode: 'people', resourceCode: 'employees', action: 'view', scopeDimension: 'department', scopePredicate: 'self', scopeValue: 'dept-a', scopeMode: 'replace', status: 'active' }],
+        baselineGrants: [], actionImplications: []
       }
       if (moduleRouting && tenantCode === 'provision-a') {
         const routes = await loadEnterpriseHostModuleRoutes(async (sql, params) => (await pool.query(sql, params))[0][0] || null, tenantCode, 'test')
         payload.policyRevision = routingRevision
         payload.enterpriseHostRoutes = routes
         payload.deployment = { publicUrl: 'https://fixture.invalid', rootAppCode: 'enterprise' }
-        payload.applications = applyEnterpriseHostModuleRoutes([{appCode:'console',status:'active'},{appCode:'aims',status:'active'},{appCode:'assets',status:'active'}],routes)
-        payload.moduleAvailability = enterpriseModuleAvailability(payload.applications,[],routes)
-        payload.rolePermissionGrants = [{grantId:'aims-view',roleCode:'custom-viewer',appCode:'aims',resourceCode:'projects',action:'view',status:'active'}]
-        payload.assignmentScopes = [{assignmentId:51,appCode:'aims',resourceCode:'projects',action:'view',scopeDimension:'department',scopePredicate:'self',scopeValue:'dept-a',scopeMode:'replace',status:'active'}]
+        payload.applications = applyEnterpriseHostModuleRoutes([{ appCode: 'console', status: 'active' }, { appCode: 'aims', status: 'active' }, { appCode: 'assets', status: 'active' }], routes)
+        payload.moduleAvailability = enterpriseModuleAvailability(payload.applications, [], routes)
+        payload.rolePermissionGrants = [{ grantId: 'aims-view', roleCode: 'custom-viewer', appCode: 'aims', resourceCode: 'projects', action: 'view', status: 'active' }]
+        payload.assignmentScopes = [{ assignmentId: 51, appCode: 'aims', resourceCode: 'projects', action: 'view', scopeDimension: 'department', scopePredicate: 'self', scopeValue: 'dept-a', scopeMode: 'replace', status: 'active' }]
       }
       return payload
     }
@@ -123,7 +123,7 @@ export async function testEnterprisePolicyBoundary({ rootDir, context, pool, wit
       const tenantCode = transportMode === 'wrong-tenant' ? 'e2e-b' : requestedTenant
       const bundle = await payloadFor(tenantCode)
       if (transportMode === 'same-revision-conflict') bundle.enterpriseEntitlement.effectiveFrom = '2026-09-02T00:00:00.000Z'
-      if (transportMode === 'same-policy-conflict') bundle.roles.push({roleCode:'extra-role',status:'active'})
+      if (transportMode === 'same-policy-conflict') bundle.roles.push({ roleCode: 'extra-role', status: 'active' })
       const payloadJson = canonical(bundle)
       const signature = await sign(payloadJson)
       const bundleHash = `sha256_${createHash('sha256').update(payloadJson).digest('hex')}`
@@ -162,7 +162,7 @@ export async function testEnterprisePolicyBoundary({ rootDir, context, pool, wit
     await states.change(command, now())
     const beforeRefresh = requests
     clock += 300001
-    await assert.rejects(authorization.loadPolicyAuthorizationSnapshot('u1', 'console', event, { ignoreSimulationSession: true }), {statusCode:503})
+    await assert.rejects(authorization.loadPolicyAuthorizationSnapshot('u1', 'console', event, { ignoreSimulationSession: true }), { statusCode: 503 })
     assert.equal(requests, beforeRefresh)
     await cache.writeCachedBundle(config.bundleCacheDir, await runtime.fetchAndVerifyPolicyBundle(config), scope)
     await assert.rejects(authorization.loadPolicyAuthorizationSnapshot('u1', 'console', event, { ignoreSimulationSession: true }), /Enterprise access is not active/)
@@ -182,17 +182,17 @@ export async function testEnterprisePolicyBoundary({ rootDir, context, pool, wit
     await cache.writeCachedBundle(config.bundleCacheDir, await runtime.fetchAndVerifyPolicyBundle(config), scope)
     globalThis.__enterprisePolicyStore = makePolicyStore()
     await assert.rejects(persistent.storePolicyBundle(globalThis.__enterprisePolicyStore, scope, 'fixture-gateway-token', { ...verified, cachedAt: now() }, clock), /durable revision rollback/)
-    for (const mode of ['same-revision-conflict','same-policy-conflict']) {
-      transportMode=mode
+    for (const mode of ['same-revision-conflict', 'same-policy-conflict']) {
+      transportMode = mode
       const conflict = await runtime.fetchAndVerifyPolicyBundle(config)
-      await assert.rejects(cache.writeCachedBundle(config.bundleCacheDir,conflict,scope),/conflict/)
+      await assert.rejects(cache.writeCachedBundle(config.bundleCacheDir, conflict, scope), /conflict/)
     }
-    transportMode='valid'
-    await new Promise((resolveRun,reject) => {
-      const child=spawn(process.execPath,['--experimental-strip-types',new URL('./enterprise-policy-restart.mjs',import.meta.url).pathname],{stdio:['pipe','inherit','inherit']})
-      child.stdin.end(JSON.stringify({connection:context.connection('console'),scope,secret:'fixture-gateway-token',oldBundle:verified}))
-      child.once('error',reject)
-      child.once('exit',code => code===0 ? resolveRun() : reject(Error(`Fresh policy process exited ${code}`)))
+    transportMode = 'valid'
+    await new Promise((resolveRun, reject) => {
+      const child = spawn(process.execPath, ['--experimental-strip-types', new URL('./enterprise-policy-restart.mjs', import.meta.url).pathname], { stdio: ['pipe', 'inherit', 'inherit'] })
+      child.stdin.end(JSON.stringify({ connection: context.connection('console'), scope, secret: 'fixture-gateway-token', oldBundle: verified }))
+      child.once('error', reject)
+      child.once('exit', code => code === 0 ? resolveRun() : reject(Error(`Fresh policy process exited ${code}`)))
     })
     await assert.rejects(authorization.loadPolicyAuthorizationSnapshot('u1', 'console', event, { ignoreSimulationSession: true }), /Enterprise access is not active/)
     const second = makeEvent('e2e-b')
@@ -204,54 +204,54 @@ export async function testEnterprisePolicyBoundary({ rootDir, context, pool, wit
     await testEnterpriseOrderFlow({ pool, withTransaction })
     clock = OriginalDate.parse('2026-09-13T00:00:00Z')
     await testEnterpriseProvisioning({ rootDir, pool, withTransaction, publicKey })
-    await testEnterpriseApprovedOrder({rootDir,pool,withTransaction})
+    await testEnterpriseApprovedOrder({ rootDir, pool, withTransaction })
     moduleRouting = true
     transportMode = 'valid'
     const routeEvent = makeEvent('provision-a')
     globalThis.__enterpriseTestEvent = routeEvent
     const routeConfig = runtime.loadPlatformRuntimeConfig(routeEvent)
-    const routeScope = runtime.resolvePlatformRuntimeCacheScope(routeConfig,routeEvent)
+    const routeScope = runtime.resolvePlatformRuntimeCacheScope(routeConfig, routeEvent)
     const { getConsoleUserApplications } = await import('../../../console/server/utils/userApplications.ts')
     const refreshRoutes = async () => {
       routingRevision++
       const bundle = await runtime.fetchAndVerifyPolicyBundle(routeConfig)
-      await cache.writeCachedBundle(routeConfig.bundleCacheDir,bundle,routeScope)
-      return { bundle, apps: await getConsoleUserApplications(routeEvent,'u1') }
+      await cache.writeCachedBundle(routeConfig.bundleCacheDir, bundle, routeScope)
+      return { bundle, apps: await getConsoleUserApplications(routeEvent, 'u1') }
     }
     const notReported = await refreshRoutes()
-    assert.equal(notReported.apps.find(app=>app.appCode==='aims')?.homeUrl,null)
-    await pool.query("UPDATE deployments d INNER JOIN platform_applications a ON a.app_code=d.app_code INNER JOIN platform_app_manifests m ON m.id=a.latest_manifest_id SET d.reported_manifest_hash=m.manifest_hash WHERE d.tenant_code='provision-a' AND d.app_code='enterprise'")
+    assert.equal(notReported.apps.find(app => app.appCode === 'aims')?.homeUrl, null)
+    await pool.query('UPDATE deployments d INNER JOIN platform_applications a ON a.app_code=d.app_code INNER JOIN platform_app_manifests m ON m.id=a.latest_manifest_id SET d.reported_manifest_hash=m.manifest_hash WHERE d.tenant_code=\'provision-a\' AND d.app_code=\'enterprise\'')
     const routed = await refreshRoutes()
-    assert.equal(routed.bundle.payload.enterpriseHostRoutes.length,2,'Producer routes require matching actual Host evidence')
-    assert.equal(routed.apps.find(app=>app.appCode==='aims')?.homeUrl,'https://fixture.invalid/aims/')
-    assert.equal(routed.apps.find(app=>app.appCode==='aims')?.deploymentState,'deployed')
-    assert.equal(routed.apps.some(app=>app.appCode==='assets'),false)
-    assert.equal(routed.bundle.payload.enterpriseHostRoutes.length,2)
-    assert.equal(routed.bundle.payload.applications.find(app=>app.appCode==='aims').apiBase,'/aims/api/v1')
-    const routeSnapshot = await authorization.loadPolicyAuthorizationSnapshot('u1','aims',routeEvent,{ignoreSimulationSession:true})
-    const aimDecision = (action,departmentCode) => evaluatePolicyBundleScopedAuthorization({payload:routeSnapshot.payload,uid:'u1',required:{appCode:'aims',resourceCode:'projects',action},object:{departmentCode}})
-    assert.equal(aimDecision('view','dept-a').allowed,true)
-    assert.equal(aimDecision('edit','dept-a').allowed,false)
-    const decision = evaluatePolicyBundleScopedAuthorization({payload:routeSnapshot.payload,uid:'u1',required:{appCode:'aims',resourceCode:'projects',action:'view'},object:{departmentCode:'dept-b'}})
-    assert.equal(decision.allowed,false)
-    assert.equal(Number((await pool.query("SELECT COUNT(*) n FROM deployments WHERE tenant_code='provision-a' AND app_code IN ('aims','assets')"))[0][0].n),0)
-    await pool.query("UPDATE deployments SET reported_manifest_hash='mismatched' WHERE tenant_code='provision-a' AND app_code='enterprise'")
+    assert.equal(routed.bundle.payload.enterpriseHostRoutes.length, 2, 'Producer routes require matching actual Host evidence')
+    assert.equal(routed.apps.find(app => app.appCode === 'aims')?.homeUrl, 'https://fixture.invalid/aims/')
+    assert.equal(routed.apps.find(app => app.appCode === 'aims')?.deploymentState, 'deployed')
+    assert.equal(routed.apps.some(app => app.appCode === 'assets'), false)
+    assert.equal(routed.bundle.payload.enterpriseHostRoutes.length, 2)
+    assert.equal(routed.bundle.payload.applications.find(app => app.appCode === 'aims').apiBase, '/aims/api/v1')
+    const routeSnapshot = await authorization.loadPolicyAuthorizationSnapshot('u1', 'aims', routeEvent, { ignoreSimulationSession: true })
+    const aimDecision = (action, departmentCode) => evaluatePolicyBundleScopedAuthorization({ payload: routeSnapshot.payload, uid: 'u1', required: { appCode: 'aims', resourceCode: 'projects', action }, object: { departmentCode } })
+    assert.equal(aimDecision('view', 'dept-a').allowed, true)
+    assert.equal(aimDecision('edit', 'dept-a').allowed, false)
+    const decision = evaluatePolicyBundleScopedAuthorization({ payload: routeSnapshot.payload, uid: 'u1', required: { appCode: 'aims', resourceCode: 'projects', action: 'view' }, object: { departmentCode: 'dept-b' } })
+    assert.equal(decision.allowed, false)
+    assert.equal(Number((await pool.query('SELECT COUNT(*) n FROM deployments WHERE tenant_code=\'provision-a\' AND app_code IN (\'aims\',\'assets\')'))[0][0].n), 0)
+    await pool.query('UPDATE deployments SET reported_manifest_hash=\'mismatched\' WHERE tenant_code=\'provision-a\' AND app_code=\'enterprise\'')
     const mismatch = await refreshRoutes()
-    assert.equal(mismatch.apps.find(app=>app.appCode==='aims')?.homeUrl,null)
-    assert.equal(enterpriseHostRoutesMatch(routed.bundle.payload,mismatch.bundle.payload.enterpriseHostRoutes),false)
-    await pool.query("UPDATE deployments d INNER JOIN platform_applications a ON a.app_code=d.app_code INNER JOIN platform_app_manifests m ON m.id=a.latest_manifest_id SET d.reported_manifest_hash=m.manifest_hash WHERE d.tenant_code='provision-a' AND d.app_code='enterprise'")
-    await pool.query("UPDATE deployments SET status='suspended' WHERE tenant_code='provision-a' AND app_code='enterprise'")
-    assert.equal((await refreshRoutes()).apps.find(app=>app.appCode==='aims')?.homeUrl,null)
-    await pool.query("UPDATE deployments SET status='active' WHERE tenant_code='provision-a' AND app_code='enterprise'")
-    const queryFixture = async (sql,params)=>(await pool.query(sql,params))[0][0] || null
-    assert.deepEqual(await loadEnterpriseHostModuleRoutes(queryFixture,'provision-b','test'),[])
-    assert.deepEqual(await loadEnterpriseHostModuleRoutes(queryFixture,'provision-a','prod'),[])
-    await pool.query("UPDATE deployment_sites SET public_url='javascript:alert(1)' WHERE tenant_code='provision-a'")
-    assert.deepEqual(await loadEnterpriseHostModuleRoutes(queryFixture,'provision-a','test'),[])
-    await pool.query("UPDATE deployment_sites SET public_url='https://fixture.invalid' WHERE tenant_code='provision-a'")
-    await pool.query("UPDATE platform_app_manifests SET manifest_json=JSON_SET(manifest_json,'$.appName','drift') WHERE app_code='assets'")
+    assert.equal(mismatch.apps.find(app => app.appCode === 'aims')?.homeUrl, null)
+    assert.equal(enterpriseHostRoutesMatch(routed.bundle.payload, mismatch.bundle.payload.enterpriseHostRoutes), false)
+    await pool.query('UPDATE deployments d INNER JOIN platform_applications a ON a.app_code=d.app_code INNER JOIN platform_app_manifests m ON m.id=a.latest_manifest_id SET d.reported_manifest_hash=m.manifest_hash WHERE d.tenant_code=\'provision-a\' AND d.app_code=\'enterprise\'')
+    await pool.query('UPDATE deployments SET status=\'suspended\' WHERE tenant_code=\'provision-a\' AND app_code=\'enterprise\'')
+    assert.equal((await refreshRoutes()).apps.find(app => app.appCode === 'aims')?.homeUrl, null)
+    await pool.query('UPDATE deployments SET status=\'active\' WHERE tenant_code=\'provision-a\' AND app_code=\'enterprise\'')
+    const queryFixture = async (sql, params) => (await pool.query(sql, params))[0][0] || null
+    assert.deepEqual(await loadEnterpriseHostModuleRoutes(queryFixture, 'provision-b', 'test'), [])
+    assert.deepEqual(await loadEnterpriseHostModuleRoutes(queryFixture, 'provision-a', 'prod'), [])
+    await pool.query('UPDATE deployment_sites SET public_url=\'javascript:alert(1)\' WHERE tenant_code=\'provision-a\'')
+    assert.deepEqual(await loadEnterpriseHostModuleRoutes(queryFixture, 'provision-a', 'test'), [])
+    await pool.query('UPDATE deployment_sites SET public_url=\'https://fixture.invalid\' WHERE tenant_code=\'provision-a\'')
+    await pool.query('UPDATE platform_app_manifests SET manifest_json=JSON_SET(manifest_json,\'$.appName\',\'drift\') WHERE app_code=\'assets\'')
     const drift = await refreshRoutes()
-    assert.equal(drift.apps.find(app=>app.appCode==='aims')?.homeUrl,null)
+    assert.equal(drift.apps.find(app => app.appCode === 'aims')?.homeUrl, null)
     console.log('Enterprise Host routing: real signed/cache/userApplications entry, matching runtime manifest, logical scope preservation, missing report/hash drift/catalog drift rejection passed.')
 
     console.log('Enterprise signed boundary: real Platform signer, Console verification/cache/authorization, scope isolation, state/expiry, tamper and refresh failure passed.')

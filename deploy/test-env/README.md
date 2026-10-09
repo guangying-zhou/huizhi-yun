@@ -520,3 +520,42 @@ ssh root@gitlab.wiztek.cn 'systemctl stop hzy-test-data-runtime && docker stop h
 
 恢复时先 `docker start hzy-test-mysql`，待数据库健康后 `systemctl start hzy-test-data-runtime`。
 停止不会删除测试数据。不要删除 `/wiztek/hzy-test`、卸载既有 MySQL/Keycloak 或操作生产 C000001。
+
+## hzy0 WizBiz 停机前身份与 DDL 门禁
+
+所有路径指向本人持有的受保护文件/本地构建工具。在停止 Runtime 或任何应用前执行完整门禁（仅原两参方式只检查 W1 DDL，不可用于数据迁移放行）：
+
+```sh
+node deploy/test-env/preflight-w1-ddl.mjs \
+  --migration-db-config "$INSTALLER_CONFIG_0600" \
+  --wizbiz-profile "$MIGRATION_PROFILE_0600" \
+  --snapshot-manifest "$SNAPSHOT_MANIFEST_0600" \
+  --preflight-bin "$LOCAL_WIZBIZ_PREFLIGHT_BINARY" \
+  --phase migration
+```
+
+暂存实例准备必须在 hzy0 停机前完成：核验封存流哈希与字节数 → 导入或复用已核验暂存库 → 按批次派生源/元数据账号名并断言所有 host 均不存在 → 创建列级源只读账号及同库元数据 SELECT-only 账号 → `stage-verify` 与 `stage-transform-audit` 均 PASS（转换审计阻断计数必须清零）。不得在维护窗口内才发现暂存账号冲突。已有暂存库只有在封存流、原导入管道证据和本轮 stage-verify 均通过时才可复用；明文 SQL 不落盘，银行账号列不读取。
+
+维护窗口只处理候选切换、W1 安装、已批准的两账号重建、全身份预检、plan，以及无阻断后的 apply/verify。W1 完成后可保持 Runtime 与应用停止直至迁移核验结束，避免重复启停；失败按本轮备份回滚，不自行重试。
+
+`--phase w1` 用于已批准的W1准备窗口，要求DDL/source/metadata/profile/绑定；`--phase migration`（默认）要求DDL和所有身份同时ready。任一失败汇总报告，不停止进程、不写账号/GRANT。ReadDirectory的SELECT-only连接与Runtime Console运行连接是不同用途。W1准备完成并重建已获批的两账号后，再全身份PASS进入迁移维护窗口。迁移身份缺失不得以将来安装/授权为理由绕过失败。Vault路径环境须与正在运行Runtime的受保护启动配置一致，预检不读取密钥内容。详见 `data-runtime/internal/migrations/wizbiztool/README.md`。
+
+#### WizBiz 磁盘容量门禁
+
+停机前和窗口内 **apply 紧邻前**各执行一次只读检查（不得复用先前的 ready）。`preflight-w1-ddl.mjs` 的两种模式也强制检查配置文件所在卷至少剩余 20 GiB；完整预检汇总 `disk`、DDL 和身份结果。
+
+```sh
+node deploy/test-env/preflight-disk-space.mjs --path "$LOCAL_RUNTIME_ROOT" \
+  --backup-bytes "$REMAINING_BACKUP_BYTES" --staging-bytes "$REMAINING_STAGING_BYTES" \
+  --log-bytes "$EXPECTED_LOG_GROWTH_BYTES" --safety-bytes "$ROLLBACK_RESERVE_BYTES"
+```
+
+门槛为 `max(20 GiB, 四项预算之和)`，使用调用用户可用空间 `bavail`，检查失败即停。预算记录在本轮受保护证据中：备份和暂存按实际体积及预计增长估算，日志包含 MySQL 日志和迁移台账增长，安全余量覆盖回滚。已存在文件已占用磁盘，不重复计为待增长；不得以“已备份”省略 20 GiB 下限。不同卷的数据库、备份、暂存、日志路径分别检查，不能以另一卷空闲抵扣。磁盘不足时不启动维护窗口；窗口内不足时停止写入并按备份回滚，不自动删除证据、封存源或数据库日志。
+
+WizBiz 账号编排的离线制品也必须在停机前核验：使用 `hzy-wizbiz-migrate-grants --profile "$GRANT_PROFILE_0600" --out "$TARGET_GRANT_PLAN_0600"` 从已审 Runtime 映射生成候选；逐行核对与用户批准的精确授权集合一致。确认 grant-profile、候选 JSON 与 grant 检查二进制存在、属主/权限正确后才停止 Runtime。不得在安装 W1 后才首次发现缺少这些文件。这个步骤不生成密码、不创建账号、不执行 GRANT；真实账号仍只能在 W1 完成后按已审集合建立。
+
+#### 同 SHA 的 WizBiz 彩排与真实窗口
+
+`wizbiz-rehearsal/run.py` 用同一套 W1、授权清单生成、两账号创建/核验、全身份预检、plan/apply/verify 和失败回滚代码执行副本与真实目标。仅受保护目标参数不同（端口/UUID/连接/配置/备份路径及副本成功后回滚）；SQL 与二进制不作替换或测试注入。停机前自动生成并核对精确授权制品，不要求人工复制中间 JSON。
+
+副本必须先完整通过 rollback，且 schema、原表行数与原授权集合回读一致；冻结 runner、预检、schema 声明、已审 grant SQL 与五个二进制的 SHA-256。真实窗口启动前及 runner 初始化逐件核对相同 SHA；任何变更必须重新彩排，不能只复跑一个阶段。Runtime `.18` 二进制另外核对与副本 plan 构建证据一致。参数文件权限 0600，证据目录 0700；日志只输出固定步骤名、状态和计数。真实目标成功后保留数据，失败从本轮加密备份恢复；不能把“脚本退出成功”代替独立 verify 与服务启动健康检查。

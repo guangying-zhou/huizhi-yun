@@ -84,5 +84,10 @@ defineExpose({ save, getContent })
     allow="clipboard-read; clipboard-write"
     referrerpolicy="strict-origin-when-cross-origin"
   />
-  <UAlert v-else color="warning" title="协作文档编辑器尚未配置" description="请配置当前环境的 Codocs 地址后重试。" />
+  <UAlert
+    v-else
+    color="warning"
+    title="协作文档编辑器尚未配置"
+    description="请配置当前环境的 Codocs 地址后重试。"
+  />
 </template>

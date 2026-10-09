@@ -10,6 +10,7 @@ function setup(input: unknown, mode = '') {
   const exports: any = {}
   const calls: any[] = []
   runInNewContext(code, { exports, require: (name: string) => {
+    name = name.replace(/\.ts$/, '')
     if (name === './productFeedbackDispatch') return { dispatchProductFeedback: async () => {
       if (mode === 'resume') calls.push('dispatch')
       return false

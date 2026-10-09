@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import ContentPageHeader from '../../../../foundation/app/components/ContentPageHeader.vue'
 import { parsePublishedAssetPath, publishedAssetShortPagePath, type PublishedAssetScope } from '../../../shared/utils/publishedAssetLink'
 import { useCodocsModule } from '../../../layer/useCodocsModule'
 import { useViewerWatermark } from '../../composables/useViewerWatermark'
@@ -8,7 +9,7 @@ const route = useRoute()
 const { resolveCurrentAppPath } = useAppUrls()
 const { hosted, moduleUrl } = useCodocsModule()
 const requestFetch = useRequestFetch()
-const { watermarkText } = useViewerWatermark()
+const { watermarkText } = useViewerWatermark({ includeTime: true })
 const resolvedPath = ref('')
 const asset = computed(() => parsePublishedAssetPath(props.token !== undefined ? resolvedPath.value : route.query.path, props.scope))
 const title = computed(() => asset.value?.name || '已发布文档')
@@ -65,15 +66,17 @@ onBeforeUnmount(() => {
 
 <template>
   <UDashboardPanel grow>
-    <div class="flex flex-col gap-3 border-b border-default bg-default px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-      <h1 class="min-w-0 break-words text-base font-semibold">
-        {{ title }}
-      </h1>
-      <div class="flex shrink-0 flex-wrap gap-2 self-start sm:self-auto">
+    <ContentPageHeader
+      :hosted="true"
+      :title="title"
+      description="已发布文档"
+      class="shrink-0 border-b border-default px-4 py-3"
+    >
+      <template #actions>
         <PublishedAssetLinkButton v-if="asset" :path="asset.path" />
         <CompanyAssetAccessRecords v-if="asset?.scope === 'company'" :path="asset.path" :title="title" />
-      </div>
-    </div>
+      </template>
+    </ContentPageHeader>
     <main class="min-h-0 flex-1 overflow-auto bg-elevated p-3 sm:p-6" :aria-busy="loading">
       <div v-if="loading" class="flex items-center justify-center gap-2 py-12 text-muted" role="status">
         <UIcon name="i-lucide-loader-2" class="size-5 animate-spin" />
@@ -87,6 +90,7 @@ onBeforeUnmount(() => {
       </div>
       <PublishedPdfViewer
         v-else-if="preview?.file_ext === 'pdf' && preview.preview_url"
+        :watermark-text="watermarkText"
         :src="preview.preview_url"
         :title="title"
       />

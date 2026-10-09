@@ -17,6 +17,12 @@ import (
 )
 
 func TestSchedulerRegistryMappedCompletionMySQL(t *testing.T) {
+	testSchedulerRegistryMappedCompletionMySQL(t, "aims", "aims.runtime")
+}
+func TestHostSchedulerRegistryMappedCompletionMySQL(t *testing.T) {
+	testSchedulerRegistryMappedCompletionMySQL(t, "enterprise", "enterprise.runtime")
+}
+func testSchedulerRegistryMappedCompletionMySQL(t *testing.T, executor, client string) {
 	socket := os.Getenv("HZY_ENTERPRISE_SCHEDULER_TEST_SOCKET")
 	if socket == "" {
 		t.Skip("requires dedicated temporary MySQL")
@@ -98,7 +104,7 @@ func TestSchedulerRegistryMappedCompletionMySQL(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	source, err := e.NewOutboundSource(q, resolved, "real-aims-worker", "aims.runtime")
+	source, err := e.NewOutboundSource(q, resolved, "real-aims-worker", client)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -110,7 +116,7 @@ func TestSchedulerRegistryMappedCompletionMySQL(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	identity := e.SchedulerIdentity{Tenant: "tenant-a", Deployment: "real-aims-worker", SourceApp: "aims", ClientID: "aims.runtime", Subject: "aims.runtime"}
+	identity := e.SchedulerIdentity{Tenant: "tenant-a", Deployment: "real-aims-worker", SourceApp: executor, ClientID: client, Subject: client}
 
 	now := time.Now().UTC().Truncate(time.Millisecond)
 	worker := "aims:aims.runtime:completion-request"
@@ -146,71 +152,73 @@ func TestSchedulerRegistryMappedCompletionMySQL(t *testing.T) {
 			t.Fatal("attempt mutated", finished, err)
 		}
 	}
-	ticket := map[string]any{"ticketCode": "ST-1", "workItemKey": "WI-1", "deliveryStatus": "closed"}
-	id, body := insert("ticket-success", ticketCode, ticket)
-	for _, name := range []string{"tenant", "key", "worker", "fence", "target", "digest", "receipt-operation"} {
-		badIdentity, badKey, badWorker := identity, "ticket-success", worker
-		badBody := map[string]any{}
-		for k, v := range body {
-			badBody[k] = v
-		}
-		switch name {
-		case "tenant":
-			badIdentity.Tenant = "tenant-b"
-		case "key":
-			badKey = "other"
-		case "worker":
-			badWorker = "other"
-		case "fence":
-			badBody["fencingToken"] = uint64(999)
-		case "target":
-			badBody["targetBizCode"] = "ST-OTHER"
-		case "digest":
-			badBody["receiptCommandSha256"] = strings.Repeat("a", 64)
-		case "receipt-operation":
-			badBody["receiptOperationId"] = uuid.NewString()
-		}
-		if _, err = service.Succeed(ctx, badIdentity, badWorker, badKey, badBody, now.Add(time.Second)); err == nil {
-			t.Fatal("accepted", name)
-		}
-		assertProcessing(id)
-	}
-	if _, err = service.Succeed(ctx, identity, worker, "ticket-success", body, now.Add(time.Second)); err != nil {
-		t.Fatal(err)
-	}
 	var status, receipt string
-	if err = db.QueryRow("SELECT status,target_receipt_id FROM u_integration_operation WHERE operation_id=?", id).Scan(&status, &receipt); err != nil || status != "succeeded" || receipt != body["targetReceiptId"] {
-		t.Fatal(status, receipt, err)
-	}
-	if _, err = service.Fail(ctx, identity, worker, "ticket-success", body, now.Add(2*time.Second)); err == nil {
-		t.Fatal("late failure accepted")
-	}
-	// The provider commits its side effect but the first worker loses the
-	// response before source ACK. A restarted worker queries the target receipt
-	// by the frozen command identity and must not repeat the provider mutation.
-	lostID, lostBody := insert("ticket-response-lost", ticketCode, ticket)
-	mutations := 0
-	targetReceipts := map[string]io.ReceiptEvidence{}
-	expectedReceipt := io.ReceiptEvidence{
-		OperationID: lostID, OperationCode: ticketCode, IdempotencyKey: "ticket-response-lost",
-		CommandSchemaVersion: "v1", CommandSHA256: lostBody["receiptCommandSha256"].(string),
-		TargetBizType: "service_ticket", TargetBizCode: "ST-1", ResponseSummarySHA256: strings.Repeat("b", 64),
-	}
-	firstProvider := &fakeRecoverableProvider{receipts: targetReceipts, mutations: &mutations, loseNext: true}
-	if _, _, err = DeliverOrRecover(ctx, firstProvider, expectedReceipt, []byte(`{"ticketCode":"ST-1"}`)); !errors.Is(err, errFakeResponseLost) {
-		t.Fatal("expected provider response loss", err)
-	}
-	restartedProvider := &fakeRecoverableProvider{receipts: targetReceipts, mutations: &mutations}
-	recoveredReceipt, recovered, recoverErr := DeliverOrRecover(ctx, restartedProvider, expectedReceipt, []byte(`{"ticketCode":"ST-1"}`))
-	if recoverErr != nil || !recovered || mutations != 1 {
-		t.Fatal("target receipt recovery", recovered, mutations, recoverErr)
-	}
-	lostBody["targetReceiptId"] = recoveredReceipt.ReceiptID
-	if _, err = service.Succeed(ctx, identity, worker, "ticket-response-lost", lostBody, now.Add(3*time.Second)); err != nil {
-		t.Fatal("source ACK after receipt recovery", err)
-	}
-	if err = db.QueryRow("SELECT status,target_receipt_id FROM u_integration_operation WHERE operation_id=?", lostID).Scan(&status, &receipt); err != nil || status != "succeeded" || receipt != recoveredReceipt.ReceiptID {
-		t.Fatal("recovered operation was not confirmed", status, receipt, err)
+	if executor == "aims" {
+		ticket := map[string]any{"ticketCode": "ST-1", "workItemKey": "WI-1", "deliveryStatus": "closed"}
+		id, body := insert("ticket-success", ticketCode, ticket)
+		for _, name := range []string{"tenant", "key", "worker", "fence", "target", "digest", "receipt-operation"} {
+			badIdentity, badKey, badWorker := identity, "ticket-success", worker
+			badBody := map[string]any{}
+			for k, v := range body {
+				badBody[k] = v
+			}
+			switch name {
+			case "tenant":
+				badIdentity.Tenant = "tenant-b"
+			case "key":
+				badKey = "other"
+			case "worker":
+				badWorker = "other"
+			case "fence":
+				badBody["fencingToken"] = uint64(999)
+			case "target":
+				badBody["targetBizCode"] = "ST-OTHER"
+			case "digest":
+				badBody["receiptCommandSha256"] = strings.Repeat("a", 64)
+			case "receipt-operation":
+				badBody["receiptOperationId"] = uuid.NewString()
+			}
+			if _, err = service.Succeed(ctx, badIdentity, badWorker, badKey, badBody, now.Add(time.Second)); err == nil {
+				t.Fatal("accepted", name)
+			}
+			assertProcessing(id)
+		}
+		if _, err = service.Succeed(ctx, identity, worker, "ticket-success", body, now.Add(time.Second)); err != nil {
+			t.Fatal(err)
+		}
+		if err = db.QueryRow("SELECT status,target_receipt_id FROM u_integration_operation WHERE operation_id=?", id).Scan(&status, &receipt); err != nil || status != "succeeded" || receipt != body["targetReceiptId"] {
+			t.Fatal(status, receipt, err)
+		}
+		if _, err = service.Fail(ctx, identity, worker, "ticket-success", body, now.Add(2*time.Second)); err == nil {
+			t.Fatal("late failure accepted")
+		}
+		// The provider commits its side effect but the first worker loses the
+		// response before source ACK. A restarted worker queries the target receipt
+		// by the frozen command identity and must not repeat the provider mutation.
+		lostID, lostBody := insert("ticket-response-lost", ticketCode, ticket)
+		mutations := 0
+		targetReceipts := map[string]io.ReceiptEvidence{}
+		expectedReceipt := io.ReceiptEvidence{
+			OperationID: lostID, OperationCode: ticketCode, IdempotencyKey: "ticket-response-lost",
+			CommandSchemaVersion: "v1", CommandSHA256: lostBody["receiptCommandSha256"].(string),
+			TargetBizType: "service_ticket", TargetBizCode: "ST-1", ResponseSummarySHA256: strings.Repeat("b", 64),
+		}
+		firstProvider := &fakeRecoverableProvider{receipts: targetReceipts, mutations: &mutations, loseNext: true}
+		if _, _, err = DeliverOrRecover(ctx, firstProvider, expectedReceipt, []byte(`{"ticketCode":"ST-1"}`)); !errors.Is(err, errFakeResponseLost) {
+			t.Fatal("expected provider response loss", err)
+		}
+		restartedProvider := &fakeRecoverableProvider{receipts: targetReceipts, mutations: &mutations}
+		recoveredReceipt, recovered, recoverErr := DeliverOrRecover(ctx, restartedProvider, expectedReceipt, []byte(`{"ticketCode":"ST-1"}`))
+		if recoverErr != nil || !recovered || mutations != 1 {
+			t.Fatal("target receipt recovery", recovered, mutations, recoverErr)
+		}
+		lostBody["targetReceiptId"] = recoveredReceipt.ReceiptID
+		if _, err = service.Succeed(ctx, identity, worker, "ticket-response-lost", lostBody, now.Add(3*time.Second)); err != nil {
+			t.Fatal("source ACK after receipt recovery", err)
+		}
+		if err = db.QueryRow("SELECT status,target_receipt_id FROM u_integration_operation WHERE operation_id=?", lostID).Scan(&status, &receipt); err != nil || status != "succeeded" || receipt != recoveredReceipt.ReceiptID {
+			t.Fatal("recovered operation was not confirmed", status, receipt, err)
+		}
 	}
 	// Failure after outbox+attempt updates must roll back when the source checkpoint fails.
 	weekly := map[string]any{"periodKey": "2026-W38", "summaryVersionId": 1, "markdownSha256": strings.Repeat("c", 64)}
@@ -256,7 +264,7 @@ func TestSchedulerRegistryMappedCompletionMySQL(t *testing.T) {
 	if err = db.QueryRow("SELECT COUNT(*) FROM integration_operation").Scan(&decoys); err != nil || decoys != 0 {
 		t.Fatal("logical decoy touched", decoys, err)
 	}
-	notificationID, notificationBody := insert("notification-dead", ticketCode, ticket)
+	notificationID, notificationBody := insert("notification-dead", weeklyCode, weekly)
 	exec("UPDATE u_integration_operation SET max_attempts=1 WHERE operation_id=?", notificationID)
 	notificationBody["httpStatus"] = 503
 	if _, err = service.Fail(ctx, identity, worker, "notification-dead", notificationBody, now.Add(time.Second)); err != nil {
@@ -274,13 +282,13 @@ func TestSchedulerRegistryMappedCompletionMySQL(t *testing.T) {
 		if _, err := service.ListPendingDeadLetterClosures(ctx, who, 20); err == nil {
 			t.Fatal("closure list bypassed guard")
 		}
-		if _, err := service.MarkFailureNotified(ctx, who, io.MarkFailureNotifiedInput{TenantCode: who.Tenant, DeploymentCode: who.Deployment, SourceApp: who.SourceApp, OperationID: notificationID, NotificationID: "n", Now: now}); err == nil {
+		if _, err := service.MarkFailureNotified(ctx, who, io.MarkFailureNotifiedInput{TenantCode: who.Tenant, DeploymentCode: who.Deployment, SourceApp: "aims", OperationID: notificationID, NotificationID: "n", Now: now}); err == nil {
 			t.Fatal("failure ACK bypassed guard")
 		}
-		if _, err := service.MarkDeadLetterActionablePublished(ctx, who, io.MarkDeadLetterActionablePublishedInput{TenantCode: who.Tenant, DeploymentCode: who.Deployment, SourceApp: who.SourceApp, OperationID: notificationID, Now: now}); err == nil {
+		if _, err := service.MarkDeadLetterActionablePublished(ctx, who, io.MarkDeadLetterActionablePublishedInput{TenantCode: who.Tenant, DeploymentCode: who.Deployment, SourceApp: "aims", OperationID: notificationID, Now: now}); err == nil {
 			t.Fatal("publish ACK bypassed guard")
 		}
-		if _, err := service.MarkDeadLetterClosureAcknowledged(ctx, who, io.MarkDeadLetterClosureAcknowledgedInput{TenantCode: who.Tenant, DeploymentCode: who.Deployment, SourceApp: who.SourceApp, OperationID: notificationID, Now: now}); err == nil {
+		if _, err := service.MarkDeadLetterClosureAcknowledged(ctx, who, io.MarkDeadLetterClosureAcknowledgedInput{TenantCode: who.Tenant, DeploymentCode: who.Deployment, SourceApp: "aims", OperationID: notificationID, Now: now}); err == nil {
 			t.Fatal("closure ACK bypassed guard")
 		}
 	}
@@ -293,7 +301,7 @@ func TestSchedulerRegistryMappedCompletionMySQL(t *testing.T) {
 	if _, err := service.ListPendingFailureNotifications(ctx, identity, 20); err != nil {
 		t.Fatal(err)
 	}
-	if ok, err := service.MarkFailureNotified(ctx, identity, io.MarkFailureNotifiedInput{TenantCode: identity.Tenant, DeploymentCode: identity.Deployment, SourceApp: identity.SourceApp, OperationID: notificationID, NotificationID: "failure-committed", Now: now}); err != nil || !ok {
+	if ok, err := service.MarkFailureNotified(ctx, identity, io.MarkFailureNotifiedInput{TenantCode: identity.Tenant, DeploymentCode: identity.Deployment, SourceApp: "aims", OperationID: notificationID, NotificationID: "failure-committed", Now: now}); err != nil || !ok {
 		t.Fatal(ok, err)
 	}
 	var notification string

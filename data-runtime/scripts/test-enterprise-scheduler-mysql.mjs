@@ -6,7 +6,7 @@ const rootDir = resolve(import.meta.dirname, '../..')
 const plan = await buildTemporaryMySqlPlan({ rootDir })
 await withTemporaryMySql(plan, async (context) => {
   await new Promise((resolveRun, reject) => {
-    const child = spawn('go', ['test', '-race', './internal/enterprisescheduler', '-run', '^(TestSchedulerRegistryMapped(Claim|Completion|MilestoneRollover|DueNotification|AssetsDueNotification)MySQL|TestSchedulerCompanyWeeklySummaryPublishConfirmsManagerTimeMySQL)$', '-count=1', '-v'], {
+    const child = spawn('go', ['test', '-race', './internal/enterprisescheduler', '-run', '^(Test(?:Host)?SchedulerRegistryMapped(Claim|Completion|MilestoneRollover|DueNotification|AssetsDueNotification)MySQL|Test(?:Host)?SchedulerCompanyWeeklySummaryPublishConfirmsManagerTimeMySQL)$', '-count=1', '-v'], {
       cwd: resolve(rootDir, 'data-runtime'), stdio: 'inherit',
       env: { ...process.env, HZY_ENTERPRISE_SCHEDULER_TEST_SOCKET: context.socketPath }
     })

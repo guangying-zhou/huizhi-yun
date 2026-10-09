@@ -13,7 +13,10 @@ import (
 
 // SalesReader is the upstream basic projection. Its table closure is separate
 // from G1 so installing it cannot add dependencies to existing basic reads.
-type SalesReader struct{ tables map[string]string }
+type SalesReader struct {
+	tables map[string]string
+	apf    bool
+}
 
 var SalesReadTables = []string{"lead", "opportunity", "opportunity_stage", "quotation", "quotation_item"}
 
@@ -25,6 +28,16 @@ func NewSalesReader(tables map[string]string) (*SalesReader, error) {
 		}
 		r.tables[logical] = tables[logical]
 	}
+	return r, nil
+}
+
+// NewEnterpriseSalesReader accepts only the fixed B2 mapping supplied by Registry.
+func NewEnterpriseSalesReader(tables map[string]string) (*SalesReader, error) {
+	r, e := NewSalesReader(tables)
+	if e != nil {
+		return nil, e
+	}
+	r.apf = true
 	return r, nil
 }
 func (r *SalesReader) table(logical string) string { return "`" + r.tables[logical] + "`" }
@@ -79,14 +92,30 @@ func (r *SalesReader) ReadInTransaction(ctx context.Context, tx *sql.Tx, resourc
 	}
 	alias := "s"
 	trusted := url.Values{"current_user": {actor}, "current_user_altoc_access": {scope.Access}, "current_user_altoc_dept_codes": {strings.Join(scope.DepartmentCodes, ",")}}
-	where, args, err := altocReadScopeWhere(trusted, resource, alias, "owner_user_id", "owner_dept_code")
+	ownerColumn := "owner_user_id"
+	if r.apf {
+		ownerColumn = "owner_uid"
+	}
+	where, args, err := altocReadScopeWhere(trusted, resource, alias, ownerColumn, "owner_dept_code")
 	if err != nil {
 		return nil, err
 	}
 	where = append(where, "s.deleted_at IS NULL")
 	from := r.table(resource) + " s"
 	columns := []string{}
-	for _, c := range salesReadColumns[resource] {
+	cols := append([]string{}, salesReadColumns[resource]...)
+	if r.apf {
+		cols = append(cols, "row_version")
+		if resource == "lead" {
+			cols = append(cols, "source_detail", "need_summary", "project_type", "estimated_budget", "budget_status", "expected_procurement_date", "procurement_mode", "source_evidence_url", "contact_name", "contact_mobile", "contact_email", "remark", "next_action", "next_action_due_at")
+		} else if resource == "opportunity" {
+			cols = append(cols, "source_type", "source_detail", "next_action", "next_action_due_at", "risk_level", "risk_reason", "competitor_info", "remark", "won_reason_code", "won_reason", "lost_reason_code", "lost_reason", "pause_reason_code", "pause_reason")
+		}
+	}
+	for _, c := range cols {
+		if r.apf && c == "owner_user_id" {
+			c = "owner_uid"
+		}
 		columns = append(columns, "s.`"+c+"`")
 	}
 	if resource == "opportunity" {
@@ -156,6 +185,19 @@ func (r *SalesReader) ReadInTransaction(ctx context.Context, tx *sql.Tx, resourc
 	}
 	if row == nil {
 		return nil, httperror.New(404, "record_not_found", "Altoc object not found")
+	}
+	if r.apf && resource == "opportunity" {
+		stages, e := altocQueryMaps(ctx, tx, "SELECT id,code,name,stage_kind FROM "+r.table("opportunity_stage")+" WHERE is_enabled=1 AND pipeline_code=(SELECT pipeline_code FROM "+r.table("opportunity_stage")+" WHERE id=?) ORDER BY sort_no,id LIMIT 101", row["stage_id"])
+		if e != nil {
+			return nil, e
+		}
+		if len(stages) > 100 {
+			return nil, httperror.New(503, "altoc_sales_stage_limit", "Stage configuration unavailable")
+		}
+		if stages == nil {
+			stages = []map[string]any{}
+		}
+		row["stages"] = stages
 	}
 	if resource == "quotation" {
 		// This canonical child has no deleted_at. Parent authorization precedes

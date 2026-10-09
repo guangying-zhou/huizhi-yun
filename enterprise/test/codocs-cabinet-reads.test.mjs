@@ -34,17 +34,28 @@ test('Enterprise Codocs cabinet reads enforce scope, canonical metadata and even
   const hooks = registerHooks({
     resolve(specifier, context, next) {
       let source
-      if (specifier.endsWith('/consoleSessionBridge')) source = `export const resolveConsoleAuthWithSessionBridge=async()=>globalThis.__codocsCabinetSession`
-      if (specifier.endsWith('/tenantGatewayTrust')) source = `export const resolveTrustedTenantGatewayContext=()=>undefined`
-      if (specifier.endsWith('/tenantRuntimeClient')) source = `export const prepareTenantRuntime=async(...args)=>{globalThis.__codocsCabinetPrepareCount++;globalThis.__codocsCabinetCalls.push({kind:'prepare',args});return true};export const maybeCallTenantRuntime=async(...args)=>{const [event,path,options]=args;globalThis.__codocsCabinetCalls.push({kind:'runtime',event,path,options});if(globalThis.__codocsCabinetRuntimeMode()==='error')throw Object.assign(new Error('runtime secret'),{statusCode:503});if(path.endsWith('personal-cabinet:list'))return {handled:true,data:{success:true,data:{items:[${JSON.stringify(files.txt)}],total:21,page:Number(options.body.query.page||1),pageSize:Number(options.body.query.pageSize||20)}}};if(path.endsWith('converted-info'))return {handled:true,data:{success:true,data:{doc_uuid:'doc-1',doc_title:'Converted',doc_path:'codocs/doc-1.md'}}};return {handled:true,data:{success:true,data:globalThis.__codocsCabinetFile||${JSON.stringify(files.txt)}}}}`
-      if (specifier.endsWith('/platformBundleAuthorization')) source = `export const loadAuthorizationSnapshotFromConsoleRuntime=async()=>{if(globalThis.__codocsCabinetRevokeAfterPrepareCount===globalThis.__codocsCabinetPrepareCount)return {resources:{},actionPolicies:{}};return globalThis.__codocsCabinetAuth()}`
-      if (specifier.endsWith('/oss')) source = `export const createRuntimeOSSClient=async(options)=>{globalThis.__codocsCabinetOssCalls.push({kind:'client',options});return {createSignedGetUrl:async(path,opts)=>{globalThis.__codocsCabinetOssCalls.push({kind:'signed',path,opts});return 'https://oss.test/'+path},get:async(path)=>{globalThis.__codocsCabinetOssCalls.push({kind:'get',path});if(globalThis.__codocsCabinetRuntimeMode()==='storage404'){const e=new Error('NoSuchKey');e.code='NoSuchKey';throw e}if(globalThis.__codocsCabinetRuntimeMode()==='storage503')throw new Error('secret storage');return {content:Buffer.from(path.endsWith('.pptx')?'pptx-bytes':'text-body')}}}}`
-      if (specifier.endsWith('/officeConverter')) source = `export const docxToHtml=async()=>'<p>untrusted</p>'`
-      if (source) return { url: `data:text/javascript,${encodeURIComponent(source)}`, shortCircuit: true }
+      if (specifier.endsWith('/consoleSessionBridge'))
+        source = `export const resolveConsoleAuthWithSessionBridge=async()=>globalThis.__codocsCabinetSession`
+      if (specifier.endsWith('/tenantGatewayTrust'))
+        source = `export const resolveTrustedTenantGatewayContext=()=>undefined`
+      if (specifier.endsWith('/tenantRuntimeClient'))
+        source = `export const prepareTenantRuntime=async(...args)=>{globalThis.__codocsCabinetPrepareCount++;globalThis.__codocsCabinetCalls.push({kind:'prepare',args});return true};export const maybeCallTenantRuntime=async(...args)=>{const [event,path,options]=args;globalThis.__codocsCabinetCalls.push({kind:'runtime',event,path,options});if(globalThis.__codocsCabinetRuntimeMode()==='error')throw Object.assign(new Error('runtime secret'),{statusCode:503});if(path.endsWith('personal-cabinet:list'))return {handled:true,data:{success:true,data:{items:[${JSON.stringify(files.txt)}],total:21,page:Number(options.body.query.page||1),pageSize:Number(options.body.query.pageSize||20)}}};if(path.endsWith('converted-info'))return {handled:true,data:{success:true,data:{doc_uuid:'doc-1',doc_title:'Converted',doc_path:'codocs/doc-1.md'}}};return {handled:true,data:{success:true,data:globalThis.__codocsCabinetFile||${JSON.stringify(files.txt)}}}}`
+      if (specifier.endsWith('/platformBundleAuthorization'))
+        source = `export const loadAuthorizationSnapshotFromConsoleRuntime=async()=>{if(globalThis.__codocsCabinetRevokeAfterPrepareCount===globalThis.__codocsCabinetPrepareCount)return {resources:{},actionPolicies:{}};return globalThis.__codocsCabinetAuth()}`
+      if (specifier.endsWith('/oss'))
+        source = `export const createRuntimeOSSClient=async(options)=>{globalThis.__codocsCabinetOssCalls.push({kind:'client',options});return {createSignedGetUrl:async(path,opts)=>{globalThis.__codocsCabinetOssCalls.push({kind:'signed',path,opts});return 'https://oss.test/'+path},get:async(path)=>{globalThis.__codocsCabinetOssCalls.push({kind:'get',path});if(globalThis.__codocsCabinetRuntimeMode()==='storage404'){const e=new Error('NoSuchKey');e.code='NoSuchKey';throw e}if(globalThis.__codocsCabinetRuntimeMode()==='storage503')throw new Error('secret storage');return {content:Buffer.from(path.endsWith('.pptx')?'pptx-bytes':'text-body')}}}}`
+      if (specifier.endsWith('/officeConverter'))
+        source = `export const docxToHtml=async()=>'<p>untrusted</p>'`
+      if (source)
+        return { url: `data:text/javascript,${encodeURIComponent(source)}`, shortCircuit: true }
       let candidate
-      if (specifier.startsWith('@hzy/foundation/')) candidate = resolve(root, 'foundation', specifier.slice('@hzy/foundation/'.length))
-      else if (specifier.startsWith('.') && context.parentURL?.startsWith('file:')) candidate = resolve(dirname(fileURLToPath(context.parentURL)), specifier)
-      if (candidate && !existsSync(candidate) && existsSync(`${candidate}.ts`)) return { url: pathToFileURL(`${candidate}.ts`).href, shortCircuit: true }
+      if (specifier.startsWith('@hzy/foundation/'))
+        candidate = resolve(root, 'foundation', specifier.slice('@hzy/foundation/'.length))
+      else
+        if (specifier.startsWith('.') && context.parentURL?.startsWith('file:'))
+          candidate = resolve(dirname(fileURLToPath(context.parentURL)), specifier)
+      if (candidate && !existsSync(candidate) && existsSync(`${candidate}.ts`))
+        return { url: pathToFileURL(`${candidate}.ts`).href, shortCircuit: true }
       return next(specifier, context)
     }
   })
@@ -57,7 +68,9 @@ test('Enterprise Codocs cabinet reads enforce scope, canonical metadata and even
     for (const [path, file] of [[':uuid/preview', '[uuid]/preview.get.ts'], [':uuid/preview-html', '[uuid]/preview-html.get.ts'], [':uuid/preview-pptx', '[uuid]/preview-pptx.get.ts'], [':uuid/download', '[uuid]/download.get.ts'], [':uuid/converted-info', '[uuid]/converted-info.get.ts']]) {
       router.get(`/codocs/api/cabinet/${path}`, (await import(`../server/routes/codocs/api/cabinet/${file}`)).default)
     }
-    app.use(defineEventHandler(event => { event.context.consoleAuth = session }))
+    app.use(defineEventHandler((event) => {
+      event.context.consoleAuth = session
+    }))
     app.use(router)
     server = createServer(toNodeListener(app))
     await new Promise(done => server.listen(0, '127.0.0.1', done))
@@ -81,9 +94,11 @@ test('Enterprise Codocs cabinet reads enforce scope, canonical metadata and even
     assert.ok(listCall.options.body.authorization.expiresAt > Date.now())
     assert.ok(listCall.options.body.authorization.expiresAt - Date.now() <= 15000)
 
-    for (const path of ['/codocs/api/cabinet?owner_uid=person-b', '/codocs/api/cabinet?page=1&page=2', '/codocs/api/cabinet?bad=1']) assert.equal((await get(path)).status, path.includes('person-b') ? 403 : 400)
+    for (const path of ['/codocs/api/cabinet?owner_uid=person-b', '/codocs/api/cabinet?page=1&page=2', '/codocs/api/cabinet?bad=1'])
+      assert.equal((await get(path)).status, path.includes('person-b') ? 403 : 400)
     for (const path of ['/codocs/api/cabinet/file-txt/preview?x=1', '/codocs/api/cabinet/not valid/preview', '/codocs/api/cabinet/file-txt/download']) {
-      if (path.endsWith('download')) continue
+      if (path.endsWith('download'))
+        continue
       assert.equal((await get(path)).status, 400)
     }
 
@@ -104,7 +119,7 @@ test('Enterprise Codocs cabinet reads enforce scope, canonical metadata and even
     assert.match((await response.json()).data.preview_url, /^\/codocs\/api\/cabinet\/file-pptx\/preview-pptx$/)
     globalThis.__codocsCabinetFile = files.docx
     response = await get('/codocs/api/cabinet/file-docx/preview-html')
-    assert.equal(response.headers.get('content-security-policy'), "sandbox; default-src 'none'; style-src 'unsafe-inline'; img-src data:")
+    assert.equal(response.headers.get('content-security-policy'), 'sandbox; default-src \'none\'; style-src \'unsafe-inline\'; img-src data:')
     globalThis.__codocsCabinetFile = files.pptx
     response = await get('/codocs/api/cabinet/file-pptx/preview-pptx')
     assert.equal(await response.text(), 'pptx-bytes')
@@ -162,10 +177,13 @@ test('Enterprise Codocs cabinet reads enforce scope, canonical metadata and even
     assert.equal(ossCalls.length, beforePathOss)
   } finally {
     hooks?.deregister?.()
-    if (server) await new Promise(done => server.close(done))
+    if (server)
+      await new Promise(done => server.close(done))
     for (const [key, value] of Object.entries(old)) {
-      if (value === undefined) delete globalThis[key]
-      else globalThis[key] = value
+      if (value === undefined)
+        delete globalThis[key]
+      else
+        globalThis[key] = value
     }
   }
 })

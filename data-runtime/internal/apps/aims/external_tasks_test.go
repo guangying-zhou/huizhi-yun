@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/DATA-DOG/go-sqlmock"
+	"github.com/huizhi-yun/data-runtime/internal/httperror"
 )
 
 func TestExternalTasksReturnsCursorPageAndGitlabLink(t *testing.T) {
@@ -63,5 +64,26 @@ func TestExternalTasksRejectsUnsupportedStatusBeforeQuery(t *testing.T) {
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// Retirement must fail before any database access, even with legacy query fields.
+func TestExternalTasksRetiredRoute(t *testing.T) {
+	adapter := &Adapter{}
+	for _, query := range []url.Values{nil, {"projectCodes": {"ANY"}, "cursor": {"invalid"}}} {
+		data, operation, handled, err := adapter.handleExternalTasksRuntime(context.Background(), "GET", "/v1/aims/service/tasks", query)
+		typed, ok := err.(httperror.Error)
+		if !handled || data != nil || operation != "aims.service.tasks.list" || !ok || typed.Status != 410 || typed.Code != "aims_service_tasks_retired" {
+			t.Fatalf("unexpected retirement result: %v %q %v %v", data, operation, handled, err)
+		}
+	}
+	_, _, handled, err := adapter.handleExternalTasksRuntime(context.Background(), "GET", "/v1/aims/work-items", nil)
+	if handled || err != nil {
+		t.Fatal("retirement intercepted a different contract")
+	}
+	_, _, handled, err = adapter.handleExternalTasksRuntime(context.Background(), "POST", "/v1/aims/service/tasks", nil)
+	typed, ok := err.(httperror.Error)
+	if !handled || !ok || typed.Status != 405 {
+		t.Fatalf("method boundary changed: %v", err)
 	}
 }

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { zh_cn } from '@nuxt/ui/locale'
 import EnterpriseProjectPageGate from './components/EnterpriseProjectPageGate.vue'
 import { enterprisePageKey } from './utils/enterprise-page-key.mjs'
 import type { RouteLocationNormalizedLoaded } from 'vue-router'
@@ -12,7 +13,7 @@ const pageKey = (route: RouteLocationNormalizedLoaded) => enterprisePageKey(veri
 </script>
 
 <template>
-  <UApp>
+  <UApp :locale="zh_cn">
     <NuxtLoadingIndicator />
     <NuxtLayout><EnterpriseProjectPageGate><NuxtPage :page-key="pageKey" /></EnterpriseProjectPageGate></NuxtLayout>
   </UApp>

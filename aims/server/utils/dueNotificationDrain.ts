@@ -193,7 +193,9 @@ export async function drainAimsDueNotifications(options: {
   if (!isAimsDueNotificationDeliveryEnabled()) {
     return { enabled: false, scanned: 0, delivered: 0, failed: 0, stoppedBy: 'feature_flag' }
   }
-  requireAimsDueNotificationRuntimeBinding()
+  // Host supplies the generation-bound typed caller; only legacy cron needs
+  // its own Aims worker credential/config binding.
+  if (!options.runtime) requireAimsDueNotificationRuntimeBinding()
   const runtime: DueRuntimeCaller = options.runtime || callAimsDueNotificationRuntime
   const eligibilityEvent = options.event || taskEligibilityEvent(options.taskContext)
   const pageSize = Math.min(Math.max(options.pageSize || 100, 1), 200)

@@ -5,12 +5,14 @@ import { createRequire } from 'node:module'
 import { build } from 'esbuild'
 import { parse, compileScript } from '@vue/compiler-sfc'
 import { ref, reactive, computed, watch } from 'vue'
-import { createConsoleMutationIntent } from '../shared/utils/consoleMutationIntent.ts'
+import '../shared/utils/consoleMutationIntent.ts'
 
 async function editor() {
   const file = new URL('../app/components/DirectoryProjectEditor.vue', import.meta.url).pathname
   const { descriptor } = parse(readFileSync(file, 'utf8'), { filename: file })
-  const result = await build({ stdin: { contents: compileScript(descriptor, { id: file }).content, loader: 'ts', resolveDir: new URL('../app/components/', import.meta.url).pathname }, bundle: true, platform: 'node', format: 'cjs', write: false, external: ['vue'], plugins: [{ name: 'empty-sfc', setup(builder) { builder.onLoad({ filter: /\.vue$/ }, () => ({ contents: 'export default {}', loader: 'js' })) } }] })
+  const result = await build({ stdin: { contents: compileScript(descriptor, { id: file }).content, loader: 'ts', resolveDir: new URL('../app/components/', import.meta.url).pathname }, bundle: true, platform: 'node', format: 'cjs', write: false, external: ['vue'], plugins: [{ name: 'empty-sfc', setup(builder) {
+    builder.onLoad({ filter: /\.vue$/ }, () => ({ contents: 'export default {}', loader: 'js' }))
+  } }] })
   const module = { exports: {} }
   new Function('require', 'module', 'exports', result.outputFiles[0].text)(createRequire(import.meta.url), module, module.exports)
   return module.exports.default
@@ -20,14 +22,25 @@ test('shared project editor gates writes, diffs fields, keeps stable retries, co
   const state = { status: 0, confirmed: false, refreshFail: false, total: 1, items: [{ uid: 'U1', role: 'member' }], calls: [], toasts: [], confirmations: [], denied: [] }
   const mocks = { ref, reactive, computed, watch,
     useToast: () => ({ add: value => state.toasts.push(value) }),
-    useConfirm: () => ({ confirm: async value => { state.confirmations.push(value); return state.confirmed } }),
-    $fetch: async (path, options) => { state.calls.push({ path, ...options }); if (state.status) throw Object.assign(Error('test'), { statusCode: state.status }); return { code: 0, data: { items: state.items, total: state.total } } }
+    useConfirm: () => ({ confirm: async (value) => {
+      state.confirmations.push(value)
+      return state.confirmed
+    } }),
+    $fetch: async (path, options) => {
+      state.calls.push({ path, ...options })
+      if (state.status)
+        throw Object.assign(Error('test'), { statusCode: state.status })
+      return { code: 0, data: { items: state.items, total: state.total } }
+    }
   }
   const previous = Object.fromEntries(Object.keys(mocks).map(key => [key, globalThis[key]]))
   Object.assign(globalThis, mocks)
   try {
     const component = await editor()
-    const props = { apiPath: '/enterprise/api/directory/projects', projects: [], departments: [], canEdit: true, refresh: async () => { if (state.refreshFail) throw Error('refresh') } }
+    const props = { apiPath: '/enterprise/api/directory/projects', projects: [], departments: [], canEdit: true, refresh: async () => {
+      if (state.refreshFail)
+        throw Error('refresh')
+    } }
     const setup = () => component.setup(props, { expose: () => {}, emit: (_, status) => state.denied.push(status) })
     const controller = setup()
     controller.openCreateProject()
@@ -96,7 +109,7 @@ test('shared project editor gates writes, diffs fields, keeps stable retries, co
     controller.editableMembersText.value = ''
     await controller.saveMembers()
     assert.deepEqual(state.calls.at(-1).body.members, [], 'empty replacement still requires warning confirmation')
-    for (const [total, items] of [[101, state.items], [2, state.items]]) {
+    for (const [total] of [[101, state.items], [2, state.items]]) {
       state.total = total
       await controller.loadMembers(project)
       const count = state.calls.length
@@ -130,5 +143,7 @@ test('shared project editor gates writes, diffs fields, keeps stable retries, co
     state.status = 403
     await controller.deleteProject(project)
     assert.deepEqual(state.denied, [403])
-  } finally { Object.assign(globalThis, previous) }
+  } finally {
+    Object.assign(globalThis, previous)
+  }
 })

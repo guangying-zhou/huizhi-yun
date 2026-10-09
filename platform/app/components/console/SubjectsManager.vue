@@ -58,6 +58,7 @@ interface SubjectRoleItem {
   subjectType: string
   subjectCode: string
   subjectDisplayName: string
+  subjectStatus?: string
   roleId: number
   roleCode: string
   roleName: string
@@ -123,7 +124,7 @@ const roleForm = reactive({
 const statusOptions = [
   { label: '正常', value: 'active' },
   { label: '暂停', value: 'suspended' },
-  { label: '禁用', value: 'disabled' }
+  { label: '已停用', value: 'disabled' }
 ]
 
 const subjectTypeOptions = [
@@ -175,7 +176,7 @@ const subjectTypeFilterOptions = computed(() => [
   ...subjectTypeOptions
 ])
 const statusFilterOptions = computed(() => [
-  { label: '全部状态', value: allFilterValue },
+  { label: '显示已停用', value: allFilterValue },
   ...statusOptions
 ])
 const subjectById = computed(() => new Map(subjects.value.map(item => [item.id, item])))
@@ -218,7 +219,7 @@ const subjectTreeRows = computed(() => {
 
     const subject = subjectById.value.get(membership.subjectId)
     const container = nodeMap.get(membership.containerSubjectId)
-    if (!subject || subject.subjectType !== 'user' || !container || subject.id === container.id) continue
+    if (!subject || subject.status !== 'active' || subject.subjectType !== 'user' || !container || subject.id === container.id) continue
 
     membershipSubjectIds.add(subject.id)
     container.children ||= []
@@ -526,7 +527,7 @@ async function assignRoleToActiveSubject() {
     .map(value => Number(value || 0))
     .filter(value => Number.isInteger(value) && value > 0)
 
-  if (!tenantCode || !subject || subject.subjectType !== 'user' || roleIds.length === 0) {
+  if (!tenantCode || !subject || subject.status !== 'active' || subject.subjectType !== 'user' || roleIds.length === 0) {
     error.value = '请先选择用户和至少一个角色'
     return
   }
@@ -723,7 +724,7 @@ watch(() => effectiveTenantCode.value, async (value) => {
             <template #displayName-cell="{ row }">
               <div
                 class="flex min-w-[260px] items-center gap-2"
-                :style="{ paddingLeft: `${row.depth * 1.25}rem` }"
+                :style="{ paddingLeft: `${row.depth * 1.25}rem`, opacity: row.original.status === 'active' ? 1 : 0.6 }"
               >
                 <UButton
                   :class="row.getCanExpand() ? '' : 'invisible'"
@@ -851,7 +852,7 @@ watch(() => effectiveTenantCode.value, async (value) => {
                       color="primary"
                       icon="i-lucide-plus"
                       :loading="roleSaving"
-                      :disabled="roleForm.roleIds.length === 0 || rolesPending"
+                      :disabled="roleForm.roleIds.length === 0 || rolesPending || activeSubject.status !== 'active'"
                     >
                       授予角色
                     </UButton>
@@ -908,10 +909,10 @@ watch(() => effectiveTenantCode.value, async (value) => {
                         :color="item.active ? 'success' : 'neutral'"
                         variant="soft"
                       >
-                        {{ item.active ? '生效中' : '已过期' }}
+                        {{ item.subjectStatus && item.subjectStatus !== 'active' ? '账号已停用、授权不生效' : item.active ? '生效中' : '已失效' }}
                       </UBadge>
                       <UButton
-                        v-if="item.active"
+                        v-if="item.active || (item.subjectStatus && item.subjectStatus !== 'active')"
                         color="error"
                         variant="soft"
                         size="sm"

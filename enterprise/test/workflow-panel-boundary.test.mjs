@@ -30,6 +30,9 @@ test('hosted Workflow bridge rejects undeclared actions and fails closed before 
     if (specifier.endsWith('/workflowRuntime')) source = `export async function resolveWorkflowApiUrl(){return 'http://127.0.0.1:23140/workflow'}`
     if (specifier.endsWith('/workflowProxyError')) source = `export function workflowProxyErrorData(error){return {statusCode:error.statusCode||503,statusMessage:'Unavailable',message:'Workflow unavailable',code:'workflow_unavailable'}}`
     if (specifier.endsWith('/externalFetch')) source = `export async function fetchExternal(url,options){return globalThis.__wfFetch(url,options)}`
+    if (specifier === './enterpriseFinanceLedger') source = `export const normalizeFinanceLedgerRequest=(op,code)=>({code});export async function callFinanceLedger(){if(!globalThis.__wfItem('308'))throw globalThis.__wfError(403);return {data:{code:'IR1'}}}`
+    if (specifier === './enterprisePeople') source = `export async function readEnterprisePeopleAssignmentByCode(){throw globalThis.__wfError(403)}`
+    if (specifier.endsWith('/enterpriseAltocReads')) source = `export async function enterpriseAltocRead(){return {}}`
     if (specifier.endsWith('/enterpriseAimsWorkItems')) source = `export async function enterpriseAimsWorkflowItem(event,id,write){return globalThis.__wfItem(id,write)}`
     if (source) return { shortCircuit: true, url: `data:text/javascript,${encodeURIComponent(source)}` }
     let candidate
@@ -122,6 +125,10 @@ test('hosted Workflow bridge rejects undeclared actions and fails closed before 
     process.env.HZY_ENTERPRISE_WORKFLOW_ORIGIN = 'http://127.0.0.1:23140'
     assert.equal((await fetch(byBiz.replace('app_code=aims', 'app_code=finance'))).status, 403)
     assert.equal(calls.length, before)
+    assert.equal((await fetch(`${base}/instances/by-biz?app_code=finance&resource_code=invoices&action_code=request&biz_id=IR1`)).status, 200)
+    assert.equal(calls.at(-1).query.biz_id, 'IR1')
+    calls.pop()
+    assert.equal((await fetch(`${base}/instances/by-biz?app_code=finance&resource_code=expenses&action_code=claim&biz_id=IR1`)).status, 403)
     visible = false
     assert.equal((await fetch(byBiz)).status, 403)
     assert.equal(calls.length, before)

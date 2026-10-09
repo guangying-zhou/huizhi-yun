@@ -112,12 +112,21 @@ export async function listUserPendingActionables(
 
 export async function publishPortalNotification(
   input: PublishPortalNotificationInput,
-  actor: { actorId?: string | null, appCode?: string | null },
+  actor: { actorId?: string | null, appCode?: string | null, notificationSourceApp?: 'aims' },
   event?: H3Event
 ) {
   try {
     const request = canonicalizePortalNotificationRequest(input, actor)
     const body = request as unknown as Record<string, unknown>
+    if (input.resolveExternalChannel !== undefined) {
+      if (input.resolveExternalChannel !== 'wecom' && input.resolveExternalChannel !== 'dingtalk') throw createError({ statusCode: 400, message: 'notification_channel_invalid' })
+      body.resolveExternalChannel = input.resolveExternalChannel
+    }
+    if ('probeOnly' in (input as object)) {
+      const probe = (input as PublishPortalNotificationInput & { probeOnly?: unknown }).probeOnly
+      if (probe !== true || actor.appCode !== 'enterprise' || actor.actorId !== 'enterprise.runtime' || request.bizType !== 'apf_due_checkpoint') throw createError({ statusCode: 403, message: 'notification_probe_source_invalid' })
+      body.probeOnly = true
+    }
     const response = event
       ? await publishConsoleCanonicalNotification(event, body)
       : await callConsoleTenantRuntimeTask<{ data: {
@@ -135,7 +144,7 @@ export async function publishPortalNotification(
 
 export async function advancePortalActionableLifecycleForService(
   input: AdvancePortalActionableLifecycleInput,
-  actor: { appCode?: string | null },
+  actor: { appCode?: string | null, notificationSourceApp?: 'aims' },
   event?: H3Event
 ) {
   try {

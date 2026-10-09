@@ -11,6 +11,7 @@ test('status route invokes dedicated authenticated handler before generic forwar
   const exports: Record<string, (event: unknown) => Promise<unknown>> = {}
   let calls = 0
   runInNewContext(compiled, { exports, defineEventHandler: (handler: unknown) => handler, require: (name: string) => {
+    name = name.replace(/\.ts$/, '')
     if (name === 'h3') return { createError, getRequestURL: () => ({ pathname: '/api/v1/service/product-feedback/progress' }) }
     if (name.endsWith('/productFeedbackProgressService')) return { handleProductFeedbackProgressService: async () => {
       calls++

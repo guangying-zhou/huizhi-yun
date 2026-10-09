@@ -4,6 +4,8 @@ type PeopleHRSourceActor = {
 }
 
 export function isCanonicalPeopleHRSourceClient(actor: PeopleHRSourceActor) {
-  return String(actor.appCode || '').trim().toLowerCase() === 'people'
-    && String(actor.actorId || '').trim() === 'people.runtime'
+  const app = String(actor.appCode || '').trim().toLowerCase()
+  const client = String(actor.actorId || '').trim()
+  return (app === 'people' && client === 'people.runtime')
+    || (app === 'enterprise' && client === 'enterprise.runtime')
 }

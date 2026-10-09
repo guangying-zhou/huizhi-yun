@@ -1,5 +1,5 @@
 import type { H3Event } from 'h3'
-import { getHeader } from 'h3'
+import { trustedClientAddress } from '@hzy/foundation/server/utils/trustedClientAddress'
 import { appendConsoleLoginLog } from '@hzy/foundation/server/utils/consoleTenantRuntimeClient'
 
 export interface AuthLoginAuditInput {
@@ -24,15 +24,7 @@ function nullableString(value: unknown) {
 }
 
 export function getAuthRequestIp(event: H3Event) {
-  const forwardedFor = getHeader(event, 'x-forwarded-for')
-  if (forwardedFor) {
-    const firstIp = forwardedFor.split(',')[0]?.trim()
-    if (firstIp) return firstIp
-  }
-
-  return getHeader(event, 'x-real-ip')
-    || event.node.req.socket.remoteAddress
-    || null
+  return trustedClientAddress(event) || null
 }
 
 export async function writeAuthLoginEvent(event: H3Event, input: AuthLoginAuditInput) {

@@ -1,0 +1,131 @@
+[
+  {
+    "Logical": "finance_project_cost_period",
+    "Physical": "finance_project_cost_period",
+    "DDL": "CREATE TABLE finance_project_cost_period (\n    id BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,\n    project_code VARCHAR(64) NOT NULL, period_month CHAR(7) NOT NULL,\n    row_version BIGINT UNSIGNED NOT NULL DEFAULT 1,\n    closed_at DATETIME(6) NULL, closed_by VARCHAR(64) NULL,\n    zero_confirmed_at DATETIME(6) NULL, zero_confirmed_by VARCHAR(64) NULL,\n    zero_input_sha256 CHAR(64) NULL, current_batch_code VARCHAR(64) NULL,\n    created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),\n    updated_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),\n    UNIQUE KEY uk_project_cost_period (project_code,period_month),\n    CHECK ((closed_at IS NULL AND closed_by IS NULL) OR (closed_at IS NOT NULL AND closed_by IS NOT NULL)),\n    CHECK ((zero_confirmed_at IS NULL AND zero_confirmed_by IS NULL AND zero_input_sha256 IS NULL) OR (zero_confirmed_at IS NOT NULL AND zero_confirmed_by IS NOT NULL AND zero_input_sha256 IS NOT NULL))\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
+    "Columns": [
+      "id",
+      "project_code",
+      "period_month",
+      "row_version",
+      "closed_at",
+      "closed_by",
+      "zero_confirmed_at",
+      "zero_confirmed_by",
+      "zero_input_sha256",
+      "current_batch_code",
+      "created_at",
+      "updated_at"
+    ]
+  },
+  {
+    "Logical": "finance_project_cost_batch",
+    "Physical": "finance_project_cost_batch",
+    "DDL": "CREATE TABLE finance_project_cost_batch (\n    id BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,\n    code VARCHAR(64) NOT NULL, project_code VARCHAR(64) NOT NULL, period_month CHAR(7) NOT NULL,\n    revision BIGINT UNSIGNED NOT NULL, parent_batch_code VARCHAR(64) NULL,\n    input_sha256 CHAR(64) NOT NULL, formula_version VARCHAR(64) NOT NULL,\n    readiness_status VARCHAR(16) NOT NULL, missing_inputs_json JSON NOT NULL,\n    input_snapshot_json JSON NOT NULL, calendar_snapshot_json JSON NOT NULL,\n    currency_code CHAR(3) NULL, labor_cost_amount DECIMAL(18,2) NULL,\n    calculated_by VARCHAR(64) NOT NULL, receipt_key VARCHAR(191) NOT NULL,\n    created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),\n    UNIQUE KEY uk_cost_batch_code (code),\n    UNIQUE KEY uk_cost_batch_revision (project_code,period_month,revision),\n    UNIQUE KEY uk_cost_batch_receipt (receipt_key),\n    CHECK (readiness_status IN ('ready','not_ready')),\n    CHECK ((readiness_status='ready' AND labor_cost_amount IS NOT NULL AND currency_code IS NOT NULL) OR (readiness_status='not_ready' AND labor_cost_amount IS NULL)),\n    CHECK (labor_cost_amount IS NULL OR labor_cost_amount>=0)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
+    "Columns": [
+      "id",
+      "code",
+      "project_code",
+      "period_month",
+      "revision",
+      "parent_batch_code",
+      "input_sha256",
+      "formula_version",
+      "readiness_status",
+      "missing_inputs_json",
+      "input_snapshot_json",
+      "calendar_snapshot_json",
+      "currency_code",
+      "labor_cost_amount",
+      "calculated_by",
+      "receipt_key",
+      "created_at"
+    ]
+  },
+  {
+    "Logical": "finance_project_cost_batch_item",
+    "Physical": "finance_project_cost_batch_item",
+    "DDL": "CREATE TABLE finance_project_cost_batch_item (\n    id BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,\n    batch_code VARCHAR(64) NOT NULL, employee_uid VARCHAR(64) NOT NULL,\n    project_hours DECIMAL(18,4) NOT NULL, standard_work_hours DECIMAL(18,4) NOT NULL,\n    allocation_ratio DECIMAL(18,4) NOT NULL, standard_cost_amount DECIMAL(18,2) NOT NULL,\n    allocated_cost_amount DECIMAL(18,2) NOT NULL, currency_code CHAR(3) NOT NULL,\n    people_snapshot_code VARCHAR(64) NULL, source_snapshot_json JSON NOT NULL,\n    UNIQUE KEY uk_cost_batch_employee (batch_code,employee_uid),\n    CONSTRAINT fk_cost_item_batch FOREIGN KEY (batch_code) REFERENCES finance_project_cost_batch(code) ON DELETE RESTRICT,\n    CHECK (project_hours>=0 AND standard_work_hours>0 AND allocation_ratio>=0 AND standard_cost_amount>=0 AND allocated_cost_amount>=0)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
+    "Columns": [
+      "id",
+      "batch_code",
+      "employee_uid",
+      "project_hours",
+      "standard_work_hours",
+      "allocation_ratio",
+      "standard_cost_amount",
+      "allocated_cost_amount",
+      "currency_code",
+      "people_snapshot_code",
+      "source_snapshot_json"
+    ]
+  },
+  {
+    "Logical": "finance_employee_cost_snapshot",
+    "Physical": "finance_employee_cost_snapshot",
+    "DDL": "CREATE TABLE finance_employee_cost_snapshot (\n    id BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,\n    employee_uid VARCHAR(64) NOT NULL, period_month CHAR(7) NOT NULL,\n    input_sha256 CHAR(64) NOT NULL, standard_cost_amount DECIMAL(18,2) NOT NULL,\n    currency_code CHAR(3) NOT NULL, people_snapshot_code VARCHAR(64) NULL,\n    source_refs_json JSON NOT NULL, row_version BIGINT UNSIGNED NOT NULL DEFAULT 1,\n    created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),\n    updated_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),\n    UNIQUE KEY uk_employee_cost_period (employee_uid,period_month),\n    CHECK (standard_cost_amount>=0)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
+    "Columns": [
+      "id",
+      "employee_uid",
+      "period_month",
+      "input_sha256",
+      "standard_cost_amount",
+      "currency_code",
+      "people_snapshot_code",
+      "source_refs_json",
+      "row_version",
+      "created_at",
+      "updated_at"
+    ]
+  },
+  {
+    "Logical": "finance_project_cost_allocation",
+    "Physical": "finance_project_cost_allocation",
+    "DDL": "CREATE TABLE finance_project_cost_allocation (\n    id BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,\n    code VARCHAR(64) NOT NULL, project_code VARCHAR(64) NOT NULL, period_month CHAR(7) NOT NULL,\n    allocation_type VARCHAR(32) NOT NULL, source_table VARCHAR(100) NOT NULL,\n    employee_uid VARCHAR(64) NULL, amount DECIMAL(18,2) NOT NULL,\n    currency_code CHAR(3) NOT NULL, allocation_basis VARCHAR(100) NOT NULL,\n    basis_value DECIMAL(18,4) NOT NULL, rule_code VARCHAR(64) NOT NULL,\n    batch_code VARCHAR(64) NULL, source_refs_json JSON NOT NULL,\n    status VARCHAR(16) NOT NULL, row_version BIGINT UNSIGNED NOT NULL DEFAULT 1,\n    created_by VARCHAR(64) NOT NULL, created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),\n    updated_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),\n    UNIQUE KEY uk_cost_allocation_code (code),\n    KEY idx_cost_allocation_project (project_code,period_month,allocation_type),\n    CHECK (status IN ('active','reversed')), CHECK (amount>=0 AND basis_value>=0)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
+    "Columns": [
+      "id",
+      "code",
+      "project_code",
+      "period_month",
+      "allocation_type",
+      "source_table",
+      "employee_uid",
+      "amount",
+      "currency_code",
+      "allocation_basis",
+      "basis_value",
+      "rule_code",
+      "batch_code",
+      "source_refs_json",
+      "status",
+      "row_version",
+      "created_by",
+      "created_at",
+      "updated_at"
+    ]
+  },
+  {
+    "Logical": "finance_project_summary",
+    "Physical": "finance_project_summary",
+    "DDL": "CREATE TABLE finance_project_summary (\n    id BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,\n    project_code VARCHAR(64) NOT NULL, period_month CHAR(7) NOT NULL,\n    currency_code CHAR(3) NULL, receipt_amount DECIMAL(18,2) NOT NULL DEFAULT 0,\n    direct_expense_amount DECIMAL(18,2) NOT NULL DEFAULT 0,\n    labor_cost_amount DECIMAL(18,2) NULL, other_cost_amount DECIMAL(18,2) NOT NULL DEFAULT 0,\n    gross_profit_amount DECIMAL(18,2) NULL, gross_margin_rate DECIMAL(18,4) NULL,\n    cost_readiness_status VARCHAR(16) NOT NULL DEFAULT 'not_ready',\n    cost_missing_inputs_json JSON NOT NULL, cost_input_hash CHAR(64) NULL,\n    current_batch_code VARCHAR(64) NULL, financial_input_sha256 CHAR(64) NULL,\n    row_version BIGINT UNSIGNED NOT NULL DEFAULT 1,\n    calculated_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),\n    UNIQUE KEY uk_project_summary_period (project_code,period_month),\n    CHECK (cost_readiness_status IN ('ready','not_ready')),\n    CHECK (cost_readiness_status='ready' OR (gross_profit_amount IS NULL AND gross_margin_rate IS NULL AND labor_cost_amount IS NULL))\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
+    "Columns": [
+      "id",
+      "project_code",
+      "period_month",
+      "currency_code",
+      "receipt_amount",
+      "direct_expense_amount",
+      "labor_cost_amount",
+      "other_cost_amount",
+      "gross_profit_amount",
+      "gross_margin_rate",
+      "cost_readiness_status",
+      "cost_missing_inputs_json",
+      "cost_input_hash",
+      "current_batch_code",
+      "financial_input_sha256",
+      "row_version",
+      "calculated_at"
+    ]
+  }
+]

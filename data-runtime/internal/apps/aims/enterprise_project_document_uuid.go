@@ -37,7 +37,10 @@ func (a *Adapter) EnterpriseProjectDocumentUUIDTitle(ctx context.Context, projec
 		owner, e := a.ResolveEnterpriseProjectDocumentOwner(ctx, nil, strconv.FormatInt(c.id, 10))
 		if e != nil {
 			var h httperror.Error
-			if errors.As(e, &h) && h.Code == "project_document_portfolio_owner_unsupported" {
+			// A stale index for another, deleted project cannot mask an exact
+			// valid association. This skips no authorization or database failure:
+			// a surviving candidate must still resolve to the signed project.
+			if errors.As(e, &h) && (h.Code == "project_document_portfolio_owner_unsupported" || h.Code == "project_not_found") {
 				continue
 			}
 			return "", e

@@ -239,7 +239,23 @@ func (a *Adapter) ListEnterpriseAccessibleProjectDocuments(ctx context.Context, 
 	if !complete {
 		return nil, httperror.New(503, "project_document_page_limit", "Deliverable page limit exceeded")
 	}
-	return filterEnterpriseProjectDocuments(ctx, docs, member, facts, check)
+	out, err := filterEnterpriseProjectDocuments(ctx, docs, member, facts, check)
+	if err != nil {
+		return nil, err
+	}
+	// Read-only section: documents of the portfolio this project currently
+	// belongs to (DOC-05, 5b-1). The project's own items are unchanged, and a
+	// portfolio dependency that is unavailable never fails the project list.
+	section, unavailable, err := a.projectPortfolioDocuments(ctx, id, actor)
+	if err != nil {
+		return nil, err
+	}
+	out["portfolioDocuments"] = nil
+	if section != nil {
+		out["portfolioDocuments"] = section
+	}
+	out["portfolioDocumentsUnavailable"] = unavailable
+	return out, nil
 }
 func projectDocID(v any) int64 {
 	switch x := v.(type) {

@@ -16,6 +16,10 @@ type InitialServiceCredential struct {
 	ClientCode string
 	AppCode    string
 	ActorID    string
+	// External enrollment is local-administration only. The callback must persist
+	// the secret to a protected destination before the database transaction commits.
+	ExternalSecretRef string
+	PersistSecret     func(string) error
 }
 type InitialServiceCredentialResult struct {
 	Created       bool   `json:"created"`
@@ -67,11 +71,22 @@ func (a *Adapter) EnsureInitialServiceCredential(ctx context.Context, in Initial
 	if _, err = rand.Read(raw); err != nil {
 		return out, err
 	}
-	material, err := a.encryptVaultPlaintext("hzy_service_" + base64.RawURLEncoding.EncodeToString(raw))
+	plaintext := "hzy_service_" + base64.RawURLEncoding.EncodeToString(raw)
+	var material vaultMaterial
+	backend := "db_encrypted"
+	if in.ExternalSecretRef != "" {
+		if in.PersistSecret == nil || !vaultEnvRefPattern.MatchString(in.ExternalSecretRef) {
+			return out, errors.New("external credential destination required")
+		}
+		backend = "env_ref"
+		material = vaultMaterial{BackendSecretRef: in.ExternalSecretRef, ContentHash: vaultContentHash(plaintext), EncryptionScheme: "external_ref", MaskedPreview: "env-ref"}
+	} else {
+		material, err = a.encryptVaultPlaintext(plaintext)
+	}
 	if err != nil {
 		return out, err
 	}
-	result, err := tx.ExecContext(ctx, `INSERT INTO vault_secrets(secret_code,secret_ref,secret_name,secret_type,usage_type,owner_type,owner_key,storage_backend,reveal_policy,masked_preview,status,created_by) VALUES(?,?,'Initial service credential','client_secret','service','service_client',?,'db_encrypted','never',?,'active',?)`, secretCode, "hzybase://vault/"+secretCode, in.ClientCode, material.MaskedPreview, in.ActorID)
+	result, err := tx.ExecContext(ctx, `INSERT INTO vault_secrets(secret_code,secret_ref,secret_name,secret_type,usage_type,owner_type,owner_key,storage_backend,reveal_policy,masked_preview,status,created_by) VALUES(?,?,'Initial service credential','client_secret','service','service_client',?,?,'never',?,'active',?)`, secretCode, "hzybase://vault/"+secretCode, in.ClientCode, backend, material.MaskedPreview, in.ActorID)
 	if err != nil {
 		return out, err
 	}
@@ -79,7 +94,7 @@ func (a *Adapter) EnsureInitialServiceCredential(ctx context.Context, in Initial
 	if err != nil {
 		return out, err
 	}
-	result, err = tx.ExecContext(ctx, `INSERT INTO vault_secret_versions(secret_id,version_no,ciphertext_blob,content_hash,encryption_scheme,key_fingerprint,status,activated_at,created_by) VALUES(?,1,?,?,?,?,'active',UTC_TIMESTAMP(),?)`, sid, material.CiphertextBlob, material.ContentHash, material.EncryptionScheme, material.KeyFingerprint, in.ActorID)
+	result, err = tx.ExecContext(ctx, `INSERT INTO vault_secret_versions(secret_id,version_no,ciphertext_blob,content_hash,encryption_scheme,key_fingerprint,backend_secret_ref,status,activated_at,created_by) VALUES(?,1,?,?,?,?,?,'active',UTC_TIMESTAMP(),?)`, sid, material.CiphertextBlob, material.ContentHash, material.EncryptionScheme, material.KeyFingerprint, material.BackendSecretRef, in.ActorID)
 	if err != nil {
 		return out, err
 	}
@@ -104,7 +119,14 @@ func (a *Adapter) EnsureInitialServiceCredential(ctx context.Context, in Initial
 	if err = insertVaultAccessLog(ctx, tx, sid, vid, "create", VaultAccessMeta{ActorType: "system", ActorID: in.ActorID, AppCode: in.AppCode, Reason: "initial service credential enrollment"}, "success"); err != nil {
 		return out, err
 	}
-	out, err = a.verifyInitialServiceCredential(ctx, tx, in)
+	if in.ExternalSecretRef != "" {
+		if err = in.PersistSecret(plaintext); err != nil {
+			return out, err
+		}
+		out = InitialServiceCredentialResult{CredentialID: uint64(cid), VaultVerified: true}
+	} else {
+		out, err = a.verifyInitialServiceCredential(ctx, tx, in)
+	}
 	if err != nil {
 		return out, err
 	}
@@ -127,6 +149,22 @@ func (a *Adapter) VerifyInitialServiceCredential(ctx context.Context, in Initial
 }
 func (a *Adapter) verifyInitialServiceCredential(ctx context.Context, tx *sql.Tx, in InitialServiceCredential) (InitialServiceCredentialResult, error) {
 	var out InitialServiceCredentialResult
+	if in.ExternalSecretRef != "" {
+		var hash, ref string
+		err := tx.QueryRowContext(ctx, `SELECT c.id,v.content_hash,v.backend_secret_ref FROM service_clients s JOIN service_client_credentials c ON c.id=s.current_credential_id AND c.service_client_id=s.id JOIN vault_secrets k ON k.id=c.secret_id JOIN vault_secret_versions v ON v.id=k.current_version_id AND v.secret_id=k.id WHERE s.client_code=? AND s.app_code=? AND s.status='active' AND c.client_id=? AND c.status='active' AND (c.expires_at IS NULL OR c.expires_at>UTC_TIMESTAMP()) AND k.owner_type='service_client' AND k.owner_key=s.client_code AND k.usage_type='service' AND k.secret_type='client_secret' AND k.storage_backend='env_ref' AND k.reveal_policy='never' AND k.status='active' AND (k.expires_at IS NULL OR k.expires_at>UTC_TIMESTAMP()) AND v.status='active' AND v.encryption_scheme='external_ref' AND COALESCE(OCTET_LENGTH(v.ciphertext_blob),0)=0`, in.ClientCode, in.AppCode, in.ClientCode).Scan(&out.CredentialID, &hash, &ref)
+		if err != nil {
+			return out, err
+		}
+		if ref != in.ExternalSecretRef {
+			return out, errors.New("external credential reference mismatch")
+		}
+		value, err := resolveVaultBackend("env_ref", ref)
+		if err != nil || !vaultContentHashMatches(hash, value) {
+			return out, errors.New("external credential integrity failed")
+		}
+		out.VaultVerified = true
+		return out, nil
+	}
 	var ciphertext []byte
 	var hash string
 	err := tx.QueryRowContext(ctx, `SELECT c.id,v.ciphertext_blob,v.content_hash FROM service_clients s JOIN service_client_credentials c ON c.id=s.current_credential_id AND c.service_client_id=s.id JOIN vault_secrets k ON k.id=c.secret_id JOIN vault_secret_versions v ON v.id=k.current_version_id AND v.secret_id=k.id WHERE s.client_code=? AND s.app_code=? AND s.status='active' AND c.client_id=? AND c.status='active' AND (c.expires_at IS NULL OR c.expires_at>UTC_TIMESTAMP()) AND k.owner_type='service_client' AND k.owner_key=s.client_code AND k.usage_type='service' AND k.secret_type='client_secret' AND k.storage_backend='db_encrypted' AND k.reveal_policy='never' AND k.status='active' AND (k.expires_at IS NULL OR k.expires_at>UTC_TIMESTAMP()) AND v.status='active' AND v.encryption_scheme='aes256-gcm'`, in.ClientCode, in.AppCode, in.ClientCode).Scan(&out.CredentialID, &ciphertext, &hash)

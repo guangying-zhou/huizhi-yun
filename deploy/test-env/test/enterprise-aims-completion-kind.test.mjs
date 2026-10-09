@@ -44,12 +44,36 @@ await withTemporaryMySql(plan, async context => {
     await db.query(`CREATE TABLE enterprise_schema_registry(id INT PRIMARY KEY,tenant_code VARCHAR(100),
       environment_code VARCHAR(100),runtime_deployment VARCHAR(100),schema_version VARCHAR(100),generation BIGINT) ENGINE=InnoDB`)
     await db.query("INSERT INTO enterprise_schema_registry VALUES(1,'C000001','isolated','isolated-runtime','v1',1)")
+    // Use the real adapter floor: verifier intentionally rejects partial domain mappings.
+    const helperDir = await mkdtemp(join(rootDir, 'data-runtime', '.completion-view-floor-'))
+    let floor
+    try {
+      await writeFile(join(helperDir, 'main.go'), `package main
+import ("encoding/json"; "os"; "github.com/huizhi-yun/data-runtime/internal/enterpriseviews")
+func main(){ json.NewEncoder(os.Stdout).Encode(enterpriseviews.RequiredByAdapters()) }
+`)
+      floor = JSON.parse(execFileSync('go', ['run', join(helperDir, 'main.go')], { cwd: resolve(rootDir, 'data-runtime'), encoding: 'utf8' }))
+    } finally { await rm(helperDir, { recursive: true, force: true }) }
+    const domains = {}
+    for (const domain of ['aims', 'assets']) {
+      const tables = {}
+      for (const logical of floor[domain]) {
+        assert.match(logical, /^[a-z_]+$/)
+        const physicalName = logical === 'work_item_completion_requests' ? 'aims_work_item_completion_requests' : `fixture_${domain}_${logical}`
+        assert.ok(physicalName.length <= 64)
+        tables[logical] = physicalName
+        if (logical !== 'work_item_completion_requests') {
+          await db.query(`CREATE TABLE \`${physicalName}\` (id BIGINT PRIMARY KEY)`)
+          await db.query(`CREATE ALGORITHM=MERGE SQL SECURITY INVOKER VIEW \`${logical}\` AS SELECT \`${physicalName}\`.id AS id FROM \`${physicalName}\``)
+        }
+      }
+      domains[domain] = { ownerDeployment: `isolated-${domain}`, read: 'unified', write: 'unified', scheduler: 'disabled', tables }
+    }
     const [[{ instance }]] = await db.query('SELECT @@server_uuid AS instance')
     await writeFile(configPath, JSON.stringify({ tenant: 'C000001', deployment: 'isolated-runtime',
-      deploymentBindings: { aims: 'isolated-aims' }, enterprise: { enabled: true, environment: 'isolated', schemaVersion: 'v1',
+      deploymentBindings: { aims: 'isolated-aims', assets: 'isolated-assets' }, enterprise: { enabled: true, environment: 'isolated', schemaVersion: 'v1',
         generation: 1, instanceId: instance, db: { host: '127.0.0.1', port: context.port, user: 'root', database: name,
-          connectionLimit: 2 }, domains: { aims: { ownerDeployment: 'isolated-aims', read: 'unified', write: 'unified',
-            scheduler: 'disabled', tables: { work_item_completion_requests: 'aims_work_item_completion_requests' } } } } }),
+          connectionLimit: 2 }, domains } }),
     { mode: 0o600 })
     const [physical] = await db.query(`SELECT COLUMN_NAME FROM information_schema.COLUMNS
       WHERE TABLE_SCHEMA=? AND TABLE_NAME='aims_work_item_completion_requests' ORDER BY ORDINAL_POSITION`, [name])

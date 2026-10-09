@@ -1,5 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import { businessApiRoutes } from '../../enterprise/composition/business-api-routes.generated.mjs'
 import gateway, {
   TEST_INTEGRATION_DRAIN_CRON,
   TEST_POLICY_SYNC_CRON,
@@ -49,7 +50,7 @@ test('scheduled handler registers only one execution with waitUntil', async () =
 test('applications without test bindings cannot fall back to production origins', async () => {
   for (const app of ['altoc', 'people', 'workflow', 'webdev', 'collab', 'directory-connector']) {
     const r = await gateway.fetch(new Request(`https://hzy-test.huizhi.yun/${app}/`), {})
-    assert.equal(r.status, 503)
+    assert.equal(r.status, app === 'altoc' ? 404 : 503)
   }
 })
 
@@ -97,8 +98,20 @@ test('Altoc G1/G2 reaches only the Enterprise binding with all three target iden
   assert.equal((await gateway.fetch(new Request('https://hzy-test.huizhi.yun'+path,{headers:{'x-hzy-app-code':'altoc','x-hzy-deployment':'forged','x-forwarded-prefix':'/altoc'}}),env)).status,200)
   const headers=new Headers(calls.at(-1).init.headers)
   assert.equal(headers.get('x-hzy-app-code'),'enterprise');assert.equal(headers.get('x-hzy-deployment'),'C000001-test-enterprise');assert.equal(headers.get('x-forwarded-prefix'),'')
-  for(const method of ['POST','PUT','PATCH','DELETE'])assert.equal((await gateway.fetch(new Request('https://hzy-test.huizhi.yun'+path,{method}),env)).status,503)
+  for(const method of ['POST','PUT','PATCH','DELETE']) {
+   const registered = businessApiRoutes.some(([allowed, pattern]) => allowed === method && pattern.replace(/:[A-Za-z]+/g, '7') === path)
+   assert.equal((await gateway.fetch(new Request('https://hzy-test.huizhi.yun'+path,{method}),env)).status, registered ? 200 : 503)
+  }
  }
- assert.equal(calls.length,12)
- for(const path of ['/altoc/settings','/altoc/api/v1/contracts/7/invoices'])assert.equal((await gateway.fetch(new Request('https://hzy-test.huizhi.yun'+path),env)).status,503)
+ for (const [method, pattern] of businessApiRoutes.filter(([, path]) => path.startsWith('/finance/api/v1/') || path.startsWith('/altoc/api/v1/'))) {
+  const path = pattern.replace(/:[A-Za-z]+/g, '7')
+  assert.equal((await gateway.fetch(new Request('https://hzy-test.huizhi.yun' + path, { method, headers: { cookie: 'session=fixture', 'x-hzy-app-code': 'forged' } }), env)).status, 200)
+  const headers = new Headers(calls.at(-1).init.headers)
+  assert.equal(headers.get('x-hzy-app-code'), 'enterprise')
+  assert.equal(headers.get('x-hzy-deployment'), 'C000001-test-enterprise')
+  assert.equal(headers.get('x-forwarded-prefix'), '')
+  assert.equal(headers.get('cookie'), 'session=fixture')
+ }
+ for (const method of ['GET', 'HEAD']) assert.equal((await gateway.fetch(new Request('https://hzy-test.huizhi.yun/finance/bank-accounts', { method }), env)).status, 200)
+ for(const path of ['/altoc/settings','/altoc/api/v1/contracts/7/unknown'])assert.equal((await gateway.fetch(new Request('https://hzy-test.huizhi.yun'+path),env)).status,503)
 })

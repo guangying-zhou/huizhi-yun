@@ -32,7 +32,9 @@
     "ali-oss": "^6.23.0",
     "date-fns": "^4.1.0",
     "h3": "1.15.10",
+    "html2canvas": "1.4.1",
     "jose": "^6.1.0",
+    "markdown-it": "14.1.1",
     "pinia": "^3.0.4",
     "reka-ui": "^2.9.2"
   },
@@ -44,7 +46,8 @@
     "@types/ali-oss": "^6.23.1",
     "nuxt": "~4.4.8",
     "tsx": "^4.19.0",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "@types/markdown-it": "14.1.2"
   },
   "engines": {
     "node": ">=24.18.0 <25"

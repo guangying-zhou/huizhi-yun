@@ -168,6 +168,7 @@ func (a *Adapter) CreateVaultSecret(
 	if err != nil {
 		return nil, err
 	}
+	material.MaskedPreview = bankAccountVaultPreview(secretType, ownerType, usageType, storageBackend, vaultRecord(body["material"]), material.MaskedPreview)
 	expiresAt, err := parseVaultExpiry(body["expiresAt"])
 	if err != nil {
 		return nil, err
@@ -288,6 +289,7 @@ func (a *Adapter) AddVaultSecretVersion(
 	if err != nil {
 		return nil, err
 	}
+	material.MaskedPreview = bankAccountVaultPreview(secret.SecretType, secret.OwnerType, secret.UsageType, storageBackend, vaultRecord(body["material"]), material.MaskedPreview)
 	var versionNo uint64
 	if err = session.tx.QueryRowContext(ctx,
 		"SELECT COALESCE(MAX(version_no),0)+1 FROM vault_secret_versions WHERE secret_id=? FOR UPDATE",
@@ -378,6 +380,48 @@ func (a *Adapter) RevealVaultSecret(
 		"versionNo": nullableVaultInt(secret.VersionNo), "plaintext": value,
 		"revealedAt": time.Now().UTC().Format(time.RFC3339Nano),
 	}, nil
+}
+
+// RevealCustodySecretForOwner is the typed in-process entry for an owning
+// domain that shows a custody secret to an authorized person (ADR-018a D11).
+// The caller states which object it owns; the vault releases the secret only if
+// it is a custody secret of the expected type bound to exactly that owner. Any
+// mismatch is reported as not found, so the caller cannot probe other secrets.
+// Every attempt on an existing secret is logged; without the log row no
+// plaintext is returned.
+func (a *Adapter) RevealCustodySecretForOwner(
+	ctx context.Context,
+	secretCode, secretType, ownerType, ownerKey string,
+	meta VaultAccessMeta,
+) (string, error) {
+	notFound := httperror.New(http.StatusNotFound, "console_vault_secret_not_found", "Vault secret was not found")
+	if secretType == "" || ownerType == "" || ownerKey == "" || strings.TrimSpace(meta.ActorID) == "" || strings.TrimSpace(meta.Reason) == "" {
+		return "", httperror.New(http.StatusBadRequest, "console_vault_reveal_invalid", "Owner, actor and reason are required")
+	}
+	if _, err := normalizeVaultCode(secretCode); err != nil {
+		return "", notFound
+	}
+	secret, err := a.loadVaultSecret(ctx, secretCode, nil)
+	if err != nil {
+		return "", err
+	}
+	if secret.SecretCode != secretCode || secret.UsageType != "custody" || secret.SecretType != secretType || secret.OwnerType != ownerType || !secret.OwnerKey.Valid || secret.OwnerKey.String != ownerKey {
+		_ = insertVaultAccessLog(ctx, a.db, int64(secret.ID), secret.VersionID.Int64, "reveal", meta, "denied")
+		return "", notFound
+	}
+	value, resolveErr := a.resolveVaultMaterial(secret.StorageBackend, secret.CiphertextBlob, secret.BackendSecretRef.String, secret.ContentHash.String)
+	status := "success"
+	if resolveErr != nil {
+		status = "failed"
+	}
+	logErr := insertVaultAccessLog(ctx, a.db, int64(secret.ID), secret.VersionID.Int64, "reveal", meta, status)
+	if resolveErr != nil {
+		return "", resolveErr
+	}
+	if logErr != nil {
+		return "", logErr
+	}
+	return value, nil
 }
 
 func (a *Adapter) ResolveVaultSecret(
@@ -642,4 +686,20 @@ func nullableVaultPositive(value int64) any {
 		return nil
 	}
 	return value
+}
+
+// Financial custody previews disclose only the last four characters. Other
+// credential types retain their existing preview; never decrypt to form one.
+func bankAccountVaultPreview(secretType, ownerType, usageType, backend string, input map[string]any, current any) any {
+	if secretType != "bank_account_number" || ownerType != "finance_bank_account" || usageType != "custody" || backend != "db_encrypted" {
+		return current
+	}
+	value := []rune(vaultText(input["plaintext"]))
+	if len(value) == 0 {
+		return nil
+	}
+	if len(value) <= 4 {
+		return strings.Repeat("*", len(value))
+	}
+	return strings.Repeat("*", len(value)-4) + string(value[len(value)-4:])
 }

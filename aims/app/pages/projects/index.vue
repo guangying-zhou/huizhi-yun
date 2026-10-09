@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import CommonEmptyState from '@hzy/foundation/app/components/common/EmptyState.vue'
 import { projectSecurityLevelConfig, projectStatusConfig, getProjectCategoryLabel, projectCategoryOptions, selectableProjectCategoryOptions } from '../../config/project'
 import type {
   AimsProject,
@@ -620,10 +621,13 @@ async function handleUpdatePortfolio() {
   updatingPortfolio.value = true
   try {
     editPortfolioForm.value.displayOrder = normalizeDisplayOrder(editPortfolioForm.value.displayOrder)
-    await portfolioStore.updatePortfolio(editingPortfolio.value.id, editPortfolioForm.value)
+    await portfolioStore.updatePortfolio(editingPortfolio.value.id, editPortfolioForm.value, hosted ? editingPortfolio.value.editVersion : undefined)
     showEditPortfolioModal.value = false
     editingPortfolio.value = null
     await loadData()
+  } catch (cause) {
+    const status = (cause as { statusCode?: number }).statusCode
+    toast.add({ title: status === 409 ? '项目集已被他人修改' : '项目集保存未完成', description: status === 409 ? '请刷新项目列表比较后重新确认，草稿已保留。' : '草稿已保留，请重试。', color: 'error' })
   } finally {
     updatingPortfolio.value = false
   }
@@ -830,7 +834,10 @@ const portfolioAssignOptions = computed(() => {
           </div>
         </div>
 
-        <div class="flex-1 min-h-0 overflow-y-auto px-4 pt-4 pb-8 sm:px-6">
+        <div
+          class="flex-1 min-h-0 overflow-y-auto px-4 pt-4 sm:px-6"
+          :class="hosted ? 'pb-4 sm:pb-6' : 'pb-8'"
+        >
           <!-- 加载中 -->
           <div
             v-if="hosted ? rootRead.loading.value : projectStore.loading"
@@ -854,18 +861,12 @@ const portfolioAssignOptions = computed(() => {
           </div>
 
           <!-- 空状态 -->
-          <div
+          <CommonEmptyState
             v-if="visibleProjects.length === 0 && portfolioStore.portfolios.length === 0 && !(hosted && (rootRead.loading.value || rootRead.error.value)) && !(!hosted && projectStore.loading)"
-            class="py-16 text-center"
-          >
-            <UIcon
-              name="i-lucide-folder-open"
-              class="mx-auto mb-4 h-14 w-14 text-muted"
-            />
-            <p class="mb-4 text-muted">
-              暂无项目
-            </p>
-          </div>
+            icon="i-lucide-folder-open"
+            title="暂无可显示的项目"
+            description="首次使用请联系项目经理将你加入项目；已加入的项目可尝试清除筛选后刷新。"
+          />
 
           <!-- ========== 卡片视图：按项目集分组 ========== -->
           <template v-else-if="viewMode === 'card' && !(hosted ? (rootRead.loading.value || rootRead.error.value) : projectStore.loading)">
@@ -894,9 +895,13 @@ const portfolioAssignOptions = computed(() => {
                 >
                   {{ group.portfolio.name }}
                 </NuxtLink>
-                <span v-else class="text-xl font-bold">
+                <NuxtLink
+                  v-else
+                  :to="moduleUrl(`/portfolios/${group.portfolio.id}`)"
+                  class="text-xl font-bold transition-colors hover:text-primary"
+                >
                   {{ group.portfolio.name }}
-                </span>
+                </NuxtLink>
                 <span class="text-base text-muted">
                   ({{ getPortfolioProjectCount(group.portfolio, group.projects) }} 个项目)
                 </span>

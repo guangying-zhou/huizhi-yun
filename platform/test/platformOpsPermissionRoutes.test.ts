@@ -128,8 +128,8 @@ describe('resolveOpsPermission 敏感动作映射', () => {
   })
 })
 
- test('drain evidence approval uses exact deployment admin permission', () => {
+test('drain evidence approval uses exact deployment admin permission', () => {
   for (const action of ['external-drain', 'drain-activity']) {
-    assert.deepEqual(resolveOpsPermission(`/api/platform/ops/deployments/${action}`, 'POST'), {resourceCode:'ops.deployments', requiredAction:'admin'})
+    assert.deepEqual(resolveOpsPermission(`/api/platform/ops/deployments/${action}`, 'POST'), { resourceCode: 'ops.deployments', requiredAction: 'admin' })
   }
- })
+})

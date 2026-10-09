@@ -36,7 +36,7 @@ test('Host-owned names stay with the Host; only module-local names are injected'
   // session. A new collision needs an explicit decision, so keep this list exact.
   const host = hostAutoImports()
   const collisions = {}
-  for (const module of ['aims', 'assets', 'codocs', 'altoc']) {
+  for (const module of ['aims', 'assets', 'codocs', 'altoc', 'finance']) {
     const own = scanAutoImportExports([resolve(root, module, 'app/composables'), resolve(root, module, 'app/utils')])
     const shadowed = [...own.keys()].filter(name => host.has(name)).sort()
     if (shadowed.length) collisions[module] = shadowed
@@ -46,7 +46,8 @@ test('Host-owned names stay with the Host; only module-local names are injected'
     aims: ['formatDate'],
     assets: ['formatDate', 'useCookieOptions', 'useDashboard'],
     codocs: ['formatDate', 'resolveAvatarProps', 'resolveAvatarSrc', 'useAccountDepartments', 'useAccountUser', 'useAccountUserProjects', 'useAccountUsers', 'useAppInfo', 'useAuth', 'useCookieOptions', 'usePermissions'],
-    altoc: ['formatDate']
+    altoc: ['formatDate'],
+    finance: ['formatMoney', 'getShortApplicationName', 'isApplicationIconName', 'useAppInfo', 'useAuthorization', 'useUserApplications']
   })
 
   const favorites = resolve(root, 'codocs/app/pages/mydocs/favorites.vue')
@@ -141,7 +142,7 @@ test('no composed page closure calls an unresolved module composable, util or st
 test('every composed-module source file survives the Host transform', async () => {
   const walk = dir => existsSync(dir) ? readdirSync(dir, { withFileTypes: true }).flatMap(entry => entry.isDirectory() ? (entry.name === 'node_modules' ? [] : walk(join(dir, entry.name))) : [join(dir, entry.name)]) : []
   const failures = []
-  for (const module of ['aims', 'assets', 'codocs']) {
+  for (const module of ['aims', 'assets', 'codocs', 'finance']) {
     for (const file of [...walk(resolve(root, module, 'app')), ...walk(resolve(root, module, 'layer'))]) {
       if (!/\.(?:vue|ts|mjs|js)$/.test(file) || file.endsWith('.d.ts')) continue
       try {

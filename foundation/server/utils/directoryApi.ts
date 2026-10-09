@@ -368,6 +368,29 @@ export async function fetchConsoleDirectoryApi<T = unknown>(
     return fetchDirectorySharingByService<T>(options)
   }
 
+  // Batch is a bounded shared identity read, not a Console administration command.
+  if (normalizedPath === '/users/batch' && options.method === 'POST') {
+    const raw = (options.body as { uids?: unknown } | undefined)?.uids
+    if (!Array.isArray(raw) || raw.length > 1000 || raw.some(uid =>
+      typeof uid !== 'string' || !uid || uid !== uid.trim() || uid.length > 128
+      || uid.includes(',') || [...uid].some(char => char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127))) {
+      throw createError({ statusCode: 400, message: 'invalid_directory_batch_uids' })
+    }
+    const uids = [...new Set(raw as string[])]
+    const users: unknown[] = []
+    for (let offset = 0; offset < uids.length; offset += 100) {
+      const response = await fetchDirectorySharingByService<DirectorySharingEnvelope<unknown[]>>({
+        event: options.event, timeout: options.timeout,
+        params: { uids: uids.slice(offset, offset + 100).join(',') }
+      })
+      if (response.code !== 0 || !Array.isArray(response.data)) {
+        throw createError({ statusCode: 503, message: 'directory_batch_unavailable' })
+      }
+      users.push(...response.data)
+    }
+    return { code: 0, message: 'ok', data: users } as T
+  }
+
   const userDetailMatch = normalizedPath.match(/^\/users\/([^/]+)$/)
   if (userDetailMatch && (!options.method || options.method === 'GET')) {
     const uid = decodeURIComponent(userDetailMatch[1] || '').trim()

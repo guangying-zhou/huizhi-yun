@@ -28,13 +28,13 @@ await withTemporaryMySql(plan, async (context) => {
     const results = await check()
     assert.equal(results.length, 3)
     for (const result of results) {
-    assert.equal(Number(result.exact_rows), 1)
-    assert.equal(Number(result.active_exact_rows), 1)
-    assert.equal(result.client_status, 'active')
-    assert.equal(result.credential_status, 'active')
+      assert.equal(Number(result.exact_rows), 1)
+      assert.equal(Number(result.active_exact_rows), 1)
+      assert.equal(result.client_status, 'active')
+      assert.equal(result.credential_status, 'active')
     }
     assert.deepEqual((await db.query('SELECT * FROM service_client_grants WHERE id=1'))[0], before)
-    const [[target]] = await db.query("SELECT id FROM service_client_grants WHERE resource_code='data-runtime:altoc:contract'")
+    const [[target]] = await db.query('SELECT id FROM service_client_grants WHERE resource_code=\'data-runtime:altoc:contract\'')
     const targetId = Number(target.id)
     for (const field of ['audience', 'tenantCode', 'deploymentCode', 'semanticScope', 'source', 'purpose']) {
       const [[row]] = await db.query('SELECT scope_json FROM service_client_grants WHERE id=?', [targetId])

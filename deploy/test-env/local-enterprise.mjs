@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { localApplications } from './local-enterprise/application-set.cjs'
 import { access, mkdir, writeFile, readFile } from 'node:fs/promises'
 import { constants } from 'node:fs'
 import { createConnection } from 'node:net'
@@ -51,21 +52,16 @@ if (command === 'plan') {
   await requirePm2()
   const processes = await inventory(loaded.value)
   if (command === 'up') {
-    if (processes.some(p => p.status !== 'online')) throw Error('Owned processes are not online; inspect status and explicitly restart the affected app')
-    const missing = ['hzy0-gateway', 'hzy0-enterprise', 'hzy0-codocs-editor',
-      ...(loaded.value.identity.consoleFacadeMode === 'local-canonical-facade' ? ['hzy0-console'] : []),
-      ...(loaded.value.features?.codocsCollaborationV2 === true ? ['hzy0-collab'] : []),
-      ...(loaded.value.features?.workflowLocal === true ? ['hzy0-workflow', 'hzy0-aims'] : [])].filter(name => !processes.some(p => p.name === name))
+    if (loaded.value.features?.aimsRetired === true && processes.some(p => p.name === 'hzy0-aims' && p.status === 'online')) throw Error('Retired physical Aims is still online')
+    const requiredProcesses = processes.filter(p => loaded.value.features?.aimsRetired !== true || p.name !== 'hzy0-aims')
+    if (requiredProcesses.some(p => p.status !== 'online')) throw Error('Owned processes are not online; inspect status and explicitly restart the affected app')
+    const missing = localApplications(loaded.value).map(app => `hzy0-${app}`).filter(name => !processes.some(p => p.name === name))
     if (missing.length) await pm2(loaded.value, ['start', await ecosystem(loaded.profilePath, mode), '--only', missing.join(','), '--update-env'])
     else console.log('Owned Dev stack already online; no processes changed.')
   } else if (command === 'status') console.log(JSON.stringify({ processes }, null, 2))
   else if (command === 'restart') {
-    const names = values.app ? [appName(values.app)] : [
-      'hzy0-gateway', 'hzy0-enterprise', 'hzy0-codocs-editor',
-      ...(loaded.value.identity.consoleFacadeMode === 'local-canonical-facade' ? ['hzy0-console'] : []),
-      ...(loaded.value.features?.codocsCollaborationV2 === true ? ['hzy0-collab'] : []),
-      ...(loaded.value.features?.workflowLocal === true ? ['hzy0-workflow', 'hzy0-aims'] : [])
-    ]
+    if (values.app === 'aims' && loaded.value.features?.aimsRetired === true) throw Error('Aims physical process is retired')
+    const names = values.app ? [appName(values.app)] : localApplications(loaded.value).map(app => `hzy0-${app}`)
     if (names.some(name => !processes.some(p => p.name === name))) throw Error('Requested owned process is not running')
     // Preserve the already-approved PM2 credential environment. Do not replace
     // it from the caller's shell or require the secret to be exported again.
@@ -74,14 +70,18 @@ if (command === 'plan') {
 }
 
 async function doctor(profile, validationIssues) {
-  const listeners = record(profile.listeners)
+  const listeners = { ...record(profile.listeners) }
+  if (profile.features?.aimsRetired === true) delete listeners.aims
   const ports = await Promise.all(Object.entries(listeners).map(async ([name, listener]) => ({
     name, port: listener?.port, available: await portAvailable(listener?.host, listener?.port)
   })))
   const commands = ['caddy', 'cloudflared', 'pm2', 'wrangler'].map(name => ({ name, available: commandAvailable(name) }))
   let processes = [], ownershipError = false
   try { processes = await inventory(profile) } catch { ownershipError = true }
+  const retiredAims = profile.features?.aimsRetired === true
+    ? { portClosed: await portAvailable('127.0.0.1', 23141), processStopped: !processes.some(p => p.name === 'hzy0-aims' && p.status === 'online') } : null
   return {
+    retiredAims,
     profile: profileSummary(profile),
     node: { version: process.version, supported: process.versions.node.startsWith('24.') },
     validationIssues,
@@ -89,10 +89,10 @@ async function doctor(profile, validationIssues) {
     ports,
     processes,
     ownershipError,
-    ready: validationIssues.length === 0 && !ownershipError && process.versions.node.startsWith('24.') && commands.every(command => command.available)
+    ready: (!retiredAims || (retiredAims.portClosed && retiredAims.processStopped)) && validationIssues.length === 0 && !ownershipError && process.versions.node.startsWith('24.') && commands.every(command => command.available)
       && ['gatewayIngress', 'enterprise', 'codocsEditor', ...(profile.identity?.consoleFacadeMode === 'local-canonical-facade' ? ['console'] : []),
         ...(profile.features?.codocsCollaborationV2 === true ? ['collab'] : []),
-        ...(profile.features?.workflowLocal === true ? ['workflow', 'aims'] : [])].every(name => {
+        ...(profile.features?.workflowLocal === true ? ['workflow', ...(profile.features?.aimsRetired === true ? [] : ['aims'])] : [])].every(name => {
         const port = ports.find(p => p.name === name)
         const processName = name === 'gatewayIngress' ? 'hzy0-gateway' : name === 'codocsEditor' ? 'hzy0-codocs-editor' : `hzy0-${name}`
         return port?.available || processes.some(p => p.name === processName && p.status === 'online')

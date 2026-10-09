@@ -13,6 +13,7 @@ test('immediate feedback dispatch binds claimed operation to authorized source a
     let claimed = 0
     let executed = 0
     runInNewContext(code, { exports, require: (name: string) => {
+      name = name.replace(/\.ts$/, '')
       if (name === './serviceTicketOpsKnowledgeOperation') return {
         createRequestOpsKnowledgeOperationIO: () => ({}),
         claimOpsKnowledgeOperation: async (_io: unknown, key: string) => {

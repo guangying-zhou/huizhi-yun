@@ -14,6 +14,7 @@ import (
 )
 
 type portfolioListItem struct {
+	EditVersion string  `json:"editVersion,omitempty"`
 	ID          int64   `json:"id"`
 	Code        string  `json:"code"`
 	Name        string  `json:"name"`
@@ -77,6 +78,45 @@ func (a *Adapter) handlePortfoliosRuntime(ctx context.Context, method string, pa
 			return data, "aims.portfolios.create", true, err
 		default:
 			return nil, "", true, httperror.New(http.StatusMethodNotAllowed, "method_not_allowed", "portfolios runtime method is not supported")
+		}
+	}
+
+	// Members and the registered document repository of one portfolio (DOC-05a).
+	if rest := strings.TrimPrefix(path, "/v1/aims/portfolios/"); rest != path {
+		if id, sub, found := strings.Cut(rest, "/"); found && id != "" {
+			switch {
+			case sub == "members" && method == http.MethodGet:
+				data, err := a.listPortfolioMembers(ctx, id, query)
+				return data, "aims.portfolios.members.list", true, err
+			case sub == "members" && method == http.MethodPut:
+				data, err := a.savePortfolioMember(ctx, id, query, body)
+				return data, "aims.portfolios.members.save", true, err
+			case sub == "doc-repo" && method == http.MethodPut:
+				data, err := a.savePortfolioDocRepo(ctx, id, query, body)
+				return data, "aims.portfolios.doc_repo.save", true, err
+			case sub == "documents" && method == http.MethodGet:
+				data, err := a.listPortfolioDocuments(ctx, id, query)
+				return data, "aims.portfolios.documents.list", true, err
+			case sub == "documents" && method == http.MethodPost:
+				data, err := a.createPortfolioDocument(ctx, id, query, body)
+				return data, "aims.portfolios.documents.create", true, err
+			case strings.HasPrefix(sub, "documents/") && strings.HasSuffix(sub, "/content") && method == http.MethodGet:
+				data, err := a.readPortfolioDocumentContent(ctx, id, strings.TrimSuffix(strings.TrimPrefix(sub, "documents/"), "/content"), query)
+				return data, "aims.portfolios.documents.content", true, err
+			case strings.HasPrefix(sub, "documents/"):
+				documentID, policy, ok := portfolioDocumentSubroute(sub)
+				switch {
+				case ok && !policy && method == http.MethodDelete:
+					data, err := a.deletePortfolioDocument(ctx, id, documentID, query)
+					return data, "aims.portfolios.documents.delete", true, err
+				case ok && policy && method == http.MethodPut:
+					data, err := a.savePortfolioDocumentPolicy(ctx, id, documentID, query, body)
+					return data, "aims.portfolios.documents.policy", true, err
+				}
+				return nil, "", true, httperror.New(http.StatusMethodNotAllowed, "method_not_allowed", "portfolio document runtime method is not supported")
+			case sub == "members" || sub == "doc-repo" || sub == "documents":
+				return nil, "", true, httperror.New(http.StatusMethodNotAllowed, "method_not_allowed", "portfolio members runtime method is not supported")
+			}
 		}
 	}
 

@@ -23,6 +23,8 @@ export const TENANT_RUNTIME_BINDING_APP_CODES = [
   // Enterprise is the unified Host identity. It has no local adapter flag,
   // but it must be returned to the Runtime for exact service-token binding.
   'enterprise',
+  // Collab has a service identity but no tenant database/schema adapter.
+  'collab',
   ...TENANT_RUNTIME_APPS.map(item => item.appCode)
 ] as const
 
@@ -130,21 +132,23 @@ export async function issueTenantRuntimeEnrollment(input: {
 
     for (const deployment of deployments) {
       const isControlPlaneBinding = deployment.app_code === 'console'
+      const isBindingOnly = deployment.app_code === 'enterprise' || deployment.app_code === 'collab'
       await tx.execute<ResultSetHeader>(
         `INSERT INTO tenant_runtime_instance_apps
           (runtime_instance_id, deployment_id, app_code, status, schema_status, created_at, updated_at)
          VALUES (?, ?, ?, ?, ?, UTC_TIMESTAMP(), UTC_TIMESTAMP())
          ON DUPLICATE KEY UPDATE
            deployment_id = VALUES(deployment_id),
-           status = CASE WHEN VALUES(app_code) = 'console' THEN VALUES(status) ELSE status END,
-           schema_status = CASE WHEN VALUES(app_code) = 'console' THEN VALUES(schema_status) ELSE schema_status END,
+           status = CASE WHEN VALUES(app_code) IN ('console', 'enterprise', 'collab') THEN VALUES(status) ELSE status END,
+           schema_status = CASE WHEN VALUES(app_code) IN ('console', 'enterprise', 'collab') THEN VALUES(schema_status) ELSE schema_status END,
+           last_error_code = CASE WHEN VALUES(app_code) IN ('console', 'enterprise', 'collab') THEN NULL ELSE last_error_code END,
            updated_at = UTC_TIMESTAMP()`,
         [
           instance.id,
           deployment.id,
           deployment.app_code,
-          isControlPlaneBinding ? 'schema_ready' : 'pending',
-          isControlPlaneBinding ? 'not_applicable' : 'unknown'
+          isControlPlaneBinding ? 'schema_ready' : isBindingOnly ? 'active' : 'pending',
+          isControlPlaneBinding || isBindingOnly ? 'not_applicable' : 'unknown'
         ]
       )
     }
@@ -162,7 +166,7 @@ export async function issueTenantRuntimeEnrollment(input: {
       runtimeCode: instance.runtime_code,
       code,
       codeLast4,
-      enabledApps: deployments.filter(item => item.app_code !== 'console').map(item => item.app_code),
+      enabledApps: deployments.filter(item => TENANT_RUNTIME_APPS.some(app => app.appCode === item.app_code)).map(item => item.app_code),
       deploymentBindings: Object.fromEntries(deployments.map(item => [item.app_code, item.deployment_code]))
     }
   })
@@ -251,8 +255,9 @@ export async function redeemTenantRuntimeEnrollment(input: {
        FROM tenant_runtime_instance_apps a
        INNER JOIN deployments d ON d.id = a.deployment_id
        WHERE a.runtime_instance_id = ?
+         AND d.tenant_code = ? AND d.environment = ? AND d.status = 'active'
        ORDER BY a.app_code`,
-      [row.id]
+      [row.id, row.tenant_code, row.environment]
     )
 
     return {

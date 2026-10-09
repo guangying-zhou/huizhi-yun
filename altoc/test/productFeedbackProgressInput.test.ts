@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { validProductFeedbackProgress } from '../server/utils/productFeedbackProgressInput'
+import { validProductFeedbackProgress } from '../server/utils/productFeedbackProgressInput.ts'
 
 test('progress snapshot rejects invalid dates, counts and private fields', () => {
   const version = { versionCode: 'v1', status: 'planning', plannedReleaseDate: '2026-09-01', releasedAt: null, publicFeatureCount: 2, deliveredFeatureCount: 0 }

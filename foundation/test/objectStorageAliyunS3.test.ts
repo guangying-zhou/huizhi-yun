@@ -5,6 +5,25 @@ import { createAliOssCompatibleClient } from '../server/utils/objectStorage'
 import { objectStorageVersionId } from '../server/utils/objectStorageVersion'
 import type { ObjectStoragePutOptions } from '../server/utils/objectStorage'
 
+test('native OSS attachment transport and preview use the native bucket host without S3 rewrite', async (t) => {
+  const put = t.mock.method(OSS.prototype, 'put', async function (this: OSS, name: string) {
+    const url = new URL(this.signatureUrl(name, { expires: 600 }))
+    assert.equal(url.hostname, 'fixture-bucket.oss-cn-qingdao.aliyuncs.com')
+    assert.equal(url.pathname, '/CLAUDE-FIXTURE/invoice.pdf')
+    return { name, res: { status: 200, headers: {} } }
+  })
+  const client = createAliOssCompatibleClient({
+    provider: 'aliyun-oss-native', bucket: 'fixture-bucket',
+    endpoint: 'https://oss-cn-qingdao.aliyuncs.com', region: 'oss-cn-qingdao',
+    accessKeyId: 'fixture-key', accessKeySecret: 'fixture-secret'
+  })
+  await client.put('CLAUDE-FIXTURE/invoice.pdf', Buffer.from('offline fixture'))
+  assert.equal(put.mock.callCount(), 1)
+  const preview = new URL(await client.createSignedGetUrl('CLAUDE-FIXTURE/invoice.pdf', { expires: 600 }))
+  assert.equal(preview.protocol, 'https:')
+  assert.equal(preview.hostname, 'fixture-bucket.oss-cn-qingdao.aliyuncs.com')
+})
+
 test('write version receipt accepts either provider header and rejects ambiguity', () => {
   assert.equal(objectStorageVersionId({ 'x-oss-version-id': 'oss-v1' }), 'oss-v1')
   assert.equal(objectStorageVersionId({ 'X-Amz-Version-Id': 's3-v1' }), 's3-v1')
@@ -228,4 +247,36 @@ test('write-once snapshot namespace refuses delete, overwrite and in-place rewri
   } finally {
     globalThis.fetch = originalFetch
   }
+})
+
+test('all OSS presign entry points upgrade bare and legacy HTTP endpoints to HTTPS', async () => {
+  for (const provider of ['aliyun-oss-native', 'aliyun-oss-s3']) {
+    for (const endpoint of ['oss-cn-qingdao.aliyuncs.com', 'http://oss-cn-qingdao.aliyuncs.com', 'https://oss-cn-qingdao.aliyuncs.com']) {
+      const client = createAliOssCompatibleClient({
+        provider, endpoint, bucket: 'fixture-bucket', region: 'oss-cn-qingdao',
+        accessKeyId: 'fixture-key', accessKeySecret: 'fixture-secret'
+      })
+      for (const key of ['cabinet/file.pdf', 'department/file.pdf', 'company/file.pdf', 'attachments/file.pdf', 'avatars/photo.png', 'snapshots/content.json']) {
+        const signed = new URL(await client.createSignedGetUrl(key, { expires: 600 }))
+        assert.equal(signed.protocol, 'https:')
+        assert.equal(signed.pathname, `/${key}`)
+        assert.ok(signed.searchParams.has(provider === 'aliyun-oss-native' ? 'Signature' : 'X-Amz-Signature'))
+        if (provider === 'aliyun-oss-native') {
+          assert.equal(new URL(client.signatureUrl(key, { expires: 600 })).protocol, 'https:')
+        }
+      }
+    }
+  }
+})
+
+test('version validation retains the original ASCII control-character boundary', () => {
+  for (let code = 0; code <= 0x7f; code++) {
+    const value = `v${String.fromCharCode(code)}1`
+    if (code <= 0x1f || code === 0x7f) {
+      assert.throws(() => objectStorageVersionId({ 'x-oss-version-id': value }), /invalid version/)
+    } else {
+      assert.equal(objectStorageVersionId({ 'x-oss-version-id': value }), value)
+    }
+  }
+  assert.equal(objectStorageVersionId({ 'x-oss-version-id': 'v\u00851' }), 'v\u00851')
 })

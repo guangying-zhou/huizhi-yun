@@ -16,7 +16,7 @@ func TestEnterpriseCallbackSystemLaneIsSeparatedAndLive(t *testing.T) {
 	cfg, key := testRuntimeJWTConfig(t)
 	cfg.Auth.JWT.Issuer = "https://console.test"
 	cfg.DeploymentBindings = map[string]string{"enterprise": "deployment-1", "aims": "deployment-aims", "workflow": "deployment-workflow"}
-	for _, scenario := range []string{"valid", "actor", "purpose", "user-scope", "notification-scope", "wrong-client", "wrong-source", "wrong-deployment", "wrong-audience", "revoked", "dependency", "missing-verifier", "legacy-closed", "legacy-open"} {
+	for _, scenario := range []string{"valid", "actor", "purpose", "user-scope", "notification-scope", "outbox-scope", "rollover-scope", "due-scope", "wrong-client", "wrong-source", "wrong-deployment", "wrong-audience", "revoked", "dependency", "missing-verifier", "legacy-closed", "legacy-open"} {
 		t.Run(scenario, func(t *testing.T) {
 			local := cfg
 			local.Enterprise.AllowLegacyAimsCallbacks = scenario == "legacy-open"
@@ -26,6 +26,12 @@ func TestEnterpriseCallbackSystemLaneIsSeparatedAndLive(t *testing.T) {
 				scope = "aims:enterprise-host:execute"
 			case "notification-scope":
 				scope = "aims:notification-detail:authorize"
+			case "outbox-scope":
+				scope = "aims:integration_operation:execute"
+			case "rollover-scope":
+				scope = "aims:milestone-rollover:execute"
+			case "due-scope":
+				scope = "aims:notifications-due:execute"
 			case "wrong-client":
 				client = "workflow.runtime"
 			case "wrong-source":

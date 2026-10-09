@@ -23,7 +23,9 @@ test('layout and page share one navigation lease and identity invalidation', asy
     useState: () => scope, useRoute: () => route,
     useNuxtApp: () => ({ $enterpriseSession: { refresh: async () => scope.value }, runWithContext: fn => fn() }),
     useRuntimeConfig: () => ({ public: { enterpriseLoginPath: '/enterprise/login' } }),
-    navigateTo: () => { throw Error('unexpected login redirect') },
+    navigateTo: () => {
+      throw Error('unexpected login redirect')
+    },
     $fetch: (_, options) => new Promise(resolve => requests.push({ resolve, signal: options.signal })),
     window: { addEventListener: (_, fn) => listeners.add(fn), removeEventListener: (_, fn) => listeners.delete(fn) }
   }
@@ -31,7 +33,10 @@ test('layout and page share one navigation lease and identity invalidation', asy
   Object.assign(globalThis, globals)
   let layoutAccess, pageAccess
   const childVisible = ref(true)
-  const Page = defineComponent({ setup() { pageAccess = useEnterpriseNavigationAccess(); return () => h('span') } })
+  const Page = defineComponent({ setup() {
+    pageAccess = useEnterpriseNavigationAccess()
+    return () => h('span')
+  } })
   const Layout = defineComponent({ setup() {
     layoutAccess = useEnterpriseNavigationAccess()
     return () => h('div', childVisible.value ? [h(Page)] : [])
@@ -39,11 +44,18 @@ test('layout and page share one navigation lease and identity invalidation', asy
   const renderer = createRenderer({
     patchProp() {}, insert() {}, remove() {}, createElement: type => ({ type }),
     createText: text => ({ text }), createComment: text => ({ text }),
-    setText(node, text) { node.text = text }, setElementText(node, text) { node.text = text },
+    setText(node, text) {
+      node.text = text
+    }, setElementText(node, text) {
+      node.text = text
+    },
     parentNode: () => null, nextSibling: () => null
   })
   const app = renderer.createApp(Layout)
-  const settle = async () => { await nextTick(); await new Promise(resolve => setImmediate(resolve)) }
+  const settle = async () => {
+    await nextTick()
+    await new Promise(resolve => setImmediate(resolve))
+  }
   try {
     app.mount({ type: 'root' })
     assert.equal(pageAccess, layoutAccess)
@@ -52,8 +64,10 @@ test('layout and page share one navigation lease and identity invalidation', asy
     requests[0].resolve({ visibleIds: [], maxAgeMs: 60_000 })
     await settle()
     assert.equal(pageAccess.status.value, 'ready')
-    childVisible.value = false; await settle()
-    childVisible.value = true; await settle()
+    childVisible.value = false
+    await settle()
+    childVisible.value = true
+    await settle()
     assert.equal(requests.length, 1, 'page remount retains the layout-owned lease')
     assert.equal(pageAccess, layoutAccess)
     scope.value = 'tenant-b/user-b/policy-b'
@@ -62,14 +76,17 @@ test('layout and page share one navigation lease and identity invalidation', asy
     scope.value = ''
     assert.equal(requests[1].signal.aborted, true)
     assert.equal(pageAccess.status.value, 'idle')
-    requests[1].resolve({ visibleIds: [], maxAgeMs: 60_000 }); await settle()
+    requests[1].resolve({ visibleIds: [], maxAgeMs: 60_000 })
+    await settle()
     assert.equal(pageAccess.status.value, 'idle', 'late data cannot restore an invalid identity')
   } finally {
     app.unmount()
     assert.equal(listeners.size, 0)
     for (const [key, descriptor] of previous) {
-      if (descriptor) Object.defineProperty(globalThis, key, descriptor)
-      else delete globalThis[key]
+      if (descriptor)
+        Object.defineProperty(globalThis, key, descriptor)
+      else
+        delete globalThis[key]
     }
   }
 })
@@ -134,8 +151,10 @@ test('a navigation 401 prompts one session check and never redirects by itself',
   } finally {
     app.unmount()
     for (const [key, descriptor] of previous) {
-      if (descriptor) Object.defineProperty(globalThis, key, descriptor)
-      else delete globalThis[key]
+      if (descriptor)
+        Object.defineProperty(globalThis, key, descriptor)
+      else
+        delete globalThis[key]
     }
   }
 })

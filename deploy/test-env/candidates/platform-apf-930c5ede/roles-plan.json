@@ -1,0 +1,483 @@
+{
+  "tenant": "C000001",
+  "environment": "test",
+  "subjectCode": "test",
+  "proposedOnly": true,
+  "roles": [
+    {
+      "appRoleCode": "finance:invoice_issuer",
+      "permissions": [
+        "finance:dashboard:view",
+        "finance:invoices:view",
+        "finance:invoices:issue"
+      ],
+      "proposedManualTenantScopes": [
+        {
+          "appCode": "finance",
+          "resourceCode": "dashboard",
+          "action": "view",
+          "scopeType": "tenant",
+          "scopeValue": "global",
+          "status": "active"
+        },
+        {
+          "appCode": "finance",
+          "resourceCode": "invoices",
+          "action": "view",
+          "scopeType": "tenant",
+          "scopeValue": "global",
+          "status": "active"
+        },
+        {
+          "appCode": "finance",
+          "resourceCode": "invoices",
+          "action": "issue",
+          "scopeType": "tenant",
+          "scopeValue": "global",
+          "status": "active"
+        }
+      ]
+    },
+    {
+      "appRoleCode": "finance:invoice_approver",
+      "permissions": [
+        "finance:dashboard:view",
+        "finance:invoices:view",
+        "finance:invoices:approve"
+      ],
+      "proposedManualTenantScopes": [
+        {
+          "appCode": "finance",
+          "resourceCode": "dashboard",
+          "action": "view",
+          "scopeType": "tenant",
+          "scopeValue": "global",
+          "status": "active"
+        },
+        {
+          "appCode": "finance",
+          "resourceCode": "invoices",
+          "action": "view",
+          "scopeType": "tenant",
+          "scopeValue": "global",
+          "status": "active"
+        },
+        {
+          "appCode": "finance",
+          "resourceCode": "invoices",
+          "action": "approve",
+          "scopeType": "tenant",
+          "scopeValue": "global",
+          "status": "active"
+        }
+      ]
+    },
+    {
+      "appRoleCode": "finance:expense_approver",
+      "permissions": [
+        "finance:dashboard:view",
+        "finance:expenses:view",
+        "finance:expenses:approve"
+      ],
+      "proposedManualTenantScopes": [
+        {
+          "appCode": "finance",
+          "resourceCode": "dashboard",
+          "action": "view",
+          "scopeType": "tenant",
+          "scopeValue": "global",
+          "status": "active"
+        },
+        {
+          "appCode": "finance",
+          "resourceCode": "expenses",
+          "action": "view",
+          "scopeType": "tenant",
+          "scopeValue": "global",
+          "status": "active"
+        },
+        {
+          "appCode": "finance",
+          "resourceCode": "expenses",
+          "action": "approve",
+          "scopeType": "tenant",
+          "scopeValue": "global",
+          "status": "active"
+        }
+      ]
+    },
+    {
+      "appRoleCode": "finance:cashier",
+      "permissions": [
+        "finance:dashboard:view",
+        "finance:receipts:view",
+        "finance:receipts:confirm",
+        "finance:expenses:view",
+        "finance:expenses:confirm",
+        "finance:bank_accounts:view"
+      ],
+      "proposedManualTenantScopes": [
+        {
+          "appCode": "finance",
+          "resourceCode": "dashboard",
+          "action": "view",
+          "scopeType": "tenant",
+          "scopeValue": "global",
+          "status": "active"
+        },
+        {
+          "appCode": "finance",
+          "resourceCode": "receipts",
+          "action": "view",
+          "scopeType": "tenant",
+          "scopeValue": "global",
+          "status": "active"
+        },
+        {
+          "appCode": "finance",
+          "resourceCode": "receipts",
+          "action": "confirm",
+          "scopeType": "tenant",
+          "scopeValue": "global",
+          "status": "active"
+        },
+        {
+          "appCode": "finance",
+          "resourceCode": "expenses",
+          "action": "view",
+          "scopeType": "tenant",
+          "scopeValue": "global",
+          "status": "active"
+        },
+        {
+          "appCode": "finance",
+          "resourceCode": "expenses",
+          "action": "confirm",
+          "scopeType": "tenant",
+          "scopeValue": "global",
+          "status": "active"
+        },
+        {
+          "appCode": "finance",
+          "resourceCode": "bank_accounts",
+          "action": "view",
+          "scopeType": "tenant",
+          "scopeValue": "global",
+          "status": "active"
+        }
+      ]
+    },
+    {
+      "appRoleCode": "finance:reconciliation_operator",
+      "permissions": [
+        "finance:dashboard:view",
+        "finance:invoices:view",
+        "finance:receipts:view",
+        "finance:reconciliation:edit",
+        "finance:reconciliation:confirm",
+        "finance:reports:view"
+      ],
+      "proposedManualTenantScopes": [
+        {
+          "appCode": "finance",
+          "resourceCode": "dashboard",
+          "action": "view",
+          "scopeType": "tenant",
+          "scopeValue": "global",
+          "status": "active"
+        },
+        {
+          "appCode": "finance",
+          "resourceCode": "invoices",
+          "action": "view",
+          "scopeType": "tenant",
+          "scopeValue": "global",
+          "status": "active"
+        },
+        {
+          "appCode": "finance",
+          "resourceCode": "receipts",
+          "action": "view",
+          "scopeType": "tenant",
+          "scopeValue": "global",
+          "status": "active"
+        },
+        {
+          "appCode": "finance",
+          "resourceCode": "reconciliation",
+          "action": "edit",
+          "scopeType": "tenant",
+          "scopeValue": "global",
+          "status": "active"
+        },
+        {
+          "appCode": "finance",
+          "resourceCode": "reconciliation",
+          "action": "confirm",
+          "scopeType": "tenant",
+          "scopeValue": "global",
+          "status": "active"
+        },
+        {
+          "appCode": "finance",
+          "resourceCode": "reports",
+          "action": "view",
+          "scopeType": "tenant",
+          "scopeValue": "global",
+          "status": "active"
+        }
+      ]
+    },
+    {
+      "appRoleCode": "people:approver",
+      "permissions": [
+        "people:dashboard:view",
+        "people:employees:view",
+        "people:assignments:view",
+        "people:offboarding_tasks:view",
+        "people:assignments:approve",
+        "people:cost_snapshots:view",
+        "people:cost_snapshots:approve",
+        "people:performance_cycles:view",
+        "people:performance_cycles:approve",
+        "people:documents:view",
+        "people:standard_costs:view",
+        "people:standard_costs:approve"
+      ],
+      "proposedManualTenantScopes": [
+        {
+          "appCode": "people",
+          "resourceCode": "dashboard",
+          "action": "view",
+          "scopeType": "tenant",
+          "scopeValue": "global",
+          "status": "active"
+        },
+        {
+          "appCode": "people",
+          "resourceCode": "employees",
+          "action": "view",
+          "scopeType": "tenant",
+          "scopeValue": "global",
+          "status": "active"
+        },
+        {
+          "appCode": "people",
+          "resourceCode": "assignments",
+          "action": "view",
+          "scopeType": "tenant",
+          "scopeValue": "global",
+          "status": "active"
+        },
+        {
+          "appCode": "people",
+          "resourceCode": "offboarding_tasks",
+          "action": "view",
+          "scopeType": "tenant",
+          "scopeValue": "global",
+          "status": "active"
+        },
+        {
+          "appCode": "people",
+          "resourceCode": "assignments",
+          "action": "approve",
+          "scopeType": "tenant",
+          "scopeValue": "global",
+          "status": "active"
+        },
+        {
+          "appCode": "people",
+          "resourceCode": "cost_snapshots",
+          "action": "view",
+          "scopeType": "tenant",
+          "scopeValue": "global",
+          "status": "active"
+        },
+        {
+          "appCode": "people",
+          "resourceCode": "cost_snapshots",
+          "action": "approve",
+          "scopeType": "tenant",
+          "scopeValue": "global",
+          "status": "active"
+        },
+        {
+          "appCode": "people",
+          "resourceCode": "performance_cycles",
+          "action": "view",
+          "scopeType": "tenant",
+          "scopeValue": "global",
+          "status": "active"
+        },
+        {
+          "appCode": "people",
+          "resourceCode": "performance_cycles",
+          "action": "approve",
+          "scopeType": "tenant",
+          "scopeValue": "global",
+          "status": "active"
+        },
+        {
+          "appCode": "people",
+          "resourceCode": "documents",
+          "action": "view",
+          "scopeType": "tenant",
+          "scopeValue": "global",
+          "status": "active"
+        },
+        {
+          "appCode": "people",
+          "resourceCode": "standard_costs",
+          "action": "view",
+          "scopeType": "tenant",
+          "scopeValue": "global",
+          "status": "active"
+        },
+        {
+          "appCode": "people",
+          "resourceCode": "standard_costs",
+          "action": "approve",
+          "scopeType": "tenant",
+          "scopeValue": "global",
+          "status": "active"
+        }
+      ]
+    },
+    {
+      "appRoleCode": "altoc:contract_approver",
+      "permissions": [
+        "altoc:dashboard:view",
+        "altoc:customer:view",
+        "altoc:customer:approve",
+        "altoc:quotation:view",
+        "altoc:quotation:approve",
+        "altoc:contract:view",
+        "altoc:contract:approve",
+        "altoc:receivable:view",
+        "altoc:maintenance_contract:view",
+        "altoc:service_ticket:view",
+        "altoc:renewal_opportunity:view"
+      ],
+      "proposedManualTenantScopes": [
+        {
+          "appCode": "altoc",
+          "resourceCode": "dashboard",
+          "action": "view",
+          "scopeType": "tenant",
+          "scopeValue": "global",
+          "status": "active"
+        },
+        {
+          "appCode": "altoc",
+          "resourceCode": "customer",
+          "action": "view",
+          "scopeType": "tenant",
+          "scopeValue": "global",
+          "status": "active"
+        },
+        {
+          "appCode": "altoc",
+          "resourceCode": "customer",
+          "action": "approve",
+          "scopeType": "tenant",
+          "scopeValue": "global",
+          "status": "active"
+        },
+        {
+          "appCode": "altoc",
+          "resourceCode": "quotation",
+          "action": "view",
+          "scopeType": "tenant",
+          "scopeValue": "global",
+          "status": "active"
+        },
+        {
+          "appCode": "altoc",
+          "resourceCode": "quotation",
+          "action": "approve",
+          "scopeType": "tenant",
+          "scopeValue": "global",
+          "status": "active"
+        },
+        {
+          "appCode": "altoc",
+          "resourceCode": "contract",
+          "action": "view",
+          "scopeType": "tenant",
+          "scopeValue": "global",
+          "status": "active"
+        },
+        {
+          "appCode": "altoc",
+          "resourceCode": "contract",
+          "action": "approve",
+          "scopeType": "tenant",
+          "scopeValue": "global",
+          "status": "active"
+        },
+        {
+          "appCode": "altoc",
+          "resourceCode": "receivable",
+          "action": "view",
+          "scopeType": "tenant",
+          "scopeValue": "global",
+          "status": "active"
+        },
+        {
+          "appCode": "altoc",
+          "resourceCode": "maintenance_contract",
+          "action": "view",
+          "scopeType": "tenant",
+          "scopeValue": "global",
+          "status": "active"
+        },
+        {
+          "appCode": "altoc",
+          "resourceCode": "service_ticket",
+          "action": "view",
+          "scopeType": "tenant",
+          "scopeValue": "global",
+          "status": "active"
+        },
+        {
+          "appCode": "altoc",
+          "resourceCode": "renewal_opportunity",
+          "action": "view",
+          "scopeType": "tenant",
+          "scopeValue": "global",
+          "status": "active"
+        }
+      ]
+    },
+    {
+      "appRoleCode": "workflow:approver",
+      "permissions": [
+        "workflow:workflow_workspace:view",
+        "workflow:workflow_tasks:view",
+        "workflow:workflow_tasks:approve",
+        "workflow:workflow_tasks:reject",
+        "workflow:workflow_tasks:delegate",
+        "workflow:workflow_instances:view"
+      ],
+      "proposedManualTenantScopes": []
+    }
+  ],
+  "phases": {
+    "invoice_issue": [
+      "finance:invoice_issuer"
+    ],
+    "approval": [
+      "finance:invoice_approver",
+      "finance:expense_approver",
+      "people:approver",
+      "altoc:contract_approver",
+      "workflow:approver"
+    ],
+    "receipt_payment_confirm": [
+      "finance:cashier"
+    ],
+    "reconciliation": [
+      "finance:reconciliation_operator"
+    ]
+  }
+}

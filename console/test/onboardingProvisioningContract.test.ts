@@ -161,3 +161,15 @@ test('onboarding service endpoints enforce capability, signature binding and cre
   assert.match(caller, /sourceApp: 'people'/)
   assert.match(caller, /sourceBizCode: onboardingCode/)
 })
+
+test('Enterprise replaces the producer identity without widening real DingTalk onboarding', () => {
+  for (const kind of ['identity-reserve', 'user-provision'] as const) {
+    const e = envelopeFor(kind, { sourceApp: 'enterprise', sourceDeployment: 'C000001-enterprise' }, { sourceApp: 'enterprise' })
+    assert.doesNotThrow(() => parseOnboardingProvisioningCommand(e, kind, 'enterprise'))
+    assert.throws(() => parseOnboardingProvisioningCommand(e, kind, 'people'))
+    for (const change of [{ providerCode: 'manual' }, { providerSubject: '' }, { sourceApp: 'people' }]) {
+      const bad = envelopeFor(kind, { sourceApp: 'enterprise' }, { sourceApp: 'enterprise', ...change })
+      assert.throws(() => parseOnboardingProvisioningCommand(bad, kind, 'enterprise'))
+    }
+  }
+})

@@ -1,0 +1,47 @@
+[
+  {
+    "Logical": "finance_due_checkpoint",
+    "Physical": "finance_due_checkpoint",
+    "Columns": [
+      "id",
+      "family",
+      "source_kind",
+      "source_id",
+      "source_code",
+      "recipient_uid",
+      "due_at",
+      "fact_hash",
+      "event_key",
+      "generation_no",
+      "notification_id",
+      "published_at",
+      "closure_state",
+      "closure_acked_at",
+      "created_at"
+    ],
+    "DDL": "CREATE TABLE finance_due_checkpoint (\n id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,\n family VARCHAR(32) NOT NULL, source_kind VARCHAR(32) NOT NULL, source_id BIGINT UNSIGNED NOT NULL,\n source_code VARCHAR(64) NOT NULL, recipient_uid VARCHAR(64) NOT NULL, due_at DATETIME(3) NOT NULL,\n fact_hash CHAR(64) NOT NULL, event_key VARCHAR(191) NOT NULL, generation_no BIGINT UNSIGNED NOT NULL,\n notification_id VARCHAR(64) NULL, published_at DATETIME(3) NULL,\n closure_state ENUM('resolved','cancelled') NULL, closure_acked_at DATETIME(3) NULL,\n created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),\n UNIQUE KEY uk_event(event_key), UNIQUE KEY uk_generation(family,source_kind,source_id,generation_no),\n KEY idx_pending(family,published_at,id), KEY idx_closure(family,closure_state,closure_acked_at,id),\n CHECK (generation_no>0), CHECK(recipient_uid<>'' AND LOWER(recipient_uid)<>'@all')\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;"
+  },
+  {
+    "Logical": "finance_due_cursor",
+    "Physical": "finance_due_cursor",
+    "Columns": [
+      "family",
+      "source_cursor",
+      "reconcile_cursor"
+    ],
+    "DDL": "CREATE TABLE finance_due_cursor (family VARCHAR(32) NOT NULL PRIMARY KEY, source_cursor VARCHAR(100) NOT NULL DEFAULT '', reconcile_cursor BIGINT UNSIGNED NOT NULL DEFAULT 0) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;"
+  },
+  {
+    "Logical": "finance_due_audit",
+    "Physical": "finance_due_audit",
+    "Columns": [
+      "id",
+      "action",
+      "counts",
+      "client_code",
+      "request_id",
+      "created_at"
+    ],
+    "DDL": "CREATE TABLE finance_due_audit (id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,action VARCHAR(64) NOT NULL,counts JSON NOT NULL,client_code VARCHAR(64) NOT NULL,request_id VARCHAR(100) NOT NULL,created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;"
+  }
+]

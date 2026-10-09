@@ -79,3 +79,7 @@ Schema 定义：`docs/workflow_schema.sql`
 - 表单定义使用 JSON Schema，前端动态渲染
 - 流程模板可跨业务复用（如"两级审批"可同时用于立项和采购）
 - 接入指南：`../foundation/docs/Workflow-Integration-Guide.md`
+
+### 项目总监读取降级
+
+项目总监角色为 missing/unresolved（仅 role_holder_missing/role_holder_unresolved 409）时，待办列表、任务/实例详情及 by-biz 读取不注入总监事实，继续 Runtime：总监角色的 pending 任务在 COUNT/分页前排除，详情不以旧 assignee 授予总监办理能力；发起人的既有读取权保留。approve/reject/delegate 在锁定任务及实例后仅对实际总监角色任务要求当前总监事实，缺失为409，非总监任务仍执行原授权。多人冲突409、Console 策略/修订依赖故障503均不得降级，不选第一人，不接受 body 中的总监身份。

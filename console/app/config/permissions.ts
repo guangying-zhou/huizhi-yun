@@ -40,6 +40,7 @@ interface MenuItem {
 }
 
 export const menus: MenuItem[][] = [[
+  { label: '系统公告', icon: 'i-lucide-megaphone', to: '/announcements', resource: 'announcements', action: 'admin' },
   {
     label: '管理概览',
     icon: 'i-lucide-layout-dashboard',
@@ -147,6 +148,7 @@ export const menus: MenuItem[][] = [[
     label: '系统管理',
     icon: 'i-lucide-settings-2',
     children: [
+      { label: '反馈管理', icon: 'i-lucide-message-square-plus', to: '/admin/feedback', resource: 'feedback' },
       {
         label: '日志管理',
         icon: 'i-lucide-scroll-text',
@@ -183,6 +185,7 @@ export const menus: MenuItem[][] = [[
  * action: 需要的操作权限
  */
 export const routeRules = [
+  { pattern: '/admin/feedback', resource: 'feedback', action: 'view' as const },
   { pattern: '/admin', resource: 'console_overview', action: 'view' as const },
   { pattern: '/admin/logs', resource: 'audit_logs', action: 'view' as const },
   { pattern: '/admin/business-domains', resource: 'org_profile', action: 'view' as const },
@@ -203,6 +206,7 @@ export const routeRules = [
   { pattern: '/directory/sources/**', resource: 'directory_sources', action: 'view' as const },
   { pattern: '/directory/sync', resource: 'directory_sync', action: 'view' as const },
   { pattern: '/directory/sync/**', resource: 'directory_sync', action: 'view' as const },
+  { pattern: '/announcements', resource: 'announcements', action: 'admin' as const },
   { pattern: '/system-settings', resource: 'system_settings', action: 'view' as const },
   { pattern: '/system-settings/**', resource: 'system_settings', action: 'view' as const },
   { pattern: '/work-calendar', resource: 'system_settings', action: 'view' as const },

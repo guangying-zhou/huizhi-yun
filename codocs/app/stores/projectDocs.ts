@@ -2,7 +2,7 @@
  * Project Docs Store - 管理项目文档
  */
 import { defineStore } from 'pinia'
-import type { Project, GitlabSyncResponse, GitlabSubmitDoc, ConflictDoc, ResolvedDoc, GitlabSubmitResponse } from '~/types/account'
+import type { Project, GitlabSyncResponse, ConflictDoc, ResolvedDoc } from '~/types/account'
 import type { ProjectFileItem } from '~/types/index'
 
 interface ProjectDocsState {
@@ -16,7 +16,6 @@ interface ProjectDocsState {
 
   // 同步和提交状态
   syncing: boolean
-  submitting: boolean
   resolving: boolean
 
   // 同步结果
@@ -30,7 +29,6 @@ export const useProjectDocsStore = defineStore('projectDocs', {
     documents: [],
     documentsLoading: false,
     syncing: false,
-    submitting: false,
     resolving: false,
     syncResult: null
   }),
@@ -240,74 +238,6 @@ export const useProjectDocsStore = defineStore('projectDocs', {
     },
 
     /**
-     * 提交项目文档（从 OSS 到 GitLab）
-     */
-    async submitDocuments(uid: string) {
-      if (!this.selectedProject) {
-        throw new Error('No project selected')
-      }
-
-      const changed = this.changedFiles
-      if (changed.length === 0) {
-        throw new Error('没有需要提交的文件')
-      }
-
-      // 将树形结构扁平化为文件列表
-      const flattenFiles = (items: ProjectFileItem[]): ProjectFileItem[] => {
-        const result: ProjectFileItem[] = []
-        for (const item of items) {
-          if (!item.isDirectory) {
-            result.push(item)
-          }
-          if (item.children) {
-            result.push(...flattenFiles(item.children))
-          }
-        }
-        return result
-      }
-
-      const config = useRuntimeConfig()
-      const gitlabBaseUrl = (config.public.gitlabBaseUrl as string) || 'http://gitlab.wiztek.cn'
-      const repoPath = this.selectedProject.repoUrl?.replace(gitlabBaseUrl, '').replace(/^\/+/, '') || ''
-      const prefix = `${repoPath}/`
-
-      const docs: GitlabSubmitDoc[] = flattenFiles(changed).map(file => ({
-        oss_path: file.path,
-        gitlab_path: file.path.replace(prefix, '')
-      }))
-
-      this.submitting = true
-      try {
-        const response = await $fetch<{ code: number, data: GitlabSubmitResponse }>(
-          `/api/project-docs/gitlab-submit/${this.selectedProject.projectCode}`,
-          {
-            method: 'POST',
-            body: {
-              uid,
-              docs
-            }
-          }
-        )
-
-        if (response.code === 0) {
-          // 提交成功后更新 docsCommittedAt 并重新加载文件列表
-          if (this.selectedProject) {
-            this.selectedProject.docsCommittedAt = new Date().toISOString()
-            // 重新加载文件列表以清除修改状态
-            await this.loadDocuments()
-          }
-        }
-
-        return response.data
-      } catch (error) {
-        console.error('Failed to submit documents:', error)
-        throw error
-      } finally {
-        this.submitting = false
-      }
-    },
-
-    /**
      * 清除状态
      */
     clear() {
@@ -316,7 +246,6 @@ export const useProjectDocsStore = defineStore('projectDocs', {
       this.documents = []
       this.documentsLoading = false
       this.syncing = false
-      this.submitting = false
       this.resolving = false
       this.syncResult = null
     }

@@ -15,7 +15,7 @@ const fields: Record<Action, Set<string>> = {
 
 function text(value: unknown, max: number) {
   const result = String(value ?? '').trim()
-  if ([...result].length > max || /[\u0000\r\n]/.test(result)) throw createError({ statusCode: 400, message: '发文执行字段无效' })
+  if ([...result].length > max || Array.from(result).some(char => char === '\u0000' || char === '\n' || char === '\r')) throw createError({ statusCode: 400, message: '发文执行字段无效' })
   return result
 }
 

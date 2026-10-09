@@ -389,6 +389,7 @@ const items = computed<DropdownMenuItem[][]>(() => {
 
 <template>
   <div
+    data-feedback-private
     :class="[
       'flex min-w-0 items-center',
       header ? 'gap-1.5' : 'w-full gap-2',

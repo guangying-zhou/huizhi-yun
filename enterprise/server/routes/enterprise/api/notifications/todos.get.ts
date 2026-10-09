@@ -9,7 +9,11 @@ export default defineEventHandler(async (event) => {
   setHeader(event, 'Cache-Control', 'private, no-store')
   requireConsoleNotificationsUserCredentials(event)
   let query: Record<string, unknown>
-  try { query = todoReadQuery(getQuery(event), true) } catch { throw createError({ statusCode: 400, message: 'Invalid todo query' }) }
+  try {
+    query = todoReadQuery(getQuery(event), true)
+  } catch {
+    throw createError({ statusCode: 400, message: 'Invalid todo query' })
+  }
   const data = await fetchConsoleNotificationsForUser(event, '/api/v1/console/notifications/todos', {
     query
   })

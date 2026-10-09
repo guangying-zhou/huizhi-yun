@@ -15,7 +15,7 @@ function requiredSource(path: string, message: string) {
 
 test('Aims Cloudflare declares a bounded integration-operation drain task and bound opt-in cron', () => {
   const task = requiredSource(taskPath, 'Aims integration-operation drain task is required')
-  const drain = requiredSource(drainPath, 'Aims integrationOperationDrain utility is required')
+  const drain = [requiredSource(drainPath, 'Aims integrationOperationDrain utility is required'), requiredSource(`${root}/server/utils/integrationOperationDrainCore.ts`, 'Shared typed drain core is required')].join('\n')
   const render = readFileSync(`${root}/scripts/render-cloudflare-config.mjs`, 'utf8')
   const nuxtConfig = readFileSync(`${root}/nuxt.config.ts`, 'utf8')
 
@@ -39,7 +39,7 @@ test('Aims Cloudflare declares a bounded integration-operation drain task and bo
 })
 
 test('Aims drain loops safely over frozen commands and always checkpoints', () => {
-  const drain = requiredSource(drainPath, 'Aims integrationOperationDrain utility is required')
+  const drain = [requiredSource(drainPath, 'Aims integrationOperationDrain utility is required'), requiredSource(`${root}/server/utils/integrationOperationDrainCore.ts`, 'Shared typed drain core is required')].join('\n')
   const executor = [
     requiredSource(`${root}/server/utils/serviceTicketDeliveryOperation.ts`, 'Aims shared request/scheduled IO is required'),
     requiredSource(`${root}/server/utils/serviceTicketDeliveryOperationExecutor.ts`, 'Aims frozen command executor is required')

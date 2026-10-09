@@ -15,6 +15,7 @@ import (
 	"testing"
 
 	"github.com/huizhi-yun/data-runtime/internal/apps/aims"
+	pc "github.com/huizhi-yun/data-runtime/internal/apps/aims/productcenter"
 	"github.com/huizhi-yun/data-runtime/internal/apps/assets"
 	"github.com/huizhi-yun/data-runtime/internal/apps/workflow"
 	e "github.com/huizhi-yun/data-runtime/internal/enterprise"
@@ -36,6 +37,7 @@ func (c caller) key() string { return c.file + "|" + c.domain + "|" + c.names }
 // until it is added here, and TestCallerNamesAreInstalled then requires its
 // names to be part of the installed view family (Aims()/Assets()).
 var registry = map[string][]string{
+	"enterpriseapf/altoc_feedback.go|\"aims\"|pc.FeedbackViewNames()":                                  pc.FeedbackViewNames(),
 	"apps/workflow/enterprise_binding.go|\"workflow\"|EnterpriseViewNames()":                           workflow.EnterpriseViewNames(),
 	"enterprisescheduler/service.go|\"aims\"|viewNames":                                                append(enterprisescheduler.CompletionViewNames(), "work_item_completion_requests"),
 	"enterpriseplanning/features.go|\"aims\"|views":                                                    enterpriseplanning.FeatureViewNames(),
@@ -62,7 +64,7 @@ var registry = map[string][]string{
 	// Domains installed by their own tools: their families are not part of Sets().
 	"enterprisecontracts/milestone_receivable.go|\"altoc\"|ActivationAltocViews()": nil,
 	"enterprisecontracts/activation.go|\"altoc\"|ActivationAltocViews()":           nil,
-	"enterprise/domaininstall/install.go|x.domain|logical":                         nil,
+	"enterprise/domaininstall/apf.go|x.domain|logical":                             nil,
 }
 
 func render(fset *token.FileSet, expr ast.Expr) string {
@@ -383,5 +385,32 @@ func TestSeparatelyInstalledAltocViewsJoinTheFamilyOnlyWhenConfigured(t *testing
 	delete(b.Domains, "altoc")
 	if got := SeparatelyInstalled(b); len(got) != 0 {
 		t.Fatalf("no altoc domain must accept nothing: %v", got)
+	}
+}
+
+func TestAPFDoesNotChangeInstalledViewsOrMappingHash(t *testing.T) {
+	b := e.Binding{Domains: map[string]e.DomainBinding{
+		"aims":     {Tables: map[string]string{"projects": "aims_projects", "integration_operation": "aims_integration_operation"}},
+		"assets":   {Tables: map[string]string{"products": "assets_products"}},
+		"workflow": {Tables: map[string]string{"workflow_tasks": "workflow_tasks"}},
+	}}
+	before := MappingHash(b)
+	old, err := Derive(b, "aims")
+	if err != nil {
+		t.Fatal(err)
+	}
+	assetsBefore, _ := Derive(b, "assets")
+	workflowBefore, _ := Derive(b, "workflow")
+	for _, domain := range []string{"altoc", "people", "finance"} {
+		b.Domains[domain] = e.DomainBinding{Tables: map[string]string{domain + "_audit_log": domain + "_audit_log", "integration_operation": domain + "_integration_operation", "service_command_receipt": domain + "_service_command_receipt"}}
+	}
+	after, err := Derive(b, "aims")
+	if err != nil {
+		t.Fatal(err)
+	}
+	assetsAfter, _ := Derive(b, "assets")
+	workflowAfter, _ := Derive(b, "workflow")
+	if strings.Join(assetsBefore, "|") != strings.Join(assetsAfter, "|") || strings.Join(workflowBefore, "|") != strings.Join(workflowAfter, "|") || before != MappingHash(b) || strings.Join(old, "|") != strings.Join(after, "|") || len(SeparatelyInstalled(b)) != 0 {
+		t.Fatal("APF changed frozen compatibility view family/hash")
 	}
 }

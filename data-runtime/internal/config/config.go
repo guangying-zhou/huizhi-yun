@@ -226,12 +226,9 @@ func Load() (Config, error) {
 		},
 		Apps: AppsConfig{
 			Console: ConsoleConfig{
-				Enabled: envBool("HZY_CONSOLE_RUNTIME_ENABLED", false),
-				DB:      appDBConfig("CONSOLE", "hzy_console"),
-				VaultMasterKeyFile: firstNonEmpty(
-					os.Getenv("HZY_CONSOLE_VAULT_MASTER_KEY_FILE"),
-					filepath.Join(envString("HZY_DATA_RUNTIME_CONFIG_DIR", "/etc/hzy-data-runtime"), "console-vault-master-key"),
-				),
+				Enabled:            envBool("HZY_CONSOLE_RUNTIME_ENABLED", false),
+				DB:                 appDBConfig("CONSOLE", "hzy_console"),
+				VaultMasterKeyFile: ConsoleVaultMasterKeyFile(os.Getenv),
 			},
 			Directory: DirectoryConfig{
 				Enabled: envBool("HZY_DIRECTORY_RUNTIME_ENABLED", false),
@@ -284,6 +281,7 @@ func Load() (Config, error) {
 	if cfg.Control.ConfigDir == "" {
 		cfg.Control.ConfigDir = configDir
 	}
+	configuredCollabDeployment := cfg.DeploymentBindings["collab"]
 	// The control-plane heartbeat persists the current bindings separately from
 	// config.json. Apply that overlay after the static file so a restart actually
 	// observes the bindings that caused it.
@@ -298,6 +296,9 @@ func Load() (Config, error) {
 		cfg.DeploymentBindings = bindings
 	} else if !os.IsNotExist(err) {
 		return cfg, fmt.Errorf("read deployment bindings overlay: %w", err)
+	}
+	if err := applyLocalCollabBinding(&cfg, configuredCollabDeployment, strings.TrimSpace(os.Getenv("HZY_LOCAL_COLLAB_DEPLOYMENT"))); err != nil {
+		return cfg, err
 	}
 	// A local-only Workflow test receiver may have no Platform deployment row.
 	// Keep the Platform overlay authoritative for every other binding; this
@@ -334,15 +335,11 @@ func Load() (Config, error) {
 	if _, bound := cfg.DeploymentBindings["console"]; bound {
 		cfg.Apps.Console.Enabled = true
 	}
-	cfg.Apps.Console.VaultMasterKey = strings.TrimSpace(os.Getenv("HZY_CONSOLE_VAULT_MASTER_KEY"))
-	if cfg.Apps.Console.VaultMasterKey == "" {
-		content, err := os.ReadFile(cfg.Apps.Console.VaultMasterKeyFile)
-		if err == nil {
-			cfg.Apps.Console.VaultMasterKey = strings.TrimSpace(string(content))
-		} else if !os.IsNotExist(err) {
-			return cfg, fmt.Errorf("read Console Vault master key file: %w", err)
-		}
+	key, err := ResolveConsoleVaultMasterKey(os.Getenv, os.ReadFile)
+	if err != nil {
+		return cfg, fmt.Errorf("read Console Vault master key file: %w", err)
 	}
+	cfg.Apps.Console.VaultMasterKey = key
 
 	cfg.Auth.Mode = normalizeAuthMode(string(cfg.Auth.Mode))
 	if cfg.Auth.JWT.Audience == "" {
@@ -630,4 +627,24 @@ func envBool(name string, fallback bool) bool {
 		return fallback
 	}
 	return value != "0" && value != "false" && value != "no" && value != "off"
+}
+
+// hzy0-only explicit enrollment. Never merge arbitrary static bindings back
+// into the authoritative Platform map; grants and signing stay unchanged.
+func applyLocalCollabBinding(cfg *Config, configured, local string) error {
+	if local == "" {
+		return nil
+	}
+	if local != "C000001-test-collab" || cfg.Tenant != "C000001" ||
+		cfg.Deployment != "c000001-test-tenant-runtime" || cfg.Server.Host != "127.0.0.1" ||
+		cfg.Server.Port != 18084 || !cfg.Apps.Codocs.Enabled || !cfg.Apps.Codocs.SnapshotV2Enabled ||
+		!cfg.Apps.Codocs.CollaborationV2Enabled || configured != local ||
+		(cfg.DeploymentBindings["collab"] != "" && cfg.DeploymentBindings["collab"] != local) {
+		return fmt.Errorf("local Collab deployment binding is invalid")
+	}
+	if cfg.DeploymentBindings == nil {
+		cfg.DeploymentBindings = map[string]string{}
+	}
+	cfg.DeploymentBindings["collab"] = local
+	return nil
 }

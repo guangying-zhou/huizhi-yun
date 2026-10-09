@@ -1,6 +1,6 @@
 import type { H3Event } from 'h3'
-import { claimOpsKnowledgeOperation, createRequestOpsKnowledgeOperationIO } from './serviceTicketOpsKnowledgeOperation'
-import { executeProductFeedbackOperation, isProductFeedbackOperation } from './productFeedbackOperation'
+import { claimOpsKnowledgeOperation, createRequestOpsKnowledgeOperationIO } from './serviceTicketOpsKnowledgeOperation.ts'
+import { executeProductFeedbackOperation, isProductFeedbackOperation } from './productFeedbackOperation.ts'
 
 type Row = Record<string, unknown>
 

@@ -542,3 +542,20 @@ Platform 的 `registerAppManifest` 对组合执行以下规则：
 - 软件发布与部署仍使用既有流程；登记不表示已发布、已部署或全员获权。签名 bundle 的逻辑目录消费和统一技术开通需按 ADR-018 合同验收。
 
 校验入口：`platform/test/enterpriseComposition.test.ts`；`node --experimental-strip-types platform/scripts/test-enterprise-composition-mysql.mjs` 已通过真实隔离 MySQL，覆盖同事务登记、原命名空间、无人员授予、重复快照复用、仅 Host release、已发布冲突及第二模块失败整体回滚；并发发布与实际环境治理仍须按发布合同验收。
+
+### 推荐角色的默认数据范围（Finance 首批）
+
+`recommendedRoles[].defaultScopes` 为可选数组。字符串模板（如 `tenant:global`）只展开到该角色 `suggestedPermissions` 已声明的精确资源/动作；对象 `{ "scope": "subject:self", "resourceCode": "expenses", "action": "edit" }` 可进一步限定资源/动作。省略 action 表示该资源已声明的动作。模板必须属于 `supportedScopes`，目前仅实现 `tenant:global` 与 `subject:self`；未知模板、未授予资源/动作、通配符及额外字段拒绝导入，不扩展权限。
+
+字段缺省保留原有范围；显式 `[]` 只删除 `manifest_default` 来源行。同步只管理该来源，手工范围（包括同 tuple 的 inactive 行）不覆盖、不删除、不激活。重复同步保留行 ID 与相同策略 revision。没有安装 `source_type` 迁移时，带此字段的同步在写入前返回 503 / `manifest_default_scope_migration_required`。
+
+默认范围是角色目录，不自动给用户分配角色。Finance admin/manager 采用 tenant:global，expense_submitter 仅 expenses 采用 subject:self，viewer 不给默认范围。实际请求仍需签名策略、精确动作及人员职责校验；任职范围继续收紧默认范围。
+
+
+## 按环境选择已发布 release
+
+Platform 可按 tenant/environment/app pin manifest release，选定版本同时控制资源、动作、action implications、推荐角色和 manifest 默认范围；当前人工授权/撤权保持独立。发布全局 latest 不覆盖已有 pin。协议及旧包初始化边界见 [环境版本说明](Platform-Environment-App-Release-Pins.md)。
+
+### 迁移基线 release
+
+`platform_app_releases` 增加 `release_kind`（默认 git）与 `baseline_source_json`。baseline 状态只用于绑定原已签包的历史 manifest，保留 manifest ID/hash，不具有 Git 来源，不参与 latest，不能通过普通发布或导入修改。登记审计由 `platform_migration_baseline_audits` 保存；原 draft 不变。详情见 [环境版本与迁移基线](Platform-Environment-App-Release-Pins.md#5-历史迁移基线-release)。

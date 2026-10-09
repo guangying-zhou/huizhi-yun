@@ -2,8 +2,8 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { request } from 'node:http'
 import { createConsoleEgress, allowedConsoleRequest, internalHostRuntimeScopes } from '../console-egress.mjs'
-import { generatedSource, projectedScopes } from '../generate-console-egress-scopes.mjs'
-import { hostRuntimeOperations, hostRuntimeScopes } from '../console-egress-scopes.generated.mjs'
+import { generatedSource, projectedScopes, projectedChannels, projectedAimsHostChannels } from '../generate-console-egress-scopes.mjs'
+import { hostRuntimeOperations, hostRuntimeScopes, apfServiceChannels } from '../console-egress-scopes.generated.mjs'
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 
@@ -642,4 +642,63 @@ test('registered Console user APIs pass the egress; unregistered paths and metho
   assert.equal(allowedConsoleRequest('GET', '/api/v1/console/profile/secrets', ''), false)
   assert.equal(allowedConsoleRequest('GET', '/api/v1/console/vault/secrets', ''), false)
   assert.equal(allowedConsoleRequest('PUT', '/api/v1/console/directory/departments/D1', ''), false)
+})
+
+
+test('APF service channels match registries and reject broad or mismatched grants', () => {
+  assert.deepEqual(apfServiceChannels, projectedChannels())
+  assert.equal(apfServiceChannels.length, 24)
+  const allowed = data => allowedConsoleRequest('POST', '/oauth/token', JSON.stringify(data), { workflowLocal: true })
+  for (const channel of apfServiceChannels) {
+    assert.match(channel.scope, /^[a-z]+:[a-z-]+:[a-z-]+$|^workflow:proxy$/)
+    assert.ok(!channel.scope.includes('*'))
+    const body = { ...tokenBody, client_id: channel.clientId, app_code: channel.app, audience: channel.audience, scope: channel.scope }
+    assert.equal(allowed(body), true, JSON.stringify(channel))
+    for (const patch of [{ client_id: 'foreign.runtime' }, { app_code: 'foreign' }, { audience: 'foreign' }, { scope: `${channel.app}:*` }, { scope: channel.app }, { source_binding: 'browser' }, { scope: `${channel.scope} foreign:write` }]) {
+      assert.equal(allowed({ ...body, ...patch }), false, JSON.stringify(patch))
+    }
+    if (channel.workflowLocal) assert.equal(allowedConsoleRequest('POST', '/oauth/token', JSON.stringify(body)), false)
+  }
+  for (const audience of ['data-runtime', 'tenant-runtime']) {
+    assert.equal(allowed({ ...tokenBody, audience, scope: 'altoc:enterprise-host:execute finance:enterprise-host:execute people:enterprise-host:execute' }), true)
+    assert.equal(allowed({ ...tokenBody, audience, scope: 'finance:enterprise-host:execute finance:scheduler:execute' }), false)
+    assert.equal(allowed({ ...tokenBody, audience, scope: 'finance:scheduler:execute finance:scheduler:execute' }), false)
+    assert.equal(allowed({ ...tokenBody, audience, scope: 'finance:enterprise-host:*' }), false)
+  }
+})
+
+
+test('People recovery egress registers only exact read-only lifecycle probes', () => {
+  for (const endpoint of ['employment-status', 'lifecycle-command-status']) {
+    const path = `/api/v1/console/service/directory/onboarding/${endpoint}`
+    assert.equal(allowedConsoleRequest('GET', path), true)
+    for (const method of ['POST', 'PUT', 'PATCH', 'DELETE']) assert.equal(allowedConsoleRequest(method, path, '{}'), false)
+    for (const extra of ['/child', '-replay', '/..']) assert.equal(allowedConsoleRequest('GET', path + extra), false)
+  }
+  assert.equal(allowedConsoleRequest('GET', '/api/v1/console/service/directory/onboarding'), false)
+})
+
+test('Aims Host scheduler egress is exact, dual-audience and cannot borrow identity or broaden scope', () => {
+  const rows = projectedAimsHostChannels()
+  assert.equal(rows.length, 13)
+  for (const row of rows) {
+    const body = { grant_type: 'client_credentials', client_id: row.clientId, app_code: row.app, audience: row.audience, scope: row.scope, source_binding: 'service-client-policy' }
+    const allow = value => allowedConsoleRequest('POST', '/oauth/token', JSON.stringify(value), { workflowLocal: true, notificationsInAppOnly: true })
+    assert.equal(allow(body), true, JSON.stringify(row))
+    assert.equal(allow({ ...body, app_code: 'people', client_id: 'people.runtime' }), false)
+    assert.equal(allow({ ...body, audience: 'wrong' }), false)
+    assert.equal(allow({ ...body, scope: row.scope + ' aims:write' }), false)
+    assert.equal(allow({ ...body, scope: 'aims:scheduler:execute' }), ['data-runtime', 'tenant-runtime'].includes(row.audience))
+    assert.equal(allowedConsoleRequest('POST', '/oauth/token', JSON.stringify(body), { workflowLocal: false }), false)
+    assert.equal(allow({ ...body, scope: 'aims:*' }), false)
+  }
+})
+
+test('feedback Console U permits only the reviewed Enterprise tenant-runtime tuple', () => {
+  const body = { grant_type: 'client_credentials', client_id: 'enterprise.runtime', app_code: 'enterprise', audience: 'tenant-runtime', scope: 'console:enterprise-host:execute', source_binding: 'service-client-policy' }
+  const allowed = (value, features = { workflowLocal: true }) => allowedConsoleRequest('POST', '/oauth/token', JSON.stringify(value), features)
+  assert.equal(allowed(body), true)
+  assert.equal(allowed(body, { workflowLocal: false }), false)
+  for (const change of [{ client_id: 'console.runtime' }, { app_code: 'console' }, { audience: 'console' }, { scope: 'assets:enterprise-host:execute' }, { source_binding: 'unknown' }, { grant_type: 'password' }, { deployment: 'forged' }]) assert.equal(allowed({ ...body, ...change }), false)
+  assert.equal(allowed({ ...body, audience: 'data-runtime' }), true)
 })

@@ -8,6 +8,7 @@ import { createAliOssCompatibleClient, type AliOssCompatibleClient } from '@hzy/
 import { objectStorageVersionId } from '@hzy/foundation/server/utils/objectStorageVersion'
 import type { H3Event } from 'h3'
 import { v4 as uuidv4 } from 'uuid'
+import { documentBucket } from '../../shared/utils/documentStorage'
 import { getCodocsOssRuntimeConfig, loadCodocsOssRuntimeConfigFromConsole } from './ossRuntime'
 import { resolveDocumentOssTimeoutMs } from './ossTimeout'
 
@@ -248,7 +249,7 @@ export const getOSSRecycleDays = () => {
 
 // 判断是否使用项目文档 bucket
 const useProjectsBucket = (docType?: string): boolean => {
-  return docType === 'git-project'
+  return documentBucket(docType) === 'projects'
 }
 
 /**

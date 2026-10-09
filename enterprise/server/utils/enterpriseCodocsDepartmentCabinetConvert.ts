@@ -24,11 +24,14 @@ function validatePlan(result: unknown, user: User, department: string, source: s
     || plan.folder_id !== intent.folder_id || (!plan.replayed && plan.title !== intent.title)
     || !['doc', 'docx'].includes(plan.source_ext) || !Number.isSafeInteger(plan.source_size) || plan.source_size < 0 || plan.source_size > 100 * 1024 * 1024
     || !hashPattern.test(plan.source_state) || typeof plan.source_path !== 'string'
-    || !plan.source_path.startsWith(`codocs/departments/${department}/cabinet/`) || /[\\\x00-\x1f\x7f]/.test(plan.source_path)
-    || plan.source_path.split('/').some(segment => !segment || segment === '.' || segment === '..')) throw invalid()
+    || !plan.source_path.startsWith(`codocs/departments/${department}/cabinet/`) || Array.from(plan.source_path).some(char => char.charCodeAt(0) <= 0x1f || char === '\\' || char.charCodeAt(0) === 0x7f)
+    || plan.source_path.split('/').some(segment => !segment || segment === '.' || segment === '..'))
+    throw invalid()
   const prefix = `codocs/cabinet-conversions/${plan.uuid}/`
-  if (typeof plan.target_prefix !== 'string' || !plan.target_prefix.startsWith(prefix) || !/^[0-9a-f]{64}\/$/.test(plan.target_prefix.slice(prefix.length))) throw invalid()
-  if (plan.replayed && (typeof plan.oss_path !== 'string' || !plan.oss_path.startsWith(plan.target_prefix) || !/^[0-9a-f]{64}\/[0-9a-f]{64}\.md$/.test(plan.oss_path.slice(plan.target_prefix.length)))) throw invalid()
+  if (typeof plan.target_prefix !== 'string' || !plan.target_prefix.startsWith(prefix) || !/^[0-9a-f]{64}\/$/.test(plan.target_prefix.slice(prefix.length)))
+    throw invalid()
+  if (plan.replayed && (typeof plan.oss_path !== 'string' || !plan.oss_path.startsWith(plan.target_prefix) || !/^[0-9a-f]{64}\/[0-9a-f]{64}\.md$/.test(plan.oss_path.slice(plan.target_prefix.length))))
+    throw invalid()
   return plan
 }
 
@@ -38,13 +41,15 @@ export async function enterpriseCodocsDepartmentCabinetConvert(event: H3Event) {
   const source = getRouterParam(event, 'uuid') || ''
   const department = departmentCabinetQuery(event, ['dept_code']).dept_code || ''
   const key = getHeader(event, 'idempotency-key') || ''
-  if (!/^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/.test(source) || !/^[A-Za-z0-9][A-Za-z0-9:_-]{7,199}$/.test(key)) throw createError({ statusCode: 400, message: '文件标识或 Idempotency-Key 无效' })
+  if (!/^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/.test(source) || !/^[A-Za-z0-9][A-Za-z0-9:_-]{7,199}$/.test(key))
+    throw createError({ statusCode: 400, message: '文件标识或 Idempotency-Key 无效' })
   await departmentCabinetAuthorize(event, department, 'edit', true)
   await departmentCabinetAuthorize(event, department, 'create', true)
   const body = await readBody(event)
   if (!body || typeof body !== 'object' || Array.isArray(body) || Object.keys(body).some(field => !['title', 'folder_id'].includes(field))
     || typeof body.title !== 'string' || !body.title.trim() || [...body.title].length > 255
-    || (body.folder_id != null && (!Number.isSafeInteger(body.folder_id) || body.folder_id < 1))) throw createError({ statusCode: 400, message: '转换标题或目录无效' })
+    || (body.folder_id != null && (!Number.isSafeInteger(body.folder_id) || body.folder_id < 1)))
+    throw createError({ statusCode: 400, message: '转换标题或目录无效' })
   const intent: Intent = { title: body.title.trim(), folder_id: body.folder_id ?? null }
   const request = (payload: object) => ({
     tenant: user.tenant, deployment: user.deployment, code: department, payload: { ...payload, uuid: source },
@@ -52,39 +57,61 @@ export async function enterpriseCodocsDepartmentCabinetConvert(event: H3Event) {
   })
   await prepareEnterpriseRuntime(event, 'codocs.department-cabinet-conversion-plan')
   const plan = validatePlan(await callEnterpriseRuntime(event, 'codocs.department-cabinet-conversion-plan', request(intent), { idempotencyKey: key }), user, department, source, intent)
-  if (plan.replayed) return { success: true, data: { uuid: plan.uuid, title: plan.title } }
+  if (plan.replayed)
+    return { success: true, data: { uuid: plan.uuid, title: plan.title } }
   let client: Awaited<ReturnType<typeof createRuntimeOSSClient>>
   let bytes: Buffer
   try {
     client = await createRuntimeOSSClient({ event, timeout: 300000 })
     const object = await client.get(plan.source_path)
     bytes = Buffer.from(object.content)
-    if (bytes.length !== plan.source_size) throw createError({ statusCode: 409, message: '源文件内容已变更' })
+    if (bytes.length !== plan.source_size)
+      throw createError({ statusCode: 409, message: '源文件内容已变更' })
   } catch (error) {
     const status = statusOf(error)
     throw createError({ statusCode: status === 404 || status === 409 ? status : 503, message: status === 404 ? '源文件正文不存在' : status === 409 ? '源文件内容已变更' : '源文件存储暂不可用' })
   }
   let markdown: string
-  try { markdown = await docxToMarkdown(bytes) } catch { throw createError({ statusCode: 422, message: '文件无法转换，请使用有效的 DOCX 文件' }) }
+  try {
+    markdown = await docxToMarkdown(bytes)
+  } catch {
+    throw createError({ statusCode: 422, message: '文件无法转换，请使用有效的 DOCX 文件' })
+  }
   const content = Buffer.from(markdown, 'utf8')
-  if (content.length > 10 * 1024 * 1024) throw createError({ statusCode: 413, message: '转换后的文档正文超过 10 MiB' })
+  if (content.length > 10 * 1024 * 1024)
+    throw createError({ statusCode: 413, message: '转换后的文档正文超过 10 MiB' })
   const digest = createHash('sha256').update(content).digest('hex')
   const path = `${plan.target_prefix}${plan.source_state}/${digest}.md`
   try {
     const verify = (head: Awaited<ReturnType<typeof client.head>>) => {
-      if (head.meta?.['hzy-content-sha256'] !== digest || Number(head.res?.headers?.['content-length']) !== content.length) throw createError({ statusCode: 409, message: '转换对象内容不一致' })
+      if (head.meta?.['hzy-content-sha256'] !== digest || Number(head.res?.headers?.['content-length']) !== content.length)
+        throw createError({ statusCode: 409, message: '转换对象内容不一致' })
     }
     let missing = false
-    try { verify(await client.head(path)) } catch (error) { if (statusOf(error) !== 404) throw error; missing = true }
-    if (missing) {
-      try { await client.put(path, content, { forbidOverwrite: true, headers: { 'Content-Type': 'text/markdown; charset=utf-8' }, meta: { 'hzy-content-sha256': digest } }) }
-      catch (error) { if (![409, 412].includes(statusOf(error))) throw error; verify(await client.head(path)) }
+    try {
+      verify(await client.head(path))
+    } catch (error) {
+      if (statusOf(error) !== 404)
+        throw error
+      missing = true
     }
-  } catch (error) { throw createError({ statusCode: statusOf(error) === 409 ? 409 : 503, message: '转换正文尚未保存，请使用相同请求重试' }) }
+    if (missing) {
+      try {
+        await client.put(path, content, { forbidOverwrite: true, headers: { 'Content-Type': 'text/markdown; charset=utf-8' }, meta: { 'hzy-content-sha256': digest } })
+      } catch (error) {
+        if (![409, 412].includes(statusOf(error)))
+          throw error
+        verify(await client.head(path))
+      }
+    }
+  } catch (error) {
+    throw createError({ statusCode: statusOf(error) === 409 ? 409 : 503, message: '转换正文尚未保存，请使用相同请求重试' })
+  }
   await departmentCabinetAuthorize(event, department, 'edit', true)
   await departmentCabinetAuthorize(event, department, 'create', true)
   await prepareEnterpriseRuntime(event, 'codocs.department-cabinet-convert')
   const committed = validatePlan(await callEnterpriseRuntime(event, 'codocs.department-cabinet-convert', request({ ...intent, source_state: plan.source_state, content_sha256: digest, content_size: content.length }), { idempotencyKey: key }), user, department, source, intent)
-  if (committed.uuid !== plan.uuid || committed.target_prefix !== plan.target_prefix || (!committed.replayed && committed.oss_path !== path)) throw createError({ statusCode: 503, message: '转换提交响应无效，请重试' })
+  if (committed.uuid !== plan.uuid || committed.target_prefix !== plan.target_prefix || (!committed.replayed && committed.oss_path !== path))
+    throw createError({ statusCode: 503, message: '转换提交响应无效，请重试' })
   return { success: true, data: { uuid: committed.uuid, title: committed.title } }
 }

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { ProductPlanningCycle } from '~/types/productPlanningCycle'
 
-definePageMeta({ layoutHeader: true, layoutHeaderTitle: '周期容量', layoutHeaderProjectSwitcher: false })
+definePageMeta({ hostContentWidth: 'full', layoutHeader: true, layoutHeaderTitle: '周期容量', layoutHeaderProjectSwitcher: false })
 interface Issue { code: string, item_id?: string, predecessor_id?: string, category?: string }
 interface Report {
   retained_person_days: string

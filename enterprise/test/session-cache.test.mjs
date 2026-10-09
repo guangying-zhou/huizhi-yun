@@ -1,13 +1,15 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { createSessionCacheCoordinator, isEnterpriseSessionCacheKey, validatedSessionScope, safeLoginRedirect, watchSessionLoss } from '../shared/session-cache.mjs'
+
 const session = (tenant, uid, policyVersion = 'p1') => ({ authenticated: true, provider: 'console_oidc', tenant, uid, policyVersion, subjectCode: `user:${uid}` })
 
 test('tenant, actor, and policy changes yield distinct verified cache identities', async () => {
   const values = [session('A', '1'), session('B', '1'), session('B', '2'), session('B', '2', 'p2'), { authenticated: false }]
   const transitions = []
   const coordinator = createSessionCacheCoordinator({ fetchSession: async () => values.shift(), onChange: value => transitions.push(value) })
-  for (let i = 0; i < 5; i++) await coordinator.refresh()
+  for (let i = 0; i < 5; i++)
+    await coordinator.refresh()
   assert.equal(new Set(transitions.slice(0, 4)).size, 4)
   assert.equal(transitions[4], '')
   assert.equal(validatedSessionScope({ ...session('A', '1'), policyVersion: null }), '')
@@ -16,7 +18,12 @@ test('tenant, actor, and policy changes yield distinct verified cache identities
 test('concurrent consumers share one verification and stale logout response cannot restore identity', async () => {
   let resolve
   let calls = 0
-  const coordinator = createSessionCacheCoordinator({ fetchSession: () => { calls++; return new Promise(done => { resolve = done }) }, onChange() {} })
+  const coordinator = createSessionCacheCoordinator({ fetchSession: () => {
+    calls++
+    return new Promise((done) => {
+      resolve = done
+    })
+  }, onChange() {} })
   const first = coordinator.refresh()
   const second = coordinator.refresh()
   assert.equal(first, second)
@@ -29,7 +36,11 @@ test('concurrent consumers share one verification and stale logout response cann
 })
 test('failed revalidation invalidates previously verified cache', async () => {
   let fail = false
-  const coordinator = createSessionCacheCoordinator({ fetchSession: async () => { if (fail) throw Error('unavailable'); return session('A', '1') }, onChange() {} })
+  const coordinator = createSessionCacheCoordinator({ fetchSession: async () => {
+    if (fail)
+      throw Error('unavailable')
+    return session('A', '1')
+  }, onChange() {} })
   assert.ok(await coordinator.refresh())
   fail = true
   await assert.rejects(coordinator.refresh(), /unavailable/)
@@ -37,7 +48,8 @@ test('failed revalidation invalidates previously verified cache', async () => {
 })
 test('login return preserves local module deep links and rejects external or recursive targets', () => {
   assert.equal(safeLoginRedirect('/aims/products/P1?tab=versions#v2'), '/aims/products/P1?tab=versions#v2')
-  for (const input of ['https://evil.example', '//evil.example', '/%2fevil.example', '/\\evil', '/%5cevil', '/login', '/aims/login', '/assets/login', '/%0d%0aevil', null]) assert.equal(safeLoginRedirect(input), '/')
+  for (const input of ['https://evil.example', '//evil.example', '/%2fevil.example', '/\\evil', '/%5cevil', '/login', '/aims/login', '/assets/login', '/%0d%0aevil', null])
+    assert.equal(safeLoginRedirect(input), '/')
 })
 
 for (const replacementFinishesFirst of [false, true]) {
@@ -84,7 +96,9 @@ test('late module responses remain isolated from a replacement tenant and user',
   const scopeB = validatedSessionScope(session('tenant-b', 'user-b'))
   const key = scope => `hzy:enterprise:${scope}:assets:asset-categories-physical`
   let resolveA
-  const requestA = new Promise(resolve => { resolveA = resolve }).then(value => cache.set(key(scopeA), value))
+  const requestA = new Promise((resolve) => {
+    resolveA = resolve
+  }).then(value => cache.set(key(scopeA), value))
   cache.set(key(scopeB), ['tenant-b-category'])
   resolveA(['tenant-a-category'])
   await requestA
@@ -101,7 +115,11 @@ test('page identity only moves on verification results, not on invalidation', as
   const verifiedTransitions = []
   let fail = false
   const coordinator = createSessionCacheCoordinator({
-    fetchSession: async () => { if (fail) throw Error('unavailable'); return session('A', '1') },
+    fetchSession: async () => {
+      if (fail)
+        throw Error('unavailable')
+      return session('A', '1')
+    },
     onChange() {},
     onVerified: value => verifiedTransitions.push(value)
   })
@@ -124,7 +142,8 @@ test('only a confirmed sign-out after an authenticated session counts as session
   let lost = 0
   const fetchSession = watchSessionLoss(async () => {
     const next = responses.shift()
-    if (next instanceof Error) throw next
+    if (next instanceof Error)
+      throw next
     return next
   }, () => {
     lost++

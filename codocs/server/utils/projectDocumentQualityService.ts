@@ -1,5 +1,6 @@
 import { codocsAimsServiceSource } from '../lib/serviceAuthPolicy'
 import { createHash } from 'node:crypto'
+import { documentBucket } from '../../shared/utils/documentStorage'
 import { requireConsoleAuthContext } from '@hzy/foundation/server/utils/consoleOidc'
 import {
   hashServiceCommandPayload,
@@ -157,7 +158,7 @@ export async function readReviewVersionContent(grant: RuntimeReviewContentGrant)
   if (!grant.ossPath || !grant.ossVersionId || !grant.contentSha256) {
     throw createError({ statusCode: 502, message: 'Codocs deterministic review version grant is incomplete.' })
   }
-  const client = grant.docType === 'git-project' ? createProjectsOSSClient() : createOSSClient()
+  const client = documentBucket(grant.docType) === 'projects' ? createProjectsOSSClient() : createOSSClient()
   const result = await client.get(grant.ossPath, { versionId: grant.ossVersionId })
   const content = result.content.toString('utf8')
   const actualHash = createHash('sha256').update(content, 'utf8').digest('hex')

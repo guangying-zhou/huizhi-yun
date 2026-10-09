@@ -1,8 +1,12 @@
 <script setup lang="ts">
+import { openDepartmentOptions, openDepartmentSelection } from '../../utils/openDepartmentOptions'
+import ContentPageHeader from '../../../../foundation/app/components/ContentPageHeader.vue'
+import { useAccountStore } from '@hzy/foundation/app/stores/account'
 import type { ProjectDocsTreeItem } from '~/types'
 import { useCodocsModule } from '../../../layer/useCodocsModule'
 
-const { moduleUrl, cacheKey } = useCodocsModule()
+const { moduleUrl, cacheKey, hosted } = useCodocsModule()
+const directoryStore = useAccountStore()
 
 interface OpenDepartmentDocument {
   uuid: string
@@ -58,11 +62,15 @@ const previewAbstract = ref('')
 const previewLoading = ref(false)
 let previewEpoch = 0
 
-const { data, pending, refresh } = await useAsyncData(
+const { data, pending, error: loadError, refresh } = useAsyncData(
   cacheKey('open-department-docs'),
   async () => {
-    const response = await $fetch<OpenDepartmentDocsResponse>(moduleUrl('/api/open-department-docs'))
-    return response.data.departments || []
+    const [response, directory] = await Promise.all([
+      $fetch<OpenDepartmentDocsResponse>(moduleUrl('/api/open-department-docs')),
+      directoryStore.fetchDepartments()
+    ])
+    if (!response.success || !Array.isArray(response.data?.departments) || !directory) throw new Error('部门开放目录加载失败')
+    return response.data.departments
   },
   {
     getCachedData: () => undefined
@@ -70,24 +78,11 @@ const { data, pending, refresh } = await useAsyncData(
 )
 
 const departmentGroups = computed(() => data.value || [])
-const departmentOptions = computed(() => departmentGroups.value.map(group => ({
-  label: group.deptName,
-  value: group.deptCode,
-  description: `${group.documentCount} 个文档`
-})))
+const departmentOptions = computed(() => openDepartmentOptions(directoryStore.departmentFlat, departmentGroups.value))
+const selectedGroup = computed(() => openDepartmentSelection(selectedDeptCode.value, departmentOptions.value, departmentGroups.value))
 
-const selectedGroup = computed(() =>
-  departmentGroups.value.find(group => group.deptCode === selectedDeptCode.value) || departmentGroups.value[0] || null
-)
-
-watch(departmentGroups, (groups) => {
-  if (!groups.length) {
-    selectedDeptCode.value = ''
-    return
-  }
-  if (!groups.some(group => group.deptCode === selectedDeptCode.value)) {
-    selectedDeptCode.value = groups[0]?.deptCode || ''
-  }
+watch(departmentOptions, (departments) => {
+  if (!departments.some(dept => dept.value === selectedDeptCode.value)) selectedDeptCode.value = departments[0]?.value || ''
 }, { immediate: true })
 
 watch(selectedGroup, (group) => {
@@ -213,6 +208,30 @@ onUnmounted(() => {
 
 <template>
   <UDashboardPanel grow>
+    <ContentPageHeader
+      :hosted="hosted"
+      title="各部门开放文档"
+      description="仅展示已开放的部门目录与文档"
+      class="shrink-0 px-4 py-3"
+    >
+      <template #actions>
+        <UButton
+          label="部门"
+          icon="i-lucide-folder-tree"
+          color="neutral"
+          variant="outline"
+          class="md:hidden"
+          @click="showPanel(); showMobileSidebar = true"
+        />
+      </template>
+    </ContentPageHeader>
+    <UAlert
+      v-if="loadError"
+      title="部门开放目录加载失败，请重试"
+      color="error"
+      class="m-3"
+      :actions="[{ label: '重试', onClick: refreshPage }]"
+    />
     <div v-if="panelCollapsed" class="hidden md:flex items-center gap-2 px-3 py-1 border-b border-default">
       <UButton
         icon="i-lucide-folder-tree"
@@ -254,18 +273,19 @@ onUnmounted(() => {
           </div>
 
           <USelectMenu
-            v-if="departmentOptions.length > 1"
+            v-if="departmentOptions.length > 0"
             v-model="selectedDeptCode"
             :items="departmentOptions"
             label-key="label"
             value-key="value"
             placeholder="选择部门"
+            aria-label="选择开放文档部门"
             class="w-full"
-            :search-input="false"
+            :loading="pending"
           />
-          <div v-else-if="selectedGroup" class="flex items-center gap-2 text-sm">
+          <div v-else class="flex items-center gap-2 text-sm">
             <UIcon name="i-lucide-building-2" class="w-4 h-4 text-muted" />
-            <span class="truncate">{{ selectedGroup.deptName }}</span>
+            <span class="truncate">{{ pending ? '正在加载部门…' : '暂无可选部门' }}</span>
           </div>
         </div>
 

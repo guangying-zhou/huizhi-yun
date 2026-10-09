@@ -18,7 +18,7 @@ const PLATFORM_REGISTRY_STALE_TTL_MS = 24 * 60 * 60 * 1000
 const PLATFORM_REGISTRY_CACHE_MARKER = '__hzy_tenant_gateway_registry_cache_v2'
 const SCHEDULER_INTERVAL_MS = 5 * 60 * 1000
 // Assets is woken only with a persisted unified/recovered selection (see wakeTenantApp).
-const SCHEDULER_APPS = new Set(['aims', 'altoc', 'assets', 'console', 'finance', 'people', 'workflow'])
+const SCHEDULER_APPS = new Set(['aims', 'altoc', 'assets', 'console', 'finance', 'people', 'workflow', 'enterprise'])
 const APP_SERVICE_BINDINGS = Object.freeze({
   aims: 'HZY_AIMS_SERVICE',
   assets: 'HZY_ASSETS_SERVICE',
@@ -28,6 +28,7 @@ const APP_SERVICE_BINDINGS = Object.freeze({
   finance: 'HZY_FINANCE_SERVICE',
   people: 'HZY_PEOPLE_SERVICE',
   workflow: 'HZY_WORKFLOW_SERVICE',
+  enterprise: 'HZY_ENTERPRISE_SERVICE',
   platform: 'HZY_PLATFORM_SERVICE'
 })
 const SCHEDULER_WAKE_PATH = '/api/internal/integration-operations/drain'
@@ -255,6 +256,7 @@ export default {
 function isSchedulerWakePath(pathname) {
   return pathname === '/api/internal/policy-bundle/sync'
     || pathname === '/console/api/internal/policy-bundle/sync'
+    || pathname === '/enterprise/api/internal/aims/drain'
     || pathname === SCHEDULER_WAKE_PATH
     || /^\/(?:aims|altoc|finance|people|workflow)\/api\/internal\/integration-operations\/drain$/.test(pathname)
 }
@@ -746,7 +748,7 @@ function schedulerOptions(controller, env) {
     // the window proportional to the per-cron wake budget so excess tenants
     // are picked up by later rounds rather than skipped inside a large window.
     maxTenants: Math.min(boundedInteger(env.HZY_TENANT_GATEWAY_SCHEDULER_MAX_TENANTS, 50, 1, 500),
-      Math.max(1, Math.floor(maxWakes / SCHEDULER_APPS.size))),
+      Math.max(1, Math.floor(maxWakes / (SCHEDULER_APPS.size - 1 + (stringValue(env.HZY_ENTERPRISE_APF_SCHEDULER_BINDINGS_JSON) ? 3 : 0))))),
     maxWakes,
     concurrency: boundedInteger(env.HZY_TENANT_GATEWAY_SCHEDULER_CONCURRENCY, 4, 1, 16),
     maxAppPasses: SCHEDULER_MAX_APP_PASSES,
@@ -843,13 +845,13 @@ function schedulerBootstrapMetadata(token) {
   }
 }
 
-export async function schedulerRequestHeaders(env, tenant, tenantHost, appCode, requestId, issuedAt, runtimeBootstrapToken, path = SCHEDULER_WAKE_PATH) {
+export async function schedulerRequestHeaders(env, tenant, tenantHost, appCode, requestId, issuedAt, runtimeBootstrapToken, path = SCHEDULER_WAKE_PATH, apfDomain = '') {
   const appConfig = recordValue(tenant.apps?.[appCode]) || {}
   const scheduler = recordValue(appConfig.enterpriseScheduler) || {}
   const schedulerStorage = stringValue(scheduler.storage)
   const schedulerGeneration = stringValue(scheduler.generation)
   if (appConfig.enterpriseScheduler !== undefined
-    && (!['aims', 'assets'].includes(appCode) || !['unified', 'recovered', 'disabled'].includes(schedulerStorage)
+    && (!(['aims', 'assets'].includes(appCode) || (appCode === 'enterprise' && [APF_WAKE_PATH, '/enterprise/api/internal/aims/drain'].includes(path))) || !['unified', 'recovered', 'disabled'].includes(schedulerStorage)
       || scheduler.storage !== schedulerStorage || typeof scheduler.generation !== 'string' || scheduler.generation !== schedulerGeneration
       || !/^[1-9][0-9]{0,19}$/.test(schedulerGeneration)
       || BigInt(schedulerGeneration) > 18446744073709551615n)) {
@@ -910,6 +912,11 @@ export async function schedulerRequestHeaders(env, tenant, tenantHost, appCode, 
   ]
   if (appCode === 'people') canonical.push(consoleTargetDeployment)
   if (schedulerStorage) canonical.push('enterprise-scheduler-v1', schedulerStorage, schedulerGeneration)
+  if (apfDomain) {
+    if (appCode !== 'enterprise' || path !== APF_WAKE_PATH || !['altoc', 'finance', 'people'].includes(apfDomain) || schedulerStorage !== 'unified') throw new Error('Invalid APF scheduler domain')
+    headers.set('x-hzy-apf-domain', apfDomain)
+    canonical.push('enterprise-apf-v1', apfDomain)
+  }
   canonical.push(issuedAt)
   headers.set('x-hzy-scheduler-signature', await schedulerHmacHex(gatewayToken, canonical.join('\n')))
   return headers
@@ -955,6 +962,41 @@ export async function runScheduledPolicyBundleSync(env, fetchImpl = fetch) {
   return results
 }
 
+const APF_WAKE_PATH = '/enterprise/api/internal/apf/scheduler-inspect'
+// Protected Gateway configuration owns only the new APF ledger families. Old
+// module jobs remain untouched until their independent retirement gate passes.
+export function apfSchedulerBinding(env, tenant, host) {
+  if (!stringValue(env.HZY_ENTERPRISE_APF_SCHEDULER_BINDINGS_JSON)) return null
+  let records
+  try { records = JSON.parse(env.HZY_ENTERPRISE_APF_SCHEDULER_BINDINGS_JSON) } catch { throw new Error('Invalid APF scheduler bindings') }
+  if (!Array.isArray(records) || records.length > 100) throw new Error('Invalid APF scheduler bindings')
+  const matches = records.filter(x => x?.host === host)
+  if (!matches.length) return null
+  if (matches.length !== 1) throw new Error('Duplicate APF scheduler owner')
+  const b = matches[0]
+  if (Object.keys(b).some(k => !['host', 'tenantCode', 'environment', 'deploymentCode', 'generation', 'domains', 'owner'].includes(k))
+    || b.owner !== 'gateway' || b.tenantCode !== tenant.tenantCode || b.environment !== tenant.environment
+    || b.deploymentCode !== tenant.apps?.enterprise?.deploymentCode || !b.deploymentCode
+    || typeof b.generation !== 'string' || !/^[1-9][0-9]{0,19}$/.test(b.generation) || BigInt(b.generation) > 18446744073709551615n
+    || !Array.isArray(b.domains) || !b.domains.length || b.domains.length > 3
+    || new Set(b.domains).size !== b.domains.length || b.domains.some(d => !['altoc', 'finance', 'people'].includes(d))) {
+    throw new Error('Invalid APF scheduler owner binding')
+  }
+  return b
+}
+
+async function wakeAPFDomain(env, tenant, host, domain, binding, requestId, issuedAt, token, options, fetchImpl) {
+  const selected = { ...tenant, apps: { ...tenant.apps, enterprise: { ...tenant.apps.enterprise,
+    enterpriseScheduler: { storage: 'unified', generation: binding.generation } } } }
+  const headers = await schedulerRequestHeaders(env, selected, host, 'enterprise', requestId, issuedAt, token, APF_WAKE_PATH, domain)
+  const response = await serviceBindingFetch(env, APP_SERVICE_BINDINGS.enterprise, fetchImpl,
+    new URL(APF_WAKE_PATH, normalizeOrigin(env.HZY_ENTERPRISE_ORIGIN || 'https://disabled.invalid')),
+    { method: 'POST', headers, body: JSON.stringify({ domain }), signal: AbortSignal.timeout(options.requestTimeoutMs) })
+  await response.arrayBuffer()
+  // One bounded pass per domain; next cron recovers remaining frozen work.
+  return { ok: response.ok, busy: false }
+}
+
 async function wakeTenantApp(env, tenant, tenantHost, appCode, requestId, issuedAt, runtimeBootstrapToken, options, fetchImpl) {
   // A persisted disabled selection must never be interpreted as legacy storage.
   if (appCode === 'aims' && recordValue(tenant.apps?.aims?.enterpriseScheduler)?.storage === 'disabled') {
@@ -965,15 +1007,22 @@ async function wakeTenantApp(env, tenant, tenantHost, appCode, requestId, issued
   if (appCode === 'assets' && !['unified', 'recovered'].includes(recordValue(tenant.apps?.assets?.enterpriseScheduler)?.storage)) {
     return { ok: true, busy: false }
   }
-  const route = appCode === 'console'
+  if (appCode === 'aims' && env.HZY_AIMS_SCHEDULER_EXECUTOR && !['aims', 'enterprise'].includes(env.HZY_AIMS_SCHEDULER_EXECUTOR)) return { ok: false, busy: false }
+  const hostAims = appCode === 'aims' && stringValue(env.HZY_AIMS_SCHEDULER_EXECUTOR) === 'enterprise'
+  if (hostAims && !['unified', 'recovered'].includes(recordValue(tenant.apps?.aims?.enterpriseScheduler)?.storage)) return { ok: false, busy: false }
+  const executor = hostAims ? 'enterprise' : appCode
+  const signedTenant = hostAims ? { ...tenant, apps: { ...tenant.apps, enterprise: { ...tenant.apps?.enterprise, enterpriseScheduler: tenant.apps.aims.enterpriseScheduler } } } : tenant
+  if (hostAims && !firstString(recordValue(tenant.apps?.enterprise) || {}, ['deploymentCode', 'deployment'])) return { ok: false, busy: false }
+  const route = hostAims ? { prefix: '/enterprise/', originEnv: 'HZY_ENTERPRISE_ORIGIN', defaultOrigin: 'https://disabled.invalid' } : appCode === 'console'
     ? { prefix: `${consoleBasePath(env)}/`, originEnv: 'HZY_CONSOLE_ORIGIN', defaultOrigin: DEFAULT_CONSOLE_ORIGIN }
-    : APP_ROUTES.find(item => item.appCode === appCode)
+    : APP_ROUTES.find(item => item.appCode === executor)
   if (!route) return { ok: false, busy: false }
   const origin = normalizeOrigin(env[route.originEnv] || route.defaultOrigin)
-  const url = new URL(`${route.prefix}${SCHEDULER_WAKE_PATH.replace(/^\/+/, '')}`, origin)
-  const response = await serviceBindingFetch(env, APP_SERVICE_BINDINGS[appCode], fetchImpl, url.toString(), {
+  const wakePath = hostAims ? '/enterprise/api/internal/aims/drain' : SCHEDULER_WAKE_PATH
+  const url = new URL(hostAims ? wakePath : `${route.prefix}${wakePath.replace(/^\/+/, '')}`, origin)
+  const response = await serviceBindingFetch(env, APP_SERVICE_BINDINGS[executor], fetchImpl, url.toString(), {
     method: 'POST',
-    headers: await schedulerRequestHeaders(env, tenant, tenantHost, appCode, requestId, issuedAt, runtimeBootstrapToken),
+    headers: await schedulerRequestHeaders(env, signedTenant, tenantHost, executor, requestId, issuedAt, runtimeBootstrapToken, wakePath),
     signal: typeof AbortSignal?.timeout === 'function' ? AbortSignal.timeout(options.requestTimeoutMs) : undefined
   })
   if (!response.ok) {
@@ -1067,8 +1116,11 @@ async function processSchedulerTenant(item, env, options, fetchImpl, now, starte
     }
     // A tight wake budget may stop mid-tenant. Rotate the first-pass app order
     // across slots so the same trailing app is not omitted on every wake.
-    const offset = options.slot % item.appCodes.length
-    let pendingApps = [...item.appCodes.slice(offset), ...item.appCodes.slice(0, offset)]
+    const apf = apfSchedulerBinding(env, tenant, item.host)
+    const apps = [...item.appCodes.filter(code => code !== 'enterprise'), ...(apf ? apf.domains.map(d => `enterprise:${d}`) : [])]
+    if (!apps.length) return
+    const offset = options.slot % apps.length
+    let pendingApps = [...apps.slice(offset), ...apps.slice(0, offset)]
     for (let pass = 1; pass <= options.maxAppPasses && pendingApps.length > 0; pass += 1) {
       if (now() - startedAt >= options.maxWallTimeMs) break
       const busyApps = []
@@ -1083,7 +1135,9 @@ async function processSchedulerTenant(item, env, options, fetchImpl, now, starte
           requestTimeoutMs: Math.max(100, Math.min(options.requestTimeoutMs, options.maxWallTimeMs - elapsed))
         }
         try {
-          const wake = await wakeTenantApp(env, tenant, item.host, appCode, requestId, issuedAt, runtimeBootstrapToken, wakeOptions, fetchImpl)
+          const wake = appCode.startsWith('enterprise:')
+            ? await wakeAPFDomain(env, tenant, item.host, appCode.split(':')[1], apf, requestId, issuedAt, runtimeBootstrapToken, wakeOptions, fetchImpl)
+            : await wakeTenantApp(env, tenant, item.host, appCode, requestId, issuedAt, runtimeBootstrapToken, wakeOptions, fetchImpl)
           if (!wake.ok) {
             counters.failedWakes += 1
             return

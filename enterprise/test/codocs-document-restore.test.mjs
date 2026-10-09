@@ -39,39 +39,60 @@ test('Enterprise Codocs restore validates the Runtime plan and copies legacy obj
   globalThis.__codocsRestorePlan = { success: true, data: stablePlan }
   globalThis.__codocsRestoreOssMode = 'stable'
   globalThis.__codocsRestoreRevokeOnCommit = false
-  globalThis.__codocsRestorePrepare = async (_event, options) => { preparations.push(options); globalThis.__codocsRestorePrepareCount = preparations.length; return true }
+  globalThis.__codocsRestorePrepare = async (_event, options) => {
+    preparations.push(options)
+    globalThis.__codocsRestorePrepareCount = preparations.length
+    return true
+  }
   globalThis.__codocsRestoreTransport = async (_event, path, options) => {
     runtimeCalls.push({ path, options })
-    if (path.endsWith('restore-plan')) return { handled: true, data: globalThis.__codocsRestorePlan }
-    if (globalThis.__codocsRestoreCommitError) throw globalThis.__codocsRestoreCommitError
+    if (path.endsWith('restore-plan'))
+      return { handled: true, data: globalThis.__codocsRestorePlan }
+    if (globalThis.__codocsRestoreCommitError)
+      throw globalThis.__codocsRestoreCommitError
     return { handled: true, data: { success: true, data: { uuid, restored: true } } }
   }
-  globalThis.__codocsRestoreOss = async options => {
+  globalThis.__codocsRestoreOss = async (options) => {
     const mode = globalThis.__codocsRestoreOssMode
     return {
       async head(path) {
         ossCalls.push({ method: 'head', path, options })
-        if (objects.has(path)) return { etag: 'persisted' }
-        if (mode === 'stable' && path === stablePlan.source_path) return { etag: 'stable' }
-        if ((mode === 'legacy' || mode === 'put-conflict') && path.startsWith('recycle.bin/')) return { etag: 'source' }
+        if (objects.has(path))
+          return { etag: 'persisted' }
+        if (mode === 'stable' && path === stablePlan.source_path)
+          return { etag: 'stable' }
+        if ((mode === 'legacy' || mode === 'put-conflict') && path.startsWith('recycle.bin/'))
+          return { etag: 'source' }
         if ((mode === 'legacy' || mode === 'put-conflict' || mode === 'put-conflict-missing' || mode === 'yjs-race') && path.startsWith('codocs/document-restores/')) {
-          const error = new Error('NoSuchKey'); error.code = 'NoSuchKey'; error.statusCode = 404; throw error
+          const error = new Error('NoSuchKey')
+          error.code = 'NoSuchKey'
+          error.statusCode = 404
+          throw error
         }
         if (mode === 'missing' || mode === 'put-fails' || mode === 'put-conflict-missing') {
-          const error = new Error('NoSuchKey'); error.code = 'NoSuchKey'; throw error
+          const error = new Error('NoSuchKey')
+          error.code = 'NoSuchKey'
+          throw error
         }
         return { etag: 'copied' }
       },
       async get(path) {
         ossCalls.push({ method: 'get', path, options })
-        if (mode === 'missing') { const error = new Error('NoSuchKey'); error.code = 'NoSuchKey'; error.statusCode = 404; throw error }
+        if (mode === 'missing') {
+          const error = new Error('NoSuchKey')
+          error.code = 'NoSuchKey'
+          error.statusCode = 404
+          throw error
+        }
         return { content: Buffer.from(path.endsWith('.yjs') ? 'yjs-state' : '# markdown') }
       },
       async put(path, content, putOptions) {
         ossCalls.push({ method: 'put', path, content, options: putOptions })
-        if (mode === 'put-fails') throw new Error('secret storage write failure')
+        if (mode === 'put-fails')
+          throw new Error('secret storage write failure')
         if (mode === 'put-conflict' || mode === 'put-conflict-missing' || mode === 'yjs-race') {
-          if (mode === 'put-conflict') objects.set(path, content)
+          if (mode === 'put-conflict')
+            objects.set(path, content)
           const error = new Error('already exists')
           error.statusCode = globalThis.__codocsRestorePutConflict || 409
           throw error
@@ -85,16 +106,26 @@ test('Enterprise Codocs restore validates the Runtime plan and copies legacy obj
   const hooks = registerHooks({
     resolve(specifier, context, next) {
       let source
-      if (specifier.endsWith('/oss')) source = 'export const createRuntimeOSSClient=async(...args)=>globalThis.__codocsRestoreOss(...args);export const resolveDocumentOssTimeoutMs=()=>8123'
-      if (specifier.endsWith('/consoleSessionBridge')) source = 'export const resolveConsoleAuthWithSessionBridge=async()=>globalThis.__codocsRestoreSession'
-      if (specifier.endsWith('/tenantRuntimeClient')) source = 'export const prepareTenantRuntime=async(...args)=>globalThis.__codocsRestorePrepare(...args);export const maybeCallTenantRuntime=(...args)=>globalThis.__codocsRestoreTransport(...args)'
-      if (specifier.endsWith('/platformBundleAuthorization')) source = 'export const loadAuthorizationSnapshotFromConsoleRuntime=async()=>{if(globalThis.__codocsRestoreRevokeAfterPrepareCount===globalThis.__codocsRestorePrepareCount){globalThis.__codocsRestoreAuthorization={resources:{},actionPolicies:{}}}return globalThis.__codocsRestoreAuthorization}'
-      if (specifier.endsWith('/tenantGatewayTrust')) source = 'export const resolveTrustedTenantGatewayContext=()=>undefined'
-      if (source) return { url: `data:text/javascript,${encodeURIComponent(source)}`, shortCircuit: true }
+      if (specifier.endsWith('/oss'))
+        source = 'export const createRuntimeOSSClient=async(...args)=>globalThis.__codocsRestoreOss(...args);export const resolveDocumentOssTimeoutMs=()=>8123'
+      if (specifier.endsWith('/consoleSessionBridge'))
+        source = 'export const resolveConsoleAuthWithSessionBridge=async()=>globalThis.__codocsRestoreSession'
+      if (specifier.endsWith('/tenantRuntimeClient'))
+        source = 'export const prepareTenantRuntime=async(...args)=>globalThis.__codocsRestorePrepare(...args);export const maybeCallTenantRuntime=(...args)=>globalThis.__codocsRestoreTransport(...args)'
+      if (specifier.endsWith('/platformBundleAuthorization'))
+        source = 'export const loadAuthorizationSnapshotFromConsoleRuntime=async()=>{if(globalThis.__codocsRestoreRevokeAfterPrepareCount===globalThis.__codocsRestorePrepareCount){globalThis.__codocsRestoreAuthorization={resources:{},actionPolicies:{}}}return globalThis.__codocsRestoreAuthorization}'
+      if (specifier.endsWith('/tenantGatewayTrust'))
+        source = 'export const resolveTrustedTenantGatewayContext=()=>undefined'
+      if (source)
+        return { url: `data:text/javascript,${encodeURIComponent(source)}`, shortCircuit: true }
       let candidate
-      if (specifier.startsWith('@hzy/foundation/')) candidate = resolve(root, 'foundation', specifier.slice('@hzy/foundation/'.length))
-      else if (specifier.startsWith('.') && context.parentURL?.startsWith('file:')) candidate = resolve(dirname(fileURLToPath(context.parentURL)), specifier)
-      if (candidate && !existsSync(candidate) && existsSync(`${candidate}.ts`)) return { url: pathToFileURL(`${candidate}.ts`).href, shortCircuit: true }
+      if (specifier.startsWith('@hzy/foundation/'))
+        candidate = resolve(root, 'foundation', specifier.slice('@hzy/foundation/'.length))
+      else
+        if (specifier.startsWith('.') && context.parentURL?.startsWith('file:'))
+          candidate = resolve(dirname(fileURLToPath(context.parentURL)), specifier)
+      if (candidate && !existsSync(candidate) && existsSync(`${candidate}.ts`))
+        return { url: pathToFileURL(`${candidate}.ts`).href, shortCircuit: true }
       return next(specifier, context)
     }
   })
@@ -104,7 +135,9 @@ test('Enterprise Codocs restore validates the Runtime plan and copies legacy obj
     const app = createApp()
     const router = createRouter()
     router.post('/documents/:uuid/restore', (await import('../server/routes/codocs/api/documents/[uuid]/restore.post.ts')).default)
-    app.use(defineEventHandler(event => { event.context.consoleAuth = globalThis.__codocsRestoreSession }))
+    app.use(defineEventHandler((event) => {
+      event.context.consoleAuth = globalThis.__codocsRestoreSession
+    }))
     app.use(router)
     server = createServer(toNodeListener(app))
     await new Promise(done => server.listen(0, '127.0.0.1', done))
@@ -197,7 +230,8 @@ test('Enterprise Codocs restore validates the Runtime plan and copies legacy obj
       ['/documents/doc-restore/restore?query=1', 'bad-query-key', body],
       ['/documents/doc-restore/restore', 'short', body],
       ['/documents/doc-restore/restore', 'bad-body-key', JSON.stringify({ owner_uid: 'person-b', oss_path: 'recycle.bin/evil.md' })]
-    ]) assert.equal((await request(path, key, requestBody)).status, 400)
+    ])
+      assert.equal((await request(path, key, requestBody)).status, 400)
 
     globalThis.__codocsRestoreOssMode = 'put-conflict'
     globalThis.__codocsRestorePutConflict = 412
@@ -247,7 +281,8 @@ test('Enterprise Codocs restore validates the Runtime plan and copies legacy obj
     assert.equal((await request('/documents/doc-restore/restore', 'invalid-plan-key')).status, 503)
     assert.equal(ossCalls.length, beforeInvalidPlanOss)
   } finally {
-    if (server) await new Promise(done => server.close(done))
+    if (server)
+      await new Promise(done => server.close(done))
     hooks.deregister()
     globalThis.useRuntimeConfig = oldConfig
     globalThis.defineEventHandler = oldDefineEventHandler

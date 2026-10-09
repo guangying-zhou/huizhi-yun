@@ -1,5 +1,7 @@
 # GitLab 同步功能 - 快速开始
 
+> **2026-10-04 更新：提交到 GitLab 的能力已废弃并删除。** 仓库文档在平台内只读，修改请在 GitLab 中按代码流程完成；“从 GitLab 同步”仍可用。下文涉及“提交到 GitLab”的内容仅作历史记录，见 `docs/Document-Asset-Unified-Management-Design.md` §6。
+
 > **当前事实边界（2026-07-11 核对）**：本文记录旧版 GitLab 同步流程，不能作为当前可执行手册。当前 GitLab 集成必须经 Foundation Git integration 和 Console 受管 integration-config/credential-vault 消费，业务应用不保存 GitLab Bot 凭据、不直连 Account，也不从本地 env 读取静态 token。Codocs 尚未为本旧同步数据链补齐专用 tenant-runtime 合同的路径应失败关闭（503），不得以本文的 Account API 或本地 MySQL 步骤绕过。以 `codocs/CLAUDE.md`、`docs/MODULE_CONTRACTS.md`、`docs/ENV_SIMPLIFICATION_PLAN.md` 与当前代码为准；执行真实同步、迁移、凭据或外部 GitLab 操作需单独授权。
 
 ## 📋 前置条件

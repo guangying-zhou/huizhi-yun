@@ -191,6 +191,9 @@ CREATE TABLE `documents` (
     `title` VARCHAR(255) NOT NULL COMMENT '文档标题',
     `doc_type` ENUM('private', 'slide', 'shared', 'department', 'project', 'git-project', 'company', 'knowledge', 'product', 'sale') NOT NULL COMMENT '文档类型',
     `oss_path` VARCHAR(500) NOT NULL COMMENT 'OSS存储路径',
+    `storage_type` ENUM('oss', 'git') NOT NULL DEFAULT 'oss' COMMENT '内容存储: oss / git(只读引用)',
+    `storage_locator` JSON NULL COMMENT '存储定位信息; NULL 等价于 {"bucket":"documents"}',
+    `origin_json` JSON NULL COMMENT '来源记录(不参与读取定位)',
     `owner_uid` VARCHAR(64) NOT NULL COMMENT '所有者用户名(Account)',
     `dept_code` VARCHAR(100) NULL COMMENT '所属部门编码(Account)',
     `project_code` VARCHAR(100) NULL COMMENT '所属项目编码',
@@ -216,6 +219,7 @@ CREATE TABLE `documents` (
     INDEX `idx_documents_project` (`project_code`),
     INDEX `idx_documents_folder` (`folder_id`),
     INDEX `idx_documents_type_status` (`doc_type`, `status`),
+    INDEX `idx_documents_storage_type` (`storage_type`),
     INDEX `idx_documents_deleted` (`deleted_at`),
     -- 注意: project_code 不使用外键约束，因为 git_projects 表在 account 模块的数据库中
     CONSTRAINT `fk_documents_folder` FOREIGN KEY (`folder_id`) REFERENCES `folders`(`id`) ON DELETE SET NULL
@@ -300,6 +304,7 @@ CREATE TABLE `document_versions` (
     `version_num` INT NOT NULL COMMENT '版本号',
     `oss_version_id` VARCHAR(100) NOT NULL COMMENT 'OSS版本ID',
     `object_key` VARCHAR(512) NULL COMMENT 'v2 快照正文对象 key；为空表示正文位于 documents.oss_path',
+    `storage_revision` VARCHAR(128) NULL COMMENT 'git 文档的 commit id; oss 文档为空',
     `editor_uid` VARCHAR(64) NOT NULL COMMENT '编辑者用户名(Account)',
     `change_summary` VARCHAR(255) NULL COMMENT '变更摘要',
     `content_size` INT UNSIGNED DEFAULT 0 COMMENT '内容大小(字节)',
@@ -340,12 +345,14 @@ CREATE TABLE `document_access_policies` (
   `document_ref_type` ENUM('codocs_document', 'cabinet_file') NOT NULL COMMENT '文档引用类型',
   `document_uuid` CHAR(36) NOT NULL COMMENT '文档 UUID（codocs 文档或文件柜文件）',
   `source_app` VARCHAR(32) NOT NULL DEFAULT 'aims' COMMENT '来源应用',
+  `source_owner_type` ENUM('project', 'portfolio', 'product_line') NOT NULL DEFAULT 'project' COMMENT '策略所属对象类型',
   `source_project_code` VARCHAR(100) NULL COMMENT '来源项目编码',
   `lifecycle_stage` ENUM('draft', 'formal', 'archived') NOT NULL DEFAULT 'draft' COMMENT '生命周期阶段',
   `confidentiality_level` ENUM('L0', 'L1', 'L2', 'L3') NOT NULL DEFAULT 'L2' COMMENT '密级',
   `default_permission` ENUM('none', 'view', 'download') NOT NULL DEFAULT 'none' COMMENT '默认权限',
   `allow_internal_access` TINYINT NOT NULL DEFAULT 0 COMMENT '是否允许企业内部访问',
   `allow_cross_project` TINYINT NOT NULL DEFAULT 0 COMMENT '是否允许跨项目组授权',
+  `inherit_to_member_projects` TINYINT NOT NULL DEFAULT 1 COMMENT '项目集文档是否对组内项目成员可读（仅 L0/L1）',
   `readonly` TINYINT NOT NULL DEFAULT 0 COMMENT '是否只读',
   `created_by` VARCHAR(64) NOT NULL COMMENT '创建人',
   `updated_by` VARCHAR(64) NOT NULL COMMENT '更新人',
@@ -1079,3 +1086,61 @@ CREATE TABLE IF NOT EXISTS product_document_creation (
     AND content_sha256 = SHA2(template_content, 256)
   )
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='产品模板创建冻结快照；不是文档或ACL事实源';
+
+-- -----------------------------------------------------------
+-- 文档目录（DOC-07）：登记内容不在 documents 的文档；与 documents 结构隔离，
+-- 仅供登记包、对账命令与后续索引使用。见 migrations/20261006_document_catalog.sql。
+-- -----------------------------------------------------------
+CREATE TABLE document_catalog_entries (
+  uuid CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  tenant_code VARCHAR(100) COLLATE utf8mb4_bin NOT NULL,
+  source_app VARCHAR(32) COLLATE utf8mb4_bin NOT NULL,
+  source_kind VARCHAR(64) COLLATE utf8mb4_bin NOT NULL,
+  source_object_id VARCHAR(128) COLLATE utf8mb4_bin NOT NULL,
+  title VARCHAR(255) NOT NULL,
+  owner_type ENUM('project','portfolio','product_line') NOT NULL,
+  owner_code VARCHAR(100) COLLATE utf8mb4_bin NOT NULL,
+  storage_type ENUM('git','module') NOT NULL,
+  storage_locator JSON NOT NULL,
+  storage_revision VARCHAR(128) COLLATE utf8mb4_bin NOT NULL DEFAULT '',
+  content_sha256 CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NULL,
+  status ENUM('active','inactive') NOT NULL DEFAULT 'active',
+  row_version BIGINT UNSIGNED NOT NULL DEFAULT 1,
+  registered_at DATETIME(3) NOT NULL,
+  updated_at DATETIME(3) NOT NULL,
+  PRIMARY KEY (uuid),
+  UNIQUE KEY uk_document_catalog_source (tenant_code, source_app, source_kind, source_object_id),
+  KEY idx_document_catalog_owner (owner_type, owner_code, status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE document_catalog_entry_versions (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  entry_uuid CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  storage_revision VARCHAR(128) COLLATE utf8mb4_bin NOT NULL,
+  content_sha256 CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NULL,
+  recorded_at DATETIME(3) NOT NULL,
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_document_catalog_version (entry_uuid, storage_revision)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Read-only union for enumeration. The documents side exposes metadata columns
+-- only and leaves out deleted and recycled rows. It does not depend on the
+-- DOC-06a storage columns, so the two migrations can be installed in any order.
+CREATE SQL SECURITY INVOKER VIEW document_catalog AS
+SELECT
+  CAST(d.uuid AS CHAR(36)) AS uuid,
+  d.title AS title,
+  'codocs' AS source_app,
+  d.doc_type AS source_kind,
+  CAST(d.id AS CHAR) AS source_object_id,
+  'oss' AS storage_type,
+  CASE WHEN d.status = 2 THEN 'published' ELSE 'active' END AS status,
+  d.updated_at AS updated_at
+FROM documents d
+WHERE d.status IN (1, 2) AND d.deleted_at IS NULL
+UNION ALL
+SELECT
+  e.uuid, e.title, e.source_app, e.source_kind, e.source_object_id,
+  e.storage_type, e.status, e.updated_at
+FROM document_catalog_entries e
+WHERE e.status = 'active';

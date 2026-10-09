@@ -4,6 +4,24 @@ import { existsSync, readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { businessModules, registerBusinessPages } from '../composition/registry.mjs'
 
+test('former project settings URL mounts the same native Host editor', () => {
+  const pages = registerBusinessPages([], businessModules, 'entry.vue')
+  const edit = pages.find(page => page.path === '/aims/projects/:id/edit')
+  const settings = pages.find(page => page.path === '/aims/projects/:id/settings')
+  assert.ok(edit)
+  assert.ok(settings)
+  assert.equal(settings.file, edit.file)
+  assert.equal(settings.meta.authorizationApp, edit.meta.authorizationApp)
+})
+
+test('overview preview preserves the project document reference for repository ACL', () => {
+  const root = resolve(import.meta.dirname, '../..')
+  const source = readFileSync(resolve(root, 'aims/app/pages/project-documents.vue'), 'utf8')
+  const preview = source.slice(source.indexOf('<AimsDocumentPreview'), source.indexOf('/>', source.indexOf('<AimsDocumentPreview')))
+  assert.match(preview, /:project-document-id="previewDoc.id"/)
+  assert.match(preview, /:project-id="previewDoc.projectId \|\| selectedProjectId"/)
+})
+
 test('document Host gates reference the manifest project resource, retaining object relationship checks', () => {
   const root = resolve(import.meta.dirname, '../..')
   const manifest = JSON.parse(readFileSync(resolve(root, 'aims/app.manifest.json'), 'utf8'))

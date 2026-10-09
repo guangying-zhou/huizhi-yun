@@ -5,11 +5,11 @@ import {
   deleteCookie,
   getCookie,
   getHeader,
-  getRequestIP,
   setCookie
 } from 'h3'
 import { execute, queryRow, withTransaction } from '~~/server/utils/db'
 import { ensureOpsRbacReady, grantOpsSuperAdminRoleToAccount } from '~~/server/utils/platformOpsRbac'
+import { trustedClientAddress } from '~~/server/utils/trustedClientAddress'
 
 export type PlatformSessionScope = 'platform_admin' | 'tenant_admin'
 
@@ -126,7 +126,7 @@ function sessionCookieOptions(maxAge = DEFAULT_SESSION_TTL_SECONDS) {
 }
 
 function getClientIp(event: H3Event) {
-  return normalizeString(getRequestIP(event, { xForwardedFor: true }))
+  return trustedClientAddress(event)
 }
 
 function getUserAgent(event: H3Event) {

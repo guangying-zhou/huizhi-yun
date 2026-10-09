@@ -1,8 +1,12 @@
 import { spawn } from 'node:child_process'
+import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
+import { checkReadinessTemplate } from '../../deploy/test-env/enterprise-readiness-policy.mjs'
 import { buildTemporaryMySqlPlan, withTemporaryMySql } from '../../scripts/test/support/temporary-mysql-harness.mjs'
 
 const rootDir = resolve(import.meta.dirname, '../..')
+// Validate the exact current Host capability set before testing its grants.
+checkReadinessTemplate(JSON.parse(readFileSync(resolve(rootDir, 'deploy/test-env/enterprise-readiness.template.json'), 'utf8')), rootDir)
 const plan = await buildTemporaryMySqlPlan({ rootDir })
 await withTemporaryMySql(plan, async (context) => {
   await new Promise((resolveRun, reject) => {

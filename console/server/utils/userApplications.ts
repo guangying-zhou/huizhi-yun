@@ -251,7 +251,7 @@ function appsFromBundle(event: H3Event, bundle: CachedPolicyBundle) {
   const deploymentPublicUrl = nullableString(deployment?.publicUrl)
 
   return records(bundle.payload?.applications)
-    .map(item => {
+    .map((item) => {
       const app = normalizeAppItem(event, item, deploymentPublicUrl)
       if (!app) return null
       const availability = enterpriseModuleAvailability(bundle.payload, app.appCode)

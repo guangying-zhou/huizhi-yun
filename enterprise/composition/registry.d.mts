@@ -1,8 +1,8 @@
 export interface BusinessPage { path: string, name: string, file: string, children?: BusinessPage[] }
 export interface PermissionRef { resource: string, action: string }
 export interface BusinessNavigationItem { id: string, label: string, icon?: string, to?: string, module?: string, permission?: PermissionRef, permissionRefs?: readonly PermissionRef[], mode?: 'all' | 'any', access?: { kind: 'authenticated-self' }, children?: BusinessNavigationItem[] }
-export interface BusinessNavigationArea { id: string, code: string, label: string, icon: string, children: BusinessNavigationItem[] }
-export interface BusinessAreaShape { code: string, label: string, icon: string, groups: { code: string, label: string }[] }
+export interface BusinessNavigationArea { id: string, code: string, label: string, icon: string, heading?: boolean, children: BusinessNavigationItem[] }
+export interface BusinessAreaShape { code: string, label: string, icon: string, heading?: boolean, groups: { code: string, label: string }[] }
 export interface ObjectWorkspaceItem { id: string, label: string, path: string, module: string, permission: PermissionRef }
 export interface ObjectWorkspace { code: string, label: string, base: string, backTo: string, backLabel: string, actions?: { id: string, module?: string, permission: PermissionRef }[], groups: { id: string, label: string, items: ObjectWorkspaceItem[] }[] }
 export interface BusinessModule {

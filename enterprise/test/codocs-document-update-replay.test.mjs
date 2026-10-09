@@ -25,25 +25,39 @@ test('completed save replay never overwrites a later edit or writes storage for 
     __updateAuthorization: () => ({ resources: { documents: allowed ? ['edit'] : ['view'] }, actionPolicies: {} }),
     __updateRuntime: async (_event, path, options) => {
       runtimeCalls.push({ path, options })
-      if (unavailable) throw fail(503, 'runtime unavailable')
+      if (unavailable)
+        throw fail(503, 'runtime unavailable')
       const body = options.body
-      if (path.endsWith('personal-documents:view')) return { handled: true, data: { success: true, data: { uuid: body.code, oss_path: 'codocs/users/owner/doc.md', doc_type: 'private' } } }
-      if (!writable) throw fail(403, 'read-only share')
+      if (path.endsWith('personal-documents:view'))
+        return { handled: true, data: { success: true, data: { uuid: body.code, oss_path: 'codocs/users/owner/doc.md', doc_type: 'private' } } }
+      if (!writable)
+        throw fail(403, 'read-only share')
       const key = options.idempotencyKey, digest = keyHash(body), previous = records.get(key)
-      if (previous && previous !== digest) throw fail(409, 'command mismatch')
-      if (path.endsWith('personal-documents:update-plan')) return { handled: true, data: { success: true, data: { uuid: body.code, replayed: Boolean(previous), oss_path: 'codocs/users/owner/doc.md', doc_type: 'private' } } }
+      if (previous && previous !== digest)
+        throw fail(409, 'command mismatch')
+      if (path.endsWith('personal-documents:update-plan'))
+        return { handled: true, data: { success: true, data: { uuid: body.code, replayed: Boolean(previous), oss_path: 'codocs/users/owner/doc.md', doc_type: 'private' } } }
       assert.ok(path.endsWith('personal-documents:update'))
       records.set(key, digest)
-      if (loseResponse) { loseResponse = false; throw fail(503, 'commit succeeded; response lost') }
+      if (loseResponse) {
+        loseResponse = false
+        throw fail(503, 'commit succeeded; response lost')
+      }
       return { handled: true, data: { success: true, data: { uuid: body.code, updated: true } } }
     },
     __updateOSS: {
-      async head() { storageCalls.push('head'); return { meta: {}, res: { headers: { etag: etag(), 'x-oss-version-id': String(version) } } } },
-      async put(_path, bytes, options) {
+      async head() {
+        storageCalls.push('head')
+        return { meta: {}, res: { headers: { 'etag': etag(), 'x-oss-version-id': String(version) } } }
+      },
+      async put(_path, bytes) {
         storageCalls.push('put')
-        if (failStorage) throw fail(503, 'isolated storage failure')
-        content = bytes.toString(); version++
-        if (revokeDuringPut) allowed = false
+        if (failStorage)
+          throw fail(503, 'isolated storage failure')
+        content = bytes.toString()
+        version++
+        if (revokeDuringPut)
+          allowed = false
         return { res: { headers: { [versionHeader]: String(version) } } }
       }
     }
@@ -52,23 +66,35 @@ test('completed save replay never overwrites a later edit or writes storage for 
   Object.assign(globalThis, globals)
   const hooks = registerHooks({ resolve(specifier, context, next) {
     let source
-    if (specifier.endsWith('/consoleSessionBridge')) source = 'export const resolveConsoleAuthWithSessionBridge=async()=>globalThis.__updateSession'
-    if (specifier.endsWith('/tenantRuntimeClient')) source = 'export const prepareTenantRuntime=async()=>true;export const maybeCallTenantRuntime=(...args)=>globalThis.__updateRuntime(...args)'
-    if (specifier.endsWith('/platformBundleAuthorization')) source = 'export const loadAuthorizationSnapshotFromConsoleRuntime=async()=>globalThis.__updateAuthorization()'
-    if (specifier.endsWith('/tenantGatewayTrust')) source = 'export const resolveTrustedTenantGatewayContext=()=>undefined'
-    if (specifier.endsWith('/oss')) source = 'export const createRuntimeOSSClient=async()=>globalThis.__updateOSS'
-    if (source) return { url: `data:text/javascript,${encodeURIComponent(source)}`, shortCircuit: true }
+    if (specifier.endsWith('/consoleSessionBridge'))
+      source = 'export const resolveConsoleAuthWithSessionBridge=async()=>globalThis.__updateSession'
+    if (specifier.endsWith('/tenantRuntimeClient'))
+      source = 'export const prepareTenantRuntime=async()=>true;export const maybeCallTenantRuntime=(...args)=>globalThis.__updateRuntime(...args)'
+    if (specifier.endsWith('/platformBundleAuthorization'))
+      source = 'export const loadAuthorizationSnapshotFromConsoleRuntime=async()=>globalThis.__updateAuthorization()'
+    if (specifier.endsWith('/tenantGatewayTrust'))
+      source = 'export const resolveTrustedTenantGatewayContext=()=>undefined'
+    if (specifier.endsWith('/oss'))
+      source = 'export const createRuntimeOSSClient=async()=>globalThis.__updateOSS'
+    if (source)
+      return { url: `data:text/javascript,${encodeURIComponent(source)}`, shortCircuit: true }
     let candidate
-    if (specifier.startsWith('@hzy/foundation/')) candidate = resolve(root, 'foundation', specifier.slice('@hzy/foundation/'.length))
-    else if (specifier.startsWith('.') && context.parentURL?.startsWith('file:')) candidate = resolve(dirname(fileURLToPath(context.parentURL)), specifier)
-    if (candidate && !existsSync(candidate) && existsSync(`${candidate}.ts`)) return { url: pathToFileURL(`${candidate}.ts`).href, shortCircuit: true }
+    if (specifier.startsWith('@hzy/foundation/'))
+      candidate = resolve(root, 'foundation', specifier.slice('@hzy/foundation/'.length))
+    else
+      if (specifier.startsWith('.') && context.parentURL?.startsWith('file:'))
+        candidate = resolve(dirname(fileURLToPath(context.parentURL)), specifier)
+    if (candidate && !existsSync(candidate) && existsSync(`${candidate}.ts`))
+      return { url: pathToFileURL(`${candidate}.ts`).href, shortCircuit: true }
     return next(specifier, context)
   } })
   let server
   try {
     const app = createApp(), router = createRouter()
     router.put('/documents/:uuid', (await import('../server/routes/codocs/api/documents/[uuid].put.ts')).default)
-    app.use(defineEventHandler(event => { event.context.consoleAuth = session }))
+    app.use(defineEventHandler((event) => {
+      event.context.consoleAuth = session
+    }))
     app.use(router)
     server = createServer(toNodeListener(app))
     await new Promise(done => server.listen(0, '127.0.0.1', done))
@@ -88,20 +114,26 @@ test('completed save replay never overwrites a later edit or writes storage for 
     assert.equal(storageCalls.length, beforeReplay)
     allowed = false
     assert.equal((await save('save-attempt-a', 'edit A')).status, 403)
-    allowed = true; writable = false
+    allowed = true
+    writable = false
     assert.equal((await save('read-only-share', 'forbidden')).status, 403)
     assert.equal(storageCalls.length, beforeReplay, 'object write ACL must be checked before storage')
-    writable = true; unavailable = true
+    writable = true
+    unavailable = true
     assert.equal((await save('outage-attempt', 'no write')).status, 503)
     assert.equal(storageCalls.length, beforeReplay)
-    unavailable = false; failStorage = true
+    unavailable = false
+    failStorage = true
     assert.equal((await save('storage-failure', 'not stored')).status, 503)
     assert.equal(content, 'edit B')
     assert.equal(records.size, 2)
-    failStorage = false; revokeDuringPut = true
+    failStorage = false
+    revokeDuringPut = true
     assert.equal((await save('revoked-during-put', 'pending content')).status, 403)
     assert.equal(records.size, 2, 'lost permission must prevent metadata commit after storage')
-    allowed = true; revokeDuringPut = false; versionHeader = 'x-amz-version-id'
+    allowed = true
+    revokeDuringPut = false
+    versionHeader = 'x-amz-version-id'
     assert.equal((await save('s3-compatible-version', 'edit through S3')).status, 200)
     assert.equal(records.size, 3, 'S3 version receipt must reach the Runtime commit')
     assert.equal(runtimeCalls.at(-1).options.body.payload.oss_version_id, String(version))
@@ -110,8 +142,10 @@ test('completed save replay never overwrites a later edit or writes storage for 
       assert.equal(call.options.body.authorization.actorUid, 'owner')
     }
   } finally {
-    if (server) await new Promise(done => server.close(done))
+    if (server)
+      await new Promise(done => server.close(done))
     hooks.deregister()
-    for (const [key, value] of Object.entries(old)) value === undefined ? delete globalThis[key] : globalThis[key] = value
+    for (const [key, value] of Object.entries(old))
+      value === undefined ? delete globalThis[key] : globalThis[key] = value
   }
 })

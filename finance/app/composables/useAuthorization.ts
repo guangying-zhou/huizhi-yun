@@ -261,6 +261,8 @@ export function useAuthorization() {
     loadAuthorization,
     getAuthorization,
     clearAuthorizationCache,
+    // Standalone Finance has no Host route owner; Foundation falls back to appCode.
+    authorizationApp: computed<string | null>(() => null),
     loaded: authorizationState.loaded,
     loading: authorizationState.loading,
     error: authorizationState.error

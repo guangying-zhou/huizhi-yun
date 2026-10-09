@@ -1,5 +1,5 @@
-// Package domaininstall adds a fixed, read-only Altoc domain to an activated
-// local unified database. It never updates Registry or any existing object.
+// Package domaininstall installs reviewed table or column subsets in an activated
+// unified database. It never updates Registry or existing business rows.
 package domaininstall
 
 import (
@@ -26,11 +26,13 @@ var manifest []byte
 var deletionEvidenceManifest []byte
 
 type installer struct {
+	column           *columnInstaller
 	domain           string
 	manifest         []byte
 	write, scheduler enterprise.PathMode
 	exactCount       int
 	expect           Expectation
+	apf              bool
 }
 
 // Expectation is the reviewed identity an installation may target. The legacy
@@ -52,8 +54,10 @@ var ErrBoundary = errors.New("domain installation boundary rejected")
 type Table struct {
 	Logical, Physical, DDL string
 	Columns                []string
+	ForeignKeys            []ColumnForeignKey `json:",omitempty"`
 }
 type Plan struct {
+	Column     *ColumnPlan `json:",omitempty"`
 	Binding    enterprise.Binding
 	Tables     []Table
 	Views      []enterprise.CompatibilityView
@@ -62,8 +66,9 @@ type Plan struct {
 }
 type Stopped func(context.Context) error
 type Receipt struct {
-	Plan    Plan
-	Created map[string]string
+	Plan          Plan
+	Created       map[string]string
+	ColumnTimings []ColumnDDLTiming `json:",omitempty"`
 }
 type Checkpoint func(Receipt) error
 
@@ -97,6 +102,66 @@ func (x *installer) validate(b enterprise.Binding) error {
 		}
 	} else if b.Storage.Address != e.Address {
 		return ErrBoundary
+	}
+	if x.apf {
+		if x.domain == "altoc-receivables" {
+			return x.validateReceivables(b)
+		}
+		if W1Domain(x.domain) != "" {
+			return x.validateW1(b)
+		}
+		if x.domain == "aims-portfolio-members" {
+			return x.validateAimsPortfolioMembers(b)
+		}
+		if strings.HasSuffix(x.domain, "-due") {
+			return x.validateDue(b)
+		}
+		if x.domain == "altoc-feedback" {
+			return x.validateAltocFeedback(b)
+		}
+		if x.domain == "finance-receivables" {
+			return x.validateFinanceReceivables(b)
+		}
+		if x.domain == "finance-cost" {
+			return x.validateFinanceCost(b)
+		}
+		if x.domain == "finance-13b" {
+			return x.validateFinance13b(b)
+		}
+		if x.domain == "finance-13a" {
+			return x.validateFinance13a(b)
+		}
+		if x.domain == "altoc-renewals" {
+			return x.validateAltocRenewals(b)
+		}
+		if x.domain == "altoc-tickets" {
+			return x.validateAltocTickets(b)
+		}
+		if x.domain == "altoc-services" {
+			return x.validateAltocServices(b)
+		}
+		if x.domain == "altoc-tenders" {
+			return x.validateAltocTenders(b)
+		}
+		if x.domain == "altoc-sales" {
+			return x.validateAltocSales(b)
+		}
+		if x.domain == "finance-b3" {
+			return x.validateFinanceB3(b)
+		}
+		if x.domain == "people-hr-source" {
+			return x.validatePeopleHRSource(b)
+		}
+		if x.domain == "people-offboarding" {
+			return x.validatePeopleOffboarding(b)
+		}
+		if x.domain == "people-facts" {
+			return x.validatePeopleFacts(b)
+		}
+		if x.domain == "people-private" {
+			return x.validatePeoplePrivate(b)
+		}
+		return x.validateAPF(b)
 	}
 	d, ok := b.Domains[x.domain]
 	if !ok || d.OwnerDeployment != e.OwnerDeployment || d.Read != enterprise.PathUnified || d.Write != x.write || d.Scheduler != x.scheduler || (x.exactCount > 0 && len(d.Tables) != x.exactCount) {
@@ -142,7 +207,9 @@ func identity(ctx context.Context, c *sql.Conn, b enterprise.Binding) error {
 func (x *installer) names() map[string]bool {
 	n := map[string]bool{}
 	for _, t := range x.tables() {
-		n[t.Logical] = true
+		if !x.apf {
+			n[t.Logical] = true
+		}
 		n[t.Physical] = true
 	}
 	return n
@@ -233,6 +300,9 @@ func (x *installer) baseline(ctx context.Context, c *sql.Conn, db string) (strin
 }
 func (x *installer) expected(b enterprise.Binding) Plan {
 	p := Plan{Binding: b, Tables: x.tables()}
+	if x.apf {
+		return p
+	}
 	for _, t := range p.Tables {
 		var cols []string
 		for _, col := range t.Columns {
@@ -244,7 +314,15 @@ func (x *installer) expected(b enterprise.Binding) Plan {
 	return p
 }
 func (x *installer) absent(ctx context.Context, c *sql.Conn, db string) error {
-	for name := range x.names() {
+	names := x.names()
+	// APF cannot coexist with the old read-only Altoc closure, even when its
+	// config mapping was removed but a compatibility view or old-only table remains.
+	if x.apf && x.domain == "apf" {
+		for _, t := range altocInstaller.tables() {
+			names[t.Logical], names[t.Physical] = true, true
+		}
+	}
+	for name := range names {
 		var n int
 		if err := c.QueryRowContext(ctx, "SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA=? AND TABLE_NAME=?", db, name).Scan(&n); err != nil {
 			return err
@@ -276,6 +354,9 @@ func (x *installer) PlanInstall(ctx context.Context, db *sql.DB, b enterprise.Bi
 		return Plan{}, err
 	}
 	p := x.expected(b)
+	if err = x.tableDependencies(ctx, c, p); err != nil {
+		return Plan{}, err
+	}
 	p.Baseline, err = x.baseline(ctx, c, b.Storage.Database)
 	if err != nil {
 		return Plan{}, err
@@ -358,6 +439,28 @@ func (x *installer) Apply(ctx context.Context, db *sql.DB, p Plan, stopped Stopp
 				return e
 			}
 		}
+		// All referenced base tables now exist; install reviewed cyclic FKs last.
+		for _, t := range p.Tables {
+			for _, fk := range t.ForeignKeys {
+				if err = stopped(ctx); err != nil {
+					return err
+				}
+				if err = identity(ctx, c, p.Binding); err != nil {
+					return err
+				}
+				if _, err = c.ExecContext(ctx, "ALTER TABLE "+q(t.Physical)+" ADD "+fk.definition()+", ALGORITHM=COPY, LOCK=SHARED"); err != nil {
+					return err
+				}
+				digest, e := objectDigest(ctx, c, t.Physical)
+				if e != nil {
+					return e
+				}
+				receipt.Created[t.Physical] = digest
+				if e = save(receipt); e != nil {
+					return e
+				}
+			}
+		}
 		// Check actual columns using the same Runtime generator before creating views.
 		logical := []string{}
 		for _, t := range p.Tables {
@@ -382,7 +485,7 @@ func (x *installer) Apply(ctx context.Context, db *sql.DB, p Plan, stopped Stopp
 				return e
 			}
 		}
-		if err = enterprise.VerifyCompatibilityViewsTx(ctx, c, p.Binding, x.domain, logical); err != nil {
+		if err = x.verifyTables(ctx, c, p.Binding, logical); err != nil {
 			return err
 		}
 		after, err := x.baseline(ctx, c, p.Binding.Storage.Database)
@@ -409,14 +512,22 @@ func (x *installer) Verify(ctx context.Context, db *sql.DB, p Plan) error {
 		return err
 	}
 	defer release()
-	if err = identity(ctx, c, p.Binding); err != nil {
+	return x.verifyOnConn(ctx, c, p)
+}
+
+// Caller holds the same session migration lock for the entire verification.
+func (x *installer) verifyOnConn(ctx context.Context, c *sql.Conn, p Plan) error {
+	if err := identity(ctx, c, p.Binding); err != nil {
+		return err
+	}
+	if err := x.verifyTableConstraints(ctx, c, p); err != nil {
 		return err
 	}
 	logical := []string{}
 	for _, t := range p.Tables {
 		logical = append(logical, t.Logical)
 	}
-	if err = enterprise.VerifyCompatibilityViewsTx(ctx, c, p.Binding, x.domain, logical); err != nil {
+	if err := x.verifyTables(ctx, c, p.Binding, logical); err != nil {
 		return err
 	}
 	after, err := x.baseline(ctx, c, p.Binding.Storage.Database)
@@ -467,6 +578,20 @@ func objectDigest(ctx context.Context, c *sql.Conn, name string) (string, error)
 // recovery for manual inspection (DDL cannot roll back transactionally).
 func (x *installer) Rollback(ctx context.Context, db *sql.DB, r Receipt, stopped Stopped) error {
 	return x.withStopped(ctx, db, r.Plan, stopped, func(c *sql.Conn) error {
+		if x.apf {
+			for _, t := range r.Plan.Tables {
+				if _, ok := r.Created[t.Physical]; !ok {
+					continue
+				}
+				var count uint64
+				if err := c.QueryRowContext(ctx, "SELECT COUNT(*) FROM "+q(t.Physical)).Scan(&count); err != nil {
+					return err
+				}
+				if count != 0 {
+					return ErrBoundary
+				}
+			}
+		}
 		// Frozen deletion evidence must never be discarded by a schema rollback.
 		if x.domain == "aims" {
 			if _, created := r.Created["aims_work_item_deletion_evidence"]; created {
@@ -524,8 +649,39 @@ func (x *installer) Rollback(ctx context.Context, db *sql.DB, r Receipt, stopped
 				if err := stopped(ctx); err != nil {
 					return err
 				}
+				if err := identity(ctx, c, r.Plan.Binding); err != nil {
+					return err
+				}
 				if _, err := c.ExecContext(ctx, "DROP VIEW "+q(name)); err != nil {
 					return err
+				}
+			}
+		}
+		// Drop only receipt-owned deferred FKs before reversing table creation.
+		for _, t := range r.Plan.Tables {
+			if _, owned := r.Created[t.Physical]; !owned {
+				continue
+			}
+			for _, fk := range t.ForeignKeys {
+				ddl, e := columnDDL(ctx, c, t.Physical)
+				if e != nil {
+					return e
+				}
+				line := constraintLine(ddl, fk.Name)
+				if line == "" {
+					continue
+				}
+				if line != fk.definition() {
+					return ErrBoundary
+				}
+				if e = stopped(ctx); e != nil {
+					return e
+				}
+				if e = identity(ctx, c, r.Plan.Binding); e != nil {
+					return e
+				}
+				if _, e = c.ExecContext(ctx, "ALTER TABLE "+q(t.Physical)+" DROP FOREIGN KEY "+q(fk.Name)+", ALGORITHM=INPLACE, LOCK=NONE"); e != nil {
+					return e
 				}
 			}
 		}
@@ -533,6 +689,9 @@ func (x *installer) Rollback(ctx context.Context, db *sql.DB, r Receipt, stopped
 			name := r.Plan.Tables[i].Physical
 			if _, ok := r.Created[name]; ok {
 				if err := stopped(ctx); err != nil {
+					return err
+				}
+				if err := identity(ctx, c, r.Plan.Binding); err != nil {
 					return err
 				}
 				if _, err := c.ExecContext(ctx, "DROP TABLE "+q(name)); err != nil {
@@ -555,7 +714,7 @@ func (x *installer) Rollback(ctx context.Context, db *sql.DB, r Receipt, stopped
 }
 
 func (x *installer) VerifyReceipt(ctx context.Context, db *sql.DB, r Receipt) error {
-	if len(r.Created) != 2*len(x.tables()) {
+	if len(r.Created) != len(r.Plan.Tables)+len(r.Plan.Views) {
 		return ErrBoundary
 	}
 	if err := x.reviewed(r.Plan); err != nil {
@@ -565,19 +724,25 @@ func (x *installer) VerifyReceipt(ctx context.Context, db *sql.DB, r Receipt) er
 	if err != nil {
 		return err
 	}
+	defer c.Close()
+	release, err := migrationlock.Acquire(ctx, c, r.Plan.Binding.Storage.InstanceID, r.Plan.Binding.Storage.Database)
+	if err != nil {
+		return err
+	}
+	defer release()
+	if err = identity(ctx, c, r.Plan.Binding); err != nil {
+		return err
+	}
 	for name, digest := range r.Created {
 		if !x.names()[name] {
-			c.Close()
 			return ErrBoundary
 		}
 		actual, e := objectDigest(ctx, c, name)
 		if e != nil || actual != digest {
-			c.Close()
 			return ErrBoundary
 		}
 	}
-	c.Close()
-	return x.Verify(ctx, db, r.Plan)
+	return x.verifyOnConn(ctx, c, r.Plan)
 }
 
 // Legacy Altoc API remains fixed; the new API selects one embedded evidence table.
@@ -634,17 +799,41 @@ func ForDeletionEvidence(e Expectation) Installer {
 	return Installer{x}
 }
 func (i Installer) PlanInstall(ctx context.Context, db *sql.DB, b enterprise.Binding) (Plan, error) {
+	if i.x.column != nil {
+		return i.x.column.plan(ctx, db, b)
+	}
 	return i.x.PlanInstall(ctx, db, b)
 }
 func (i Installer) Apply(ctx context.Context, db *sql.DB, p Plan, off Stopped, save Checkpoint) error {
+	if i.x.column != nil {
+		return i.x.column.apply(ctx, db, Receipt{Plan: p, Created: map[string]string{}}, off, save)
+	}
 	return i.x.Apply(ctx, db, p, off, save)
 }
 func (i Installer) Verify(ctx context.Context, db *sql.DB, p Plan) error {
+	if i.x.column != nil {
+		return i.x.column.verify(ctx, db, p, nil)
+	}
 	return i.x.Verify(ctx, db, p)
 }
 func (i Installer) VerifyReceipt(ctx context.Context, db *sql.DB, r Receipt) error {
+	if i.x.column != nil {
+		return i.x.column.verify(ctx, db, r.Plan, &r)
+	}
 	return i.x.VerifyReceipt(ctx, db, r)
 }
 func (i Installer) Rollback(ctx context.Context, db *sql.DB, r Receipt, off Stopped) error {
+	if i.x.column != nil {
+		return i.x.column.rollback(ctx, db, r, off)
+	}
 	return i.x.Rollback(ctx, db, r, off)
+}
+
+// Resume only accepts the persisted column-subset checkpoint. Unknown DDL
+// outcomes are not inferred from the database and require manual review.
+func (i Installer) Resume(ctx context.Context, db *sql.DB, r Receipt, off Stopped, save Checkpoint) error {
+	if i.x.column == nil {
+		return ErrBoundary
+	}
+	return i.x.column.apply(ctx, db, r, off, save)
 }

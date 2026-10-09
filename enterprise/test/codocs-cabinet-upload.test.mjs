@@ -31,46 +31,58 @@ test('Enterprise Codocs cabinet upload plans, stores and commits with idempotent
   globalThis.__cabUploadCreateOss = async (options) => {
     ossCalls.push({ method: 'client', options })
     return {
-    head: async (path) => {
-      ossCalls.push({ method: 'head', path })
-      if (!objects.has(path)) {
-        const e = new Error('NoSuchKey')
-        e.code = 'NoSuchKey'
-        e.statusCode = 404
-        throw e
+      head: async (path) => {
+        ossCalls.push({ method: 'head', path })
+        if (!objects.has(path)) {
+          const e = new Error('NoSuchKey')
+          e.code = 'NoSuchKey'
+          e.statusCode = 404
+          throw e
+        }
+        const object = objects.get(path)
+        return { meta: { 'hzy-content-sha256': object.sha }, res: { headers: { 'content-length': String(object.bytes.length) } } }
+      },
+      put: async (path, bytes, putOptions) => {
+        calls.push({ kind: 'oss-put', path })
+        ossCalls.push({ method: 'put', path, bytes, options: putOptions })
+        if (mode === 'put-fails')
+          throw Object.assign(new Error('secret storage'), { statusCode: 503 })
+        if (mode === '409' || mode === '412') {
+          if (mode === '409' || globalThis.__cabUpload412Winner)
+            objects.set(path, { bytes: Buffer.from(bytes), sha: putOptions.meta['hzy-content-sha256'] })
+          const e = new Error('already exists')
+          e.statusCode = Number(mode)
+          throw e
+        }
+        objects.set(path, { bytes: Buffer.from(bytes), sha: putOptions.meta['hzy-content-sha256'] })
+        return { res: { headers: {} } }
       }
-      const object = objects.get(path)
-      return { meta: { 'hzy-content-sha256': object.sha }, res: { headers: { 'content-length': String(object.bytes.length) } } }
-    },
-    put: async (path, bytes, putOptions) => {
-      calls.push({ kind: 'oss-put', path })
-      ossCalls.push({ method: 'put', path, bytes, options: putOptions })
-      if (mode === 'put-fails') throw Object.assign(new Error('secret storage'), { statusCode: 503 })
-      if (mode === '409' || mode === '412') {
-        if (mode === '409' || globalThis.__cabUpload412Winner) objects.set(path, { bytes: Buffer.from(bytes), sha: putOptions.meta['hzy-content-sha256'] })
-        const e = new Error('already exists')
-        e.statusCode = Number(mode)
-        throw e
-      }
-      objects.set(path, { bytes: Buffer.from(bytes), sha: putOptions.meta['hzy-content-sha256'] })
-      return { res: { headers: {} } }
-    }
     }
   }
 
   const hooks = registerHooks({
     resolve(specifier, context, next) {
       let source
-      if (specifier.endsWith('/consoleSessionBridge')) source = 'export const resolveConsoleAuthWithSessionBridge=async()=>globalThis.__cabUploadSession'
-      if (specifier.endsWith('/tenantGatewayTrust')) source = 'export const resolveTrustedTenantGatewayContext=()=>undefined'
-      if (specifier.endsWith('/platformBundleAuthorization')) source = 'export const loadAuthorizationSnapshotFromConsoleRuntime=async()=>globalThis.__cabUploadRevokeAfterPrepare===globalThis.__cabUploadPrepareCount?{resources:{},actionPolicies:{}}:globalThis.__cabUploadAuth()'
-      if (specifier.endsWith('/tenantRuntimeClient')) source = `export const prepareTenantRuntime=async(...args)=>{globalThis.__cabUploadPrepareCount++;globalThis.__cabUploadCalls.push({kind:'prepare',event:args[0],options:args[1]});return true};export const maybeCallTenantRuntime=async(...args)=>{const [event,path,options]=args;globalThis.__cabUploadCalls.push({kind:'runtime',event,path,options});const current=globalThis.__cabUploadMode();if(['401','403','503'].includes(current)||(current==='commit-fail'&&path.endsWith('personal-cabinet:upload')&&globalThis.__cabUploadCommitFailures-->0)){const e=new Error('runtime secret');e.statusCode=Number(current==='commit-fail'?503:current);throw e}const payload=options.body.payload;const sha=payload?.content_sha256||'0'.repeat(64);const plan={uuid:'11111111-1111-4111-8111-111111111111',owner_uid:'person-a',original_name:payload?.original_name,file_ext:payload?.file_ext,file_size:payload?.file_size,content_sha256:sha,folder_id:payload?.folder_id??null,filename:payload?.original_name,oss_path:'codocs/users/person-a/cabinet/11111111-1111-4111-8111-111111111111/'+sha+'.'+payload?.file_ext,id:7};if(current==='bad-owner')plan.owner_uid='person-b';if(current==='bad-path')plan.oss_path='codocs/../unsafe';if(path.endsWith('upload-plan')){if(current==='revoke-after-plan')globalThis.__cabUploadRevokeAfterPrepare=globalThis.__cabUploadPrepareCount+1;return {handled:true,data:{success:true,data:plan}}}return {handled:true,data:{success:true,data:plan}}}`
-      if (specifier.endsWith('/oss')) source = 'export const createRuntimeOSSClient=async options=>globalThis.__cabUploadCreateOss(options)'
-      if (source) return { url: `data:text/javascript,${encodeURIComponent(source)}`, shortCircuit: true }
+      if (specifier.endsWith('/consoleSessionBridge'))
+        source = 'export const resolveConsoleAuthWithSessionBridge=async()=>globalThis.__cabUploadSession'
+      if (specifier.endsWith('/tenantGatewayTrust'))
+        source = 'export const resolveTrustedTenantGatewayContext=()=>undefined'
+      if (specifier.endsWith('/platformBundleAuthorization'))
+        source = 'export const loadAuthorizationSnapshotFromConsoleRuntime=async()=>globalThis.__cabUploadRevokeAfterPrepare===globalThis.__cabUploadPrepareCount?{resources:{},actionPolicies:{}}:globalThis.__cabUploadAuth()'
+      if (specifier.endsWith('/tenantRuntimeClient'))
+        source = `export const prepareTenantRuntime=async(...args)=>{globalThis.__cabUploadPrepareCount++;globalThis.__cabUploadCalls.push({kind:'prepare',event:args[0],options:args[1]});return true};export const maybeCallTenantRuntime=async(...args)=>{const [event,path,options]=args;globalThis.__cabUploadCalls.push({kind:'runtime',event,path,options});const current=globalThis.__cabUploadMode();if(['401','403','503'].includes(current)||(current==='commit-fail'&&path.endsWith('personal-cabinet:upload')&&globalThis.__cabUploadCommitFailures-->0)){const e=new Error('runtime secret');e.statusCode=Number(current==='commit-fail'?503:current);throw e}const payload=options.body.payload;const sha=payload?.content_sha256||'0'.repeat(64);const plan={uuid:'11111111-1111-4111-8111-111111111111',owner_uid:'person-a',original_name:payload?.original_name,file_ext:payload?.file_ext,file_size:payload?.file_size,content_sha256:sha,folder_id:payload?.folder_id??null,filename:payload?.original_name,oss_path:'codocs/users/person-a/cabinet/11111111-1111-4111-8111-111111111111/'+sha+'.'+payload?.file_ext,id:7};if(current==='bad-owner')plan.owner_uid='person-b';if(current==='bad-path')plan.oss_path='codocs/../unsafe';if(path.endsWith('upload-plan')){if(current==='revoke-after-plan')globalThis.__cabUploadRevokeAfterPrepare=globalThis.__cabUploadPrepareCount+1;return {handled:true,data:{success:true,data:plan}}}return {handled:true,data:{success:true,data:plan}}}`
+      if (specifier.endsWith('/oss'))
+        source = 'export const createRuntimeOSSClient=async options=>globalThis.__cabUploadCreateOss(options)'
+      if (source)
+        return { url: `data:text/javascript,${encodeURIComponent(source)}`, shortCircuit: true }
       let candidate
-      if (specifier.startsWith('@hzy/foundation/')) candidate = resolve(root, 'foundation', specifier.slice('@hzy/foundation/'.length))
-      else if (specifier.startsWith('.') && context.parentURL?.startsWith('file:')) candidate = resolve(dirname(fileURLToPath(context.parentURL)), specifier)
-      if (candidate && !existsSync(candidate) && existsSync(`${candidate}.ts`)) return { url: pathToFileURL(`${candidate}.ts`).href, shortCircuit: true }
+      if (specifier.startsWith('@hzy/foundation/'))
+        candidate = resolve(root, 'foundation', specifier.slice('@hzy/foundation/'.length))
+      else
+        if (specifier.startsWith('.') && context.parentURL?.startsWith('file:'))
+          candidate = resolve(dirname(fileURLToPath(context.parentURL)), specifier)
+      if (candidate && !existsSync(candidate) && existsSync(`${candidate}.ts`))
+        return { url: pathToFileURL(`${candidate}.ts`).href, shortCircuit: true }
       return next(specifier, context)
     }
   })
@@ -80,15 +92,19 @@ test('Enterprise Codocs cabinet upload plans, stores and commits with idempotent
     const app = createApp()
     const router = createRouter()
     router.post('/codocs/api/cabinet/upload', (await import('../server/routes/codocs/api/cabinet/upload.post.ts')).default)
-    app.use(defineEventHandler(event => { event.context.consoleAuth = globalThis.__cabUploadSession }))
+    app.use(defineEventHandler((event) => {
+      event.context.consoleAuth = globalThis.__cabUploadSession
+    }))
     app.use(router)
     server = createServer(toNodeListener(app))
     await new Promise(done => server.listen(0, '127.0.0.1', done))
     const base = `http://127.0.0.1:${server.address().port}`
     const upload = async (files, key = 'cabinet-upload-key', fields = { owner_uid: 'person-a' }, query = '') => {
       const form = new FormData()
-      for (const [name, value] of Object.entries(fields)) form.append(name, value)
-      for (const file of files) form.append('files', file)
+      for (const [name, value] of Object.entries(fields))
+        form.append(name, value)
+      for (const file of files)
+        form.append('files', file)
       return fetch(`${base}/codocs/api/cabinet/upload${query}`, { method: 'POST', headers: { 'Idempotency-Key': key }, body: form })
     }
     const file = new File([Uint8Array.from([0, 1, 2, 255])], 'photo.png')
@@ -250,11 +266,14 @@ test('Enterprise Codocs cabinet upload plans, stores and commits with idempotent
     assert.equal(calls.filter(call => call.kind === 'runtime').length, beforeTooLargeRuntime)
     assert.equal(ossCalls.length, beforeTooLargeOss)
   } finally {
-    if (server) await new Promise(done => server.close(done))
+    if (server)
+      await new Promise(done => server.close(done))
     hooks.deregister()
     for (const [key, value] of Object.entries(old)) {
-      if (value === undefined) delete globalThis[key]
-      else globalThis[key] = value
+      if (value === undefined)
+        delete globalThis[key]
+      else
+        globalThis[key] = value
     }
   }
 })

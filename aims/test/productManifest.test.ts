@@ -39,7 +39,6 @@ test('onboard-only setup entry does not require view or grant access to product 
   }
 })
 
-
 test('product document relation permissions do not grant Codocs ACL', () => {
   assert.deepEqual(manifest.resources.find(resource => resource.code === 'product_documents')?.actions, ['view', 'edit'])
   for (const role of manifest.recommendedRoles.filter(role => role.code.startsWith('aims:product_'))) {

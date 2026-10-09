@@ -1,1 +1,4 @@
-import{defineEventHandler}from'h3';import{enterpriseAimsProjectCreate}from'../../../../../utils/enterpriseAimsProjectCreate';export default defineEventHandler(enterpriseAimsProjectCreate)
+import { defineEventHandler } from 'h3'
+import { enterpriseAimsProjectCreate } from '../../../../../utils/enterpriseAimsProjectCreate'
+
+export default defineEventHandler(enterpriseAimsProjectCreate)

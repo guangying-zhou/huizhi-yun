@@ -1,6 +1,8 @@
 export const PROJECT_LIST_QUERY_KEYS = ['category', 'status', 'portfolio', 'search', 'participatingOnly', 'view']
 
-function first(value) { return Array.isArray(value) ? value[0] : value }
+function first(value) {
+  return Array.isArray(value) ? value[0] : value
+}
 
 /** @returns {{ category: string, status: string, portfolio: string, search: string, participatingOnly: boolean, view: 'card' | 'list' }} */
 export function readProjectListState(query = {}) {
@@ -17,11 +19,17 @@ export function readProjectListState(query = {}) {
 
 export function writeProjectListState(state) {
   const query = {}
-  if (state.category !== 'all') query.category = state.category
-  if (state.status !== 'all') query.status = state.status
-  if (state.portfolio !== 'all') query.portfolio = state.portfolio
-  if (state.search.trim()) query.search = state.search.trim()
-  if (!state.participatingOnly) query.participatingOnly = 'false'
-  if (state.view !== 'card') query.view = state.view
+  if (state.category !== 'all')
+    query.category = state.category
+  if (state.status !== 'all')
+    query.status = state.status
+  if (state.portfolio !== 'all')
+    query.portfolio = state.portfolio
+  if (state.search.trim())
+    query.search = state.search.trim()
+  if (!state.participatingOnly)
+    query.participatingOnly = 'false'
+  if (state.view !== 'card')
+    query.view = state.view
   return query
 }

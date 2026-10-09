@@ -19,6 +19,9 @@ func (a *Adapter) handleProductCostFreezeRuntime(ctx context.Context, method, pa
 	if path != "/v1/aims/internal/product-cost-rules:freeze" && !readStatus {
 		return nil, "", false, nil
 	}
+	if a.retireAPFCommands && !readStatus {
+		return nil, "aims.product-cost-rules.freeze", true, httperror.New(http.StatusGone, "aims_operation_retired", "旧跨域可靠命令已停用")
+	}
 	action := "freeze"
 	if readStatus {
 		action = "status"

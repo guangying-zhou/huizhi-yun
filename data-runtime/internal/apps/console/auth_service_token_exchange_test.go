@@ -19,7 +19,7 @@ func exchangeTestBody() map[string]any {
 		"clientId": "aims.runtime", "clientSecret": "fixture-secret",
 		"audience": "data-runtime", "scope": "aims:product:view",
 		"issuer": "https://example.test/console", "ttlSeconds": 900,
-		"sourceBinding": "service-client-policy", "policyVersion": "v7", "caps": "hash-7",
+		"sourceBinding": "service-client-policy", "policyVersion": "v7", "caps": exchangePolicyHash(),
 	}
 }
 
@@ -33,7 +33,7 @@ func exchangeTestSubjectRows() *sqlmock.Rows {
 		30, 40, "db_encrypted", "sha256-only", []byte{}, "hash-only", "sha256_"+hex.EncodeToString(digest[:]))
 }
 
-func expectExchangeQueries(mock sqlmock.Sqlmock, policyVersion string, auditError error) {
+func expectExchangeQueries(t *testing.T, mock sqlmock.Sqlmock, adapter *Adapter, policyVersion string, auditError error) {
 	mock.ExpectBegin()
 	mock.ExpectQuery("FROM service_client_credentials scc").WithArgs("aims.runtime").WillReturnRows(exchangeTestSubjectRows())
 	mock.ExpectExec("INSERT INTO vault_access_logs").WillReturnResult(sqlmock.NewResult(1, 1))
@@ -42,9 +42,7 @@ func expectExchangeQueries(mock sqlmock.Sqlmock, policyVersion string, auditErro
 			AddRow("aims:product", "view", `{"audience":"data-runtime","semanticScope":"aims:product:view","tenantCode":"C000001","deploymentCode":"C000001-test-aims"}`),
 	)
 	mock.ExpectExec("UPDATE service_client_grants").WithArgs(uint64(10), "aims:product", "view").WillReturnResult(sqlmock.NewResult(0, 1))
-	mock.ExpectQuery("SELECT bundle_version,bundle_hash FROM policy_bundle_snapshots").WithArgs("C000001", "C000001-test-console").WillReturnRows(
-		sqlmock.NewRows([]string{"bundle_version", "bundle_hash"}).AddRow(policyVersion, "hash-7"),
-	)
+	expectVerifiedExchangePolicy(t, mock, adapter, policyVersion)
 	if policyVersion != "v7" {
 		mock.ExpectRollback()
 		return
@@ -84,7 +82,7 @@ func TestExchangeConsoleServiceClientTokenAuditAndPolicyAreAtomic(t *testing.T) 
 			defer database.Close()
 			adapter := &Adapter{db: database, tenant: "C000001"}
 			adapter.SetOIDCSigningIssuerSource(func() string { return "https://example.test/console" })
-			expectExchangeQueries(mock, tc.version, tc.auditError)
+			expectExchangeQueries(t, mock, adapter, tc.version, tc.auditError)
 			result, err := adapter.exchangeConsoleServiceClientTokenWithKey(context.Background(), exchangeTestBody(),
 				"C000001", "C000001-test-console", oidcSigningKey{ID: 5, Kid: "test-kid", PrivateKey: privateKey})
 			if tc.wantToken {
@@ -101,7 +99,7 @@ func TestExchangeConsoleServiceClientTokenAuditAndPolicyAreAtomic(t *testing.T) 
 				for claim, expected := range map[string]string{
 					"sub": "client:aims.runtime", "source_app": "aims", "tenant": "C000001",
 					"deployment": "C000001-test-aims", "scope": "aims:product:view",
-					"policy_ver": "v7", "caps": "hash-7",
+					"policy_ver": "v7", "caps": exchangePolicyHash(),
 				} {
 					if claims[claim] != expected {
 						t.Fatalf("claim %s = %v, want %s", claim, claims[claim], expected)

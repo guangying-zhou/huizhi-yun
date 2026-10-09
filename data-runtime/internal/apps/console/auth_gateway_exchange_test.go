@@ -58,7 +58,7 @@ func TestGatewayExchangeAtomicReplayGrantPolicyAndAudit(t *testing.T) {
 					insert.WillReturnError(tc.replayError)
 				} else {
 					insert.WillReturnResult(sqlmock.NewResult(0, 1))
-					mock.ExpectQuery("SELECT bundle_version,bundle_hash").WithArgs("C000001", "C000001-test-console").WillReturnRows(sqlmock.NewRows([]string{"version", "hash"}).AddRow("v7", "hash-7"))
+					expectVerifiedExchangePolicy(t, mock, a, "v7")
 					mock.ExpectQuery("SELECT id FROM auth_signing_keys").WithArgs(uint64(5)).WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(5))
 					mock.ExpectExec("UPDATE service_client_credentials").WithArgs(uint64(20)).WillReturnResult(sqlmock.NewResult(0, 1))
 					audit := mock.ExpectExec("INSERT INTO auth_token_events").WithArgs("aims.runtime")
@@ -84,7 +84,7 @@ func TestGatewayExchangeAtomicReplayGrantPolicyAndAudit(t *testing.T) {
 				if e != nil || !token.Valid {
 					t.Fatal(e)
 				}
-				for k, v := range map[string]string{"source_app": "aims", "tenant": "C000001", "deployment": "C000001-test-aims", "scope": "aims:product:view", "aud": "data-runtime", "sub": "client:aims.runtime", "policy_ver": "v7", "caps": "hash-7"} {
+				for k, v := range map[string]string{"source_app": "aims", "tenant": "C000001", "deployment": "C000001-test-aims", "scope": "aims:product:view", "aud": "data-runtime", "sub": "client:aims.runtime", "policy_ver": "v7", "caps": exchangePolicyHash()} {
 					if claims[k] != v {
 						t.Fatalf("claims mismatch %s", k)
 					}
@@ -100,6 +100,7 @@ func TestGatewayExchangeAtomicReplayGrantPolicyAndAudit(t *testing.T) {
 				if claims["exp"].(float64)-claims["iat"].(float64) != 900 {
 					t.Fatal("legacy TTL differs")
 				}
+				legacy["caps"] = exchangePolicyHash() // The signed formal fixture carries a real payload hash.
 				delete(claims, "iat")
 				delete(claims, "exp")
 				if !reflect.DeepEqual(map[string]any(claims), legacy) {

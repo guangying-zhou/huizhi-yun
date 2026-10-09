@@ -6,7 +6,6 @@ import { resolve, dirname } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
 test('account operation audit uses event-aware Console binding without eventless fallback', async () => {
-  const root = resolve(import.meta.dirname, '..')
   const tokenCalls = []
   const serviceCalls = []
   const fetchCalls = []
@@ -15,7 +14,7 @@ test('account operation audit uses event-aware Console binding without eventless
   const oldConfig = globalThis.useRuntimeConfig
   const oldFetch = globalThis.$fetch
   const oldError = console.error
-  globalThis.useRuntimeConfig = receivedEvent => {
+  globalThis.useRuntimeConfig = (receivedEvent) => {
     assert.equal(receivedEvent === event || receivedEvent === undefined, true)
     return { public: { appCode: 'enterprise' }, hzy: { audit: { consoleApiUrl: receivedEvent ? 'https://event-console.test' : 'https://legacy-console.test' } } }
   }

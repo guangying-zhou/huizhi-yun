@@ -52,11 +52,25 @@ func (s Store) Read(ctx context.Context) (Snapshot, error) {
 // current snapshot. A table without the renewal columns (migration not yet
 // applied) still serves the snapshot with no renewal, which grants no grace.
 func (s Store) ReadWithRenewal(ctx context.Context) (Snapshot, *Renewal, error) {
+	return s.readWithRenewal(ctx, s.DB)
+}
+
+// ReadWithRenewalTx uses the caller's transaction without changing signature,
+// exact binding or renewal validation, and never reads the legacy policy table.
+func (s Store) ReadWithRenewalTx(ctx context.Context, tx *sql.Tx) (Snapshot, *Renewal, error) {
+	return s.readWithRenewal(ctx, tx)
+}
+
+type snapshotReader interface {
+	QueryRowContext(context.Context, string, ...any) *sql.Row
+}
+
+func (s Store) readWithRenewal(ctx context.Context, reader snapshotReader) (Snapshot, *Renewal, error) {
 	var raw, state sql.NullString
 	var attempted sql.NullInt64
-	err := s.DB.QueryRowContext(ctx, `SELECT snapshot, renewal_state, renewal_attempted_at FROM verified_policy_snapshots WHERE tenant_code=? AND environment=? AND deployment_code=?`, s.Binding.Tenant, s.Binding.Environment, s.Binding.Deployment).Scan(&raw, &state, &attempted)
+	err := reader.QueryRowContext(ctx, `SELECT snapshot, renewal_state, renewal_attempted_at FROM verified_policy_snapshots WHERE tenant_code=? AND environment=? AND deployment_code=?`, s.Binding.Tenant, s.Binding.Environment, s.Binding.Deployment).Scan(&raw, &state, &attempted)
 	if missingRenewalColumns(err) {
-		err = s.DB.QueryRowContext(ctx, `SELECT snapshot FROM verified_policy_snapshots WHERE tenant_code=? AND environment=? AND deployment_code=?`, s.Binding.Tenant, s.Binding.Environment, s.Binding.Deployment).Scan(&raw)
+		err = reader.QueryRowContext(ctx, `SELECT snapshot FROM verified_policy_snapshots WHERE tenant_code=? AND environment=? AND deployment_code=?`, s.Binding.Tenant, s.Binding.Environment, s.Binding.Deployment).Scan(&raw)
 		state, attempted = sql.NullString{}, sql.NullInt64{}
 	}
 	if errors.Is(err, sql.ErrNoRows) {

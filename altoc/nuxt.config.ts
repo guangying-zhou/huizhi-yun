@@ -190,6 +190,7 @@ export default defineNuxtConfig({
   compatibilityDate: '2026-01-19',
 
   nitro: {
+    typescript: { tsConfig: { compilerOptions: { allowImportingTsExtensions: true } } },
     scheduledTasks: {
       '*/5 * * * *': ['integration-operations:drain'],
       '*/15 * * * *': ['notifications:receivable-due']
@@ -222,6 +223,8 @@ export default defineNuxtConfig({
       ]
     }
   },
+
+  typescript: { tsConfig: { compilerOptions: { allowImportingTsExtensions: true } } },
 
   hooks: {
     'vite:extendConfig'(config, { isClient, isServer }) {

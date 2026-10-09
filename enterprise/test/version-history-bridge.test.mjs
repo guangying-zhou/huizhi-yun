@@ -32,44 +32,76 @@ test('real H3 version history retains validation, scope and immutable response p
   const hooks = registerHooks({
     resolve(specifier, context, next) {
       let source
-      if (specifier.endsWith('/consoleSessionBridge') || specifier === './consoleSessionBridge') source = 'export const resolveConsoleAuthWithSessionBridge = async () => globalThis.__planningSession'
-      if (specifier.endsWith('/tenantRuntimeClient') || specifier === './tenantRuntimeClient') source = 'export const maybeCallTenantRuntime = (...args) => globalThis.__planningTransport(...args); export const verifiedServiceCommandActor=()=>null;export const prepareTenantRuntime = async () => true'
-      if (specifier.endsWith('/platformBundleAuthorization')) source = 'export const loadScopedAuthorizationFromConsoleRuntime = (...args) => globalThis.__planningAuthorization(...args)'
-      if (source) return { url: `data:text/javascript,${encodeURIComponent(source)}`, shortCircuit: true }
+      if (specifier.endsWith('/consoleSessionBridge') || specifier === './consoleSessionBridge')
+        source = 'export const resolveConsoleAuthWithSessionBridge = async () => globalThis.__planningSession'
+      if (specifier.endsWith('/tenantRuntimeClient') || specifier === './tenantRuntimeClient')
+        source = 'export const maybeCallTenantRuntime = (...args) => globalThis.__planningTransport(...args); export const verifiedServiceCommandActor=()=>null;export const prepareTenantRuntime = async () => true'
+      if (specifier.endsWith('/platformBundleAuthorization'))
+        source = 'export const loadScopedAuthorizationFromConsoleRuntime = (...args) => globalThis.__planningAuthorization(...args)'
+      if (source)
+        return { url: `data:text/javascript,${encodeURIComponent(source)}`, shortCircuit: true }
       let candidate
-      if (specifier.startsWith('@hzy/foundation/')) candidate = resolve(root, 'foundation', specifier.slice('@hzy/foundation/'.length))
-      else if (specifier.startsWith('.') && context.parentURL?.startsWith('file:')) candidate = resolve(dirname(fileURLToPath(context.parentURL)), specifier)
-      if (candidate && !existsSync(candidate) && existsSync(`${candidate}.ts`)) return { url: pathToFileURL(`${candidate}.ts`).href, shortCircuit: true }
+      if (specifier.startsWith('@hzy/foundation/'))
+        candidate = resolve(root, 'foundation', specifier.slice('@hzy/foundation/'.length))
+      else
+        if (specifier.startsWith('.') && context.parentURL?.startsWith('file:'))
+          candidate = resolve(dirname(fileURLToPath(context.parentURL)), specifier)
+      if (candidate && !existsSync(candidate) && existsSync(`${candidate}.ts`))
+        return { url: pathToFileURL(`${candidate}.ts`).href, shortCircuit: true }
       return next(specifier, context)
     }
   })
   let server
   try {
-    const { enterpriseProductPlanningBridge:bridge }=await import('../server/utils/enterpriseProductPlanning.ts')
-    const { handleProductVersionAcceptance:acceptance }=await import('../../aims/server/utils/productVersionAcceptanceRuntime.ts')
-    const { handleProductVersionCollection:release }=await import('../../aims/server/utils/productVersionRuntime.ts')
-    const app=createApp(),router=createRouter();app.use(defineEventHandler(e=>{e.context.consoleAuth=session}))
-    router.get('/products/:productCode/versions/:versionId/acceptances',defineEventHandler(async e=>acceptance(e,'list',await bridge(e))))
-    router.get('/products/:productCode/versions/:versionId/acceptances/:acceptanceId',defineEventHandler(async e=>acceptance(e,'view',await bridge(e))))
-    router.get('/products/:productCode/versions/:versionId/releases',defineEventHandler(async e=>release(e,'release-list',await bridge(e))))
-    router.get('/products/:productCode/versions/:versionId/releases/:recordId',defineEventHandler(async e=>release(e,'release-view',await bridge(e))))
-    app.use(router);server=createServer(toNodeListener(app));await new Promise(r=>server.listen(0,'127.0.0.1',r))
-    const base=`http://127.0.0.1:${server.address().port}/products/P-A/versions/1/`
-    for(const path of ['acceptances?page=0','acceptances?tenant=other','acceptances/0','releases?pageSize=1000','releases/abc']){
-      const before=calls.length;assert.equal((await fetch(base+path)).status,400);assert.equal(calls.length,before)
+    const { enterpriseProductPlanningBridge: bridge } = await import('../server/utils/enterpriseProductPlanning.ts')
+    const { handleProductVersionAcceptance: acceptance } = await import('../../aims/server/utils/productVersionAcceptanceRuntime.ts')
+    const { handleProductVersionCollection: release } = await import('../../aims/server/utils/productVersionRuntime.ts')
+    const app = createApp(), router = createRouter()
+    app.use(defineEventHandler((e) => {
+      e.context.consoleAuth = session
+    }))
+    router.get('/products/:productCode/versions/:versionId/acceptances', defineEventHandler(async e => acceptance(e, 'list', await bridge(e))))
+    router.get('/products/:productCode/versions/:versionId/acceptances/:acceptanceId', defineEventHandler(async e => acceptance(e, 'view', await bridge(e))))
+    router.get('/products/:productCode/versions/:versionId/releases', defineEventHandler(async e => release(e, 'release-list', await bridge(e))))
+    router.get('/products/:productCode/versions/:versionId/releases/:recordId', defineEventHandler(async e => release(e, 'release-view', await bridge(e))))
+    app.use(router)
+    server = createServer(toNodeListener(app))
+    await new Promise(r => server.listen(0, '127.0.0.1', r))
+    const base = `http://127.0.0.1:${server.address().port}/products/P-A/versions/1/`
+    for (const path of ['acceptances?page=0', 'acceptances?tenant=other', 'acceptances/0', 'releases?pageSize=1000', 'releases/abc']) {
+      const before = calls.length
+      assert.equal((await fetch(base + path)).status, 400)
+      assert.equal(calls.length, before)
     }
-    denied='product_versions:view';assert.ok([403,404].includes((await fetch(base+'releases')).status));denied=''
-    wrongScope=true;assert.ok([403,404].includes((await fetch(base+'acceptances/1')).status));wrongScope=false
-    for(const [path,op] of [['acceptances','acceptance-list'],['acceptances/7','acceptance-view'],['releases','release-list'],['releases/9','release-view']]){
-      calls.length=0;const response=await fetch(base+path);assert.equal(response.status,200);assert.equal(response.headers.get('cache-control'),'no-store')
-      const sent=calls.find(c=>c.path.endsWith('product-version:'+op));assert.ok(sent,op)
-      assert.equal(sent.options.scope,'aims:enterprise-host:execute');assert.equal(sent.options.appCode,'enterprise');assert.equal(sent.options.idempotencyKey,undefined)
-      assert.equal(sent.options.body.authorization.action,'view');assert.equal(sent.options.body.authorization.facts.actor_uid,'person-a')
-      assert.equal(sent.options.body.tenant,'tenant-a');assert.equal(sent.options.body.deployment,'enterprise-test')
-      assert.equal(sent.options.body.input.version_id,1)
+    denied = 'product_versions:view'
+    assert.ok([403, 404].includes((await fetch(base + 'releases')).status))
+    denied = ''
+    wrongScope = true
+    assert.ok([403, 404].includes((await fetch(base + 'acceptances/1')).status))
+    wrongScope = false
+    for (const [path, op] of [['acceptances', 'acceptance-list'], ['acceptances/7', 'acceptance-view'], ['releases', 'release-list'], ['releases/9', 'release-view']]) {
+      calls.length = 0
+      const response = await fetch(base + path)
+      assert.equal(response.status, 200)
+      assert.equal(response.headers.get('cache-control'), 'no-store')
+      const sent = calls.find(c => c.path.endsWith('product-version:' + op))
+      assert.ok(sent, op)
+      assert.equal(sent.options.scope, 'aims:enterprise-host:execute')
+      assert.equal(sent.options.appCode, 'enterprise')
+      assert.equal(sent.options.idempotencyKey, undefined)
+      assert.equal(sent.options.body.authorization.action, 'view')
+      assert.equal(sent.options.body.authorization.facts.actor_uid, 'person-a')
+      assert.equal(sent.options.body.tenant, 'tenant-a')
+      assert.equal(sent.options.body.deployment, 'enterprise-test')
+      assert.equal(sent.options.body.input.version_id, 1)
     }
-  }finally{
-    if(server)await new Promise(r=>server.close(r));hooks.deregister();globalThis.useRuntimeConfig=oldConfig
-    delete globalThis.__planningSession;delete globalThis.__planningTransport;delete globalThis.__planningAuthorization
+  } finally {
+    if (server)
+      await new Promise(r => server.close(r))
+    hooks.deregister()
+    globalThis.useRuntimeConfig = oldConfig
+    delete globalThis.__planningSession
+    delete globalThis.__planningTransport
+    delete globalThis.__planningAuthorization
   }
 })

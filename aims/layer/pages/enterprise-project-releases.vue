@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { projectPageFailure } from '../../app/utils/projectPageFailure'
 import ProjectNavbar from '../../app/components/project/ProjectNavbar.vue'
 import { useAimsModule } from '../useAimsModule'
 import { projectModuleEnabled } from '../../app/utils/projectModuleConfig'
@@ -44,7 +45,7 @@ async function refresh() {
     if (request !== requestSequence) return
     items.value = []
     total.value = 0
-    error.value = cause instanceof Error ? cause.message : '项目版本暂不可用'
+    error.value = projectPageFailure(cause, '项目版本暂不可用')
   } finally {
     if (request === requestSequence) loading.value = false
   }

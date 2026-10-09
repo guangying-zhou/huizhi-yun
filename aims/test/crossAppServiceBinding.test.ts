@@ -29,7 +29,7 @@ test('Aims Cloudflare config binds every cross-app delivery target', () => {
 })
 
 test('Aims delivery operations use target Service Bindings and trusted target context', () => {
-  const delivery = source('server/utils/serviceTicketDeliveryOperation.ts')
+  const delivery = [source('server/utils/serviceTicketDeliveryOperation.ts'), source('server/utils/codocsOperationTransport.ts')].join('\n')
   const targets = Array.from(
     delivery.matchAll(/serviceAppFetch<RuntimeEnvelope<RuntimeRow>>\(\s*event,\s*'(altoc|people|codocs)'/g),
     match => match[1]
@@ -71,7 +71,7 @@ test('Aims Assets calls use the Assets binding and target-bound headers', () => 
 })
 
 test('cost rules use Finance transport in request and scheduled IO with explicit deployment', () => {
-  const delivery = source('server/utils/serviceTicketDeliveryOperation.ts')
+  const delivery = [source('server/utils/serviceTicketDeliveryOperation.ts'), source('server/utils/codocsOperationTransport.ts')].join('\n')
   assert.match(delivery, /sendProductCostRules\(event, operation, command\)/)
   assert.match(delivery, /sendProductCostRules\(null, operation, command, targetDeployments\.finance \|\| ''\)/)
   assert.match(source('server/utils/integrationOperationDrain.ts'), /finance: binding\.financeTargetDeployment/)

@@ -1,9 +1,10 @@
 <script setup lang="ts">
+import RemoteAssetObjectSelect from './RemoteAssetObjectSelect.vue'
 import { useAssetsModule } from '../../../layer/useAssetsModule'
 import { useAssetDictionaries } from '../../composables/useAssetDictionaries'
-import type { ApiResponse, AssetListItem, ListPayload, ProductAssetItem } from '../../types'
+import type { ApiResponse, ProductAssetItem } from '../../types'
 
-const { moduleUrl, hosted } = useAssetsModule()
+const { moduleUrl } = useAssetsModule()
 const commandKey = ref(crypto.randomUUID())
 
 const props = defineProps<{
@@ -26,31 +27,12 @@ await loadDictionaries()
 
 const toast = useToast()
 const submitting = ref(false)
-const loadingAssets = ref(false)
-const assetOptions = ref<Array<{ label: string, value: number }>>([])
 const relationOptions = computed(() => getOptions('product_asset_relation_type'))
 const state = reactive({
   asset_id: undefined as number | undefined,
   relation_type: 'runtime',
   is_primary: false
 })
-
-async function loadAssets() {
-  loadingAssets.value = true
-
-  try {
-    const response = await $fetch<ApiResponse<ListPayload<AssetListItem>>>(moduleUrl(hosted ? '/api/v1/products/link-candidates/assets' : '/api/v1/assets'))
-    const linkedIds = new Set((props.product?.linked_assets || []).map(item => item.id))
-    assetOptions.value = (response.data.items || [])
-      .filter(item => !linkedIds.has(item.id))
-      .map(item => ({ label: `${item.asset_code} · ${item.asset_name}`, value: item.id }))
-  } catch (error) {
-    console.error('[ProductResourceLink] Failed to load assets:', error)
-    toast.add({ title: '资产加载失败', description: '请刷新后重试。', color: 'error', icon: 'i-lucide-circle-alert' })
-  } finally {
-    loadingAssets.value = false
-  }
-}
 
 watch(state, () => {
   commandKey.value = crypto.randomUUID()
@@ -62,7 +44,6 @@ watch(() => props.open, async (open) => {
     state.asset_id = undefined
     state.relation_type = 'runtime'
     state.is_primary = false
-    await loadAssets()
   }
 })
 
@@ -111,13 +92,12 @@ async function handleSubmit() {
     <template #body>
       <div class="space-y-4 p-4">
         <UFormField label="选择资产" required>
-          <USelectMenu
+          <RemoteAssetObjectSelect
             v-model="state.asset_id"
-            :items="assetOptions"
-            :loading="loadingAssets"
-            value-key="value"
-            placeholder="请选择资源资产"
-            searchable
+            kind="assets"
+            :enabled="isOpen"
+            :exclude-ids="(props.product?.linked_assets || []).map(item => item.id)"
+            product-candidates
           />
         </UFormField>
 

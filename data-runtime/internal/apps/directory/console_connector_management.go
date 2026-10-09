@@ -136,7 +136,12 @@ func (a *Adapter) ConsoleDirectoryOnboardingOperation(
 	operationID string,
 	uid string,
 	onboardingCode string,
+	sources ...string,
 ) (map[string]any, error) {
+	source, e := onboardingSource(sources)
+	if e != nil {
+		return nil, e
+	}
 	operationID = strings.TrimSpace(operationID)
 	uid = strings.TrimSpace(uid)
 	onboardingCode = strings.TrimSpace(onboardingCode)
@@ -152,9 +157,9 @@ func (a *Adapter) ConsoleDirectoryOnboardingOperation(
 		FROM integration_operation
 		WHERE operation_id=? AND target_app='directory-connector' AND source_biz_code=?
 		  AND operation_code='console.directory-connector.create-user.v1'
-		  AND JSON_UNQUOTE(JSON_EXTRACT(command_json,'$.sourceApp'))='people'
+		  AND JSON_UNQUOTE(JSON_EXTRACT(command_json,'$.sourceApp'))=?
 		  AND JSON_UNQUOTE(JSON_EXTRACT(command_json,'$.sourceBizCode'))=?
-		LIMIT 1`, operationID, uid, onboardingCode).Scan(
+		LIMIT 1`, operationID, uid, source, onboardingCode).Scan(
 		&operationCode, &sourceBizCode, &status, &attemptCount,
 		&createdAt, &updatedAt, &errorCode, &errorSummary,
 	)

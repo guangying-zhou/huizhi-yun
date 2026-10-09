@@ -4,7 +4,7 @@ import type { TableColumn } from '@nuxt/ui'
 type View = { biz_id: string, product_code: string, owner_uid: string, revision: number, definition: { title: string, audience: string, visibility: string, cycle_biz_id: string, year: number, quarter: number, unscheduled: boolean } }
 type Item = { biz_id: string, title: string, scope_summary: string, lifecycle: string, selection_status: string, roadmap_bucket: string, decision_rank: number, starts_on: string | null, ends_on: string | null }
 type Applied = { view: View, roadmap: { cycle_biz_id: string, items: Item[], total: number, page: number, pageSize: number, workspace_revision: number } }
-definePageMeta({ layoutHeader: true, layoutHeaderTitle: '高级规划 · 周期路线图', layoutHeaderProjectSwitcher: false })
+definePageMeta({ hostContentWidth: 'full', layoutHeader: true, layoutHeaderTitle: '高级规划 · 周期路线图', layoutHeaderProjectSwitcher: false })
 const route = useRoute()
 const code = computed(() => String(route.params.productCode || ''))
 const base = computed(() => `/api/v1/products/${encodeURIComponent(code.value)}/roadmaps/views`)

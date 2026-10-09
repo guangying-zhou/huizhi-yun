@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { projectPageFailure } from '../../app/utils/projectPageFailure'
 import ProjectNavbar from '../../app/components/project/ProjectNavbar.vue'
 import AimsDocumentPreview from '../../app/components/AimsDocumentPreview.vue'
 import ProjectOutputRepositoryPicker from '../components/ProjectOutputRepositoryPicker.vue'
@@ -77,7 +78,7 @@ async function refresh() {
     overview.value = data
   } catch (cause) {
     if (request !== requestSequence) return
-    error.value = cause instanceof Error ? cause.message : '项目成果暂不可用'
+    error.value = projectPageFailure(cause, '项目成果暂不可用')
   } finally { if (request === requestSequence) loading.value = false }
 }
 async function unlinkRepo(repo: Repo) {
@@ -88,7 +89,7 @@ async function unlinkRepo(repo: Repo) {
     await refresh()
     toast.add({ title: '仓库关联已解除', color: 'success' })
   } catch (cause) {
-    toast.add({ title: '解除失败，可重试原操作', description: cause instanceof Error ? cause.message : '请求失败', color: 'error' })
+    toast.add({ title: '解除失败，可重试原操作', description: projectPageFailure(cause, '请求失败'), color: 'error' })
   } finally {
     removing.value = ''
   }
@@ -138,7 +139,7 @@ async function writeQuality(decision: 'pass' | 'return' = 'pass') {
     toast.add({ title: action === 'submission' ? '已送检固定版本' : action === 'waiver' ? '豁免已记录' : decision === 'pass' ? '完整性已确认' : '已退回补充', color: 'success' })
     await refresh()
   } catch (cause) {
-    qualityError.value = cause instanceof Error ? cause.message : '操作失败，可重试原操作'
+    qualityError.value = projectPageFailure(cause, '操作失败，可重试原操作')
   } finally { qualitySaving.value = false }
 }
 watch(projectId, () => {

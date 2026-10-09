@@ -13,7 +13,9 @@ test('project documents overview reuses the original Aims page in Enterprise, wi
   assert.equal(page.meta.layout, 'enterprise')
   const nav = buildBusinessNavigation(navigationContributors, businessAreas, auxiliaryAreas)
   const documents = [...nav.primary, ...nav.auxiliary].find(area => area.code === 'documents')
-  const space = documents.children.find(group => group.code === 'project')
+  const projects = nav.primary.find(area => area.code === 'delivery')
+  assert.equal(projects.label, '项目')
+  const space = projects.children.find(group => group.code === 'documents')
   const leaf = space.children.find(item => item.to === '/aims/project-documents')
   assert.ok(leaf)
   assert.equal(leaf.label, '项目文档')
@@ -35,11 +37,10 @@ test('overview reads the existing owning accessible-list without widening capabi
 test('document menu has four ownership groups while tab routes and their permissions remain registered', () => {
   const nav = buildBusinessNavigation(navigationContributors, businessAreas, auxiliaryAreas)
   const documents = [...nav.primary, ...nav.auxiliary].find(area => area.code === 'documents')
-  assert.deepEqual(documents.children.map(group => group.label), ['我的空间', '部门空间', '项目空间', '公司空间'])
+  assert.deepEqual(documents.children.map(group => group.label), ['我的空间', '部门空间', '公司空间'])
   assert.deepEqual(documents.children.map(group => group.children.map(item => item.label)), [
     ['我的文档', '我的文件柜'],
     ['部门文档', '部门文件柜', '会议记录', '部门规章', '对外发文'],
-    ['项目文档'],
     ['公司制度', '通知公告', '法务合规', '企业文化', '技术规范', '公司知识库', '各部门开放文档']
   ])
   const settings = [...nav.primary, ...nav.auxiliary].find(area => area.code === 'console')

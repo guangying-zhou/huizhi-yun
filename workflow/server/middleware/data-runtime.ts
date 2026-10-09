@@ -17,7 +17,7 @@ import {
   resolveWorkflowProxyAuthorizationPurpose,
   resolveWorkflowRoutePermission
 } from '~~/server/utils/workflowPermissionRoutes'
-import { resolveWorkflowProjectDirectorRoleHolder } from '~~/server/utils/projectDirectorRoleHolder'
+import { workflowProjectDirectorFacts } from '~~/server/utils/projectDirectorRoleHolder'
 
 const API_PREFIX = '/api/v1'
 
@@ -71,10 +71,12 @@ export default defineEventHandler(async (event) => {
   delete query.currentProjectDirectorDisplayName
   const reconcilesProjectDirector = needsProjectDirectorReconciliation(suffix, query)
   if (reconcilesProjectDirector) {
-    const director = await resolveWorkflowProjectDirectorRoleHolder(event)
-    query.current_project_director_uid = director.uid
-    query.current_project_director_revision = String(director.revision)
-    query.current_project_director_display_name = director.displayName
+    const director = await workflowProjectDirectorFacts(event)
+    if (director) {
+      query.current_project_director_uid = director.uid
+      query.current_project_director_revision = String(director.revision)
+      query.current_project_director_display_name = director.displayName
+    }
   }
   let body: Record<string, unknown> | undefined
   if (method !== 'GET') {

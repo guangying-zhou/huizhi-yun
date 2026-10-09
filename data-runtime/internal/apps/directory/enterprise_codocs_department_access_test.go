@@ -59,7 +59,7 @@ func TestEnterpriseCodocsDepartmentRolePriorityAndDirectParent(t *testing.T) {
 			}
 		})
 	}
-	if CodocsDepartmentLeader.CanWrite() || CodocsDepartmentParent.CanWrite() || CodocsDepartmentMember.CanManage() || !CodocsDepartmentManager.CanManage() {
+	if !CodocsDepartmentLeader.CanWrite() || !CodocsDepartmentMember.CanWrite() || !CodocsDepartmentManager.CanWrite() || CodocsDepartmentParent.CanWrite() || CodocsDepartmentNone.CanWrite() || CodocsDepartmentLeader.CanManage() || CodocsDepartmentParent.CanManage() || CodocsDepartmentMember.CanManage() || !CodocsDepartmentManager.CanManage() {
 		t.Fatal("department role permissions changed")
 	}
 }

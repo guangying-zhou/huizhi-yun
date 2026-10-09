@@ -1,11 +1,11 @@
 import { existsSync, readFileSync, readdirSync } from 'node:fs'
 import { basename, dirname, extname, join, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { parse as parseSfc } from '@vue/compiler-sfc'
+import { parse as parseSfc, compileScript } from '@vue/compiler-sfc'
 import { init, parse as parseImports } from 'es-module-lexer'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..')
-const modules = ['aims', 'assets', 'codocs', 'altoc']
+const modules = ['aims', 'assets', 'codocs', 'altoc', 'finance', 'people']
 const suffixes = ['', '.ts', '.js', '.mjs', '.vue', '/index.ts', '/index.js', '/index.vue']
 
 export function resolveBusinessModuleAlias(source, importer) {
@@ -175,15 +175,27 @@ export async function rewriteBusinessModuleImports(code, id) {
   const inject = requestKind(id)
   if (!inject && !code.includes('~/') && !code.includes('~~/')) return null
   const blocks = []
+  const pageMetaEdits = []
   if (id.split('?')[0].endsWith('.vue') && !id.includes('?vue') && !id.includes('&vue')) {
     const { descriptor, errors } = parseSfc(code, { filename: id })
     if (errors.length) throw Error(`Invalid composed SFC ${id}: ${errors[0]}`)
+    // Nuxt reads metadata through ?macro=true. Composed page components must
+    // not execute the compiler hint (which also injects vue-router at runtime).
+    if (!new URLSearchParams(id.split('?')[1] || '').has('macro') && descriptor.scriptSetup
+      && /\/(?:app|layer)\/pages\//.test(id) && descriptor.scriptSetup.content.includes('definePageMeta')) {
+      const ast = compileScript(descriptor, { id }).scriptSetupAst || []
+      for (const node of ast) {
+        if (node.type !== 'ExpressionStatement' || node.expression.type !== 'CallExpression' || node.expression.callee.name !== 'definePageMeta') continue
+        const offset = descriptor.scriptSetup.loc.start.offset
+        pageMetaEdits.push({ start: offset + node.start, end: offset + node.end, replacement: descriptor.scriptSetup.content.slice(node.start, node.end).replace(/[^\r\n]/g, ' ') })
+      }
+    }
     for (const block of [descriptor.script, descriptor.scriptSetup]) {
       if (block) blocks.push({ content: block.content, offset: block.loc.start.offset, setup: block === descriptor.scriptSetup, template: descriptor.template?.content || '' })
     }
   } else blocks.push({ content: code, offset: 0, setup: false, template: '' })
 
-  const edits = []
+  const edits = [...pageMetaEdits]
   const hasAlias = code.includes('~/') || code.includes('~~/')
   if (hasAlias) await init
   for (const block of hasAlias ? blocks : []) {

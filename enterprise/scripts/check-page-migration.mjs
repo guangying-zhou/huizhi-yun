@@ -13,9 +13,10 @@ import { fileURLToPath } from 'node:url'
 
 const root = resolve(fileURLToPath(new URL('../..', import.meta.url)))
 const read = path => readFileSync(resolve(root, path), 'utf8')
-const walk = dir => {
+const walk = (dir) => {
   const full = resolve(root, dir)
-  if (!existsSync(full)) return []
+  if (!existsSync(full))
+    return []
   return readdirSync(full, { withFileTypes: true }).flatMap(entry =>
     entry.isDirectory() ? walk(join(dir, entry.name)) : [join(dir, entry.name)])
 }
@@ -26,20 +27,25 @@ function autoImportIndex() {
   const symbols = new Map()
   for (const dir of ['aims/app/composables', 'aims/app/utils', 'aims/app/stores']) {
     for (const file of walk(dir)) {
-      if (!file.endsWith('.ts')) continue
+      if (!file.endsWith('.ts'))
+        continue
       const source = read(file)
-      for (const m of source.matchAll(/export\s+(?:async\s+)?function\s+([A-Za-z0-9_]+)/g)) symbols.set(m[1], file)
-      for (const m of source.matchAll(/export\s+const\s+([A-Za-z0-9_]+)/g)) symbols.set(m[1], file)
+      for (const m of source.matchAll(/export\s+(?:async\s+)?function\s+([A-Za-z0-9_]+)/g))
+        symbols.set(m[1], file)
+      for (const m of source.matchAll(/export\s+const\s+([A-Za-z0-9_]+)/g))
+        symbols.set(m[1], file)
     }
   }
   const components = new Map()
   for (const file of walk('aims/app/components')) {
-    if (file.endsWith('.vue')) components.set(basename(file, '.vue'), file)
+    if (file.endsWith('.vue'))
+      components.set(basename(file, '.vue'), file)
   }
   // Foundation 是两边共同的 Layer，其组件在宿主里同样自动注册，不需要显式导入。
   const foundationComponents = new Set()
   for (const file of walk('foundation/app/components')) {
-    if (file.endsWith('.vue')) foundationComponents.add(basename(file, '.vue'))
+    if (file.endsWith('.vue'))
+      foundationComponents.add(basename(file, '.vue'))
   }
   return { symbols, components, foundationComponents }
 }
@@ -47,9 +53,11 @@ function autoImportIndex() {
 // <NuxtPage/> 壳页面的功能在子路由里：pages/x.vue 的子页在 pages/x/ 目录下。
 // 不跟进去，壳页会被误判成零缺口。
 function childRoutes(file) {
-  if (!file.endsWith('.vue')) return []
+  if (!file.endsWith('.vue'))
+    return []
   const source = readFileSync(resolve(root, file), 'utf8')
-  if (!/<NuxtPage\b/.test(source)) return []
+  if (!/<NuxtPage\b/.test(source))
+    return []
   const dir = file.replace(/\.vue$/, '')
   return walk(dir).filter(f => f.endsWith('.vue'))
 }
@@ -61,7 +69,8 @@ function foundationRoutes() {
   const set = new Set()
   for (const file of walk(base)) {
     const m = file.slice(base.length + 1).match(/^(.*)\.(get|post|put|patch|delete)\.ts$/)
-    if (!m) continue
+    if (!m)
+      continue
     set.add(`/api/${m[1].replace(/\/index$/, '').replace(/\[[^\]]+\]/g, ':id')}`)
   }
   return set
@@ -74,7 +83,8 @@ function hostRoutes() {
   const set = new Set()
   for (const file of walk(base)) {
     const m = file.slice(base.length + 1).match(/^(.*)\.(get|post|put|patch|delete)\.ts$/)
-    if (!m) continue
+    if (!m)
+      continue
     set.add(`${m[2].toUpperCase()} /api/${m[1].replace(/\/index$/, '').replace(/\[[^\]]+\]/g, ':id')}`)
   }
   return set
@@ -87,18 +97,19 @@ const FRAMEWORK_TAGS = new Set([
   'Suspense', 'KeepAlive', 'Component', 'ClientOnly', 'LazyHydrate'
 ])
 
-const scriptOf = source => {
+const scriptOf = (source) => {
   const parts = [...source.matchAll(/<script[^>]*>([\s\S]*?)<\/script>/g)].map(m => m[1])
   return parts.length ? parts.join('\n') : source
 }
-const templateOf = source => {
+const templateOf = (source) => {
   const start = source.indexOf('<template>')
   const end = source.lastIndexOf('</template>')
   return start >= 0 && end > start ? source.slice(start, end) : ''
 }
 
 function analyse(file, index, seen) {
-  if (seen.has(file)) return null
+  if (seen.has(file))
+    return null
   seen.add(file)
   const source = read(file)
   const script = scriptOf(source)
@@ -107,13 +118,16 @@ function analyse(file, index, seen) {
   for (const m of script.matchAll(/import\s*\{([^}]*)\}/g)) {
     for (const part of m[1].split(',')) {
       const name = part.trim().replace(/^type\s+/, '').split(/\s+as\s+/).pop()
-      if (name) imported.add(name.trim())
+      if (name)
+        imported.add(name.trim())
     }
   }
-  for (const m of script.matchAll(/import\s+([A-Za-z0-9_]+)\s+from/g)) imported.add(m[1])
+  for (const m of script.matchAll(/import\s+([A-Za-z0-9_]+)\s+from/g))
+    imported.add(m[1])
   // 本文件内定义的同名符号不算缺失
   const declared = new Set()
-  for (const m of script.matchAll(/(?:function|const|let|class)\s+([A-Za-z0-9_]+)/g)) declared.add(m[1])
+  for (const m of script.matchAll(/(?:function|const|let|class)\s+([A-Za-z0-9_]+)/g))
+    declared.add(m[1])
 
   const aliases = [...new Set([...script.matchAll(/from\s+'(~~?\/[^']*)'/g)].map(m => m[1]))]
   // 显式相对导入同样要进闭包：已改造的文件看起来"没有自动导入"，但依赖仍在
@@ -123,52 +137,65 @@ function analyse(file, index, seen) {
       const candidate = resolve(dirname(resolve(root, file)), m[1] + suffix)
       if (existsSync(candidate) && !candidate.endsWith('/')) {
         const rel = relative(root, candidate)
-        if (rel.startsWith('aims/app/') && extname(rel)) relatives.push(rel)
+        if (rel.startsWith('aims/app/') && extname(rel))
+          relatives.push(rel)
         break
       }
     }
   }
   const missingSymbols = []
   for (const [name, src] of index.symbols) {
-    if (imported.has(name) || declared.has(name)) continue
-    if (new RegExp(`\\b${name}\\s*\\(`).test(script)) missingSymbols.push({ name, src })
+    if (imported.has(name) || declared.has(name))
+      continue
+    if (new RegExp(`\\b${name}\\s*\\(`).test(script))
+      missingSymbols.push({ name, src })
   }
   const usedComponents = []
   const unregisteredComponents = []
   for (const [name, src] of index.components) {
-    if (!new RegExp(`<${name}[\\s/>]`).test(template)) continue
+    if (!new RegExp(`<${name}[\\s/>]`).test(template))
+      continue
     usedComponents.push({ name, src })
-    if (!imported.has(name)) unregisteredComponents.push({ name, src })
+    if (!imported.has(name))
+      unregisteredComponents.push({ name, src })
   }
   // 模板里出现、但仓库中根本没有对应组件文件、也没有显式导入的大写标签。
   // 之前只对照已存在的组件文件，找不到就当"不是组件"跳过，于是
   // <WorkItemSourceSectionViewer>（组件不存在，原应用同样渲染为空）被漏报。
   const unresolvedComponents = []
   for (const tag of new Set([...template.matchAll(/<([A-Z][A-Za-z0-9]*)[\s/>]/g)].map(m => m[1]))) {
-    if (tag.startsWith('U') || FRAMEWORK_TAGS.has(tag)) continue
-    if (index.components.has(tag) || imported.has(tag) || index.foundationComponents.has(tag)) continue
+    if (tag.startsWith('U') || FRAMEWORK_TAGS.has(tag))
+      continue
+    if (index.components.has(tag) || imported.has(tag) || index.foundationComponents.has(tag))
+      continue
     unresolvedComponents.push(tag)
   }
   // 页面跳转同样要经 moduleUrl：宿主里业务路由在 /aims 前缀下，
   // 裸路径会跳到宿主根部而不是模块内（members.vue 的 navigateTo 即是一例）。
   const links = []
   for (const m of script.matchAll(/(?:navigateTo|router\.(?:push|replace))\(\s*(['`])(\/[^'`]*)\1/g)) {
-    if (m[2].startsWith('/api/')) continue
+    if (m[2].startsWith('/api/'))
+      continue
     const before = script.slice(Math.max(0, m.index - 60), m.index)
-    if (!/moduleUrl\(\s*$/.test(before)) links.push(m[2].replace(/\$\{[^}]*\}/g, ':id'))
+    if (!/moduleUrl\(\s*$/.test(before))
+      links.push(m[2].replace(/\$\{[^}]*\}/g, ':id'))
   }
 
   // 调用方实际发送的 query 键。宿主与运行时的白名单必须按这个写，
   // 靠推测会让整页 400（已发生三次：lifecycleStatus / participating_only / filter+uid）。
   const queryKeys = new Set()
-  for (const m of script.matchAll(/params\.set\(\s*['`]([A-Za-z0-9_]+)['`]/g)) queryKeys.add(m[1])
+  for (const m of script.matchAll(/params\.set\(\s*['`]([A-Za-z0-9_]+)['`]/g))
+    queryKeys.add(m[1])
   for (const m of script.matchAll(/\bparams:\s*\{([^}]*)\}/g)) {
-    for (const k of m[1].matchAll(/([A-Za-z0-9_]+)\s*:/g)) queryKeys.add(k[1])
+    for (const k of m[1].matchAll(/([A-Za-z0-9_]+)\s*:/g))
+      queryKeys.add(k[1])
   }
   for (const m of script.matchAll(/\bquery:\s*\{([^}]*)\}/g)) {
-    for (const k of m[1].matchAll(/([A-Za-z0-9_]+)\s*:/g)) queryKeys.add(k[1])
+    for (const k of m[1].matchAll(/([A-Za-z0-9_]+)\s*:/g))
+      queryKeys.add(k[1])
   }
-  for (const m of script.matchAll(/[?&]([A-Za-z0-9_]+)=/g)) queryKeys.add(m[1])
+  for (const m of script.matchAll(/[?&]([A-Za-z0-9_]+)=/g))
+    queryKeys.add(m[1])
 
   // API：不限 /api/v1，legacy /api/account 这类同样要发现
   const calls = []
@@ -186,7 +213,8 @@ function analyse(file, index, seen) {
     const after = script.slice(m.index, m.index + 220)
     const method = (after.match(/method:\s*'([A-Za-z]+)'/) || [])[1] || 'GET'
     calls.push({ path, method: method.toUpperCase(), wrapped })
-    if (explicitlyWrapped && isFoundation) wronglyWrapped.push(path)
+    if (explicitlyWrapped && isFoundation)
+      wronglyWrapped.push(path)
   }
   return { file, aliases, missingSymbols, usedComponents, unregisteredComponents, unresolvedComponents, calls, wronglyWrapped, relatives, links, queryKeys: [...queryKeys].sort() }
 }
@@ -198,22 +226,34 @@ function report(entry, index, host) {
   while (queue.length) {
     const file = queue.shift()
     const result = analyse(file, index, seen)
-    if (!result) continue
+    if (!result)
+      continue
     results.push(result)
-    for (const { src } of result.usedComponents) queue.push(src)
-    for (const { src } of result.missingSymbols) queue.push(src)
-    for (const src of result.relatives) queue.push(src)
-    for (const child of childRoutes(file)) queue.push(child)
+    for (const { src } of result.usedComponents)
+      queue.push(src)
+    for (const { src } of result.missingSymbols)
+      queue.push(src)
+    for (const src of result.relatives)
+      queue.push(src)
+    for (const child of childRoutes(file))
+      queue.push(child)
   }
   const aliases = [], symbols = [], components = [], unresolved = [], wrongWrap = new Set(), bareLinks = new Set(), apis = new Map(), queryKeys = new Set()
   for (const r of results) {
-    for (const a of r.aliases) aliases.push(`${relative('aims/app', r.file)} : ${a}`)
-    for (const s of r.missingSymbols) symbols.push(`${relative('aims/app', r.file)} : ${s.name} <- ${relative('aims/app', s.src)}`)
-    for (const c of r.unregisteredComponents) components.push(`${relative('aims/app', r.file)} : <${c.name}> <- ${relative('aims/app', c.src)}`)
-    for (const l of r.links) bareLinks.add(`${relative('aims/app', r.file)} : ${l}`)
-    for (const k of r.queryKeys) queryKeys.add(k)
-    for (const p of r.wronglyWrapped || []) wrongWrap.add(`${relative('aims/app', r.file)} : ${p}`)
-    for (const tag of r.unresolvedComponents || []) unresolved.push(`${relative('aims/app', r.file)} : <${tag}> 仓库中无此组件`)
+    for (const a of r.aliases)
+      aliases.push(`${relative('aims/app', r.file)} : ${a}`)
+    for (const s of r.missingSymbols)
+      symbols.push(`${relative('aims/app', r.file)} : ${s.name} <- ${relative('aims/app', s.src)}`)
+    for (const c of r.unregisteredComponents)
+      components.push(`${relative('aims/app', r.file)} : <${c.name}> <- ${relative('aims/app', c.src)}`)
+    for (const l of r.links)
+      bareLinks.add(`${relative('aims/app', r.file)} : ${l}`)
+    for (const k of r.queryKeys)
+      queryKeys.add(k)
+    for (const p of r.wronglyWrapped || [])
+      wrongWrap.add(`${relative('aims/app', r.file)} : ${p}`)
+    for (const tag of r.unresolvedComponents || [])
+      unresolved.push(`${relative('aims/app', r.file)} : <${tag}> 仓库中无此组件`)
     for (const c of r.calls) {
       const key = `${c.method} ${c.path}`
       const prev = apis.get(key) || { wrapped: true, from: new Set() }
@@ -227,11 +267,11 @@ function report(entry, index, host) {
   // 因此 `X:action` 找不到时，退回检查参数形式 `X`。
   // 宿主路由里的 :id 是参数段，调用方可能写字面量（/work-calendars/CN/days）。
   // 按段比对并把 :id 当通配，否则会把已提供的端点误报成缺失。
-  const hostPatterns = [...host].map(k => {
+  const hostPatterns = [...host].map((k) => {
     const [method, path] = k.split(' ')
     return { method, segments: path.split('/') }
   })
-  const matches = key => {
+  const matches = (key) => {
     const [method, path] = key.split(' ')
     const segments = path.split('/')
     return hostPatterns.some(p => p.method === method
@@ -262,17 +302,25 @@ let blocking = 0
 if (asJson) {
   const out = []
   for (const target of targets) {
-    if (!existsSync(resolve(root, target))) continue
-    const seen = new Set(); const queue = [target]; const files = []
+    if (!existsSync(resolve(root, target)))
+      continue
+    const seen = new Set()
+    const queue = [target]
+    const files = []
     while (queue.length) {
       const file = queue.shift()
       const r = analyse(file, index, seen)
-      if (!r) continue
+      if (!r)
+        continue
       files.push(r)
-      for (const { src } of r.usedComponents) queue.push(src)
-      for (const { src } of r.missingSymbols) queue.push(src)
-      for (const src of r.relatives) queue.push(src)
-    for (const child of childRoutes(file)) queue.push(child)
+      for (const { src } of r.usedComponents)
+        queue.push(src)
+      for (const { src } of r.missingSymbols)
+        queue.push(src)
+      for (const src of r.relatives)
+        queue.push(src)
+      for (const child of childRoutes(file))
+        queue.push(child)
     }
     out.push({ entry: target, files: files.map(f => ({
       file: f.file,
@@ -287,12 +335,18 @@ if (asJson) {
   process.exit(0)
 }
 for (const target of targets) {
-  if (!existsSync(resolve(root, target))) { console.log(`\n### ${target}\n  文件不存在`); continue }
+  if (!existsSync(resolve(root, target))) {
+    console.log(`\n### ${target}\n  文件不存在`)
+    continue
+  }
   const r = report(target, index, host)
   console.log(`\n### ${target}`)
   console.log(`  闭包文件数 ${r.files}    API ${r.apis.size} 个`)
   const section = (label, items) => {
-    if (!items.length) { console.log(`  ${label}: 无`); return }
+    if (!items.length) {
+      console.log(`  ${label}: 无`)
+      return
+    }
     blocking += items.length
     console.log(`  ${label} (${items.length}):`)
     items.forEach(i => console.log(`     ${i}`))
@@ -306,7 +360,10 @@ for (const target of targets) {
   section('未经 moduleUrl 的页面跳转', r.bareLinks)
   section('宿主缺少的端点', r.missingApis)
   // 提示而非阻断：白名单该覆盖哪些键，按这里的事实写
-  if (r.queryKeys.length) console.log(`  调用方发送的 query 键 (${r.queryKeys.length}): ${r.queryKeys.join(' ')}`)
+  if (r.queryKeys.length)
+    console.log(`  调用方发送的 query 键 (${r.queryKeys.length}): ${r.queryKeys.join(' ')}`)
 }
-function aliasesOf(r) { return r.aliases }
+function aliasesOf(r) {
+  return r.aliases
+}
 process.exit(blocking ? 1 : 0)

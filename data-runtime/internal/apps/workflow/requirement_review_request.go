@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/huizhi-yun/data-runtime/internal/httperror"
+	"github.com/huizhi-yun/data-runtime/internal/workflowapproval"
 )
 
 // Narrow, owning read port wired only by Runtime construction. It supplies the
@@ -84,6 +85,9 @@ func replayRequirementReviewRequest(ctx context.Context, tx *sql.Tx, action *act
 
 // A frozen review is a one-shot result, not a mutable resubmission round.
 func requireMutableRequirementReviewInstance(instance map[string]any) error {
+	if workflowapproval.Registered(cleanAnyString(instance["app_code"]), cleanAnyString(instance["resource_code"]), cleanAnyString(instance["action_code"])) {
+		return httperror.New(409, "altoc_approval_round_closed", "Submit a new Altoc request after rejection")
+	}
 	if cleanAnyString(instance["app_code"]) != "aims" || cleanAnyString(instance["resource_code"]) != "requirements" {
 		return nil
 	}

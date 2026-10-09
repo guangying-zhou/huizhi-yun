@@ -24,10 +24,15 @@ export default defineNitroPlugin((nitro) => {
         const serviceAuthorizationRead = /^\/(?:console\/)?api\/v1\/console\/service\/authorization\/(?:role-holders|subject-eligibility|subject-scoped)$/.test(sourcePath)
           // Notification detail re-checks the viewer's eligibility against a live revision.
           || /^\/(?:console\/)?api\/v1\/console\/notifications\/notif_[A-Za-z0-9-]{1,64}\/detail$/.test(sourcePath)
+        // Feedback administrator routes also require the same live revision
+        // check; admitting transport never bypasses their personnel permits.
+        const feedbackPolicyRead = /^\/(?:console\/)?api\/v1\/console\/(?:feedback-settings|feedback(?:\/[A-Za-z0-9_-]{1,64}(?:\/(?:retry|cancel))?)?)$/.test(sourcePath)
+          || (process.env.HZY_CONSOLE_FEEDBACK_DELIVERY_ENABLED === 'true'
+            && /^\/(?:console\/)?api\/internal\/integration-operations\/drain$/.test(sourcePath))
         let egressUrl = ''
         if (format === 'hzy-policy-envelope.v1') egressUrl = process.env.HZY0_POLICY_EGRESS_URL!
         if (format === 'hzy-policy-revision.v1') {
-          if (!schedulerSync && !serviceAuthorizationRead) throw Error('Unapproved policy source')
+          if (!schedulerSync && !serviceAuthorizationRead && !feedbackPolicyRead) throw Error('Unapproved policy source')
           egressUrl = `${process.env.HZY0_POLICY_EGRESS_URL!}-revision${schedulerSync ? '' : '-live'}`
         }
         const expected = { environment: 'test', deploymentCode: 'wiztek-test-console' }

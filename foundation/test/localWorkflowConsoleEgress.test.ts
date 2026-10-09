@@ -36,7 +36,7 @@ test('local Workflow Console transport requires the exact signed app deployment'
   } finally {
     for (const [name, value] of Object.entries({ HZY0_WORKFLOW_LOCAL_ONLY: before.local,
       HZY0_CONSOLE_EGRESS_URL: before.endpoint, HZY0_GATEWAY_INTERNAL_TOKEN: before.token })) {
-      if (value === undefined) delete process.env[name]
+      if (value === undefined) Reflect.deleteProperty(process.env, name)
       else process.env[name] = value
     }
     if (priorConfig) globals.useRuntimeConfig = priorConfig

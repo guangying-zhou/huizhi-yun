@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, test } from 'node:test'
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 
 function source(path: string) {
   return readFileSync(new URL(`../${path}`, import.meta.url), 'utf8')
@@ -923,11 +923,6 @@ describe('Codocs sensitive route permissions', () => {
         path: 'server/api/project-docs/ignore-conflict/[...projectCode].post.ts',
         message: '缺少项目文档冲突处理权限',
         sideEffect: 'createProjectsOSSClient()'
-      },
-      {
-        path: 'server/api/project-docs/gitlab-submit/[...projectCode].post.ts',
-        message: '缺少项目文档提交权限',
-        sideEffect: 'submitProjectDocsToGitLab({'
       }
     ]
 
@@ -938,13 +933,14 @@ describe('Codocs sensitive route permissions', () => {
     }
   })
 
-  test('project document GitLab submit uses verified session uid instead of request body uid', () => {
-    const content = source('server/api/project-docs/gitlab-submit/[...projectCode].post.ts')
-
-    assert.match(content, /const uid = requireRequestUid\(event,\s*'未登录或会话已过期'\)/)
-    assert.doesNotMatch(content, /uid\?: string/)
-    assertBefore(content, 'const uid = requireRequestUid', 'submitProjectDocsToGitLab({')
-    assert.match(content, /submitProjectDocsToGitLab\(\{[\s\S]*uid,[\s\S]*authorName: uid,[\s\S]*authorEmail: `\$\{uid\}@wiztek\.cn`/)
+  test('project documents cannot be submitted to GitLab from Codocs', () => {
+    // Document asset design DOC-01: repository content is read-only in the platform.
+    assert.equal(existsSync(new URL('../server/api/project-docs/gitlab-submit/[...projectCode].post.ts', import.meta.url)), false)
+    const integration = source('server/utils/gitProjectIntegration.ts')
+    assert.doesNotMatch(integration, /submitProjectDocsToGitLab|createGitCommit|resolveGitCommitActions|SubmitGitlabDocsInput/)
+    for (const file of ['app/stores/account.ts', 'app/stores/projectDocs.ts', 'app/pages/projects/repos.vue']) {
+      assert.doesNotMatch(source(file), /gitlab-submit|submitDocuments|submitDocs/, file)
+    }
   })
 
   test('runtime-backed publish request mutations are guarded before orchestration', () => {

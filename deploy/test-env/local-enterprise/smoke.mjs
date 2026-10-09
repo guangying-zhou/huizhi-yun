@@ -2,8 +2,8 @@
 // Read-only ingress/Dev transport probe. No user cookies, credentials, writes,
 // Runtime calls or business acceptance claims. HMR token stays in memory.
 import { request } from 'node:http'
-import { randomBytes } from 'node:crypto'
 import { parseArgs } from 'node:util'
+import { probeDynamicModules } from './dynamic-module-smoke.mjs'
 import { readProfile } from './config.mjs'
 
 const { values } = parseArgs({ options: { profile: { type:'string' } } })
@@ -18,6 +18,7 @@ for (const [path, expected] of [['/enterprise/',302],['/enterprise',200],['/ente
   // Internal paths may fail closed as 503 before route resolution.
   results.push({ path,status:response.status,passed:response.status===expected || (expected===404 && response.status===503) })
 }
+results.push(...await probeDynamicModules(get))
 const client = await get('/enterprise/_nuxt/@vite/client')
 // The Host serves its icon collections under its own base (G-12).
 const iconPath = '/enterprise/_nuxt_icon/lucide.json?icons=menu,search'
@@ -25,10 +26,8 @@ const iconResponse = await get(iconPath)
 let iconPayload
 try { iconPayload = JSON.parse(iconResponse.body) } catch {}
 results.push({ path: iconPath, status: iconResponse.status, passed: iconResponse.status === 200 && iconPayload?.prefix === 'lucide' && typeof iconPayload?.icons?.menu?.body === 'string' && typeof iconPayload?.icons?.search?.body === 'string' })
-const configured = client.status===200 && /const hmrPort = 443;/.test(client.body) && /const socketProtocol = "wss"/.test(client.body)
-const token = client.body.match(/const wsToken = "([^"]+)"/)?.[1]
-const handshake = token ? await upgrade(token) : 0
-results.push({ path:'/enterprise/_nuxt/@vite/client',status:client.status,explicitPublicHmr:configured,handshake,passed:configured&&handshake===101 })
+const manualRefresh = client.status === 200 && client.body.includes('hzy0 manual-refresh: HMR transport disabled') && !client.body.includes('transport.connect(createHMRHandler(handleMessage));')
+results.push({ path: '/enterprise/_nuxt/@vite/client', status: client.status, manualRefresh, passed: manualRefresh })
 console.log(JSON.stringify({ scope:'unauthenticated local ingress; not browser/business acceptance', results },null,2))
 if (results.some(result=>!result.passed)) process.exitCode=1
 
@@ -42,16 +41,6 @@ function get(path) {
     })
     req.setTimeout(20000,()=>req.destroy(Error('Probe timed out')))
     req.on('error',()=>reject(Error('Probe transport failed')))
-    req.end()
-  })
-}
-function upgrade(token) {
-  return new Promise(resolve=>{
-    const req=request({...base,path:'/enterprise/_nuxt/?token='+encodeURIComponent(token),headers:{...base.headers,origin:profile.publicOrigin,connection:'Upgrade',upgrade:'websocket','sec-websocket-version':'13','sec-websocket-key':randomBytes(16).toString('base64'),'sec-websocket-protocol':'vite-hmr'}})
-    req.on('upgrade',(res,socket)=>{socket.destroy();resolve(res.statusCode)})
-    req.on('response',res=>{res.resume();resolve(res.statusCode)})
-    req.on('error',()=>resolve(0))
-    req.setTimeout(8000,()=>req.destroy())
     req.end()
   })
 }

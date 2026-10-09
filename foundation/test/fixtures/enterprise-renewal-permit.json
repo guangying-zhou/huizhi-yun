@@ -1,0 +1,42 @@
+{
+  "method": "POST",
+  "target": "/v1/enterprise/altoc/renewals:create",
+  "body": {
+    "id": "",
+    "code": "",
+    "name": "",
+    "rowVersion": 0,
+    "page": 0,
+    "pageSize": 0,
+    "search": "",
+    "authorization": {
+      "actorUid": "Person",
+      "tenant": "C000001",
+      "deployment": "Host",
+      "resource": "renewal_opportunity",
+      "action": "edit",
+      "operation": "renewals-create",
+      "objectId": "",
+      "allowed": true,
+      "expiresAt": 123,
+      "bundleVersion": "1",
+      "bundleHash": "hash",
+      "policyRevision": 38,
+      "scope": {
+        "access": "self",
+        "departmentCodes": []
+      }
+    },
+    "sales": {
+      "id": "",
+      "payload": {
+        "name": "中文续约记录",
+        "customer_id": "12",
+        "contract_id": null,
+        "owner_uid": "Person",
+        "expected_amount": "12.30"
+      }
+    }
+  },
+  "canonical": "[\"hzy-enterprise-apf-permit.v1\",\"POST\",\"/v1/enterprise/altoc/renewals:create\",\"Person\",\"C000001\",\"Host\",\"renewal_opportunity\",\"edit\",\"renewals-create\",\"\",true,123,\"1\",\"hash\",38,\"self\",[],\"\",\"\",\"\",0,0,0,\"\",[\"\",[[\"contract_id\",null],[\"customer_id\",\"12\"],[\"expected_amount\",\"12.30\"],[\"name\",\"中文续约记录\"],[\"owner_uid\",\"Person\"]]]]"
+}

@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import { createManifest, publishDirectory, verifyManifest } from '../release-lib.mjs'
-import { publishIndex } from '../release.mjs'
+import { publishIndex, localHealth } from '../release.mjs'
 import { sha256File } from '../release-lib.mjs'
 
 const base = dirname(dirname(fileURLToPath(import.meta.url)))
@@ -164,4 +164,38 @@ test('Platform runtime-only credentials and isolated Tailscale ingress are fixed
   assert.match(ingress, /proxy_pass http:\/\/127\.0\.0\.1:31006;/)
   for (const setting of ['lower_case_table_names=1', 'character_set_server=utf8mb4', 'collation_server=utf8mb4_unicode_ci']) assert.ok(readme.includes(setting))
   assert.match(readme, /首次初始化 datadir 前/)
+})
+
+ test('Aims health uses only the existing read-only entry, never drain', async () => {
+  const calls = []
+  await localHealth('aims', { attempts: 1, fetch: async (url, options) => {
+    calls.push({ url, options })
+    return new Response('', { status: 200 })
+  } })
+  assert.equal(calls.length, 1)
+  assert.equal(calls[0].url, 'http://127.0.0.1:31004/aims/')
+  assert.equal(calls[0].options.method ?? 'GET', 'GET')
+  assert.equal(calls[0].options.redirect, 'manual')
+  for (const status of [404, 503]) {
+    await assert.rejects(localHealth('aims', { attempts: 1, fetch: async () => new Response('', { status }) }), /health probe failed/)
+  }
+})
+
+
+test('isolated Gateway payload resolves its complete production import graph', async t => {
+  const root = await mkdtemp(join(tmpdir(), 'hzy-gateway-payload-'))
+  t.after(() => rm(root, { recursive: true, force: true }))
+  const { copyGatewayPayload } = await import('../gateway-payload.mjs')
+  await copyGatewayPayload(join(base, '../..'), root)
+  await exec(process.execPath, ['--input-type=module', '-e',
+    'await import(' + JSON.stringify(join(root, 'deploy/self-hosted/gateway/server.mjs')) + ')'])
+})
+
+test('retired release excludes physical Aims without removing rollback support', async () => {
+  const { releaseApplications } = await import('../release-lib.mjs')
+  assert.ok(releaseApplications().includes('aims'))
+  assert.ok(!releaseApplications({ aimsRetired: true }).includes('aims'))
+  assert.ok(releaseApplications({ aimsRetired: true }).includes('enterprise'))
+  assert.throws(() => releaseApplications({ aimsRetired: true, apps: ['aims'] }), /physical Aims/)
+  assert.deepEqual(releaseApplications({ apps: ['enterprise', 'workflow'] }), ['enterprise', 'workflow'])
 })

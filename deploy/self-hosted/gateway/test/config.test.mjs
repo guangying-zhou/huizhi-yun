@@ -195,3 +195,38 @@ test('example config routes /codocs/ws and /collab/* to a loopback-only standalo
   const duplicate = rawConfig({ apps: { console: filled.apps.console, collab: { origin: filled.apps.console.origin } } })
   assert.throws(() => validateConfig(duplicate), error => error instanceof ConfigError && error.issues.some(issue => /duplicates/.test(issue)))
 })
+
+test('APF signed cron owner defaults off and requires explicit domains, deployment and generation', () => {
+  const raw = rawConfig()
+  const normal = validateConfig(raw)
+  assert.equal(normal.scheduler.apf.enabled, false)
+  const normalEnv = buildWorkerEnv(normal, { createBinding: () => ({}), disabledBinding })
+  assert.equal(normalEnv.HZY_ENTERPRISE_APF_SCHEDULER_BINDINGS_JSON, undefined)
+  raw.apps.enterprise = { origin: 'http://127.0.0.1:31002', deploymentCode: 'T900001-enterprise' }
+  raw.scheduler.apf = { enabled: true, domains: ['altoc', 'finance', 'people'], generation: '7' }
+  const selected = validateConfig(raw)
+  const env = buildWorkerEnv(selected, { createBinding: () => ({}), disabledBinding })
+  const [owner] = JSON.parse(env.HZY_ENTERPRISE_APF_SCHEDULER_BINDINGS_JSON)
+  assert.equal(owner.owner, 'gateway')
+  assert.equal(owner.deploymentCode, 'T900001-enterprise')
+  for (const bad of [{ ...raw.scheduler.apf, domains: ['people', 'people'] }, { ...raw.scheduler.apf, generation: '01' }, { ...raw.scheduler.apf, domains: ['aims'] }]) assert.throws(() => validateConfig({ ...raw, scheduler: { ...raw.scheduler, apf: bad } }), ConfigError)
+})
+
+test('Host Aims wake needs Enterprise but no physical Aims listener', () => {
+  const raw = rawConfig()
+  raw.apps.enterprise = { origin: 'http://127.0.0.1:31002', deploymentCode: 'enterprise-deployment' }
+  raw.apps.workflow = { origin: 'http://127.0.0.1:31003', deploymentCode: 'workflow-deployment' }
+  delete raw.apps.aims
+  raw.scheduler.aimsExecutor = 'enterprise'
+  raw.scheduler.drain.apps = ['console', 'workflow', 'aims']
+  const config = validateConfig(raw)
+  assert.equal(config.scheduler.aimsExecutor, 'enterprise')
+  assert.equal(config.apps.aims, undefined)
+  delete raw.apps.enterprise
+  assert.throws(() => validateConfig(raw), ConfigError)
+  const legacy = rawConfig()
+  delete legacy.apps.aims
+  legacy.scheduler.aimsExecutor = 'aims'
+  legacy.scheduler.drain.apps = ['aims']
+  assert.throws(() => validateConfig(legacy), ConfigError)
+})

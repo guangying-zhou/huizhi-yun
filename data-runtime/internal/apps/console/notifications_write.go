@@ -41,6 +41,18 @@ func (a *Adapter) PublishCanonicalNotification(ctx context.Context, body map[str
 	if err != nil {
 		return nil, err
 	}
+	channel := ""
+	if raw, present := body["resolveExternalChannel"]; present {
+		value, valid := raw.(string)
+		if !valid || (value != "wecom" && value != "dingtalk") {
+			return nil, httperror.New(400, "notification_channel_invalid", "External notification channel is invalid")
+		}
+		channel = value
+	}
+	probe, hasProbe := body["probeOnly"]
+	if hasProbe && (probe != true || request.SourceAppCode != "enterprise" || request.CreatedBy != "enterprise.runtime" || request.BizType != "apf_due_checkpoint" || !strings.HasPrefix(request.IdempotencyKey, "apf-due:")) {
+		return nil, httperror.New(403, "notification_probe_source_invalid", "Exact owned notification probe required")
+	}
 	tx, err := a.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelSerializable})
 	if err != nil {
 		return nil, err
@@ -56,13 +68,23 @@ func (a *Adapter) PublishCanonicalNotification(ctx context.Context, body map[str
 		if existingHash != request.RequestHash {
 			return nil, httperror.New(http.StatusConflict, "idempotency_payload_mismatch", "Idempotency key is already bound to a different notification request")
 		}
+		out := notificationPublishEnvelope(request, existingID, true)
+		if err = resolveNotificationExternalIdentities(ctx, tx, request, existingID, channel, out); err != nil {
+			return nil, err
+		}
 		if err := tx.Commit(); err != nil {
 			return nil, err
 		}
-		return notificationPublishEnvelope(request, existingID, true), nil
+		return out, nil
 	}
 	if !errors.Is(err, sql.ErrNoRows) {
 		return nil, err
+	}
+	if hasProbe {
+		if err = tx.Commit(); err != nil {
+			return nil, err
+		}
+		return map[string]any{"code": 0, "data": map[string]any{"found": false}}, nil
 	}
 	notificationID := "notif_" + uuid.NewString()
 	_, err = tx.ExecContext(ctx, `
@@ -92,10 +114,14 @@ func (a *Adapter) PublishCanonicalNotification(ctx context.Context, body map[str
 			}
 		}
 	}
+	out := notificationPublishEnvelope(request, notificationID, false)
+	if err = resolveNotificationExternalIdentities(ctx, tx, request, notificationID, channel, out); err != nil {
+		return nil, err
+	}
 	if err := tx.Commit(); err != nil {
 		return nil, err
 	}
-	return notificationPublishEnvelope(request, notificationID, false), nil
+	return out, nil
 }
 
 func (a *Adapter) AdvanceNotificationActionableLifecycle(ctx context.Context, body map[string]any) (map[string]any, error) {

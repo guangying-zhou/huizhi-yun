@@ -180,7 +180,9 @@ test('service token introspection distinguishes revoked credentials from tempora
   await assert.rejects(() => requireActiveConsoleServiceToken({
     endpointBaseUrl: 'https://console.example.test',
     token: 'unknown-token',
-    fetcher: async () => { throw new Error('console unavailable') }
+    fetcher: async () => {
+      throw new Error('console unavailable')
+    }
   }), (error: unknown) => {
     assert.equal((error as { statusCode?: number }).statusCode, 503)
     assert.match(String((error as Error).message), /introspection_unavailable/)
@@ -190,7 +192,9 @@ test('service token introspection distinguishes revoked credentials from tempora
   await assert.rejects(() => requireActiveConsoleServiceToken({
     endpointBaseUrl: 'https://console.example.test',
     token: 'unknown-token',
-    fetcher: async () => { throw { statusCode: 500 } }
+    fetcher: async () => {
+      throw { statusCode: 500 }
+    }
   }), (error: unknown) => {
     assert.equal((error as { statusCode?: number }).statusCode, 503)
     return true
@@ -262,5 +266,33 @@ test('claims are consumed only with exact issuer, audience, token use, and expir
       audience: 'workflow',
       nowSeconds: 1_000
     }), /claims are invalid/)
+  }
+})
+
+test('Host Altoc receiver introspects live state and preserves the legacy audience without changing Host user configuration', async () => {
+  const { requireConsoleAltocServiceAuth } = await import('../server/utils/consoleOidc')
+  const globals = globalThis as unknown as { useRuntimeConfig?: (event?: unknown) => unknown }
+  const previous = globals.useRuntimeConfig
+  const config = { public: { appCode: 'enterprise' }, hzy: { consoleOidc: { issuer: 'https://console.example.test', clientId: 'enterprise' } } }
+  globals.useRuntimeConfig = () => config
+  let state = 200, active = true, calls = 0
+  const base = { iss: 'https://console.example.test', aud: 'altoc', token_use: 'service', source_app: 'aims', target_app: 'altoc', client_id: 'aims.runtime', tenant: 'C000001', deployment: 'aims-test', exp: Math.floor(Date.now() / 1000) + 60, hzy: { appCode: 'aims', clientCode: 'aims.runtime', subjectType: 'service' }, scope: 'altoc:product-feedback:update-status' }
+  const event = (claims: Record<string, unknown>) => ({ node: { req: { originalUrl: '/altoc/api/v1/service/product-feedback/status', headers: { host: 'host.example.test', authorization: `Bearer ${Buffer.from('{}').toString('base64url')}.${Buffer.from(JSON.stringify(claims)).toString('base64url')}.signature` }, url: '/altoc/api/v1/service/product-feedback/status' } }, context: { cloudflare: { env: { HZY_CONSOLE_SERVICE: { async fetch() {
+    calls++
+    return Response.json({ active }, { status: state })
+  } } } } } }) as unknown as H3Event
+  try {
+    const result = await requireConsoleAltocServiceAuth(event(base))
+    assert.equal(result.clientCode, 'aims.runtime')
+    assert.equal(config.hzy.consoleOidc.clientId, 'enterprise')
+    for (const claims of [{ ...base, aud: 'enterprise' }, { ...base, target_app: 'enterprise' }, { ...base, source_app: 'other' }, { ...base, client_id: 'other.runtime' }, { ...base, exp: 1 }, { ...base, tenant: '' }, { ...base, deployment: '' }])
+      await assert.rejects(requireConsoleAltocServiceAuth(event(claims)), { statusCode: 403 })
+    active = false
+    await assert.rejects(requireConsoleAltocServiceAuth(event(base)), { statusCode: 401 })
+    state = 503
+    await assert.rejects(requireConsoleAltocServiceAuth(event(base)), { statusCode: 503 })
+    assert.ok(calls >= 10)
+  } finally {
+    globals.useRuntimeConfig = previous
   }
 })

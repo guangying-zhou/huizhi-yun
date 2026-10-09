@@ -85,8 +85,8 @@ func (a *Adapter) documentsList(ctx context.Context, query url.Values) (map[stri
       ) AS shared_info`
 		}
 	} else {
-		if docType == "project" {
-			where = append(where, `d.doc_type IN ("project", "git-project")`)
+		if docType == docTypeProject {
+			where = append(where, projectFamilyCondition("d.doc_type"))
 		} else if docType != "" {
 			where = append(where, "d.doc_type = ?")
 			args = append(args, docType)
@@ -304,7 +304,7 @@ func (a *Adapter) myDocumentStats(ctx context.Context, query url.Values) (map[st
       FROM documents
       WHERE status IN (1, 2)
         AND deleted_at IS NULL
-        AND doc_type <> 'git-project'`, actorUID, actorUID).Scan(&allDocumentCount, &allTotalSize, &myDocumentCount, &myTotalSize); err != nil {
+        AND `+notRepositoryCopyCondition("doc_type"), actorUID, actorUID).Scan(&allDocumentCount, &allTotalSize, &myDocumentCount, &myTotalSize); err != nil {
 		return nil, err
 	}
 
@@ -316,7 +316,7 @@ func (a *Adapter) myDocumentStats(ctx context.Context, query url.Values) (map[st
       FROM documents
       WHERE status IN (1, 2)
         AND deleted_at IS NULL
-        AND doc_type <> 'git-project'
+        AND `+notRepositoryCopyCondition("doc_type")+`
         AND owner_uid = ?
       GROUP BY doc_type
       ORDER BY count DESC, doc_type ASC`, actorUID)
@@ -360,8 +360,8 @@ func (a *Adapter) documentNameExists(ctx context.Context, query url.Values) (map
 	where := []string{"status = 1", "title = ?"}
 	args := []any{title}
 	docType := strings.TrimSpace(query.Get("doc_type"))
-	if docType == "project" {
-		where = append(where, `doc_type IN ("project", "git-project")`)
+	if docType == docTypeProject {
+		where = append(where, projectFamilyCondition("doc_type"))
 	} else if docType != "" {
 		where = append(where, "doc_type = ?")
 		args = append(args, docType)
@@ -408,8 +408,8 @@ func (a *Adapter) documentsTrash(ctx context.Context, query url.Values) (map[str
 	where = append(where, visibleWhere)
 	args := visibleArgs
 	docType := strings.TrimSpace(query.Get("type"))
-	if docType == "project" {
-		where = append(where, `d.doc_type IN ("project", "git-project")`)
+	if docType == docTypeProject {
+		where = append(where, projectFamilyCondition("d.doc_type"))
 	} else if docType != "" {
 		where = append(where, "d.doc_type = ?")
 		args = append(args, docType)

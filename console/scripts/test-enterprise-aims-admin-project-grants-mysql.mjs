@@ -8,7 +8,7 @@ const rootDir = resolve(import.meta.dirname, '../..')
 const seed = await readFile(new URL('../docs/sql/Console-SQL-Seed-v2.26-enterprise-aims-admin-projects.sql', import.meta.url), 'utf8')
 const verify = await readFile(new URL('../docs/sql/Console-SQL-Verify-v2.26-enterprise-aims-admin-projects.sql', import.meta.url), 'utf8')
 const plan = await buildTemporaryMySqlPlan({ rootDir })
-await withTemporaryMySql(plan, async context => {
+await withTemporaryMySql(plan, async (context) => {
   const db = await mysql.createConnection({ ...context.connection('console'), multipleStatements: true })
   try {
     await db.query(`CREATE TABLE service_clients(id BIGINT PRIMARY KEY,client_code VARCHAR(100),app_code VARCHAR(50),status VARCHAR(20),current_credential_id BIGINT);
@@ -20,17 +20,22 @@ await withTemporaryMySql(plan, async context => {
     const check = async () => (await db.query(verify))[0].flat().filter(row => Object.hasOwn(row || {}, 'exact_rows'))
     assert.equal(await apply(), 2)
     assert.equal(await apply(), 0)
-    for (const row of await check()) { assert.equal(Number(row.exact_rows), 1); assert.equal(Number(row.active_exact_rows), 1) }
-    const [[target]] = await db.query("SELECT id FROM service_client_grants WHERE action='edit'")
+    for (const row of await check()) {
+      assert.equal(Number(row.exact_rows), 1)
+      assert.equal(Number(row.active_exact_rows), 1)
+    }
+    const [[target]] = await db.query('SELECT id FROM service_client_grants WHERE action=\'edit\'')
     for (const field of ['audience', 'tenantCode', 'deploymentCode', 'semanticScope', 'source', 'purpose']) {
       const [[old]] = await db.query('SELECT scope_json FROM service_client_grants WHERE id=?', [target.id])
       await db.query('UPDATE service_client_grants SET scope_json=JSON_SET(scope_json,?,NULL) WHERE id=?', ['$.' + field, target.id])
       assert.equal(Number((await check()).find(row => row.action === 'edit').active_exact_rows), 0, field)
       await db.query('UPDATE service_client_grants SET scope_json=? WHERE id=?', [JSON.stringify(old.scope_json), target.id])
     }
-    await db.query("UPDATE service_client_grants SET status='revoked' WHERE id=?", [target.id])
+    await db.query('UPDATE service_client_grants SET status=\'revoked\' WHERE id=?', [target.id])
     assert.equal(await apply(), 0)
     assert.equal(Number((await check()).find(row => row.action === 'edit').active_exact_rows), 0)
     console.log(JSON.stringify({ fixture: '/tmp disposable MySQL', insert: 'PASS', rerun: 'PASS', binding: 'PASS', revokedUnchanged: 'PASS' }))
-  } finally { await db.end() }
+  } finally {
+    await db.end()
+  }
 }, { execute: true, confirm: plan.confirmationSha256, temporaryParent: '/tmp' })

@@ -2,7 +2,7 @@ import { createServer } from 'node:http'
 import { randomUUID, timingSafeEqual } from 'node:crypto'
 import { safeError, safeErrorHeaders } from './error-contract.mjs'
 import { POLICY_EGRESS_PATH, POLICY_REVISION_EGRESS_PATH, POLICY_LIVE_REVISION_EGRESS_PATH, SERVICE_KEY_EGRESS_PATH } from './policy-sync.mjs'
-import { hostRuntimeScopes } from './console-egress-scopes.generated.mjs'
+import { hostRuntimeScopes, apfServiceChannels, aimsHostServiceChannels } from './console-egress-scopes.generated.mjs'
 import { matchConsoleUserApiRoute } from '../../../foundation/shared/utils/consoleUserApiRoutes.ts'
 
 export const CONSOLE_ORIGIN = 'https://hzy-test.huizhi.yun'
@@ -12,6 +12,9 @@ const readPaths = new Set([
   '/api/v1/console/runtime/apps/enterprise/config',
   '/api/v1/console/service/directory/users', '/api/v1/console/service/business-domains',
   '/api/v1/console/service/directory/project-access',
+  // Exact read-only provisioning probes; Console still enforces service grants.
+  '/api/v1/console/service/directory/onboarding/employment-status',
+  '/api/v1/console/service/directory/onboarding/lifecycle-command-status',
   '/api/v1/console/directory/users', '/api/v1/console/directory/projects', '/api/v1/console/directory/business-domains',
   '/api/v1/console/user/permissions', '/api/auth/permissions',
   '/api/v1/console/user/applications', '/api/user/applications'
@@ -208,6 +211,36 @@ export function allowedConsoleRequest(method, path, body, { notificationsInAppOn
       : ['grant_type', 'client_id', 'refresh_token']
     return Object.keys(data).every(key => fields.includes(key))
       && (data.grant_type !== 'authorization_code' || data.redirect_uri === 'https://hzy0.isme.dev/enterprise/api/auth/oidc-callback')
+  }
+  // Closed channel tuples bind scope to its caller and physical audience.
+  const requested = typeof data.scope === 'string' ? data.scope.split(' ') : []
+  if (data.client_id === 'enterprise.runtime' && data.app_code === 'enterprise'
+    && requested.some(scope => aimsHostServiceChannels.some(row => row.scope === scope))) {
+    return (data.audience === 'notifications' ? notificationsInAppOnly : workflowLocal) && requested.length === 1
+      && aimsHostServiceChannels.some(row => row.scope === requested[0] && row.audience === data.audience)
+      && (data.audience !== 'notifications' || notificationsInAppOnly)
+      && data.grant_type === 'client_credentials'
+      && ['trusted-gateway', 'service-client-policy'].includes(data.source_binding)
+      && Object.keys(data).every(key => ['grant_type', 'client_id', 'app_code', 'audience', 'scope', 'source_binding'].includes(key))
+  }
+  const registeredScopes = new Set(apfServiceChannels.map(channel => channel.scope))
+  // Feedback's reviewed Console U tuple has both Runtime audiences. Keep
+  // every other Host scope's existing data-runtime-only decision unchanged.
+  if (data.scope === 'console:enterprise-host:execute' && data.audience === 'tenant-runtime') {
+    return workflowLocal && data.client_id === 'enterprise.runtime' && data.app_code === 'enterprise'
+      && data.grant_type === 'client_credentials'
+      && ['trusted-gateway', 'service-client-policy'].includes(data.source_binding)
+      && Object.keys(data).every(key => ['grant_type', 'client_id', 'app_code', 'audience', 'scope', 'source_binding'].includes(key))
+  }
+  if (requested.some(scope => registeredScopes.has(scope))) {
+    const matches = requested.map(scope => apfServiceChannels.find(channel => channel.scope === scope
+      && channel.clientId === data.client_id && channel.app === data.app_code && channel.audience === data.audience
+      && (!channel.workflowLocal || workflowLocal)))
+    return requested.length > 0 && new Set(requested).size === requested.length && matches.every(Boolean)
+      && (requested.length === 1 || matches.every(channel => channel.lane === 'host'))
+      && data.grant_type === 'client_credentials'
+      && ['trusted-gateway', 'service-client-policy'].includes(data.source_binding)
+      && Object.keys(data).every(key => ['grant_type', 'client_id', 'app_code', 'audience', 'scope', 'source_binding'].includes(key))
   }
   const enterprise = data.client_id === 'enterprise.runtime' && data.app_code === 'enterprise'
     && ['data-runtime', 'console', ...(workflowLocal ? ['workflow'] : []), ...(notificationsInAppOnly ? ['notifications'] : [])].includes(data.audience)

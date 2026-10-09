@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { useAimsModule } from '../../../layer/useAimsModule'
-const { moduleUrl, cacheKey } = useAimsModule()
 import type { ProductVersionAcceptancePreview, VersionAcceptanceDetail } from '../../types/productVersionAcceptance'
+import { useAimsModule } from '../../../layer/useAimsModule'
+
+const { moduleUrl, cacheKey } = useAimsModule()
 
 const props = defineProps<{ productCode: string, versionId: string, record: VersionAcceptanceDetail }>()
 const emit = defineEmits<{ busy: [value: boolean] }>()

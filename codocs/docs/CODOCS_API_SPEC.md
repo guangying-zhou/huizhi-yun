@@ -1208,3 +1208,7 @@ Host 部门文档复制只接源 UUID、源/目标部门编码、标题和目标
 Host 从已验证的 tenant、Enterprise deployment、actor 与 Idempotency-Key 派生 `codocs/copy-staging/` 独立前缀下的对象键。首次源正文读取后以条件写暂存字节与规范化复制意图摘要；同键重试先核暂存摘要，再读第一次暂存字节，不覆盖对象。Runtime 创建命令只接 Host 计算的暂存正文摘要/大小与源 UUID，目标正文在元数据回执后条件写入；写入失败可用同键从暂存恢复，不覆盖已编辑正文。
 
 **暂存清理（取代 OSS 生命周期规则）：**为 `codocs/copy-staging/` 单独配置 1 天过期的 OSS 生命周期规则已被 OSS 拒绝：桶上已有前缀 `codocs/` 的 Expiration 规则，嵌套前缀不能共用同一动作类型。应用**不在复制成功后即时删除**暂存：成功后保留，使 24 小时内对已成功请求的同键重放（如响应丢失）仍复用首份字节，避免重新读取源正文得到不同摘要而被 Runtime 回执判 409。仅由维护脚本 `scripts/cleanup-codocs-copy-staging.mjs`（`pnpm codocs:cleanup-copy-staging -- --client-module <file>`）清理超过 24 小时的对象：默认只读 dry-run；实际删除须同时给 `--apply --confirm-delete-copy-staging`，拒绝任何其它前缀；凭据不在脚本内，由运维在受控环境提供工厂模块（示例见 `scripts/cleanup-codocs-copy-staging.client.example.mjs`），不输出、不硬编码。桶为测试与生产共用并启用版本控制：删除只产生删除标记，非当前版本按现有 `codocs/` 规则保留 30 天。若暂存已被清理而目标正文仍缺失，原键无法自动恢复，须走人工审计恢复；不得静默改用当时的源正文。
+
+## APF-16e Enterprise 已有知识文档关联（候选）
+
+`POST /api/v1/service/enterprise-knowledge-links` 仅接受 `serviceCommand`，精确 `codocs:knowledge-link:create`、验签 enterprise.runtime 来源、同 tenant、登记目标 deployment 与 actor 委托。11 个字段为 actorUid/action(link)/ticketCode/documentUuid/customerCode/contractCode/projectCode/deliveryCode/deliveryAssetCode/environmentCode/targetDeployment；operationCode=`enterprise.codocs.knowledge-link.v1`。先按 Codocs 当前可读 ACL 校验已有 active UUID，然后同事务写无授权关系与原键回执；不写正文/附件/发布状态。缺权限 403、失效对象 404、意图冲突 409、依赖故障 503。旧 Altoc `/ops-knowledge` 合同不变，切换见 MODULE_CONTRACTS APF-16e。

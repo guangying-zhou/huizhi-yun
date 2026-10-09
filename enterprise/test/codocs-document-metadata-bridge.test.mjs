@@ -48,15 +48,24 @@ test('Enterprise Codocs metadata PATCH is actor-bound, field-bound, and idempote
   const hooks = registerHooks({
     resolve(specifier, context, next) {
       let source
-      if (specifier.endsWith('/consoleSessionBridge')) source = 'export const resolveConsoleAuthWithSessionBridge=async()=>globalThis.__codocsMetadataSession'
-      if (specifier.endsWith('/tenantRuntimeClient')) source = 'export const prepareTenantRuntime=async(...args)=>globalThis.__codocsMetadataPrepare(...args);export const maybeCallTenantRuntime=(...args)=>globalThis.__codocsMetadataTransport(...args);export const hashServiceCommandPayload=async payload=>globalThis.__codocsMetadataHash(payload)'
-      if (specifier.endsWith('/platformBundleAuthorization')) source = 'export const loadAuthorizationSnapshotFromConsoleRuntime=async()=>globalThis.__codocsMetadataAuthorization'
-      if (specifier.endsWith('/tenantGatewayTrust')) source = 'export const resolveTrustedTenantGatewayContext=()=>undefined'
-      if (source) return { url: `data:text/javascript,${encodeURIComponent(source)}`, shortCircuit: true }
+      if (specifier.endsWith('/consoleSessionBridge'))
+        source = 'export const resolveConsoleAuthWithSessionBridge=async()=>globalThis.__codocsMetadataSession'
+      if (specifier.endsWith('/tenantRuntimeClient'))
+        source = 'export const prepareTenantRuntime=async(...args)=>globalThis.__codocsMetadataPrepare(...args);export const maybeCallTenantRuntime=(...args)=>globalThis.__codocsMetadataTransport(...args);export const hashServiceCommandPayload=async payload=>globalThis.__codocsMetadataHash(payload)'
+      if (specifier.endsWith('/platformBundleAuthorization'))
+        source = 'export const loadAuthorizationSnapshotFromConsoleRuntime=async()=>globalThis.__codocsMetadataAuthorization'
+      if (specifier.endsWith('/tenantGatewayTrust'))
+        source = 'export const resolveTrustedTenantGatewayContext=()=>undefined'
+      if (source)
+        return { url: `data:text/javascript,${encodeURIComponent(source)}`, shortCircuit: true }
       let candidate
-      if (specifier.startsWith('@hzy/foundation/')) candidate = resolve(root, 'foundation', specifier.slice('@hzy/foundation/'.length))
-      else if (specifier.startsWith('.') && context.parentURL?.startsWith('file:')) candidate = resolve(dirname(fileURLToPath(context.parentURL)), specifier)
-      if (candidate && !existsSync(candidate) && existsSync(`${candidate}.ts`)) return { url: pathToFileURL(`${candidate}.ts`).href, shortCircuit: true }
+      if (specifier.startsWith('@hzy/foundation/'))
+        candidate = resolve(root, 'foundation', specifier.slice('@hzy/foundation/'.length))
+      else
+        if (specifier.startsWith('.') && context.parentURL?.startsWith('file:'))
+          candidate = resolve(dirname(fileURLToPath(context.parentURL)), specifier)
+      if (candidate && !existsSync(candidate) && existsSync(`${candidate}.ts`))
+        return { url: pathToFileURL(`${candidate}.ts`).href, shortCircuit: true }
       return next(specifier, context)
     }
   })
@@ -66,7 +75,9 @@ test('Enterprise Codocs metadata PATCH is actor-bound, field-bound, and idempote
     const app = createApp()
     const router = createRouter()
     router.patch('/documents/:uuid', (await import('../server/routes/codocs/api/documents/[uuid].patch.ts')).default)
-    app.use(defineEventHandler(event => { event.context.consoleAuth = globalThis.__codocsMetadataSession }))
+    app.use(defineEventHandler((event) => {
+      event.context.consoleAuth = globalThis.__codocsMetadataSession
+    }))
     app.use(router)
     server = createServer(toNodeListener(app))
     await new Promise(done => server.listen(0, '127.0.0.1', done))
@@ -152,7 +163,8 @@ test('Enterprise Codocs metadata PATCH is actor-bound, field-bound, and idempote
       body: JSON.stringify({ title: 'runtime unavailable' })
     })).status, 503)
   } finally {
-    if (server) await new Promise(done => server.close(done))
+    if (server)
+      await new Promise(done => server.close(done))
     hooks.deregister()
     globalThis.useRuntimeConfig = oldConfig
     globalThis.defineEventHandler = oldDefineEventHandler

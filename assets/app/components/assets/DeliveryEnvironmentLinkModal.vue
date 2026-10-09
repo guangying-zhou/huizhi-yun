@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import type { ApiResponse, DeliveryItem, EnvironmentItem, ListPayload } from '~/types'
+import RemoteAssetObjectSelect from './RemoteAssetObjectSelect.vue'
+import type { ApiResponse, DeliveryItem } from '~/types'
 
 const props = defineProps<{
   open: boolean
@@ -18,8 +19,6 @@ const isOpen = computed({
 
 const toast = useToast()
 const submitting = ref(false)
-const loadingEnvironments = ref(false)
-const environmentOptions = ref<Array<{ label: string, value: number }>>([])
 const relationOptions = [
   { label: '主交付环境', value: 'primary' },
   { label: '备份环境', value: 'backup' },
@@ -33,31 +32,10 @@ const state = reactive({
   relation_type: 'primary'
 })
 
-async function loadEnvironments() {
-  loadingEnvironments.value = true
-
-  try {
-    const response = await $fetch<ApiResponse<ListPayload<EnvironmentItem>>>('/api/v1/environments')
-    const linkedIds = new Set((props.delivery?.linked_environments || []).map(item => item.id))
-    environmentOptions.value = (response.data.items || [])
-      .filter(item => !linkedIds.has(item.id))
-      .map(item => ({
-        label: `${item.environment_code} · ${item.environment_name}`,
-        value: item.id
-      }))
-  } catch (error) {
-    console.error('[DeliveryEnvironmentLink] Failed to load environments:', error)
-    toast.add({ title: '环境加载失败', description: '请刷新后重试。', color: 'error', icon: 'i-lucide-circle-alert' })
-  } finally {
-    loadingEnvironments.value = false
-  }
-}
-
 watch(() => props.open, async (open) => {
   if (open) {
     state.environment_id = undefined
     state.relation_type = 'primary'
-    await loadEnvironments()
   }
 })
 
@@ -101,13 +79,11 @@ async function handleSubmit() {
     <template #body>
       <div class="space-y-4 p-4">
         <UFormField label="环境视图" required>
-          <USelectMenu
+          <RemoteAssetObjectSelect
             v-model="state.environment_id"
-            :items="environmentOptions"
-            :loading="loadingEnvironments"
-            value-key="value"
-            searchable
-            placeholder="请选择环境视图"
+            kind="environments"
+            :enabled="isOpen"
+            :exclude-ids="(props.delivery?.linked_environments || []).map(item => item.id)"
           />
         </UFormField>
 

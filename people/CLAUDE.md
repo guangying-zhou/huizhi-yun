@@ -58,3 +58,5 @@ dead-letter 的发布/closure 是独立 scheduled drain（`integrations:dead-let
 - 绩效周期详情由 People BFF `GET /api/admin/performance-amounts` 读取 Finance `GET /api/v1/finance/service/performance-amounts` 展示绩效金额财务口径快照；People 只引用金额依据，不写 Finance，也不把 Finance 状态当作 People 绩效终态。
 - 成本快照和绩效周期是 People 侧历史固化事实，分别服务成本留档和个人绩效考核；Finance 项目成本核算只消费员工职级、职级设置和 Aims 工时，不依赖绩效周期。
 - 数据结构变更必须同步更新 `docs/people_schema.sql`。
+
+- APF-09c1 Host People 事实命令由 Enterprise 自身 U 通道调用；owning 核心 `enterprise_*_facts.go` 接受 caller-Tx，不自行提交，不投递 Console。任职审批使用 Workflow owning 窄 reader 核验正式实例，People 不反向 import Workflow。冻结 operation 与事实/receipt 同事务；身份开通、激活和生命周期投递留待 c2。

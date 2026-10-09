@@ -10,10 +10,12 @@ import { getRuntimeSetting } from './runtimeSettings'
 import { requestServiceAccessToken } from './serviceOidc'
 import { publishNotification, type PublishNotificationInput } from './notifications'
 import { fetchExternal } from './externalFetch'
+import { notificationExternalIdentityResolution } from './notificationExternalIdentity'
 
 export interface NotifyParams {
   touser: string | string[]
   externalRecipients?: string | string[]
+  resolveExternalIdentities?: true
   channel?: 'wecom' | 'dingtalk'
   title: string
   description: string
@@ -51,6 +53,7 @@ export interface NotificationDeliveryResult {
   externalRecipients: string[]
   inApp: NotificationChannelResult
   external: NotificationChannelResult
+  externalSkipped?: { count: number, reasons: string[] }
 }
 
 export class NotificationDeliveryError extends Error {
@@ -162,6 +165,46 @@ function normalizeBaseUrl(value: string) {
   return value.replace(/\/+$/, '')
 }
 
+/** Channel-independent link contract, also reusable by email adapters. Never accepts a request origin. */
+export function externalNotificationActionUrl(input: string, publicBaseUrl: string) {
+  const value = stringValue(input)
+  if (!value || /[\\\r\n]/.test(value) || value.startsWith('//')) {
+    throw createError({ statusCode: 400, message: 'External notification action URL is invalid' })
+  }
+  if (!value.startsWith('/')) {
+    let absolute: URL
+    try {
+      absolute = new URL(value)
+    } catch {
+      throw createError({ statusCode: 400, message: 'External notification action URL is invalid' })
+    }
+    if (!['http:', 'https:'].includes(absolute.protocol) || absolute.username || absolute.password) {
+      throw createError({ statusCode: 400, message: 'External notification action URL is invalid' })
+    }
+    return value
+  }
+  let base: URL
+  try {
+    base = new URL(publicBaseUrl)
+  } catch {
+    throw createError({ statusCode: 503, message: 'Trusted notification public URL is unavailable' })
+  }
+  if (!['http:', 'https:'].includes(base.protocol) || base.username || base.password || base.search || base.hash) {
+    throw createError({ statusCode: 503, message: 'Trusted notification public URL is unavailable' })
+  }
+  return new URL(value, base.origin).toString()
+}
+
+export async function resolveExternalNotificationActionUrl(input: string, event?: H3Event | null) {
+  // Existing absolute links keep their exact bytes (including activation-link parameters).
+  if (!stringValue(input).startsWith('/')) return externalNotificationActionUrl(input, '')
+  const config = useRuntimeConfig(event || undefined) as unknown as Record<string, unknown>
+  const configured = envValue(event, ['HZY_DEPLOYMENT_PUBLIC_URL', 'NUXT_PUBLIC_DEPLOYMENT_PUBLIC_URL'])
+    || getConfigValue(config, ['public.deploymentPublicUrl'])
+  const base = configured || stringValue((await getConsoleRuntimeConfig({ event })).deployment?.publicUrl)
+  return externalNotificationActionUrl(input, base)
+}
+
 function normalizeRecipientUids(value: string | string[], fieldName: string) {
   const raw = (Array.isArray(value) ? value : [value])
     .flatMap(item => stringValue(item).split(/[|,\s]+/))
@@ -206,7 +249,7 @@ export async function orchestrateNotificationDelivery(
   options: { externalRecipients?: string | string[], inAppOnly?: boolean } = {}
 ): Promise<NotificationDeliveryResult> {
   const recipients = normalizeRecipientUids(params.touser, 'touser')
-  const externalRecipients = options.inAppOnly
+  let externalRecipients = options.inAppOnly
     ? []
     : normalizeRecipientUids(options.externalRecipients || params.touser, 'external touser')
   const sourceAppCode = stringValue(params.sourceAppCode) || stringValue(await dependencies.resolveSourceAppCode(params))
@@ -233,6 +276,7 @@ export async function orchestrateNotificationDelivery(
       idempotencyKey: params.idempotencyKey,
       recipients,
       channels: ['in_app'],
+      ...(params.resolveExternalIdentities && !options.inAppOnly && !options.externalRecipients && !params.externalRecipients ? { resolveExternalChannel: params.channel || 'wecom' } : {}),
       metadata: params.metadata
     })
   } catch (error) {
@@ -255,7 +299,18 @@ export async function orchestrateNotificationDelivery(
     }
   }
 
+  let externalSkipped: { count: number, reasons: string[] } | undefined
   try {
+    if (params.resolveExternalIdentities && !options.externalRecipients && !params.externalRecipients) {
+      const resolved = notificationExternalIdentityResolution(inAppValue, params.channel || 'wecom', recipients)
+      externalRecipients = resolved.recipients
+      externalSkipped = { count: resolved.skippedCount, reasons: resolved.reasons }
+      if (!externalRecipients.length) return {
+        sourceAppCode, recipients, externalRecipients,
+        inApp: { status: 'fulfilled', value: inAppValue },
+        external: { status: 'skipped', reason: 'external_identity_missing' }, externalSkipped
+      }
+    }
     const externalValue = await dependencies.sendExternal(
       { ...params, sourceAppCode },
       externalRecipients.join('|')
@@ -265,7 +320,8 @@ export async function orchestrateNotificationDelivery(
       recipients,
       externalRecipients,
       inApp: { status: 'fulfilled', value: inAppValue },
-      external: { status: 'fulfilled', value: externalValue }
+      external: { status: 'fulfilled', value: externalValue },
+      ...(externalSkipped ? { externalSkipped } : {})
     }
   } catch (error) {
     throw new NotificationDeliveryError({
@@ -395,6 +451,7 @@ async function sendViaNotificationRuntime(params: NotifyParams, touser: string, 
 }
 
 async function sendExternalNotification(params: NotifyParams, touser: string) {
+  const externalParams = { ...params, url: await resolveExternalNotificationActionUrl(params.url, params.event) }
   const target = await resolveExternalRuntimeTarget(params.event, params.channel || 'wecom')
   if (!target.runtimeUrl) {
     throw createError({
@@ -402,7 +459,18 @@ async function sendExternalNotification(params: NotifyParams, touser: string) {
       message: 'notification-runtime is not configured'
     })
   }
-  return await sendViaNotificationRuntime(params, touser, target)
+  return await sendViaNotificationRuntime(externalParams, touser, target)
+}
+
+/** A durable owning-domain outbox may request only the external channel. */
+export async function sendExternalNotificationOnly(params: NotifyParams) {
+  validateNotificationIdempotencyKey(params.idempotencyKey)
+  if (hzy0InAppOnlyNotifications({ HZY0_LOCAL_ENTERPRISE: process.env.HZY0_LOCAL_ENTERPRISE, HZY0_NOTIFICATIONS_IN_APP_ONLY: process.env.HZY0_NOTIFICATIONS_IN_APP_ONLY })) {
+    throw createError({ statusCode: 503, message: 'External notification delivery is disabled in this local environment.' })
+  }
+  const config = useRuntimeConfig(params.event || undefined)
+  const recipients = normalizeRecipientUids(resolveExternalRecipients(params, config.notifyRedirectTo) || params.touser, 'external touser')
+  return await sendExternalNotification(params, recipients.join('|'))
 }
 
 /**
@@ -413,7 +481,7 @@ async function sendExternalNotification(params: NotifyParams, touser: string) {
  * 任一失败抛出 NotificationDeliveryError，调用方可从 result 识别
  * 外部未尝试或站内已成功的部分交付。
  */
-export async function sendNotification(params: NotifyParams) {
+export async function sendNotification(params: NotifyParams, owning?: Pick<NotificationDeliveryDependencies, 'publishInApp'>) {
   validateNotificationIdempotencyKey(params.idempotencyKey)
   // The hzy0 runner derives both values from its validated private profile.
   // Production and other local stacks keep dual-channel delivery unchanged.
@@ -436,7 +504,7 @@ export async function sendNotification(params: NotifyParams) {
 
   return await orchestrateNotificationDelivery(params, {
     resolveSourceAppCode: resolveNotificationSourceAppCode,
-    publishInApp: publishNotification,
+    publishInApp: owning?.publishInApp || publishNotification,
     sendExternal: sendExternalNotification
   }, {
     externalRecipients: inAppOnly ? undefined : resolveExternalRecipients(params, config.notifyRedirectTo),

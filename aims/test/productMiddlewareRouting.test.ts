@@ -8,7 +8,7 @@ const source = readFileSync(new URL('../server/middleware/tenant-runtime.ts', im
 const compiled = ts.transpileModule(source + '\nexport { shouldForwardAimsRuntime, isAllowedNuxtApiV1Path }', {
   compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 }
 }).outputText
-const exports: any = {}
+const exports = {} as typeof import('../server/middleware/tenant-runtime')
 runInNewContext(compiled, { exports, require: () => ({}), defineEventHandler: (handler: unknown) => handler })
 
 test('product BFF routes reach scoped handlers instead of generic runtime forwarding', () => {

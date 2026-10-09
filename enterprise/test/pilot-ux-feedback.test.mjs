@@ -80,6 +80,7 @@ test('document read rejection replaces the editor shell with a safe empty state 
   const statement = ast.statements.find(node => ts.isVariableStatement(node) && node.declarationList.declarations.some(node => node.name.getText(ast) === 'fetchDocument'))
   const state = vm.createContext({ loading: ref(false), hasLoadedDocument: ref(true), documentLoadFailure: ref(null), documentLoadFailureMessage: ref(''), initialLoadPending: ref(true), slowLoadHint: ref(false), setTimeout, clearTimeout, slowLoadHintDelayMs: 2000,
     documentLoadErrorMessage: () => '你没有查看此文档正文的权限，请返回文档列表', collaboration: { disconnect: () => {} },
+    privateDocumentAclVerified: ref({ uuid: 'restricted', actorUid: 'user-a' }), authUserId: ref('user-a'),
     documentId: ref('restricted'), documentDeptCode: ref(''), isDepartmentRead: ref(false), hosted: true,
     getDocumentPreviewBootstrap: () => undefined, clearDocumentPreviewBootstrap: () => {}, moduleUrl: path => path,
     console: { error: () => {} }, $fetch: async () => { throw { statusCode: 403 } }
@@ -87,6 +88,7 @@ test('document read rejection replaces the editor shell with a safe empty state 
   vm.runInContext(transpile(statement.getText(ast) + '\nglobalThis.load = fetchDocument;'), state)
   await state.load()
   assert.equal(state.documentLoadFailure.value, 'forbidden')
+  assert.equal(state.privateDocumentAclVerified.value, null, 'a denied re-read clears the previous actor ACL')
   assert.equal(state.hasLoadedDocument.value, false)
   assert.equal(state.loading.value, false)
   assert.equal(state.initialLoadPending.value, false)

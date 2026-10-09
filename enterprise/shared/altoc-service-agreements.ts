@@ -1,0 +1,7 @@
+export const serviceAgreementOperations = ['service-agreements-page', 'service-agreements-view', 'service-agreements-create', 'service-agreements-update', 'service-coverages-page', 'service-coverages-create', 'service-coverages-resolve', 'service-coverages-suspend', 'service-coverages-end', 'service-projects-page', 'service-projects-bind', 'service-projects-set-default', 'service-projects-suspend', 'service-projects-end'] as const
+export type ServiceAgreementOperation = typeof serviceAgreementOperations[number]
+export const agreementFields = ['name', 'service_level', 'service_start_date', 'service_end_date', 'service_window', 'billing_mode', 'renewal_policy', 'response_minutes', 'resolution_minutes', 'included_quota', 'quota_unit', 'renewal_remind_at', 'status', 'owner_user_id']
+export const coverageFields = ['target_type', 'source_plan_code', 'delivery_asset_code', 'environment_code', 'coverage_scope', 'effective_from', 'effective_to', 'included', 'exclusion_note']
+export const agreementRowFields = ['id', 'code', 'contract_id', 'contract_line_id', 'customer_code', 'row_version', ...agreementFields, 'consumed_quota']
+export const coverageRowFields = ['id', 'coverage_code', 'row_version', ...coverageFields, 'resolution_status', 'coverage_status']
+export const projectRowFields = ['id', 'row_version', 'project_code', 'project_role', 'is_default', 'status', 'effective_from', 'effective_to']

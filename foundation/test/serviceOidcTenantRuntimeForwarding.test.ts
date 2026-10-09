@@ -439,7 +439,8 @@ test('trusted route helper preserves only the guarded hzy0 dial for synchronous 
       'x-hzy-local-runtime-dial-url': 'http://127.0.0.1:18084',
       'x-hzy-service-routes': ' ' + JSON.stringify({
         workflow: { origin: 'http://127.0.0.1:23140', deploymentCode: 'C000001-test-workflow-local', basePath: '/workflow' },
-        aims: { origin: 'http://127.0.0.1:23141', deploymentCode: 'C000001-test-aims', basePath: '/aims' }
+        aims: { origin: 'http://127.0.0.1:23141', deploymentCode: 'C000001-test-aims', basePath: '/aims' },
+        enterprise: { origin: 'http://127.0.0.1:23120', deploymentCode: 'C000001-test-enterprise', basePath: '/enterprise' }
       }) + ' '
     }
     const event = (value: Record<string, string>) => ({ context: {}, node: { req: { headers: value, url: '/api/task' } } }) as never
@@ -458,6 +459,21 @@ test('trusted route helper preserves only the guarded hzy0 dial for synchronous 
     }
     assert.equal(verifiedLocalWorkflowCallbackHeaders({ ...callbackInput, forwardedHeaders: callbackHeaders })['x-hzy-local-runtime-dial-url'], 'http://127.0.0.1:18084')
     assert.equal(callbackHeaders['x-hzy-service-routes'], headers['x-hzy-service-routes'])
+    const { workflowCallbackTarget } = await import('../../workflow/server/utils/callbackTarget.ts')
+    for (const [app, resource, action, path] of [
+      ['aims', 'tasks', 'complete', '/api/v1/service/workflow/callback'],
+      ['altoc', 'quotation', 'approve', '/api/v1/service/workflow/callback'],
+      ['finance', 'expenses', 'claim', '/api/v1/finance/workflow/callback'],
+      ['people', 'assignments', 'change', '/api/v1/service/workflow/callback']
+    ]) {
+      const target = workflowCallbackTarget(app!, resource!, action!, path!)
+      const actual = trustedServiceRequestHeaders(event(forwarded), target.appCode)
+      assert.equal(verifiedLocalWorkflowCallbackHeaders({ ...callbackInput, appCode: target.appCode, forwardedHeaders: actual })['x-hzy-deployment'], 'C000001-test-enterprise')
+      for (const change of [
+        { 'x-hzy-app-code': 'workflow' }, { 'x-hzy-deployment': 'other' }, { 'x-forwarded-prefix': '/workflow' }
+      ]) assert.throws(() => verifiedLocalWorkflowCallbackHeaders({ ...callbackInput, appCode: target.appCode, forwardedHeaders: { ...actual, ...change } }), /local_callback_target_binding_invalid/)
+    }
+
     for (const routes of [
       { workflow: { origin: 'http://127.0.0.1:23140', deploymentCode: 'C000001-test-workflow-local', basePath: '/workflow' } },
       { aims: { origin: 'http://127.0.0.1:23141', deploymentCode: 'other', basePath: '/aims' } }

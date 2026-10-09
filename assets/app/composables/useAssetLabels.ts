@@ -1,4 +1,5 @@
 import { useAssetDictionaries } from './useAssetDictionaries'
+
 const staticDictionaryLabels: Record<string, Record<string, string>> = {
   asset_category: {
     physical: '实物资产',

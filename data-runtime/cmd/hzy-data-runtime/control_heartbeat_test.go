@@ -130,3 +130,25 @@ func TestWritePlatformSigningKeyPersistsValidatedHTTPSOverlay(t *testing.T) {
 		t.Fatal("Platform signing key sync over plain HTTP must fail closed")
 	}
 }
+
+func TestBindingsChangedIgnoresOnlyExactLocalCollabOverlay(t *testing.T) {
+	current := map[string]string{"aims": "C000001-test-aims", "collab": "C000001-test-collab", "workflow": "C000001-test-workflow-local"}
+	platform := map[string]string{"aims": "C000001-test-aims"}
+	if bindingsChanged(current, platform, "C000001-test-workflow-local", "C000001-test-collab") {
+		t.Fatal("local overlays restart on each heartbeat")
+	}
+	if current["collab"] != "C000001-test-collab" {
+		t.Fatal("comparison mutated current bindings")
+	}
+	for _, optIn := range []string{"", "other"} {
+		if !bindingsChanged(current, platform, "C000001-test-workflow-local", optIn) {
+			t.Fatal("nonexact opt-in masked missing binding")
+		}
+	}
+	if !bindingsChanged(current, map[string]string{"aims": "changed"}, "C000001-test-workflow-local", "C000001-test-collab") {
+		t.Fatal("unrelated binding change masked")
+	}
+	if !bindingsChanged(current, map[string]string{"aims": "C000001-test-aims", "collab": "platform-collab"}, "C000001-test-workflow-local", "C000001-test-collab") {
+		t.Fatal("Platform conflict masked")
+	}
+}

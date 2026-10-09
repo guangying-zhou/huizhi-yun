@@ -89,7 +89,7 @@ Cloudflare 构建/运行（`HZY_CLOUDFLARE_BUILD` 或 `HZY_CLOUDFLARE_RUNTIME=tr
 
 获准 hzy0 本机测试副本可由 Enterprise 服务端插件设置 `event.context.hzyConsoleTransport`，仅 `HZY0_LOCAL_ENTERPRISE=true` 时由同一 Console transport helper 使用；不读取浏览器同名头或 public 配置。该适配器只连接固定回环 Gateway egress，后者使用本地凭据认证、校验 method/path/服务身份并仅向现有测试 Console 发送独立的获准 Gateway 凭据。Cloudflare Service Binding、正式 issuer、scope、用户委托与 Runtime 校验不变。当前仅支持登记的查询、授权查询及 OIDC/只读 service token 交换，不表示写业务已验收。
 
-自托管单站点回环拓扑（G-10，`shared/utils/selfHostedTopology.ts` + `server/utils/selfHostedServiceTransport.ts`）：无 Cloudflare Service Binding、且公网入口会剥除全部 `x-hzy-*` 的自托管部署，由服务端环境变量显式声明本机进程源，Foundation 的 `consoleServiceBinding()` / `appServiceBinding()` 在没有真实 Service Binding 时返回同语义的回环传输（目标源固定、只取 URL 的 path+query、调用方已由 Foundation 组装的受信头原样发送、`redirect: manual`、拒绝 `Request` 与带凭据 URL），因此 `consoleServiceFetch`、`fetchConsoleServiceJson`、`requestServiceAccessToken`（Console `/oauth/token`）、Console runtime 配置读取与 `serviceAppFetch` 全部直连本机，不回落公网。`HZY_SELF_HOSTED_SERVICE_ORIGINS_JSON` 为 `{appCode: origin}`，键仅限 console/enterprise/workflow/aims/assets/altoc/codocs/finance/people/collab，必须含 `console`，值只能是 `http://127.x.x.x:<port>` 或 `http://[::1]:<port>` 精确源（拒绝 localhost、简写/整数地址、HTTPS、凭据、路径、查询、片段、隐式端口，JSON ≤4 KiB）；启用后未配置的目标应用返回 503，不回落公网。`HZY_SELF_HOSTED_RUNTIME_ENDPOINT`（Platform 登记的规范 HTTPS 端点，不能是回环）与 `HZY_SELF_HOSTED_RUNTIME_DIAL_ORIGIN`（回环源）必须成对设置，只替换该规范端点的 TCP 拨号（`tenantRuntimeClient` 经 `resolveRuntimeDialEndpoint`、`dataRuntimeClient`、Aims 调度与 Console 生命周期任务客户端）；签名/调度 HMAC/令牌使用的规范端点不变，其他端点一律 503，且不能由请求头选择，也不会作为 `x-hzy-local-runtime-dial-url` 向下游转发。任一变量与 `HZY0_LOCAL_ENTERPRISE` / `HZY0_WORKFLOW_LOCAL_ONLY` / `HZY0_LOCAL_CONSOLE_FACADE` 或 `HZY_CLOUDFLARE_BUILD` / `HZY_CLOUDFLARE_RUNTIME` 同时为 `true` 即配置错误。插件 `server/plugins/self-hosted-topology.ts` 在启动时校验（错误信息不含配置值，进程拒绝启动），请求期再遇非法配置统一 503。优先级：hzy0 本机 transport → Cloudflare Service Binding → 自托管回环 → 原公网回落（仅未配置时）。目标端 401/403 原样保留。**Console 基路径**：自托管 Console 以 `NUXT_APP_BASE_URL=/console/` 运行，对无前缀路径返回 302，而回环传输不跟随重定向；因此 `normalizeConsoleServiceBindingUrl(url, binding)` 仅当 `binding` 是真实 Cloudflare Service Binding（或调用方未传 binding）时剥去 `/console`，自托管回环传输（由 `selfHostedServiceTransport` 模块内部登记、`isSelfHostedLoopbackBinding()` 判定，不取决于 URL 或任何请求输入）保留前缀。网关自身对 Console 的调用（策略同步、Console 排空唤醒、目录连接器代理）由 `HZY_CONSOLE_BASE_PATH=/console`（自托管网关配置注入，未设置则与 Cloudflare 行为逐字相同）加前缀。回归：`foundation/test/selfHostedConsolePrefix.test.ts`、`deploy/self-hosted/test/console-prefix-loopback.e2e.mjs --app <应用制品目录>`。
+自托管单站点回环拓扑（G-10，`shared/utils/selfHostedTopology.ts` + `server/utils/selfHostedServiceTransport.ts`）：无 Cloudflare Service Binding、且公网入口会剥除全部 `x-hzy-*` 的自托管部署，由服务端环境变量显式声明本机进程源，Foundation 的 `consoleServiceBinding()` / `appServiceBinding()` 在没有真实 Service Binding 时返回同语义的回环传输（目标源固定、只取 URL 的 path+query、调用方已由 Foundation 组装的受信头原样发送、`redirect: manual`、拒绝 `Request` 与带凭据 URL），因此 `consoleServiceFetch`、`fetchConsoleServiceJson`、`requestServiceAccessToken`（Console `/oauth/token`）、Console runtime 配置读取与 `serviceAppFetch` 全部直连本机，不回落公网。`HZY_SELF_HOSTED_SERVICE_ORIGINS_JSON` 为 `{appCode: origin}`，键仅限 console/enterprise/workflow/aims/assets/altoc/codocs/finance/people/collab，必须含 `console`，值只能是 `http://127.x.x.x:<port>` 或 `http://[::1]:<port>` 精确源（拒绝 localhost、简写/整数地址、HTTPS、凭据、路径、查询、片段、隐式端口，JSON ≤4 KiB）；启用后未配置的目标应用返回 503，不回落公网。`HZY_SELF_HOSTED_RUNTIME_ENDPOINT`（Platform 登记的规范 HTTPS 端点，不能是回环）与 `HZY_SELF_HOSTED_RUNTIME_DIAL_ORIGIN`（回环源）必须成对设置，只替换该规范端点的 TCP 拨号（`tenantRuntimeClient` 经 `resolveRuntimeDialEndpoint`、`dataRuntimeClient`、Aims 调度与 Console 生命周期任务客户端）；签名/调度 HMAC/令牌使用的规范端点不变，其他端点一律 503，且不能由请求头选择，也不会作为 `x-hzy-local-runtime-dial-url` 向下游转发。任一变量与 `HZY0_LOCAL_ENTERPRISE` / `HZY0_WORKFLOW_LOCAL_ONLY` / `HZY0_LOCAL_CONSOLE_FACADE` 或 `HZY_CLOUDFLARE_BUILD` / `HZY_CLOUDFLARE_RUNTIME` 同时为 `true` 即配置错误。插件 `server/plugins/self-hosted-topology.ts` 在启动时校验（错误信息不含配置值，进程拒绝启动），请求期再遇非法配置统一 503。优先级：hzy0 本机 transport → Cloudflare Service Binding → 自托管回环 → 原公网回落（仅未配置时）。目标端 401/403 原样保留。**Console 基路径**：自托管 Console 以 `NUXT_APP_BASE_URL=/console/` 运行，对无前缀路径返回 302，而回环传输不跟随重定向；因此 `normalizeConsoleServiceBindingUrl(url, binding)` 仅当 `binding` 是真实 Cloudflare Service Binding（或调用方未传 binding）时剥去 `/console`，自托管回环传输（由 `selfHostedServiceTransport` 模块内部登记、`isSelfHostedLoopbackBinding()` 判定，不取决于 URL 或任何请求输入）补齐缺失的 `/console` 并保留已有前缀；已带前缀不重复添加，query 保持不变。hzy0 transport 仍按原规则剥前缀。网关自身对 Console 的调用（策略同步、Console 排空唤醒、目录连接器代理）由 `HZY_CONSOLE_BASE_PATH=/console`（自托管网关配置注入，未设置则与 Cloudflare 行为逐字相同）加前缀。回归：`foundation/test/selfHostedConsolePrefix.test.ts`、`deploy/self-hosted/test/console-prefix-loopback.e2e.mjs --app <应用制品目录>`。
 
 hzy0 本机测试的 Runtime 回环试运行只改变 HTTP 拨号地址：Gateway 继续以 `https://hzy-test-runtime.isme.dev` 作为可信、签名的 Runtime 规范端点，另由受管本机进程注入固定 `x-hzy-local-runtime-dial-url: http://127.0.0.1:18084`。`tenantRuntimeClient` 仅在 development、固定租户/环境/部署/域名和可信 Gateway 凭据同时成立时接受该头；浏览器头由 Gateway 剥离。服务令牌、调度签名、对象授权及 Runtime 本身校验不变；无自动公网回退。Gateway 启动时须对比回环和规范公网 `/runtime/healthz` 的部署及版本身份，失败则拒绝启动。该传输试运行不是 G1 放行证据。
 
@@ -110,7 +110,7 @@ OIDC 访问令牌主动续期（2026-09-22）：客户端插件 `app/plugins/con
 | `useAuth()` | 当前用户信息 + Console OIDC 登录、token/session 数据源、登出；legacy bridge 仅显式 fallback | `user`、`token`、`tenant`、`subjectCode`、`policyVersion`、`logout()` |
 | `useDirectory*()` | Console Directory Runtime 读取入口；用户列表由 Foundation BFF 按 runtime 单页上限 100 自动分页合并，业务页面可继续请求不超过 1000 人的姓名映射窗口 | `useDirectoryUsers()`、`useDirectoryDepartments()`、`useDirectoryProjects()`、`useDirectoryUser(uid)`、`useDirectoryGitGroups()`、`useDirectoryUserProjects(uid)`、`useDirectoryBusinessDomains()` |
 | `useAccount*()` | 兼容旧 Account 命名，内部委托 `useDirectory*()` | `useAccountUsers()`、`useAccountDepartments()`、`useAccountProjects()`、`useAccountUser(uid)`、`useAccountGitGroups()`、`useAccountUserProjects(uid)`、`useBusinessDomains()` |
-| `usePermissions()` | 角色/资源权限检查，基于 Console policy bundle 授权快照；普通运行默认合并全部有效企业角色，`activeRoleCode` 仅作为展示/显式模拟提示，并展开为当前应用权限。快照来源由 `useAuthorization()` 决定：独立应用读本应用 `/api/auth/permissions`；Enterprise Host（`appCode=enterprise`）按当前页面构建期路由 meta `authorizationApp` 读 `/enterprise/api/auth/permissions?app=<module>`，每模块独立缓存、不合并同名资源，无归属页面不请求。响应须通过 `shared/utils/authorizationSnapshotSource.ts` 信封校验，HTML/错误形状/模块不符记为 `error`（空快照失败关闭，不静默），`error` 经 `usePermissions()` 暴露 | `hasRole(role)`、`canAccess(resource, action)`、`loaded`、`error` |
+| `usePermissions()` | 角色/资源权限检查，基于 Console policy bundle 授权快照；普通运行默认合并全部有效企业角色，`activeRoleCode` 仅作为展示/显式模拟提示，并展开为当前应用权限。快照来源由 `useAuthorization()` 决定：共享 Host shell 可传 `{ routeMeta: () => router.currentRoute.value.meta }`，在懒加载页面过渡期间先核验目标模块；默认组件仍沿用当前页面 route，来源选择与权限算法不变。独立应用读本应用 `/api/auth/permissions`；Enterprise Host（`appCode=enterprise`）按当前页面构建期路由 meta `authorizationApp` 读 `/enterprise/api/auth/permissions?app=<module>`，每模块独立缓存、不合并同名资源，无归属页面不请求。响应须通过 `shared/utils/authorizationSnapshotSource.ts` 信封校验，HTML/错误形状/模块不符记为 `error`（空快照失败关闭，不静默），`error` 经 `usePermissions()` 暴露 | `hasRole(role)`、`canAccess(resource, action)`、`loaded`、`error` |
 | `useWorkflow` 模块 | Workflow API 封装（查询/审批/发起） | `fetchPendingTasks()`、`fetchTaskDetail()`、`approveTask()`、`rejectTask()`、`createInstance()`、`prepareInstance()`、`fetchInstanceByBiz()` |
 | `useNotifications()` | Console 统一消息中心前端封装；未读摘要按 `uid + tenant + policyVersion` 在当前页签缓存 30 秒，写操作后强制刷新 | `loadSummary()`、`loadNotifications()`、`markRead()`、`markAllRead()`、`archive()` |
 | `sharedApiPath(path)`（`app/utils`，纯函数 `resolveSharedApiPath` 在 `shared/utils/sharedApiPath.ts`） | Foundation 共享用户 API 的浏览器路径：默认保持根 `/api/<op>`；仅 `appCode=enterprise` 且 public `sharedApiBase` 恰为 `/enterprise/api/foundation` 时改写到 Host 基址（G-12，网关根 `/api/*` 归 Console）。`useWorkflow`、`useNotifications`、`useUserApplications`、`useDirectory*`、`useDirectoryStore`、`UserTreeSelector` 已统一经它请求；Host 需为实际使用的操作登记路由与拓扑，见根 MODULE_CONTRACTS | `sharedApiPath('/api/notifications')` |
@@ -140,7 +140,7 @@ OIDC 访问令牌主动续期（2026-09-22）：客户端插件 `app/plugins/con
 | 插件 | 职责 | 配置 |
 |------|------|------|
 | `rum.client.ts` | 自动上报页面加载、Web Vital、同源 API 耗时、JS error / unhandled rejection。上报前会去掉 URL query/hash，不采集 Cookie、Authorization、请求体或用户输入内容。 | `public.rum.enabled`、`public.rum.endpoint`、`public.rum.sampleRate` |
-| `issue-console-capture.client.ts` | 维护最近控制台错误 / `window.error` / `unhandledrejection` 的环形缓冲，供 `IssueReporter` 采集（提交前脱敏） | 无 |
+| `issue-console-capture.client.ts` | 维护最近控制台错误 / `window.error` / `unhandledrejection` 的环形缓冲，供 `IssueReporter` 采集（进入缓冲前脱敏；全局反馈另受 5 分钟 TTL、身份切换清空与默认不附带约束） | 无 |
 
 ### 使用示例
 
@@ -173,11 +173,12 @@ usePageWorkflow({
 | 组件 | 用途 |
 |------|------|
 | `<LayoutSidebar>` | 页面主框架（当前应用侧边栏 + 内容区 + 响应式应用导航）。所有业务页默认继承此布局；企业 Shell iframe 内自动隐藏重复的应用品牌、全局应用入口、通知、用户菜单和反馈入口 |
-| `<ContentPageHeader>` | 企业宿主内容区页头：标题、可选面包屑与单行说明，以及 `actions` 插槽；必填 `hosted`（模块的 `use*Module().hosted`），组件只在宿主模式显示，独立应用保留 `UDashboardNavbar` 原有标题与操作区 |
+| `<ContentPageHeader>` | 企业宿主内容区页头：标题、同排次要色说明（移动端可换行、长说明截断并提供 tooltip）与 `actions` 插槽；不显示面包屑，保留调用方返回按钮；标题带 `data-host-page-title`，供 Enterprise 顶栏在标题滚出内容区后显示页面名（无页头不显示）；必填 `hosted`（模块的 `use*Module().hosted`），组件只在宿主模式显示，独立应用保留 `UDashboardNavbar` 原有标题与操作区 |
 | `<UserMenu>` | 顶栏用户菜单（头像/姓名/主题切换/登出）；普通运行使用合并权限，不再暴露日常企业角色切换入口 |
 | `<NotificationBell>` | 顶栏通知按钮，展示 Console 消息中心未读角标，点击打开通知抽屉 |
 | `<NotificationsSlideover>` | Console 统一消息中心抽屉，支持未读筛选、在当前应用弹窗查看实时授权详情、标记已读、归档，并仅在用户点击“前往处理”时导航业务目标；外部通知使用 Console `/notifications/{notificationId}` 深链进入统一消息中心 |
 | Console `/notifications`、`/notifications/{notificationId}` | 面向所有已登录用户的完整消息中心：桌面端列表与实时授权详情双栏展示，移动端列表/详情分层切换；企业微信、钉钉、邮件等外部通知可直接选中目标消息，无需跳转通知运行时配置页 |
+| `<GlobalFeedbackButton>` / `<FeedbackRecords>` | Enterprise 全局文本反馈与本人记录；Console typed owning 入口受理并可靠投递 GitLab，不双写 WebDev。诊断默认不附带，可预览；本人/租户范围、幂等、管理员双通道通知由服务端执行。图片与截图另批交付。 |
 | `<IssueReporter>` | 业务应用内嵌「反馈」浮动入口（默认右下角，可 `:floating="false"` 仅暴露 `open()`）；自动采集页面/环境/控制台错误，提交前展示「我已提报」去重，经当前业务应用 `/api/webdev-report/issues` 上报到 WebDev。Console Shell 使用 `target-base-path/target-page-url/target-route-pattern` 将外层入口绑定到当前授权业务应用，使 WebDev 来源由目标 Worker 的 service token 确定，不能由浏览器声明。浮动按钮仅在已登录且系统参数 `feedback.reporter.enabled` 启用时展示（见 `useFeedbackReporter()`） |
 | `<AppLauncher>` | 窄屏应用启动器（九宫格图标），通过 `/api/user/applications` 读取当前用户可访问应用，支持 manifest `icon` 图标名或图标 URL；与 AppRail 共用 Shell 路由和导航预热 |
 | `<AppRail>` | 宽屏左侧常驻应用轨道；与当前应用侧边栏并列，企业 Shell 中由父容器唯一渲染；Shell 导航同时检查应用目录中的 Console/工作台来源，独立端口业务应用不承载 Console Shell |
@@ -198,6 +199,7 @@ usePageWorkflow({
 
 | 组件 | 用途 |
 |------|------|
+| `<RemoteObjectSelectMenu>` | 远程业务对象单选的共享下拉面板。搜索、选项、滚动加载、加载更多及错误重试均在面板内；数据适配器负责真实分页、权限/身份范围、过期响应隔离。Altoc/Finance/迁移事项共用，禁止把分页控件放在触发器外。 |
 | `<DeptTreeSelector>` | 部门树**单选**（递归节点） |
 | `<UserTreeSelector>` | **员工树选择**（按部门树组织，支持委员会，支持多选/单选，复选框联动）。见下节 |
 | `<GitGroupTreeSelector>` / `<GitGroupTreeNode>` | GitLab 群组树单选，带搜索与路径高亮 |
@@ -279,18 +281,14 @@ usePageWorkflow({
 | `GET /api/workflow-proxy/**` / mutating methods | Workflow API 代理；先校验当前业务应用用户，再以本应用 runtime service client 请求 `audience=workflow`、`scope=workflow:proxy` 的短期 token 转发。代理会用服务端 `public.appCode` 覆盖 `request_app_code` 并写入同值 `x-hzy-request-app-code`，同时把目标 Worker runtime app identity 固定为 `workflow`；缺 appCode、token source app 不一致或无 actor 均失败关闭。Workflow 再以 `service-client-policy` 获取绑定 `<tenant>-workflow` 的 data-runtime token 并重签 actor；任务列表错误必须原样传播，不能伪装成空列表。代理必须保留 Workflow 4xx 的稳定业务 `code/message`，但对上游 5xx 和网络错误统一脱敏为 503，不得泄露内部错误细节。需要 server-side 直调 Workflow 用户路径的既有 BFF 也必须写入与其 service token source app 精确相等的 header，不能由浏览器决定 |
 | `GET /api/account/user-departments` | 全量 user-dept 关联（含委员会），供 UserTreeSelector 使用；迁移期 Account 命名 BFF，必须先有已验证的 Console 用户会话 |
 | `GET /api/account/dept-members?deptCode=xxx` | 指定部门/委员会的成员列表（回退路径）；迁移期 Account 命名 BFF，必须先有已验证的 Console 用户会话 |
-| `GET /api/git-integration/commits` | GitLab commit 列表；支持 `projectCode/repoUrl/repoPath/ref/since/until/page/perPage`，凭证从 Console integration/vault 解析 |
-| `GET /api/git-integration/commit-diff` | GitLab commit diff；支持 `projectCode/repoUrl/repoPath/sha` |
-| `GET /api/git-integration/markdown-tree` | 仓库根目录与 `docs/` 下的 Markdown 文件树 |
-| `GET /api/git-integration/file` | 读取 GitLab 仓库文件内容 |
-| `POST /api/git-integration/commit` | 通过 GitLab commits API 创建提交，供 Codocs/Aims 等模块复用 |
+| ~~`/api/git-integration/*`~~ | 已删除（2026-10-04，文档资产设计 DOC-01）。五个通用 GitLab 接口没有前端调用方，且处理器内没有人员授权。GitLab 读取只通过各业务模块自己的、先判项目范围与仓库绑定的服务端入口，经 `server/utils/gitIntegration.ts` 的只读辅助函数完成；平台不向仓库提交内容 |
 | `POST /api/webdev-report/issues` | 业务应用 Issue 上报入口；派生当前用户身份后经 Console service token 转发到 WebDev `intake`（业务应用前端不直连 WebDev）。转发成功后按系统参数 `feedback.notify.wecomUsers` 经 `sendNotification()` 向配置的企业微信号推送提醒（失败不影响提交） |
 | `GET /api/webdev-report/issues` | 报告组件「我已提报」列表；按当前用户 + 层级（`scope`/`pageKey`）过滤，供提交前自行判断是否重复 |
 | `GET /api/runtime/feedback-reporter` | 解析 Console 系统参数 `feedback.reporter.enabled`（经 service token + runtime settings 缓存），返回 `{ enabled }` 决定是否展示反馈浮动按钮；Console 不可达时回退启用 |
 | `GET /api/platform-activation/status` | 查看当前应用 Platform runtime 激活、license、bundle、heartbeat 状态 |
 | `POST /api/platform-activation/retry` | 手动重试 license 校验、policy bundle 拉取与 heartbeat 上报；正常启动会刷新本地 bundle，heartbeat 返回 `download_bundle` action 时会自动拉取；未激活初始化阶段可用，已激活后要求当前用户具备 Console `system_settings:admin` |
 
-> 业务模块如需用户、部门、项目等目录 API，请在自己的 `server/api/account/*.ts` 兼容路由或 `server/api/directory/*.ts` 薄代理中调用 Foundation `directoryApi.ts`；不要直连 Account 或 Console 数据库。浏览器 BFF 必须先建立已验证的 Console 用户会话；应用 Directory 凭证只用于下游调用，不能单独授权匿名浏览器读取目录。非 Console 应用读取 `/api/directory/users`、`/api/directory/users/{uid}` 或 `/api/directory/departments` 时，Foundation 使用调用应用 runtime 的 `console:directory-users:read` service capability 请求 Console 最小共享投影，不复用 Console 人类 UI 角色；用户投影只含共享识别字段，部门投影只含组织树字段，该 service grant 不产生 Console 菜单 entitlement。Aims 读取 `/api/directory/business-domains` 时同样使用 `aims.runtime` 的精确 `console:business-domain:view` service capability，而不是 Console `org_profile:view` 人类权限。Foundation 的成员关系 BFF（`/api/account/**` 兼容别名及 `/api/directory/**` 标准路径）已通过 `requireFoundationSessionUid()` 实施该边界；`user-departments` 是目录树的全量关系投影而非 self-service 查询，保留其已登录协作视图语义。
+> 业务模块如需用户、部门、项目等目录 API，请在自己的 `server/api/account/*.ts` 兼容路由或 `server/api/directory/*.ts` 薄代理中调用 Foundation `directoryApi.ts`；不要直连 Account 或 Console 数据库。浏览器 BFF 必须先建立已验证的 Console 用户会话；应用 Directory 凭证只用于下游调用，不能单独授权匿名浏览器读取目录。非 Console 应用读取 `/api/directory/users`、`/api/directory/users/{uid}` 、`POST /api/directory/users/batch` 或 `/api/directory/departments` 时，Foundation 使用调用应用 runtime 的 `console:directory-users:read` service capability 请求 Console 最小共享投影，不复用 Console 人类 UI 角色；用户投影只含共享识别字段及 Directory 原始 `status`（有效账号可选，停用、删除或未知状态不可选），部门投影只含组织树字段，该 service grant 不产生 Console 菜单 entitlement。Aims 读取 `/api/directory/business-domains` 时同样使用 `aims.runtime` 的精确 `console:business-domain:view` service capability，而不是 Console `org_profile:view` 人类权限。Foundation 的成员关系 BFF（`/api/account/**` 兼容别名及 `/api/directory/**` 标准路径）已通过 `requireFoundationSessionUid()` 实施该边界；`user-departments` 是目录树的全量关系投影而非 self-service 查询，保留其已登录协作视图语义。
 
 ---
 
@@ -328,7 +326,7 @@ usePageWorkflow({
 | `maybeProxyCurrentApiToTenantRuntime()` | 通用 Nuxt API 到 tenant-runtime proxy；按 `/api/v1/** -> /v1/{appCode}/**` 转发，支持 app 级转发白名单、scope resolver 和已验证用户/部门上下文透传（`current_user_dept_code(s)`）；scope resolver 可返回传输 scope + 资源/动作 capability 的组合（如 `altoc.write altoc:lead:edit`），用于同时满足 runtime 入口认证和 adapter 内部领域授权；会清理浏览器传入的 `current_user` / `operator_uid` / `current_user_scopes` 等认证上下文字段后重建；是否允许 direct DB fallback 由模块中间件显式决定，Assets/Altoc/Aims 阶段 2 主路径不回退 |
 | `reportOperationAudit(payload, { event?, idempotencyKey? })` | 复用 Console audit audience 与 audit:write 合同。请求内调用应传 event，配置、令牌及 Console Service Binding 使用同一请求上下文，不退回 eventless 请求；可传稳定幂等键。sourceApp 必须匹配实际物理服务身份，逻辑业务域可记录在 action/detail。保持原 best-effort 语义，失败仅固定脱敏日志；不把它用作必须持久成功的业务审计门禁。无 event 的 legacy 调用行为保留 |
 | `readRequestBodyCompat(event)` | 跨运行时请求体读取。Nitro 的 Cloudflare 入口通常为 POST/PUT/PATCH 缓冲 body（`requestHasBody` = `/post|put|patch/i`），但带 body 的 DELETE 以及少数未暴露预期缓冲体的 POST/PUT/PATCH 进入 Worker 后，`event.node.req.body` 仍可能为 null 而 `content-length` 仍在。h3 `readRawBody` 此时会退回 node-mock-http 的 mock Readable 等待永不触发的 `'end'`，Promise 永不 settle，Worker 被 Cloudflare 以「code had hung and would never generate a response」取消。该 helper 只要发现缓冲体缺失，就从平台原始 Request 取回 body 并预置到 h3 优先读取的 `event._requestBody`，解析语义与 `readBody` 完全一致。所有可能收到带 body 的转发点（`tenantRuntimeProxy`、`tenantRuntimeClient`、`dataRuntimeClient`、`workflow-proxy`）必须使用它，不得直接调用 `readBody` |
-| `listGitCommits()` / `getGitCommitDiff()` / `listGitMarkdownTree()` / `getGitRepositoryFile()` / `createGitCommit()` / `upsertGitIssue()` | Git integration fixed-operation service。GitLab baseUrl/token 只在 Console tenant-runtime 从 `gitlab.default` integration 和 vault 解析，业务 BFF 不读取凭证。`upsertGitIssue()` 要求服务端幂等键，并以稳定 Aims item-key marker 创建/更新 Issue；Console 会在更新已有 IID 前复验 marker，禁止覆盖其他工作项的 Issue |
+| `listGitCommits()` / `getGitCommitDiff()` / `listGitMarkdownTree()` / `getGitRepositoryFile()` / `upsertGitIssue()` | Git integration fixed-operation service。GitLab baseUrl/token 只在 Console tenant-runtime 从 `gitlab.default` integration 和 vault 解析，业务 BFF 不读取凭证。`upsertGitIssue()` 要求服务端幂等键，并以稳定 Aims item-key marker 创建/更新 Issue；Console 会在更新已有 IID 前复验 marker，禁止覆盖其他工作项的 Issue |
 | `aiProviderFetch()` / `getAiProviderIntegrationConfig()` / `getWecomIntegrationAccessToken()` / `getOssIntegrationConfig()` | AI Provider、企业微信、OSS runtime integration helpers。服务端按 `integrationCode` 消费 Console integration + vault，不在业务模块直接读取 secret 或 Console vault resolve |
 | `getAccountApiConfig()` / `requireAccountApiConfig()` / `getAccountApiAuthHeaders()` | 读取/校验 Account API 配置，生成 Authorization Header |
 | `fetchDirectoryActiveStatuses(event, uids)` | 通过现有 `console:directory-users:read` service capability 请求 `projection=active-status`，按 1～100 个显式 UID 返回最小 `uid/active`；不存在／停用／未知状态为 false。严格校验响应完整 UID 集合和布尔类型，旧版身份展示响应不能代替状态校验；不缓存，不授予用户产品动作。Aims 产品成员写入前校验目标及接管经理，每次最多两人 |
@@ -348,7 +346,7 @@ usePageWorkflow({
 | `getAuthCookieOptions()` | 统一认证 Cookie 的 domain/path/sameSite 配置 |
 | `reportWebDevIssue(event, payload)` / `listMyWebDevIssues(event, query)` | 业务应用 → WebDev Issue 上报/查询代理；内部用 `requestServiceAccessToken({ audience: 'webdev', scope: 'webdev:issue:write\|read' })` + `resolveServiceAppBaseUrl(event,'webdev')` 调 WebDev intake/mine |
 | `publishNotification({ recipients, title, summary, actionUrl, event? })` | 发布站内消息到 Console 统一消息中心；使用 Console service token `audience=notifications`、`scope=notifications:publish`；作为低层站内通道 primitive，普通业务通知应调用 `sendNotification()` |
-| `sendNotification({ touser, externalRecipients?, channel?, title, description, url, inAppUrl?, idempotencyKey, ... })` | 统一双通道通知入口；先以 Console `in_app` 作为耐久事实源，成功后才通过客户侧 notification/connector runtime 发送企业微信或钉钉。`touser` 是站内 canonical UID，`externalRecipients` 可固定为外部 provider subject；`inAppUrl` 用于凭据型外部 URL 的安全站内替代，禁止把 bearer token 写入持久通知。缺省来源从 Console runtime config 推断，并把稳定幂等键传给 runtime；空收件人和 `@all` 在网络调用前拒绝。外部失败抛出保留站内成功结果的部分交付错误。hzy0 Enterprise 的私有 profile 显式开启 `features.notificationsInAppOnly` 时，runner 同时设置本地身份与站内模式环境值，站内发布成功后直接返回 `external: skipped`，不调用外部通知 Runtime；其他环境仍按双通道执行。Delivery ledger 只保存请求哈希和脱敏结果，不保存通知正文或 URL。 |
+| `sendNotification({ touser, externalRecipients?, channel?, title, description, url, inAppUrl?, idempotencyKey, ... })` | 统一双通道通知入口；先以 Console `in_app` 作为耐久事实源，成功后才通过客户侧 notification/connector runtime 发送企业微信或钉钉。`touser` 是站内 canonical UID，`externalRecipients` 可固定为外部 provider subject；`inAppUrl` 用于凭据型外部 URL 的安全站内替代，禁止把 bearer token 写入持久通知。缺省来源从 Console runtime config 推断，并把稳定幂等键传给 runtime；空收件人和 `@all` 在网络调用前拒绝。外部投递前将单斜杠相对 `url` 转为绝对 URL：只读取部署环境 `HZY_DEPLOYMENT_PUBLIC_URL` / `NUXT_PUBLIC_DEPLOYMENT_PUBLIC_URL`、受保护 Nuxt deploymentPublicUrl，缺失时读取 Console deployment.publicUrl；不从请求头或 request origin 推导，缺失/非法配置失败关闭。已有合法 http(s) 绝对链接保持字节不变；拒绝 protocol-relative、反斜杠、凭据 URL 和非 http(s) scheme。站内 `actionUrl` 保持原值。`externalNotificationActionUrl` 是渠道无关的 URL 合同，供外部适配器（含未来邮件）复用，不新增邮件能力。外部失败抛出保留站内成功结果的部分交付错误。hzy0 Enterprise 的私有 profile 显式开启 `features.notificationsInAppOnly` 时，runner 同时设置本地身份与站内模式环境值，站内发布成功后直接返回 `external: skipped`，不调用外部通知 Runtime；其他环境仍按双通道执行。Delivery ledger 只保存请求哈希和脱敏结果，不保存通知正文或 URL。 |
 | `drainIntegrationOperationDeadLetterNotifications()` / `publishIntegrationOperationDeadLetter()` | Aims/Altoc/Assets/Finance/People dead-letter actionable 适配器。新路径只消费 source 冻结的 generation、actionable key 和 object version，发布成功后将 Console 实际过滤的 `recipientUids` 与 notification ID 回写 source CAS；随后扫描 source closure，以 expected/next version 调 Console lifecycle，再确认 closure ack。publish 或 closure ack 丢失均可重放，Console 失败不改变 source 事实。旧 failure-notification endpoint 仅在新 API 明确 404/405/501 时回退，且 legacy payload 不生成 actionable。 |
 | `parseNotificationDetailAuthorizationRequest()` / `requireNotificationDetailAuthorizationCaller()` | 来源应用通知详情实时重验的服务边界：统一要求服务端 `notificationId/descriptor/subject.uid/tenantId/deploymentId`，只接受 Console service token、精确 `<source-app>:notification-details:authorize` scope，并要求 tenant/deployment 与已验证 token claim 完全一致；拒绝浏览器身份、非 Console 来源、缺失上下文和客户端直接声明 actor。Console 会在任何非 Console 来源调用前先按 persisted descriptor 的静态 source+resource registry 做 active Directory + fresh normal-merged 固定 `resource:view` 资格检查；来源不可传入或覆盖该 resource/action，拒绝和基础设施不可用都不会调用来源 verifier。Aims 可通过 `maybeCallTenantRuntime()` 的专用 `notificationDetailActor` 选项生成绑定精确 app/path/scope/tenant/deployment 和固定 purpose 的短时 HMAC runtime actor；普通调用不能启用该 delegation。业务对象当前访问权仍必须由来源应用自身 runtime/授权规则判定，来源不可用时 fail closed。 |
 | `syncApprovalActions(items)` | 启动时同步业务模块的审批动作清单到 Workflow 服务 |
@@ -487,7 +485,7 @@ Gateway断言第四批：`gatewayAssertionContract.ts` 重导出 `shared/contrac
 
 - `OrgProfileDetails`：企业基础资料/区域/联系信息展示，接收 `profile`，不发请求或写入；现只由 Console（含编辑 modal）使用。
 
-- `DirectoryUsersTable`：用户表格（名称、主部门、邮箱、手机尾号、类型、状态），`select` 发出选中用户；现只由 Console 使用。
+- `DirectoryUsersTable`：停用账号显示“已停用”徽标并置灰；用户表格（名称、主部门、邮箱、手机尾号、类型、状态），`select` 发出选中用户；现只由 Console 使用。
 
 - `DirectoryDepartmentsTable` 与 `flattenDepartmentTree`：组织树列表、缩进、展开及祖先搜索匹配；默认只读，仅 select/toggle，Console 显式 readOnly=false 保留编辑/删除事件。
 
@@ -513,6 +511,8 @@ WorkCalendarOverview 共享月汇总、日历/列表；默认只读，Console �
 
 #### B2 共享部门编辑与幂等意图
 `DirectoryDepartmentEditor` 参数化 apiPath/departments/canEdit/refresh，供 Console 与 Host 共用宽抽屉表单、差量 PATCH、useConfirm danger 删除。`createConsoleMutationIntent` 保存一次意图的 METHOD/path/body/key，重复提交互斥，结果未知时阻止新修改、保留原键重试；成功后仅处理独立 GET 刷新失败。组件不是权限边界，Host canEdit 来自 gated Console 快照，每次 mutation 仍由 Console handler 判权。MVP 无 CAS，允许既有同字段后写覆盖。
+
+`shared/utils/reviewMutationIntent.ts` 的 `createReviewMutationIntent` 复用上述稳定意图：调用方提供明确的、未落库的 409 业务码闭集，允许这些 CAS/状态拒绝在刷新比较后重新确认；未知 409、网络或 5xx 仍冻结原请求与原键。它不改变服务端授权，也不能将未知回执标为成功。历史合同及迁移队列复用此 helper。
 
 #### B2 共享项目编辑
 
@@ -590,3 +590,123 @@ Foundation 统一提供签名用户委托与 projects:view/edit 范围 permit，
 跨进程 Codocs 调用仍走其精确 capability、独立 ACL 与成对来源校验。
 
 - `enterpriseRuntimeClient` 固定操作 `console.org-brand-view`：Host 签名用户委托读企业公开名称投影，路径 `/v1/enterprise/console/org-brand:view`，复用 Console 域 Host execute；不提供完整企业资料或管理员权限旁路。
+
+目录批量姓名读取：非 Console 应用的 POST batch 复用已有共享用户投影，不申请 Console 管理权限；UID 精确去重，每批最多 100 人，总请求最多 1000 人，拒绝逗号/控制字符与非字符串。分批失败整体失败，不返回部分成功；浏览器入口仍先校验会话。现有 Host batch 路由与拓扑不变。
+
+#### People 基础读取范围（APF-09ab）
+
+`server/utils/peopleScopeProjection.ts::projectPeopleReadScope` 通过唯一 Foundation scope evaluator 的真值表编译 People Runtime 可执行的 all/self/dept/self_dept/none；不支持谓词、树异常、超过上限或无法等价表达的 AND 返回 null，调用方必须 503。员工基础读取与 standard_costs 敏感字段范围分别编译，不能用 People 权限读取 Finance 参数。`enterpriseAPFPermitCanonical` 将字段掩码、范围及全部 People 请求字段纳入短期 HMAC，TS/Go 共用 enterprise-people-permit.json 黄金夹具。
+
+APF-09d 增量：私密档案固定 view/update 都要求 `employees:edit` + 员工对象范围，服务仍为 `people:enterprise-host:execute`；六字段白名单、身份证掩码与 DingTalk 只读事实，员工 row_version 与既有 People receipt 同事务。仅交付固定私密表 domaininstall 安装/核验/回滚候选，未执行环境安装。详见 MODULE_CONTRACTS 的 APF-09d 章节。
+
+#### APF-09c1 People 事实写入
+
+`enterprisePeopleFactsPermit` 为 11 个闭集操作提供 ordered intent；`enterpriseAPFPermitCanonical` 绑定完整 People facts（含服务端字段许可）。`enterpriseRuntimeClient` 对应 `people.apf09c1-*` 固定 U 入口，人员权限仍由 scoped authorization/helper 计算，不能以 capability 代替人员范围。`enterpriseRuntimeChannels` 的 `people.workflow-callback` 为正式 Workflow 系统入口，不携带浏览器 actor；该阶段不包含身份投递能力。
+
+#### APF-09c2 Directory 出站
+
+`directoryServiceCommand.ts` 只接受 Runtime 冻结的七种既有 Directory 命令，按 operationCode 选择精确 Console capability，重新获取 Enterprise 服务身份；legacy Console HMAC 线协议仅在 Foundation 实现。`callEnterprisePeopleDirectoryWorker` 只用于已验签 APF scheduler wake 的四种固定命令，使用 people:scheduler:execute 和同 generation。浏览器没有 checkpoint/claim/ack/fail 接口；manual 候选不能进入自动开通。完整合同与候选授权文件见 MODULE_CONTRACTS APF-09c2。
+
+#### APF-07a Altoc 主链
+
+`enterpriseRuntimeClient` 登记 15 个 `altoc.apf07-*` 固定 U 操作；`enterpriseAPFPermitCanonical` 的 sales intent 绑定源 ID、完整 payload 和目标事实，TS/Go 共用 enterprise-sales-permit golden。服务仍使用 `altoc:enterprise-host:execute`，人员各动作由 scoped helper 独立判定，不新增 capability/grant。Host 不能调用通用 action API 或构造当前范围/状态事实。
+
+### APF-07b 销售支撑（已复用 U 通道）
+
+`altoc.apf07b-*` 共 14 个固定操作，名单与人员门槛见 `altoc/docs/Host-Sales-API.md`。仍为 `altoc:enterprise-host:execute`，不新增 capability/grant；Foundation 原 APF permit canonical 对 sales payload 的每个字段签名，TS/Go 黄金夹具 `enterprise-sales-support-permit.json` 固定 parent/child/version 绑定。Host REST/readiness 提供对应精确路径，无通用 action 或表代理。
+
+#### APF-18A machine wake (candidate; default disabled)
+
+`enterpriseRuntimeChannels` APF helpers accept only a verified Gateway wake for the exact domain, unified generation and protected Host enable flag. `tenantRuntimeClient` closed scheduler table includes Finance invoice pending/bind-system, People Directory prepare-due/claim/ack/fail and People assignment pending/bind. Each requests fresh enterprise.runtime `<domain>:scheduler:execute`, with no actor/purpose/U fallback. Runtime supplies the authoritative frozen People actor/form; `callEnterprisePeopleApprovalWorker` cannot accept actor facts. User `people.apf09c1-assignments-request-workflow` uses the existing assignments:edit scoped personnel permit and People U capability only to freeze explicit user intent.
+
+Gateway domain signature v1 adds `enterprise-apf-v1` + domain after the existing storage/generation canonical fields. Legacy wakes without this header keep their previous canonical bytes. Dual-audience scheduler grant candidates are separate from U grants; activation, environment writes and legacy retirement require later approval.
+
+### APF-16a fixed Host tender delegation (candidate)
+
+The existing APF permit canonicalizer and Enterprise Runtime fixed-operation registry add ten literal Altoc tender operations (`altoc.apf16a-*`). No generic service helper, tender personnel resource or service grant is added. Signed resource/action remains opportunity:view/edit; every validated scalar field, parent ID and expectedVersion uses existing SalesIntent TS/Go canonicalization. Contract/golden: `altoc/docs/Host-Tender-API.md`, `foundation/test/fixtures/enterprise-tender-permit.json`. Directory labels/selectors reuse existing batch users and department-tree facilities. No environment activation is claimed.
+
+#### APF-16b 服务协议 U 操作
+
+新增14个固定`altoc.apf16b-*`登记与permit路径（协议4、覆盖5、项目关系5），继续复用现有域U能力；`buildAPFPermit`仅使用manifest `contract:view/edit`及唯一范围投影。规范SalesIntent共同TS/Go黄金夹具绑定操作、actor、scope和全部输入。无新增服务scope/grant、无通用action代理，legacy确认写通道关闭。
+
+#### APF-16c 工单 U 操作
+
+9个固定altoc.apf16c操作与许可路径复用域U能力；service_ticket:view/edit/close/reopen只按确切manifest资源动作，重开不从edit蕴含。签名绑定当前actor/范围/对象/意图/版本，TS与Go共用enterprise-service-ticket-permit.json黄金夹具。Runtime构造注入的Aims→Altoc结果端口只接受owning事实，无前端或通用服务代理入口；不新增capability/grant。
+
+### APF-16e narrow knowledge service contract (candidate)
+
+`knowledgeLinkService.requireEnterpriseKnowledgeLink` composes current service authentication, trusted target route context, the fixed all-string `knowledgeLinkContract` command, and existing short-lived service-command HMAC verification. Only enterprise.runtime may call assets:asset-link:create or codocs:knowledge-link:create; it does not compute personnel grants or substitute source permissions for target ACL. Assets scopes continue through the sole Assets owning scope compiler and Console subject-scoped purposes. `tenantRuntimeClient` binds the private target-produced knowledgeAuthorization string to the fresh Assets Runtime token on the one exact POST path; all other transport paths remain unchanged. Fixed user U registrations are the five `altoc.apf16e-*` knowledge operations. No general proxy, scheduler capability or browser-authority input is introduced.
+
+### APF-16f Host 产品反馈
+
+三个固定 U 操作 `altoc.apf16f-product-feedback-view/submit/resume` 使用既有域能力和签名人员范围；恢复另携现有产品 create permit。`requireConsoleAltocServiceAuth` 仅供保留 aud=altoc 的旧 Aims 投影接收端，Console 实时验证后传播身份；不会修改 Host 用户 OIDC 配置。`callEnterpriseAltocFeedbackProjection` 仅有 status/progress 两个闭集分支，以新取得的 enterprise.runtime 与既有 `altoc:scheduler:execute` 调 Runtime，不转发入站令牌。无新增 capability 或 grant。
+
+### APF-16g 服务只读摘要
+
+`altoc.apf16g-customer-service-finance-summary` 与 `altoc.apf16g-service-cost-summary-view` 为现有域 U 通道内的固定操作，无新增授权。Finance 权限由现有责任范围与项目核算 helper 投影，绑定在签名意图中；没有权限的区块不返回数量，不把 Altoc 人员许可提升为 Finance 许可。Owning Finance caller-Tx 读取只返回已确认的公共事实。
+
+### APF-17a HR 控制命令桥
+
+`enterpriseHRSourceCommand.ts` 只向受信Console route目录中的目标部署调用固定HR来源合同，重新取得enterprise.runtime服务身份，复用console:hr-source-sync:view/admin/execute；不转发用户token、不冒充people.runtime。`enterprisePeopleFactsPermit.ts`登记11个HR U操作并使用既有APF HMAC黄金合同；非全租户HR范围失败关闭。服务目标必须验签命令来源与双部署绑定。环境grant与新增state安装均只交付候选。
+
+#### APF-18B1 到期通知候选
+
+`callEnterpriseAPFDueWorker(event, family, action, body)` 只接受六个固定族和 scan-due/published/closure-ack，在已验证 APF wake 下以 Enterprise 自身身份请求对应域 scheduler scope，携带 unified generation；tenantRuntimeClient 的精确系统路径白名单同步登记。关态在 token/IO 前短路，不创建新 cron。
+
+`publishNotification` 的 `probeOnly: true` 仅用于 Enterprise APF 冻结意图原键回执查询；Console 验签身份，目标返回 absent 不等于安全取消依据。原发布/关闭幂等合同不变。APF purpose 经现有 `checkSubjectEligibility` 和 `callEnterpriseNotificationRuntime`，Console 的固定目的映射到业务 view 资源，不接受客户端指定权限 tuple；Runtime 再检查直接责任人事实。安装、seed 和唯一 owner 切换门禁见 MODULE_CONTRACTS APF-18B1。
+
+#### APF-18B2 死信通知候选
+
+`callEnterpriseAPFDeadLetterWorker` 只允许三域×四个固定 S 命令，复用受验签的 APF wake、Registry scheduler generation 与 `<domain>:scheduler:execute`，每跳重新获取 enterprise.runtime 身份。没有新增 U capability/grant；复用 APF-18A 的双 audience scheduler seed/verify 和18B1 P/发布制品。发布源 enterprise 与原 operation.source_app 分离，Console 保留原 active actor/配置回退收件人合同；`apf_<domain>_dead_letter` 详情需当前 integration_operations:view 及冻结收件人双检。全部 owner 默认关闭，旧通知 task/请求内调用须先停并对账。
+
+
+### APF-17c 原命令状态查询与恢复许可
+
+`callDirectoryLifecycleProbe(event, frozen)` 只接收 Runtime 已核验的 employment-sync/offboarding-disable 冻结命令，复用 directoryCommandHeaders 的严格来源/客户端/tenant/deployment/capability 校验，再以当前 Enterprise 身份发送只读查询。返回 Directory/Platform 封闭状态；不接收浏览器确认，不投递命令，不变更状态。`readConsoleLifecycleCommandStatus` 由 Console 以现有 directory-connector 精确能力查询 Runtime 的对应版本。
+
+`enterprisePeopleFactsPermit` 与 `enterpriseRuntimeClient` 增量登记 directory-operations-list/view/replay 三个固定 U 操作，人员资源是 integration_operations 的全局 view/replay；黄金夹具与 Go 校验共同固定 action、actor、对象、版本、作用域和 TTL。无新 capability/grant。本地 egress 只增两条精确 GET probe 路径候选，写方法/相邻路径拒绝；部署与路径核验仍是环境待验项。
+
+## 保留目录主体与“未分配”内置用户
+
+- `foundation/shared/utils/reservedDirectorySubject.ts`：`isReservedDirectorySubject(uid)`（`system`、`system:*`、`client:*`）、`UNASSIGNED_OWNER_UID`（`system:unassigned`）、`UNASSIGNED_OWNER_LABEL`（“未分配”）。前后端共用。
+- `foundation/server/utils/builtinDirectoryUsers.ts`：内置目录用户在本地解析、不转发 Console Directory；现有 `system` 与 `system:unassigned` 两项。内置用户只用于显示，不是身份。
+- 保留主体不能作为会话主体（`requireFoundationSessionUid`）、不能取得权限快照或 scoped authorization（`platformBundleAuthorization.ts` 的两个加载函数直接 403）、不进入 `UserTreeSelector` 候选且不会被其提交。
+- 业务模块显示负责人等 uid 时，对 `UNASSIGNED_OWNER_UID` 显示 `UNASSIGNED_OWNER_LABEL`，并且不要把保留主体计入“目录未解析”的错误判断。合同见 `docs/MODULE_CONTRACTS.md`“Altoc 负责人指派校验与‘未分配’保留主体”。
+
+## 敏感操作审计用的客户端地址（`trustedClientAddress`）
+
+`foundation/server/utils/trustedClientAddress.ts` 提供 `trustedClientAddress(event)` 与 `reportedUserAgent(event)`，供需要把“谁从哪里发起”写入审计的敏感操作使用（首个使用方：Finance 查看完整银行账号）。
+
+- 地址取连接对端；仅当对端是回环或私网地址（请求来自 Gateway）时采用 Gateway 覆盖写入的 `X-Real-IP`。**不读取 `X-Forwarded-For`**——浏览器可以在它前面放任何值。
+- 依赖的部署不变量：受支持的 Tenant Gateway 要么用自己看到的地址覆盖 `X-Real-IP`（自托管 nginx），要么剥离全部转发头（本地测试 Gateway，此时记录到的是 Gateway 的回环地址）。新增 Gateway 形态时须保持这一点。
+- `reportedUserAgent` 是浏览器自报信息，只做长度与可打印字符处理，不能作为安全依据。
+- 既有 `getRequestIp` / `getAuthRequestIp` 兼容入口已委托给 `trustedClientAddress`，供 Foundation、Align、Console 的登录、会话及授权模拟审计使用；Codocs WeCom 登录审计和 Console OIDC 令牌事件直接调用同一 helper。无法取得有效地址时记录 `null`。
+- Platform 的发布审批／同步、Vault 迁移、OIDC 签名初始化和会话记录经 `platform/server/utils/trustedClientAddress.ts` 复用此独立工具，不组合 Foundation Nuxt Layer。原始 `X-Forwarded-For` 不作为审计地址。
+- Console 登录日志 Service API 的 `body.ipAddress` 是具有 `audit:write` 能力的服务调用方上报的原始客户端地址；该已有合同保留。它与从当前请求连接提取地址的 helper 不同，不能对浏览器开放同样的信任。
+
+### Host 目录显示标签
+
+`useHostDirectoryLabels(uids, enabled?)` 合并当前 Host 会话的目录批量姓名查询与部门树，返回 `userName`、`userDepartment`、`departmentName` 及显式重试入口。保留主体不查询；切换身份清空缓存，丢弃迟到响应；失败不自动循环重试。模块可用 `enabled` 延迟加载（Finance 迁移队列仅在 Altoc 人员页有查看权限时读取），不把原始 UID 显示成姓名。Altoc 既有 `useAltocDirectoryLabels` 保留为同一实现的别名。
+
+### 来源记录展示
+
+`foundation/app/components/SourceRecordInfo.vue` 接收已由 owning Runtime 白名单投影的 `source`，只展示来源系统、源表、源主键、批次与导入时间。Enterprise W3 保留原组件名作为薄包装；Finance 账户详情复用同一组件，不读取迁移原始 JSON。
+
+### 浏览器标签品牌标题
+
+Foundation `browser-title` 插件提供统一 `titleTemplate`：有页面名显示「页面名 - 汇智云」，空白或未提供名称显示「汇智云」。Host `ContentPageHeader` 提供响应式页头名称；独立应用通过 `usePageTitle` 或 `useHead` 提供纯页面名。业务页不自拼品牌，页面内标题与返回入口保持原用途。
+
+员工选择器以 Directory active 状态为准；停用、已删除及缺失状态均不可选，历史已选账号显示“账号已停用、授权不生效”。
+
+
+### Codocs 共享通知的外部身份降级（2026-10-08）
+
+Codocs 共享通知在既有 Console 通知发布合同中显式请求 `resolveExternalChannel`（闭集：`wecom` / `dingtalk`）。该传输字段不进入规范通知正文和摘要，不改变既有幂等键、permit 或能力；未启用的调用保持原行为。Console Runtime 只解析本次规范通知收件人，通过 Directory 的 active 身份返回绑定目标；不接受调用方自报外部身份。该响应仅用于服务端投递，不下发浏览器，不记录外部身份值。
+
+收件人缺有效外部绑定或已停用时，在同一通知事务中记录 `skipped` 及闭集原因。站内通知成功后，外部跳过不构成共享失败；有效绑定的收件人仍正常投递。Directory 依赖故障、响应不完整或不匹配不得降级为跳过。原键重放不重复写跳过记录。真实临时投递失败保留 pending 和原键；授权/配置或渠道明确拒绝显示已共享与渠道提示，不伪装为共享行写入失败。
+
+共享列表姓名补充复用 Foundation 既有目录用户读取合同；失败仅回退 UID，不改变共享 ACL。禁止将文档共享给当前操作者或文档所有者：Host 与 Runtime 在写入/通知前返回 `share_self_not_allowed`。历史自共享行不自动清理。
+
+### 全局反馈图片与截图（G2+G3）
+
+`GlobalFeedbackButton` 组合 `FeedbackImageEditor` 与 `app/utils/feedbackImages.ts`：上传/弹窗内粘贴、本机预览、裁剪和不可恢复的实色遮挡；确认附带不上传，最终提交才走 Host 固定 BFF。html2canvas 按需从本站加载，仅当前视口；业务敏感容器使用 `data-feedback-private`，完全禁止自动采集的页面使用 `data-feedback-capture="deny"`。原生标签页捕获仅显式后备，所有 tracks 最终停止。没有新增外部截图代理或 Token 接口。截图标记不能替代人工逐图确认。

@@ -17,6 +17,12 @@ import (
 )
 
 func TestSchedulerRegistryMappedClaimMySQL(t *testing.T) {
+	testSchedulerRegistryMappedClaimMySQL(t, "aims", "aims.runtime")
+}
+func TestHostSchedulerRegistryMappedClaimMySQL(t *testing.T) {
+	testSchedulerRegistryMappedClaimMySQL(t, "enterprise", "enterprise.runtime")
+}
+func testSchedulerRegistryMappedClaimMySQL(t *testing.T, executor, client string) {
 	socket := os.Getenv("HZY_ENTERPRISE_SCHEDULER_TEST_SOCKET")
 	if socket == "" {
 		t.Skip("requires dedicated temporary MySQL")
@@ -97,7 +103,7 @@ func TestSchedulerRegistryMappedClaimMySQL(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	source, err := e.NewOutboundSource(q, resolved, "real-aims-worker", "aims.runtime")
+	source, err := e.NewOutboundSource(q, resolved, "real-aims-worker", client)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -106,7 +112,7 @@ func TestSchedulerRegistryMappedClaimMySQL(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	identity := e.SchedulerIdentity{Tenant: "tenant-a", Deployment: "real-aims-worker", SourceApp: "aims", ClientID: "aims.runtime", Subject: "aims.runtime"}
+	identity := e.SchedulerIdentity{Tenant: "tenant-a", Deployment: "real-aims-worker", SourceApp: executor, ClientID: client, Subject: client}
 	now := time.Now().UTC().Truncate(time.Millisecond)
 	insert := func(table, tenant, deployment, key string) string {
 		t.Helper()
@@ -116,7 +122,11 @@ func TestSchedulerRegistryMappedClaimMySQL(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		exec("INSERT INTO "+table+"(operation_id,operation_key,correlation_key,tenant_code,deployment_code,source_app,target_app,operation_code,required_capability,source_biz_type,source_biz_code,idempotency_key,command_json,command_sha256,next_attempt_at) VALUES(?,?,?,?,?,'aims','assets','assets.delivery.link_document.v1','assets.delivery.write','request','R-1',?,?,?,?)", id, key, key, tenant, deployment, key, string(command), digest, now)
+		operationCode := "assets.delivery.link_document.v1"
+		if executor == "enterprise" {
+			operationCode = "aims.codocs.product-document.create.v1"
+		}
+		exec("INSERT INTO "+table+"(operation_id,operation_key,correlation_key,tenant_code,deployment_code,source_app,target_app,operation_code,required_capability,source_biz_type,source_biz_code,idempotency_key,command_json,command_sha256,next_attempt_at) VALUES(?,?,?,?,?,'aims','assets',?,'assets.delivery.write','request','R-1',?,?,?,?)", id, key, key, tenant, deployment, operationCode, key, string(command), digest, now)
 		return id
 	}
 	id := insert("u_integration_operation", "tenant-a", "real-aims-worker", "key-1")
@@ -132,8 +142,16 @@ func TestSchedulerRegistryMappedClaimMySQL(t *testing.T) {
 			}
 		}
 	}
+	if executor == "enterprise" {
+		exec("UPDATE u_integration_operation SET operation_code='aims.work-item.ticket-result.v1' WHERE operation_id=?", id)
+		if _, err = service.Claim(ctx, identity, "key-1", "worker-1", now, time.Minute); err == nil {
+			t.Fatal("retired command claimed")
+		}
+		assertUntouched()
+		exec("UPDATE u_integration_operation SET operation_code='aims.codocs.product-document.create.v1' WHERE operation_id=?", id)
+	}
 	for name, mutate := range map[string]func(*e.SchedulerIdentity){
-		"tenant": func(i *e.SchedulerIdentity) { i.Tenant = "tenant-b" }, "deployment": func(i *e.SchedulerIdentity) { i.Deployment = "runtime-a" }, "source": func(i *e.SchedulerIdentity) { i.SourceApp = "enterprise" }, "client": func(i *e.SchedulerIdentity) { i.ClientID = "enterprise.runtime" }, "subject": func(i *e.SchedulerIdentity) { i.Subject = "other" },
+		"tenant": func(i *e.SchedulerIdentity) { i.Tenant = "tenant-b" }, "deployment": func(i *e.SchedulerIdentity) { i.Deployment = "runtime-a" }, "source": func(i *e.SchedulerIdentity) { i.SourceApp = "other" }, "client": func(i *e.SchedulerIdentity) { i.ClientID = "other.runtime" }, "subject": func(i *e.SchedulerIdentity) { i.Subject = "other" },
 	} {
 		t.Run(name, func(t *testing.T) {
 			bad := identity

@@ -17,7 +17,7 @@ type OutboundSource struct {
 }
 
 func NewOutboundSource(writer ResolveRequest, resolved Resolved, workerDeployment, workerClient string) (OutboundSource, error) {
-	if writer.Domain != "aims" || !nonempty(workerDeployment) || workerClient != "aims.runtime" {
+	if writer.Domain != "aims" || !nonempty(workerDeployment) || (workerClient != "aims.runtime" && workerClient != "enterprise.runtime") {
 		return OutboundSource{}, fmt.Errorf("%w: explicit Aims delivery worker required", ErrBindingMismatch)
 	}
 	operation, e := resolved.Table("integration_operation")
@@ -47,7 +47,7 @@ func NewOutboundSource(writer ResolveRequest, resolved Resolved, workerDeploymen
 	return s, nil
 }
 func (s OutboundSource) Validate(writer ResolveRequest, resolved Resolved) error {
-	if !validKey(s.key) || !nonempty(s.schema) || s.generation == 0 || !nonempty(s.owner) || writer.Domain != "aims" || resolved.Domain != "aims" || s.key != writer.Key || s.key != resolved.Key || s.schema != writer.SchemaVersion || s.schema != resolved.SchemaVersion || s.generation != writer.Generation || s.generation != resolved.Generation || s.owner != writer.OwnerDeployment || s.owner != resolved.OwnerDeployment || s.workerDeployment == "" || s.workerClient != "aims.runtime" {
+	if !validKey(s.key) || !nonempty(s.schema) || s.generation == 0 || !nonempty(s.owner) || writer.Domain != "aims" || resolved.Domain != "aims" || s.key != writer.Key || s.key != resolved.Key || s.schema != writer.SchemaVersion || s.schema != resolved.SchemaVersion || s.generation != writer.Generation || s.generation != resolved.Generation || s.owner != writer.OwnerDeployment || s.owner != resolved.OwnerDeployment || s.workerDeployment == "" || (s.workerClient != "aims.runtime" && s.workerClient != "enterprise.runtime") {
 		return ErrBindingMismatch
 	}
 	for logical, physical := range map[string]string{"integration_operation": s.tables.Operation(), "integration_operation_attempt": s.tables.Attempt(), "service_command_receipt": s.tables.Receipt(), "integration_operation_dead_letter_actionable": s.tables.DeadLetterActionable()} {
@@ -66,7 +66,7 @@ func (s *OutboundSource) Context(writer ResolveRequest, requestID string) integr
 		return integrationoperation.TrustedContext{}
 	}
 	tables := s.tables
-	return integrationoperation.TrustedContext{TenantCode: s.key.Tenant, DeploymentCode: s.workerDeployment, SourceApp: "aims", RequestID: requestID, OutboxTables: &tables}
+	return integrationoperation.TrustedContext{TenantCode: s.key.Tenant, DeploymentCode: s.workerDeployment, SourceApp: "aims", RequestID: requestID, OutboxTables: &tables, RetireAPFCommands: s.workerClient == "enterprise.runtime"}
 }
 
 func (s OutboundSource) WorkerDeployment() string                  { return s.workerDeployment }

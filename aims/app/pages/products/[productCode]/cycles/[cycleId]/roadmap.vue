@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { objectivePositive as positive } from '~/utils/productObjectiveView'
 
-definePageMeta({ layoutHeader: true, layoutHeaderTitle: '季度路线图', layoutHeaderProjectSwitcher: false })
+definePageMeta({ hostContentWidth: 'full', layoutHeader: true, layoutHeaderTitle: '季度路线图', layoutHeaderProjectSwitcher: false })
 const route = useRoute()
 const code = computed(() => String(route.params.productCode || ''))
 const cycleId = computed(() => String(route.params.cycleId || ''))

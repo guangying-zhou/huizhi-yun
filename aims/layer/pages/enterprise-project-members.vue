@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import CommonEmptyState from '@hzy/foundation/app/components/common/EmptyState.vue'
+import { projectPageFailure } from '../../app/utils/projectPageFailure'
 import ProjectNavbar from '../../app/components/project/ProjectNavbar.vue'
 import { PROJECT_ROLE_LABELS, PROJECT_ROLE_OPTIONS, type NormalizedProjectRole } from '../../app/utils/projectRoles'
 import { useAccountUsers } from '@hzy/foundation/app/composables/useAccount'
@@ -7,6 +9,7 @@ import { useAimsModule } from '../useAimsModule'
 type ProjectMember = { id: number, uid: string, role?: string, status?: string, createdAt?: string, updatedAt?: string, created_at?: string, updated_at?: string }
 const { users: accountUsers } = useAccountUsers()
 const { confirm } = useConfirm()
+const toast = useToast()
 const userNames = computed(() => new Map(accountUsers.value.map(user => [user.uid, user.realName || user.uid])))
 const memberStatusLabels: Record<string, string> = { active: '有效', inactive: '已停用' }
 const route = useRoute()
@@ -40,31 +43,43 @@ async function write(action: 'add' | 'role' | 'remove', target: string, nextRole
     uid.value = ''
     await refresh()
   } catch (cause) {
-    error.value = cause instanceof Error ? cause.message : '成员操作失败，可使用相同操作标识重试'
+    toast.add({ title: '成员操作未完成', description: projectPageFailure(cause, '请重试原操作'), color: 'error' })
   } finally {
     saving.value = false
   }
 }
 
+let readGeneration = 0
 async function refresh() {
+  const generation = ++readGeneration
   loading.value = true
   error.value = ''
+  canManage.value = false
+  items.value = []
+  total.value = 0
   try {
     const detail = await $fetch<{ code?: number, data?: Record<string, unknown> }>(moduleUrl(`/api/v1/projects/${projectId.value}`))
+    if (generation !== readGeneration) return
     canManage.value = detail.code === 0 && detail.data?.canEditProject === true
     const response = await $fetch<{ code?: number, data?: { items?: ProjectMember[], total?: number } }>(moduleUrl(`/api/v1/projects/${projectId.value}/members`), {
       query: { page: page.value, pageSize, ...(debounced.value.trim() ? { search: debounced.value.trim() } : {}) }
     })
+    if (generation !== readGeneration) return
     if (response.code !== 0) throw Error('项目成员暂不可用')
     items.value = Array.isArray(response.data?.items) ? response.data.items : []
     total.value = Number(response.data?.total || items.value.length)
   } catch (cause) {
-    error.value = cause instanceof Error ? cause.message : '项目成员暂不可用'
+    if (generation !== readGeneration) return
+    canManage.value = false
+    error.value = projectPageFailure(cause, '项目成员暂不可用')
   } finally {
-    loading.value = false
+    if (generation === readGeneration) loading.value = false
   }
 }
 
+onScopeDispose(() => {
+  readGeneration++
+})
 watch(projectId, () => {
   if (page.value !== 1) page.value = 1
   else refresh()
@@ -80,7 +95,7 @@ onMounted(refresh)
         <ProjectNavbar>
           <template #actions>
             <UButton
-              v-if="canManage"
+              v-if="canManage && !loading && !error"
               icon="i-lucide-user-plus"
               size="sm"
               @click="showAdd=true"
@@ -121,6 +136,8 @@ onMounted(refresh)
               :description="error"
             />
             <UTable
+              v-if="!error"
+              class="hidden sm:block"
               :data="items"
               :loading="loading"
               :columns="[
@@ -169,7 +186,57 @@ onMounted(refresh)
                 <CommonEmptyState icon="i-lucide-users" title="暂无项目成员" description="当前项目没有可显示的成员。" />
               </template>
             </UTable>
-            <div class="flex flex-wrap items-center justify-between gap-3">
+            <div v-if="!error" class="sm:hidden">
+              <p v-if="loading" role="status" class="py-4 text-sm text-muted">
+                正在读取成员…
+              </p>
+              <ul v-else-if="items.length" class="divide-y divide-default">
+                <li v-for="member in items" :key="member.id" class="space-y-3 py-3">
+                  <div class="flex min-w-0 items-start justify-between gap-3">
+                    <div class="min-w-0">
+                      <p class="truncate font-medium">
+                        {{ userNames.get(member.uid) || member.uid }}
+                      </p>
+                      <p class="truncate text-xs text-muted">
+                        {{ member.uid }}
+                      </p>
+                    </div>
+                    <UBadge color="neutral" variant="subtle">
+                      {{ memberStatusLabels[member.status || ''] || member.status || '-' }}
+                    </UBadge>
+                  </div>
+                  <p class="text-sm text-muted">
+                    {{ PROJECT_ROLE_LABELS[member.role as NormalizedProjectRole] || member.role || '-' }}
+                  </p>
+                  <div v-if="canManage" class="flex flex-wrap gap-2">
+                    <UButton
+                      size="xs"
+                      variant="soft"
+                      :disabled="saving"
+                      @click="write('role', member.uid, member.role === 'manager' ? 'member' : 'manager')"
+                    >
+                      {{ member.role === 'manager' ? '改为成员' : '设为经理' }}
+                    </UButton>
+                    <UButton
+                      size="xs"
+                      color="error"
+                      variant="soft"
+                      :disabled="saving"
+                      @click="write('remove', member.uid)"
+                    >
+                      移除
+                    </UButton>
+                  </div>
+                </li>
+              </ul>
+              <CommonEmptyState
+                v-else
+                icon="i-lucide-users"
+                title="暂无项目成员"
+                description="当前项目没有可显示的成员。"
+              />
+            </div>
+            <div v-if="!error" class="flex flex-wrap items-center justify-between gap-3">
               <span class="text-sm text-muted">共 {{ total }} 条</span>
               <UPagination v-model:page="page" :items-per-page="pageSize" :total="total" />
             </div>
@@ -194,7 +261,7 @@ onMounted(refresh)
             >
               取消
             </UButton><UButton
-              v-if="canManage"
+              v-if="canManage && !loading && !error"
               :loading="saving"
               :disabled="!uid.trim()"
               @click="write('add', uid, role)"

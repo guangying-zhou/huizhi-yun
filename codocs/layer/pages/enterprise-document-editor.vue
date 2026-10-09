@@ -11,6 +11,11 @@ usePageTitle('协作文档')
 <template>
   <section class="w-full" style="height: calc(100svh - 3.5rem); min-height: 32rem">
     <UAlert v-if="!validUuid" color="error" title="文档标识无效" />
-    <CodocsEditor v-else :uuid="uuid" :base-url="codocsUrl" class="h-full" />
+    <CodocsEditor
+      v-else
+      :uuid="uuid"
+      :base-url="codocsUrl"
+      class="h-full"
+    />
   </section>
 </template>

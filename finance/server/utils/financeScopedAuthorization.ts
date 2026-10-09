@@ -9,7 +9,7 @@ import {
   authorizationActionsAllow,
   type ResourceActionPolicy
 } from '@hzy/foundation/shared/utils/authorizationActions'
-import { appCode, type PermissionAction } from '~~/app/config/permissions'
+import { appCode, type PermissionAction } from '../../app/config/permissions'
 
 type RuntimeQuery = Record<string, unknown>
 

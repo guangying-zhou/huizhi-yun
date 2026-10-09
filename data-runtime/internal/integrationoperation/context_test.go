@@ -47,3 +47,10 @@ func TestTrustedContextFromMapFailsClosed(t *testing.T) {
 		})
 	}
 }
+
+func TestPublicMapCannotSelectRetiredProducerPolicy(t *testing.T) {
+	trusted, err := TrustedContextFromMap(map[string]any{TrustedTenantCodeKey: "tenant", TrustedDeploymentCodeKey: "dep", TrustedSourceAppKey: "aims", "RetireAPFCommands": true}, "aims")
+	if err != nil || trusted.RetireAPFCommands {
+		t.Fatalf("public producer flag accepted: %+v %v", trusted, err)
+	}
+}

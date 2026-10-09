@@ -18,7 +18,7 @@ export interface NotificationAuthorizationDescriptor {
   bizKey?: string
 }
 
-const SUPPORTED_NOTIFICATION_DETAIL_SOURCE_APPS = new Set(['workflow', 'aims', 'assets', 'people', 'finance', 'altoc'])
+const SUPPORTED_NOTIFICATION_DETAIL_SOURCE_APPS = new Set(['workflow', 'aims', 'assets', 'people', 'finance', 'altoc', 'enterprise'])
 const ENTERPRISE_CODOCS_SNAPSHOT_TYPES = new Set(['document_share', 'department_share', 'document_review'])
 const SUPPORTED_ASSETS_NOTIFICATION_DETAIL_RESOURCES = new Set([
   'asset_item',
@@ -40,7 +40,7 @@ function normalizedAppCode(value: unknown) {
 export function notificationDetailSourceAuthorizationTarget(sourceAppCodeInput: unknown) {
   const sourceAppCode = normalizedAppCode(sourceAppCodeInput)
   if (!SUPPORTED_NOTIFICATION_DETAIL_SOURCE_APPS.has(sourceAppCode)) return null
-  if (sourceAppCode === 'aims' || sourceAppCode === 'assets') {
+  if (sourceAppCode === 'aims' || sourceAppCode === 'assets' || sourceAppCode === 'enterprise') {
     return { audience: 'enterprise', scope: 'enterprise:notification-detail:authorize' }
   }
   return { audience: sourceAppCode, scope: `${sourceAppCode}:notification-details:authorize` }
@@ -159,6 +159,21 @@ export function notificationAuthorizationDescriptor(
     return { resource, id }
   }
 
+  if (sourceAppCode === 'enterprise') {
+    if (row.bizType === 'integration_operation' && metadata.notificationKind === 'apf_dead_letter') {
+      const descriptor = metadata.authorizationDescriptor as Record<string, unknown> | undefined
+      if (!descriptor || Object.keys(descriptor).sort().join(',') !== 'id,resource' || !['altoc', 'finance', 'people'].includes(String(metadata.moduleAppCode)) || descriptor.resource !== `apf_${metadata.moduleAppCode}_dead_letter` || descriptor.id !== row.bizId || !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(String(descriptor.id))) return null
+      return { resource: String(descriptor.resource), id: String(descriptor.id) }
+    }
+    if (row.bizType !== 'apf_due_checkpoint' || metadata.notificationKind !== 'apf_due') return null
+    const descriptor = metadata.authorizationDescriptor as Record<string, unknown> | undefined
+    if (!descriptor || Object.keys(descriptor).sort().join(',') !== 'id,resource' || !['apf_sales_lead_due', 'apf_sales_due', 'apf_billing_due', 'apf_issuance_due', 'apf_reconciliation_due', 'apf_handover_due', 'apf_asset_recovery_due'].includes(String(descriptor.resource)) || descriptor.id !== row.bizId
+      || !/^apf-due:(sales-due|billing-due|issuance-due|reconciliation-due|handover-due|asset-recovery-due):[a-z_]+:[1-9][0-9]*:[1-9][0-9]*$/.test(String(descriptor.id))) return null
+    const family = String(descriptor.id).split(':')[1]!.replaceAll('-', '_')
+    const purpose = family === 'sales_due' && String(descriptor.id).split(':')[2] === 'lead' ? 'apf_sales_lead_due' : `apf_${family}`
+    if (descriptor.resource !== purpose) return null
+    return { resource: String(descriptor.resource), id: String(descriptor.id) }
+  }
   if (sourceAppCode === 'people') {
     const rawDescriptor = metadata.authorizationDescriptor
     if (!rawDescriptor || typeof rawDescriptor !== 'object' || Array.isArray(rawDescriptor)) return null
@@ -220,7 +235,7 @@ export function notificationAuthorizationDescriptor(
     const resource = boundedDescriptorValue(descriptor.resource, 128)
     const id = boundedDescriptorValue(descriptor.id, 256)
     if (
-      !['people_lifecycle_authorization', 'notification_runtime'].includes(resource)
+      !['people_lifecycle_authorization', 'notification_runtime', 'feedback'].includes(resource)
       || !id
       || boundedDescriptorValue(row.bizType, 128) !== resource
       || boundedDescriptorValue(row.bizId, 256) !== id

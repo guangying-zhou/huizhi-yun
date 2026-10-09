@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import CommonEmptyState from '@hzy/foundation/app/components/common/EmptyState.vue'
+import { documentLoadErrorMessage } from '../../utils/departmentDocumentWriteError'
+
 import MyDocumentSpaceHeader from '../../components/MyDocumentSpaceHeader.vue'
 import { useDocumentDownload } from '../../composables/useDocumentDownload'
 import { useCodocsModule } from '../../../layer/useCodocsModule'
@@ -58,7 +61,7 @@ const fetchRecentlyEdited = async () => {
   return response?.data?.items || []
 }
 
-const { data: documents, pending } = await useAsyncData(cacheKey('my-recent-docs'), fetchRecentlyEdited, { watch: [page] })
+const { data: documents, pending, error: loadError, refresh } = await useAsyncData(cacheKey('my-recent-docs'), fetchRecentlyEdited, { watch: [page] })
 </script>
 
 <template>
@@ -69,7 +72,13 @@ const { data: documents, pending } = await useAsyncData(cacheKey('my-recent-docs
     <div class="flex-1 overflow-auto p-4">
       <ClientOnly>
         <div>
+          <CommonEmptyState v-if="loadError" title="无法读取文档" :description="documentLoadErrorMessage(loadError)">
+            <UButton color="neutral" variant="outline" @click="refresh()">
+              重试
+            </UButton>
+          </CommonEmptyState>
           <UTable
+            v-else
             v-model:sorting="sorting"
             :data="documents || []"
             :columns="columns"

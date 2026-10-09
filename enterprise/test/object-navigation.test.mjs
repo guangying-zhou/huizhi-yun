@@ -1,6 +1,9 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { filterObjectGroups, isUsableProject, numericProjectId, projectReturnTarget, safeProjectReturn, projectWorkspaceWithWriteAccess, projectTabAllows, projectTabForPath } from '../app/utils/object-navigation.mjs'
+import { readFileSync } from 'node:fs'
+import { runInNewContext } from 'node:vm'
+import { computed, ref } from 'vue'
+import { filterObjectGroups, isUsableProject, numericProjectId, projectReturnTarget, safeProjectReturn, projectWorkspaceWithWriteAccess, projectTabAllows, projectTabForPath, projectPageCanMount } from '../app/utils/object-navigation.mjs'
 
 const workspace = { base: '/aims/projects/:id', groups: [{ id: 'overview', label: '概览', items: [{ id: 'overview', label: '概览', path: '' }, { id: 'board', label: '看板', path: '/board' }] }] }
 const matched = [{ name: 'aims-project-detail', path: '/aims/projects/:id' }]
@@ -77,4 +80,37 @@ test('restricted page mounting fails closed before discovery and for stale proje
   assert.equal(projectPageCanMount('/aims/projects/263', project), true)
   assert.equal(projectPageCanMount('/enterprise', null), true)
   assert.equal(projectPageCanMount('/aims/projects/263/weekly-reports', { ...project, projectTabAccess: { anyProjectManager: true } }), true)
+})
+
+test('overview, members and document pages wait for exact project discovery too', () => {
+  for (const suffix of ['', '/members', '/documents', '/documents/1/open']) {
+    const path = `/aims/projects/1${suffix}`
+    assert.equal(projectPageCanMount(path, null), false)
+    assert.equal(projectPageCanMount(path, { id: 2, name: '另一项目' }), false)
+    assert.equal(projectPageCanMount(path, { id: 1, name: '已无权项目', canAccess: false }), false)
+    assert.equal(projectPageCanMount(path, { id: 1, name: '当前有权项目', canAccess: true }), true)
+  }
+})
+
+test('actual page gate immediately hides outgoing project on navigation before Nuxt updates page route', () => {
+  const route = ref({ path: '/aims/projects/1/documents' })
+  const context = { project: ref({ id: 1, name: '可见项目', canAccess: true }) }
+  const page = readFileSync(new URL('../app/components/EnterpriseProjectPageGate.vue', import.meta.url), 'utf8')
+  const script = page.match(/<script setup[^>]*>([\s\S]*?)<\/script>/)[1].replace(/^import .*$/gm, '')
+  const exports = {}
+  runInNewContext(script + '\nexports.allowed = allowed', {
+    exports, computed, projectPageCanMount,
+    useRouter: () => ({ currentRoute: route }),
+    useRoute: () => { throw new Error('delayed Nuxt route cannot gate the target') },
+    useProvidedEnterpriseProjectObjectContext: () => context
+  })
+  assert.equal(exports.allowed.value, true)
+  route.value = { path: '/aims/projects/999/documents' }
+  assert.equal(exports.allowed.value, false, 'outgoing project must hide before target ACL finishes')
+  context.project.value = null
+  assert.equal(exports.allowed.value, false)
+  context.project.value = { id: 999, name: '不可见项目', canAccess: false }
+  assert.equal(exports.allowed.value, false)
+  context.project.value = { id: 999, name: '已核准项目', canAccess: true }
+  assert.equal(exports.allowed.value, true)
 })

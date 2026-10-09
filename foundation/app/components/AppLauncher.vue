@@ -111,8 +111,7 @@ function prefetchApp(app: { appCode: string, homeUrl: string | null, basePath?: 
             :alt="app.appName"
           >
           <UIcon v-else name="i-lucide-box" class="size-8 text-dimmed" />
-          <span class="line-clamp-2 text-center text-xs leading-tight text-default">
-            {{ getShortApplicationName(app.appName, app.appCode) }}
+          <span class="line-clamp-2 text-center text-xs leading-tight text-default"> {{ getShortApplicationName(app.appName, app.appCode) }}
           </span>
         </NuxtLink>
         <div
@@ -123,7 +122,12 @@ function prefetchApp(app: { appCode: string, homeUrl: string | null, basePath?: 
           aria-disabled="true"
         >
           <UIcon v-if="isApplicationIconName(app.icon)" :name="app.icon!" class="size-8" />
-          <img v-else-if="app.icon" :src="app.icon" class="size-8 rounded object-contain opacity-60" :alt="app.appName">
+          <img
+            v-else-if="app.icon"
+            :src="app.icon"
+            class="size-8 rounded object-contain opacity-60"
+            :alt="app.appName"
+          >
           <UIcon v-else name="i-lucide-box" class="size-8" />
           <span class="line-clamp-2 text-center text-xs leading-tight">{{ getShortApplicationName(app.appName, app.appCode) }}</span>
           <span class="text-center text-[10px] leading-tight">{{ app.availabilityReason || '暂不可用' }}</span>

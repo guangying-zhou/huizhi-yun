@@ -34,6 +34,10 @@ test('admin project bridge requires static admin and keeps its service operation
     assert.equal((await list({ query: { page: '1', pageSize: '20' } })).code, 0)
     assert.equal(calls.at(-1).op, 'aims.admin-project-list')
     assert.equal(calls.at(-1).body.authorization.mode, 'admin-static')
+    await list({ query: { tree: 'true', search: 'needle', page: '2', pageSize: '20' } })
+    assert.equal(calls.at(-1).body.query.tree, 'true')
+    assert.equal(calls.at(-1).body.query.search, 'needle')
+    await assert.rejects(list({ query: { tree: 'false' } }), { statusCode: 400 })
     const edit = { params: { id: '7' }, headers: { 'Idempotency-Key': 'marked-7' }, body: { expectedVersion: 'a'.repeat(64), name: '标记' } }
     assert.equal((await update(edit)).code, 0)
     assert.equal(calls.at(-1).op, 'aims.admin-project-update')
@@ -41,7 +45,7 @@ test('admin project bridge requires static admin and keeps its service operation
     assert.equal(calls.at(-1).options.idempotencyKey, 'marked-7')
     const count = calls.length
     deps.scoped = { ...deps.scoped, grants: [{ ...deps.scoped.grants[0], scopes: [{ dimension: 'project', predicate: 'code', value: 'P7' }] }] }
-    await assert.rejects(list({ query: {} }), { statusCode: 403 })
+    await assert.rejects(list({ query: { tree: 'true' } }), { statusCode: 403 })
     assert.equal(calls.length, count)
     deps.scoped = { ...deps.scoped, grants: [{ ...deps.scoped.grants[0], scopes: [] }] }
     deps.snapshot = { resources: { projects: ['edit'] } }

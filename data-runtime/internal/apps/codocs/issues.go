@@ -306,7 +306,7 @@ func validateIssueDocumentAssociation(ctx context.Context, queryer issueDocument
 	err := queryer.QueryRowContext(ctx, `
       SELECT uuid FROM documents
       WHERE uuid = ? AND project_code = ? AND status = 1
-        AND doc_type IN ('project', 'git-project')
+        AND `+projectFamilyCondition("doc_type")+`
       FOR SHARE`, documentUUID, projectCode).Scan(&matched)
 	if err == sql.ErrNoRows {
 		return httperror.New(http.StatusBadRequest, "issue_document_scope_invalid", "document_uuid is not an active document in the trusted project")

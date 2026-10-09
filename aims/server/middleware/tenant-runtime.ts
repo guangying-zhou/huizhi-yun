@@ -208,6 +208,9 @@ interface RuntimeApprovalRecord {
 
 export default defineEventHandler(async (event) => {
   const pathname = getRequestURL(event).pathname
+  if (normalizedApiV1Path(pathname) === '/api/v1/service/tasks') {
+    throw createError({ statusCode: 410, message: '旧任务服务接口已退役，请使用 Enterprise 工作项页面', data: { code: 'aims_service_tasks_retired' } })
+  }
   if (isApiV1Path(pathname)) {
     await ensureConsoleAuthContext(event)
   }

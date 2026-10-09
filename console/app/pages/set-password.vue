@@ -6,7 +6,7 @@ definePageMeta({
 })
 
 useSeoMeta({
-  title: '设置登录密码 · 汇智云',
+  title: '设置登录密码',
   description: '通过一次性激活链接设置企业账号的登录密码。'
 })
 

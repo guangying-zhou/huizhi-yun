@@ -1,3 +1,4 @@
+import { businessApiRoutes } from '../../enterprise/composition/business-api-routes.generated.mjs'
 import { enterpriseHostEntries, enterpriseHostRoutes } from './enterprise-host-routes.mjs'
 
 /** Explicit same-origin pilot; no DNS, credentials or deployment are created. */
@@ -50,7 +51,7 @@ function resolveLegacyShellPath(path, search = '') {
   const match = path.match(/^\/shell\/([a-z0-9-]+)\/?$/i)
   if (!match) return null
   const appCode = match[1].toLowerCase()
-  if (!Object.hasOwn(enterpriseHostRoutes, appCode)) return null
+  if (!Object.hasOwn(enterpriseHostRoutes, appCode) || !enterpriseHostEntries[appCode]) return null
   const params = new URLSearchParams(search)
   const target = params.get('target') || enterpriseHostEntries[appCode]
   if (!target.startsWith(`/${appCode}/`) && target !== `/${appCode}`) return null
@@ -67,14 +68,29 @@ function resolveLegacyShellPath(path, search = '') {
 export function resolveEnterprisePilotPath(path, search = '', method = 'GET') {
   const shell = resolveLegacyShellPath(path, search)
   if (shell) return shell
-  // Altoc G1 is an exact native read surface, not an enabled application prefix.
-  if (['/altoc/customers', '/altoc/contracts', '/altoc/payments', '/altoc/leads', '/altoc/opportunities', '/altoc/quotes'].includes(path)
-    || /^\/altoc\/(?:customers|contracts|payments|leads|opportunities|quotes)\/[1-9]\d{0,15}$/.test(path) && Number.isSafeInteger(Number(path.split('/').at(-1)))) {
-    return ['GET', 'HEAD'].includes(method) ? { path, kind: 'page' } : { path, kind: 'unavailable' }
+  // APF surfaces come from registered pages and actual BFF METHOD/path pairs.
+  // No application-prefix wildcard or implicit HEAD/write permission.
+  if (/^\/(?:finance|altoc|people)(?:\/|$)/.test(path)) {
+    const app = path.split('/')[1]
+    const safePath = !path.includes('//') && !path.endsWith('/') && /^\/[A-Za-z0-9._~/-]+$/.test(path) && !path.split('/').some(segment => segment === '.' || segment === '..')
+    const match = pattern => safePath && matchesRegisteredPath(path, pattern)
+      && (app !== 'altoc' || pattern.split('/').every((segment, index) => !segment.startsWith(':')
+        || /^[1-9]\d{0,15}$/.test(path.split('/')[index]) && Number.isSafeInteger(Number(path.split('/')[index]))))
+    if (path.startsWith(`/${app}/api/`)) {
+      return { path, kind: businessApiRoutes.some(([allowed, pattern]) => allowed === method && pattern.startsWith(`/${app}/api/v1/`) && match(pattern)) ? 'api' : 'unavailable' }
+    }
+    return { path, kind: ['GET', 'HEAD'].includes(method) && (enterpriseHostRoutes[app] || []).some(match) ? 'page' : 'unavailable' }
   }
-  if (['/altoc/api/v1/customers', '/altoc/api/v1/contracts', '/altoc/api/v1/payments', '/altoc/api/v1/leads', '/altoc/api/v1/opportunities', '/altoc/api/v1/quotes'].includes(path)
-    || /^\/altoc\/api\/v1\/(?:customers|contracts|payments|leads|opportunities|quotes)\/[1-9]\d{0,15}$/.test(path) && Number.isSafeInteger(Number(path.split('/').at(-1)))) {
-    return method === 'GET' ? { path, kind: 'api' } : { path, kind: 'unavailable' }
+  // Host-owned APF APIs use the same generated METHOD/path registry as readiness.
+  // Prefix membership alone grants nothing; unregistered paths and methods fail closed.
+  if (path.startsWith('/enterprise/api/apf/')) {
+    const safePath = !path.includes('//') && !path.endsWith('/')
+      && /^\/[A-Za-z0-9._~/-]+$/.test(path)
+      && !path.split('/').some(segment => segment === '.' || segment === '..')
+    const registered = safePath && businessApiRoutes.some(([allowed, pattern]) => allowed === method
+      && pattern.startsWith('/enterprise/api/apf/') && !pattern.includes('*')
+      && matchesRegisteredPath(path, pattern))
+    return { path, kind: registered ? 'api' : 'unavailable' }
   }
   // /enterprise is the Host workbench; the site root and the slash form are temporary aliases of it.
   if (path === '/enterprise') return { path, kind: 'page' }
@@ -82,7 +98,10 @@ export function resolveEnterprisePilotPath(path, search = '', method = 'GET') {
   if (path === '/enterprise/login') return { path, kind: 'page' }
   if (path === '/enterprise/approvals' || /^\/enterprise\/approvals\/[1-9]\d*$/.test(path)) return { path, kind: 'page' }
   if (path === '/enterprise/notifications' || /^\/enterprise\/notifications\/[A-Za-z0-9_-]{1,64}$/.test(path) || path === '/enterprise/todos') return { path, kind: 'page' }
+  if (path === '/enterprise/help' || path === '/enterprise/announcements' || /^\/enterprise\/announcements\/[0-9a-f-]{36}$/.test(path)) return { path, kind: ['GET', 'HEAD'].includes(method) ? 'page' : 'unavailable' }
+  if (/^\/enterprise\/api\/announcements(?:\/(?:manage|departments|surfaces|[0-9a-f-]{36}(?:\/(?:read|withdraw))?))?$/.test(path)) return { path, kind: businessApiRoutes.some(([allowed, pattern]) => allowed === method && matchesRegisteredPath(path, pattern)) ? 'api' : 'unavailable' }
   if (path === '/enterprise/profile') return { path, kind: 'page' }
+  if (/^\/enterprise\/api\/feedback(?:\/(?:options|drafts|[A-Za-z0-9-]+(?:\/submit|\/attachments\/[a-f0-9-]{36})?))?$/.test(path)) return { path, kind: 'api' }
   if (path === '/enterprise/api/notifications/todos') return { path, kind: 'api' }
   const shared = resolveEnterpriseSharedApiPath(path, method)
   if (shared) return shared
@@ -152,4 +171,29 @@ export function validateEnterprisePilotBinding(tenant, binding, allowlist = []) 
   return Array.isArray(allowlist) && typeof deploymentCode === 'string' && allowlist.some(entry =>
     entry?.tenantCode === tenant?.tenantCode && entry?.environment === tenant?.environment
     && entry?.deploymentCode === deploymentCode)
+}
+
+// hzy0-only standalone Console administration entry. This registers transport,
+// not permission: Console sessions and directory_sync edit+admin remain required.
+export const hzy0ConsoleDirectorySyncReads = Object.freeze([
+  '/console/admin', '/console/directory/sync',
+  '/console/api/v1/console/auth/me', '/console/api/auth/permissions',
+  '/console/api/activation/status',
+  '/console/api/v1/console/authorization/simulation-sessions/current',
+  '/console/api/v1/console/directory/sync-jobs'
+])
+export const hzy0ConsoleDirectorySyncWrite = '/console/api/v1/console/directory/sync-jobs'
+
+export function hzy0ConsoleDirectorySyncReadDetail(path) {
+  const code = '[A-Za-z0-9_-]{1,191}'
+  return new RegExp(`^/console/directory/sync/${code}$`).test(path)
+    || new RegExp(`^/console/api/v1/console/directory/sync-jobs/${code}(?:/events)?$`).test(path)
+}
+
+// G0/G1 standalone administrator transport; authorization remains in Console.
+export function hzy0ConsoleFeedbackRoute(path, method) {
+  if (['GET', 'HEAD'].includes(method)) return ['/console/admin/feedback', '/console/api/v1/console/feedback', '/console/api/v1/console/feedback-settings'].includes(path)
+    || /^\/console\/api\/v1\/console\/feedback\/[A-Za-z0-9_-]{1,64}$/.test(path)
+  if (method === 'PATCH') return path === '/console/api/v1/console/feedback-settings'
+  return method === 'POST' && /^\/console\/api\/v1\/console\/feedback\/[A-Za-z0-9_-]{1,64}\/(?:retry|cancel)$/.test(path)
 }

@@ -5,14 +5,18 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	altoc "github.com/huizhi-yun/data-runtime/internal/apps/altoc"
 	d "github.com/huizhi-yun/data-runtime/internal/apps/directory"
 	e "github.com/huizhi-yun/data-runtime/internal/enterprise"
+	"github.com/huizhi-yun/data-runtime/internal/enterprise/domaininstall"
+	"github.com/huizhi-yun/data-runtime/internal/enterpriseticket"
 	"github.com/huizhi-yun/data-runtime/internal/httperror"
 )
 
 // transaction cannot be constructed or populated outside this package. It owns
 // the generation fence, both resolutions, lock plan and immutable Directory facts.
 type transaction struct {
+	ticketResults  enterpriseticket.Prepared
 	tx             *sql.Tx
 	aims, workflow e.Resolved
 	snapshot       d.WorkflowInitiatorSnapshot
@@ -26,11 +30,22 @@ func open(ctx context.Context, registry *e.Registry, binding e.Binding, locks e.
 	req := func(domain string) e.ResolveRequest {
 		return e.ResolveRequest{Key: binding.Key, Domain: domain, Operation: e.Write, OwnerDeployment: binding.Domains[domain].OwnerDeployment, SchemaVersion: binding.SchemaVersion, Generation: binding.Generation}
 	}
-	tx, rs, err := registry.BeginWorkflowWriteTransaction(ctx, binding, req("aims"), req("workflow"), required)
+	extra := []e.ResolveRequest{}
+	if domaininstall.IsAltocTicketsDomain(binding.Domains["altoc"]) {
+		extra = append(extra, req("altoc"))
+	}
+	tx, rs, err := registry.BeginWorkflowWriteTransaction(ctx, binding, req("aims"), req("workflow"), required, extra...)
 	if err != nil {
 		return nil, err
 	}
 	h := &transaction{tx: tx, aims: rs[0], workflow: rs[1], snapshot: snapshot, employees: employees}
+	if len(rs) == 3 {
+		h.ticketResults, err = altoc.PrepareEnterpriseTicketResultsTx(ctx, tx, rs[2], rs[0], locks.WorkItemIDs)
+		if err != nil {
+			tx.Rollback()
+			return nil, err
+		}
+	}
 	if err = e.LockCompletionObjects(ctx, tx, h.aims, h.workflow, locks); err != nil {
 		tx.Rollback()
 		return nil, err
@@ -57,6 +72,9 @@ func (t *transaction) Rollback()                          { _ = t.tx.Rollback() 
 type contextKey struct{}
 
 func Context(ctx context.Context, t *transaction) context.Context {
+	if t != nil && t.ticketResults != nil {
+		ctx = enterpriseticket.With(ctx, t.ticketResults)
+	}
 	return context.WithValue(ctx, contextKey{}, t)
 }
 func FromContext(ctx context.Context) (*transaction, bool) {

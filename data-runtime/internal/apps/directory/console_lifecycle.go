@@ -70,7 +70,8 @@ func (a *Adapter) ConsoleApplyPeopleLifecycle(
 	if err != nil {
 		return nil, httperror.New(http.StatusForbidden, "service_command_context_invalid", "trusted People service command context is invalid")
 	}
-	if receiptInput.TrustedContext.SourceApp != "people" || serviceContext.SourceApp != "people" {
+	source := serviceContext.SourceApp
+	if receiptInput.TrustedContext.SourceApp != source || !((source == "people" && serviceContext.SourceClientID == "people.runtime") || (source == "enterprise" && serviceContext.SourceClientID == "enterprise.runtime")) {
 		return nil, httperror.New(http.StatusForbidden, "service_command_source_forbidden", "service command source must be People")
 	}
 	if serviceContext.TargetApp != "console" || serviceContext.TargetDeploymentCode == "" {

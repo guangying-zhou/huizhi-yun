@@ -2955,3 +2955,22 @@ CREATE TABLE IF NOT EXISTS product_feedback_progress_projection (
     CONSTRAINT fk_feedback_progress_submission FOREIGN KEY(ticket_id) REFERENCES service_ticket_product_feedback(ticket_id),
     CONSTRAINT ck_feedback_progress_revision CHECK(source_revision > 0 AND source_revision <= 9007199254740991)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- APF M1 fresh unified-domain candidate canonical is docs/apf_m1_schema.sql.
+-- Generated from docs/Enterprise-APF-Domain-Design.sql; do not combine with this legacy schema.
+-- No historical data import or existing-environment apply is part of M1.
+
+-- B5-A: 由 domaininstall altoc-receivables 安装，不能直接执行本文件。
+CREATE TABLE altoc_collection_event (
+ id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+ code VARCHAR(64) NOT NULL, billing_schedule_id BIGINT UNSIGNED NOT NULL,
+ contract_id BIGINT UNSIGNED NOT NULL, event_type VARCHAR(32) NOT NULL,
+ before_json JSON NOT NULL, after_json JSON NOT NULL, result VARCHAR(1000) NULL,
+ promised_payment_date DATE NULL, promised_amount DECIMAL(18,2) NULL,
+ next_followup_at DATETIME(3) NULL, actor_uid VARCHAR(64) NOT NULL,
+ idempotency_key VARCHAR(100) NOT NULL, operation_id CHAR(36) NOT NULL, created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+ UNIQUE KEY uk_collection_code(code), UNIQUE KEY uk_collection_intent(operation_id),
+ KEY idx_collection_plan(billing_schedule_id,id), KEY idx_collection_contract(contract_id,id),
+ CHECK(promised_amount IS NULL OR promised_amount>=0), CHECK(actor_uid<>''),
+ CHECK(event_type IN ('assign','due_date','followup'))
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

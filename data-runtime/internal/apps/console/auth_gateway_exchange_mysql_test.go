@@ -15,6 +15,7 @@ import (
 
 	"github.com/go-sql-driver/mysql"
 	"github.com/google/uuid"
+	"github.com/huizhi-yun/data-runtime/internal/policyenvelope"
 )
 
 func TestGatewayExchangeMySQL(t *testing.T) {
@@ -51,7 +52,8 @@ func TestGatewayExchangeMySQL(t *testing.T) {
 		`CREATE TABLE service_clients(id BIGINT PRIMARY KEY,client_code VARCHAR(128),client_name VARCHAR(128),client_type VARCHAR(32),app_code VARCHAR(64),status VARCHAR(16),current_credential_id BIGINT)`,
 		`CREATE TABLE service_client_credentials(id BIGINT PRIMARY KEY,service_client_id BIGINT,client_id VARCHAR(128),status VARCHAR(16),expires_at DATETIME,last_used_at DATETIME)`,
 		`CREATE TABLE service_client_grants(service_client_id BIGINT,resource_code VARCHAR(128),action VARCHAR(32),scope_json JSON,status VARCHAR(16),last_used_at DATETIME,created_at DATETIME,updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,UNIQUE(service_client_id,resource_code,action))`,
-		`CREATE TABLE policy_bundle_snapshots(tenant_code VARCHAR(64),deployment_code VARCHAR(128),bundle_version VARCHAR(32),bundle_hash VARCHAR(64),synced_at_ms BIGINT)`,
+		`CREATE TABLE verified_policy_snapshots(tenant_code VARCHAR(64),environment VARCHAR(16),deployment_code VARCHAR(128),snapshot JSON,renewal_state VARCHAR(32),renewal_attempted_at BIGINT,PRIMARY KEY(tenant_code,environment,deployment_code))`,
+		`CREATE TABLE policy_bundle_snapshots(tenant_code VARCHAR(64),deployment_code VARCHAR(128),bundle_version VARCHAR(32),bundle_hash VARCHAR(191),synced_at_ms BIGINT)`,
 		`CREATE TABLE auth_signing_keys(id BIGINT PRIMARY KEY,status VARCHAR(16),not_before DATETIME,not_after DATETIME)`,
 		`CREATE TABLE auth_token_events(event_type VARCHAR(32),client_id VARCHAR(128),result VARCHAR(16),created_at DATETIME)`,
 		`INSERT INTO service_clients VALUES(10,'aims.runtime','Aims','runtime','aims','active',20),(11,'console.runtime','Console','runtime','console','active',21)`,
@@ -236,11 +238,64 @@ func TestGatewayExchangeMySQL(t *testing.T) {
 	_, key, _ := ed25519.GenerateKey(rand.Reader)
 	adapter := &Adapter{db: db, tenant: "C000001"}
 	adapter.SetOIDCSigningIssuerSource(func() string { return "https://example.test/console" })
+	store, snapshot := exchangePolicyFixture(t, "test", "C000001-test-console", "v7", nil)
+	setExchangePolicyFixture(adapter, store)
+	if _, err := db.Exec(`INSERT INTO verified_policy_snapshots VALUES(?,?,?,?,?,?)`, "C000001", "test", "C000001-test-console", snapshot, "ok", time.Now().UnixMilli()); err != nil {
+		t.Fatal(err)
+	}
 	claims := gatewayClaims()
 	claims.ExpiresAt = time.Now().Add(time.Minute).Unix()
 	issue := func() (map[string]any, error) {
 		return adapter.exchangeConsoleServiceTokenWithKey(context.Background(), gatewayBody(), "C000001", "C000001-test-console", oidcSigningKey{ID: 5, Kid: "fixture", PrivateKey: key}, &claims)
 	}
+	t.Run("formal policy rejects legacy-only match and invalid binding or lease atomically", func(t *testing.T) {
+		for _, tc := range []struct {
+			name, version string
+			change        func(*policyenvelope.Body)
+			missing       bool
+		}{
+			{name: "legacy matches formal differs", version: "v8"},
+			{name: "formal missing legacy exists", version: "v7", missing: true},
+			{name: "formal lease expired", version: "v7", change: func(b *policyenvelope.Body) { b.IssuedAt -= 600000; b.ExpiresAt -= 600000 }},
+			{name: "formal wrong tenant", version: "v7", change: func(b *policyenvelope.Body) { b.Tenant = "OTHER" }},
+			{name: "formal wrong deployment", version: "v7", change: func(b *policyenvelope.Body) { b.Deployments = []string{"other-console"} }},
+			{name: "formal wrong environment", version: "v7", change: func(b *policyenvelope.Body) { b.Environment = "prod" }},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				candidate, raw := exchangePolicyFixture(t, "test", "C000001-test-console", tc.version, tc.change)
+				setExchangePolicyFixture(adapter, candidate)
+				if _, e := db.Exec(`UPDATE policy_bundle_snapshots SET bundle_version='v7',bundle_hash=?`, exchangePolicyHash()); e != nil {
+					t.Fatal(e)
+				}
+				if tc.missing {
+					if _, e := db.Exec(`DELETE FROM verified_policy_snapshots`); e != nil {
+						t.Fatal(e)
+					}
+				} else {
+					if _, e := db.Exec(`INSERT INTO verified_policy_snapshots VALUES(?,?,?,?,?,?) ON DUPLICATE KEY UPDATE snapshot=VALUES(snapshot)`, "C000001", "test", "C000001-test-console", raw, "ok", time.Now().UnixMilli()); e != nil {
+						t.Fatal(e)
+					}
+				}
+				if result, e := issue(); e == nil || result != nil {
+					t.Fatal("invalid formal policy returned token")
+				}
+				for _, table := range []string{"gateway_service_assertion_replay", "auth_token_events"} {
+					var rows int
+					if e := db.QueryRow("SELECT COUNT(*) FROM " + table).Scan(&rows); e != nil || rows != 0 {
+						t.Fatalf("rollback %s count=%d err=%v", table, rows, e)
+					}
+				}
+			})
+		}
+		setExchangePolicyFixture(adapter, store)
+		if _, e := db.Exec(`INSERT INTO verified_policy_snapshots VALUES(?,?,?,?,?,?) ON DUPLICATE KEY UPDATE snapshot=VALUES(snapshot)`, "C000001", "test", "C000001-test-console", snapshot, "ok", time.Now().UnixMilli()); e != nil {
+			t.Fatal(e)
+		}
+		if _, e := db.Exec(`UPDATE policy_bundle_snapshots SET bundle_version='legacy-other',bundle_hash='legacy-other'`); e != nil {
+			t.Fatal(e)
+		}
+	})
+
 	// A failing success audit must roll back the consumed jti as well as grant/client changes.
 	if _, err = db.Exec(`CREATE TRIGGER reject_audit BEFORE INSERT ON auth_token_events FOR EACH ROW SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='fixture audit failure'`); err != nil {
 		t.Fatal(err)

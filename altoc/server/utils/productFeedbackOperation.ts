@@ -6,7 +6,7 @@ import {
   resolveServiceOperationConflictDisposition,
   validateServiceCommandReceipt
 } from '@hzy/foundation/server/utils/serviceOperation'
-import type { ClaimedOpsKnowledgeOperation, OpsKnowledgeOperationIO } from './serviceTicketOpsKnowledgeOperation'
+import type { ClaimedOpsKnowledgeOperation, OpsKnowledgeOperationIO } from './serviceTicketOpsKnowledgeOperation.ts'
 
 type Row = Record<string, unknown>
 const text = (value: unknown) => String(value || '').trim()

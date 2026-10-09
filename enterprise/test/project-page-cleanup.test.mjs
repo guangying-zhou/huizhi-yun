@@ -22,7 +22,7 @@ const Gate = mod.exports.default
 
 test('actual lazy page gate never mounts/fetches denied or unknown business pages', async () => {
   globalThis.computed = computed
-  globalThis.useRoute = () => ({ path: '/aims/projects/263/board' })
+  globalThis.useRouter = () => ({ currentRoute: ref({ path: '/aims/projects/263/board' }) })
   let requests = 0
   const BusinessPage = defineComponent({ setup() {
     requests++
@@ -57,7 +57,7 @@ test('member card uses existing discovery fact and requirements table has Chines
 
 test('client gate waits for discovery and unmounts immediately when membership is revoked', async () => {
   globalThis.computed = computed
-  globalThis.useRoute = () => ({ path: '/aims/projects/263/board' })
+  globalThis.useRouter = () => ({ currentRoute: ref({ path: '/aims/projects/263/board' }) })
   const project = ref(null)
   globalThis.__cleanupContext = { project }
   let requests = 0

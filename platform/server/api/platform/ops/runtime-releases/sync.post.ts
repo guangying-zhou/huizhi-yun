@@ -1,3 +1,4 @@
+import { trustedClientAddress } from '~~/server/utils/trustedClientAddress'
 import type { RowDataPacket } from 'mysql2/promise'
 import { ok } from '~~/server/utils/api'
 import { dataRuntimeReleaseStaticSettings } from '~~/server/utils/dataRuntimeRelease'
@@ -22,7 +23,7 @@ export default defineEventHandler(async (event) => {
     : null
   const stored = await storeDataRuntimeRelease(release, {
     accountId: account?.id || null,
-    ip: String(getRequestIP(event, { xForwardedFor: true }) || '').trim() || null,
+    ip: trustedClientAddress(event) || null,
     userAgent: String(getHeader(event, 'user-agent') || '').trim().slice(0, 500) || null
   })
 

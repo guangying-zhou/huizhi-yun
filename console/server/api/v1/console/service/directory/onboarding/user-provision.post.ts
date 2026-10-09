@@ -21,8 +21,8 @@ export default defineEventHandler(async (event) => {
 
   const binding = resolvePeopleDirectoryTargetBinding(event, actor.tenantCode)
   const body = await readBody<Record<string, unknown>>(event).catch(() => ({} as Record<string, unknown>))
-  verifyPeopleDirectorySignature(event, body, binding)
-  const { command, uid } = parseOnboardingProvisioningCommand(body, 'user-provision')
+  const sourceApp = verifyPeopleDirectorySignature(event, body, binding)
+  const { command, uid } = parseOnboardingProvisioningCommand(body, 'user-provision', sourceApp)
 
   const runtime = await queueConsoleDirectoryLDAPUserCreate(event, {
     reservationId: command.reservationId,
@@ -37,7 +37,7 @@ export default defineEventHandler(async (event) => {
     primaryDeptCode: command.deptCode,
     userType: 'employee',
     status: 'active',
-    sourceApp: 'people',
+    sourceApp,
     providerCode: command.providerCode,
     providerSubject: command.providerSubject,
     issueActivationCredential: false

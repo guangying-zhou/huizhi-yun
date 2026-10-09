@@ -1,5 +1,7 @@
 # GitLab 项目文档同步功能
 
+> **2026-10-04 更新：提交到 GitLab 的能力已废弃并删除。** 仓库文档在平台内只读，修改请在 GitLab 中按代码流程完成；“从 GitLab 同步”仍可用。下文涉及“提交到 GitLab”的内容仅作历史记录，见 `docs/Document-Asset-Unified-Management-Design.md` §6。
+
 > **当前事实边界（2026-07-11 核对）**：本文是旧版 Account API 编排的功能说明，不是当前业务应用主路径。现行 GitLab 配置与凭据通过 Foundation Git integration 及 Console integration-config/credential-vault 解析；Codocs 不在应用 env 保存 Bot token、不直接调用 Account，也不得回退本地 DB。尚未补专用 tenant-runtime 合同的旧同步数据路径须返回 503，而非按本文旧接口执行。以 `codocs/CLAUDE.md`、`docs/MODULE_CONTRACTS.md`、`docs/ENV_SIMPLIFICATION_PLAN.md` 与当前代码为准；未执行外部 GitLab、迁移、部署或凭据操作。
 
 ## 功能概述

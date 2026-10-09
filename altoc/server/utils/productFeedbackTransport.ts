@@ -4,7 +4,7 @@ import { resolveServiceAppBaseUrl, resolveTrustedServiceAppRoute } from '@hzy/fo
 import { resolveTrustedTenantGatewayContext } from '@hzy/foundation/server/utils/tenantGatewayTrust'
 import { requestWithServiceAccessToken } from '@hzy/foundation/server/utils/serviceOidc'
 import { serviceAppFetch } from '@hzy/foundation/server/utils/appServiceBinding'
-import type { ClaimedOpsKnowledgeOperation } from './serviceTicketOpsKnowledgeOperation'
+import type { ClaimedOpsKnowledgeOperation } from './serviceTicketOpsKnowledgeOperation.ts'
 
 type Row = Record<string, unknown>
 export async function sendProductFeedback(event: H3Event | null, operation: ClaimedOpsKnowledgeOperation, envelope: Row, targetDeploymentOverride = ''): Promise<Row> {

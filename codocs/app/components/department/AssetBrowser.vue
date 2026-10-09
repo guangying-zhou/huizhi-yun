@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import ContentPageHeader from '../../../../foundation/app/components/ContentPageHeader.vue'
 import { useCodocsModule } from '../../../layer/useCodocsModule'
 import { useResizablePanel } from '../../composables/useResizablePanel'
 import { useViewerWatermark } from '../../composables/useViewerWatermark'
@@ -15,7 +16,7 @@ usePageTitle(props.title)
 const toast = useToast()
 const { panelWidth, panelCollapsed, onResizeStart, showPanel } = useResizablePanel(288)
 const { user, userDeptCode } = useAuth()
-const { watermarkText } = useViewerWatermark()
+const { watermarkText } = useViewerWatermark({ includeTime: true })
 const { departmentsCache, setDepartmentsCache } = useUserDepartmentsCache()
 const { hasPermission } = usePermissions()
 const isAdmin = computed(() => hasPermission('departments', 'admin'))
@@ -411,6 +412,12 @@ const handleReceiveSuccess = async () => {
 
 <template>
   <UDashboardPanel grow>
+    <ContentPageHeader
+      :hosted="hosted"
+      :title="title"
+      description="浏览目录与文档"
+      class="shrink-0 px-4 py-3"
+    />
     <div v-if="panelCollapsed" class="hidden md:flex items-center gap-2 px-3 py-1 border-b border-default">
       <UButton
         icon="i-lucide-folder-tree"
@@ -584,7 +591,12 @@ const handleReceiveSuccess = async () => {
             <UIcon name="i-lucide-loader-2" class="w-8 h-8 animate-spin text-primary" />
           </div>
           <div v-else class="max-w-4xl mx-auto bg-white dark:bg-gray-900 shadow-sm rounded-lg min-h-full">
-            <PublishedPdfViewer v-if="previewUrl" :src="previewUrl" :title="selectedFile.name" />
+            <PublishedPdfViewer
+              v-if="previewUrl"
+              :watermark-text="watermarkText"
+              :src="previewUrl"
+              :title="selectedFile.name"
+            />
             <EditorDocLazyPreview
               v-else-if="previewContent"
               :content="previewContent"

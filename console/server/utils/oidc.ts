@@ -1,6 +1,7 @@
 import { createHash, randomBytes } from 'node:crypto'
 import type { H3Event } from 'h3'
 import { createError, getHeader } from 'h3'
+import { trustedClientAddress } from '@hzy/foundation/server/utils/trustedClientAddress'
 import type { JWTPayload, JWK } from 'jose'
 import { useRuntimeConfig } from '#imports'
 import { normalizePublicUrl, resolveCurrentAppHomeUrl } from '@hzy/foundation/server/utils/appUrls'
@@ -755,9 +756,7 @@ export async function writeTokenEvent(
     event,
     {
       ...input,
-      ipAddress: stringValue(getHeader(event, 'x-forwarded-for')).split(',')[0]
-        || event.node.req.socket.remoteAddress
-        || null,
+      ipAddress: trustedClientAddress(event) || null,
       userAgent: stringValue(getHeader(event, 'user-agent')).slice(0, 500) || null
     },
     `oidc-token-event:${randomBytes(16).toString('hex')}`

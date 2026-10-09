@@ -1,3 +1,4 @@
+import { manualRefreshPlugin } from './composition/manual-refresh.mjs'
 import { fileURLToPath } from 'node:url'
 import { createRequire } from 'node:module'
 import { dirname, join } from 'node:path'
@@ -50,14 +51,9 @@ function resolveAppAsset(path: string, fallback: string) {
 }
 
 export default defineNuxtConfig({
-  vite: {
-    plugins: [businessModuleAliasPlugin()],
-    ...(process.env.HZY0_LOCAL_ENTERPRISE === 'true'
-      ? { server: { allowedHosts: ['hzy0.isme.dev'], hmr: { protocol: 'wss' as const, clientPort: 443 } } }
-      : {})
-  },
   extends: ['@hzy/foundation'],
   modules: ['@nuxt/ui', '@pinia/nuxt', '@vueuse/nuxt', './composition/dev-watch.mjs'],
+  ssr: false,
   components: {
     dirs: [
       {
@@ -108,13 +104,18 @@ export default defineNuxtConfig({
       }
     ]
   },
-  ssr: false,
   // The SPA loader is emitted in the initial HTML, before the large Dev module
   // graph is fetched. Nuxt removes it once the first page resolves.
   spaLoadingTemplate: './spa-loading-template.html',
-  experimental: { spaLoadingTemplateLocation: 'body' },
+  experimental: { spaLoadingTemplateLocation: 'body', ...(process.env.HZY0_LOCAL_ENTERPRISE === 'true' ? { emitRouteChunkError: 'manual' as const, checkOutdatedBuildInterval: false as const } : {}) },
+  vite: {
+    plugins: [businessModuleAliasPlugin(), ...(process.env.HZY0_LOCAL_ENTERPRISE === 'true' ? [manualRefreshPlugin()] : [])],
+    ...(process.env.HZY0_LOCAL_ENTERPRISE === 'true'
+      ? { server: { allowedHosts: ['hzy0.isme.dev'], hmr: false as const, watch: null } }
+      : {})
+  },
+  ...(process.env.HZY0_LOCAL_ENTERPRISE === 'true' ? { watch: [], watchers: { chokidar: { ignored: () => true } } } : {}),
   devtools: { enabled: false },
-  sourcemap: { server: false, client: false },
   app: {
     baseURL: '/',
     ...(pilot ? { buildAssetsDir: '/enterprise/_nuxt/' } : {}),
@@ -126,53 +127,11 @@ export default defineNuxtConfig({
       ]
     }
   },
+  css: ['~/assets/css/main.css'],
   appConfig: {
     enterprise: {
       businessNavigation: buildBusinessNavigation(navigationContributors, businessAreas, auxiliaryAreas),
       objectWorkspaces: buildObjectWorkspaces(businessModules)
-    }
-  },
-  css: ['~/assets/css/main.css'],
-  // The gateway forwards root /api/* to Console, so Host icons are served from
-  // the Host's own public prefix (outside the /enterprise/api readiness fence).
-  icon: pilot ? { localApiEndpoint: '/enterprise/_nuxt_icon' } : {},
-  hooks: {
-    'vite:extendConfig'(config, { isClient }) {
-      if (process.env.HZY0_LOCAL_ENTERPRISE !== 'true' || !isClient) return
-      // Over Tunnel, the unbundled UI barrels create hundreds of serial module
-      // requests. VueUse's module excludes these by default; select only these
-      // client libraries after module configuration. Bundle the Vue runtime
-      // family together, using Nuxt's existing aliases to keep one Vue instance;
-      // application sources and virtual modules retain normal HMR.
-      const dependencies = [
-        'vue', '@vue/runtime-core', '@vue/runtime-dom', '@vue/reactivity', '@vue/shared',
-        'reka-ui', '@vueuse/core', '@vueuse/shared', '@vue/devtools-kit',
-        'pinia', 'tailwind-merge', 'tailwind-variants', '@iconify/vue',
-        // Imported by composed Aims pages. Discovered at runtime they force a
-        // re-optimize and full reload; a fresh browser can then mix module
-        // versions and fail with "useHead() was called without provide context".
-        'date-fns', 'date-fns/locale', 'marked'
-      ]
-      if (!config.optimizeDeps) return
-      config.optimizeDeps.exclude = (config.optimizeDeps.exclude || []).filter(name => !dependencies.includes(name))
-      config.optimizeDeps.include = [...new Set([...(config.optimizeDeps.include || []), ...dependencies])]
-      config.plugins?.push({
-        name: 'hzy0-compact-route-metadata',
-        apply: 'serve',
-        enforce: 'post',
-        transform(code, id) {
-          if (!/[?&]macro=true(?:&|$)/.test(id)) return
-          // Nuxt extracts tiny route metadata but upstream Vue maps retain the
-          // entire SFC. Every route eagerly imports this metadata. Drop only
-          // those irrelevant maps; the actual page keeps its debugger and HMR.
-          return { code, map: { version: 3, names: [], sources: [], mappings: '' } }
-        }
-      })
-    },
-    'pages:extend'(pages) {
-      validateHostNativePages(pages, hostNativePages)
-      annotateHostNativePageAuthorization(pages, hostNativePages)
-      pages.push(...registerBusinessPages(pages, businessModules, fileURLToPath(new URL('./app/module-entry.vue', import.meta.url))))
     }
   },
   runtimeConfig: {
@@ -195,6 +154,10 @@ export default defineNuxtConfig({
       integration: { consoleApiUrl: consoleUrl }
     },
     public: {
+      manualRefresh: process.env.HZY0_LOCAL_ENTERPRISE === 'true',
+      // Announcements are currently approved for hzy0 only. Production stays
+      // dark until a separate rollout explicitly enables this UI surface.
+      announcementsEnabled: process.env.HZY0_LOCAL_ENTERPRISE === 'true' || process.env.HZY_ENTERPRISE_ANNOUNCEMENTS_ENABLED === 'true',
       // UI hint only; the server bridge re-reads and re-validates the topology.
       hostWorkflowEnabled: hostWorkflow.mode === 'loopback',
       appLogo: resolveAppAsset(process.env.NUXT_PUBLIC_APP_LOGO || '', pilot ? '/enterprise/logo.svg' : '/logo.svg'),
@@ -230,6 +193,7 @@ export default defineNuxtConfig({
       modules: { aims: { enabled: false }, assets: { enabled: false } }
     }
   },
+  sourcemap: { server: false, client: false },
   compatibilityDate: '2026-06-15',
   nitro: { publicAssets: ['cmaps', 'standard_fonts', 'wasm'].map(directory => ({
     dir: join(pdfjsDir, directory), baseURL: `/pdfjs/${pdfjsVersion}/${directory}`, maxAge: 31536000
@@ -242,5 +206,60 @@ export default defineNuxtConfig({
         }
       : {})
   }, cloudflare: { deployConfig: false, nodeCompat: true }, experimental: { asyncContext: true } },
-  typescript: { strict: true, tsConfig: { compilerOptions: { allowImportingTsExtensions: true } } }
+  typescript: { strict: true, tsConfig: { compilerOptions: { allowImportingTsExtensions: true } } },
+  hooks: {
+    'vite:extendConfig'(config, { isClient }) {
+      if (process.env.HZY0_LOCAL_ENTERPRISE !== 'true' || !isClient) return
+      // Over Tunnel, the unbundled UI barrels create hundreds of serial module
+      // requests. VueUse's module excludes these by default; select only these
+      // client libraries after module configuration. Bundle the Vue runtime
+      // family together, using Nuxt's existing aliases to keep one Vue instance;
+      // application sources and virtual modules retain normal HMR.
+      const dependencies = [
+        'vue', '@vue/runtime-core', '@vue/runtime-dom', '@vue/reactivity', '@vue/shared',
+        'reka-ui', '@vueuse/core', '@vueuse/shared', '@vue/devtools-kit',
+        'pinia', 'tailwind-merge', 'tailwind-variants', '@iconify/vue',
+        // Imported by composed Aims pages. Discovered at runtime they force a
+        // re-optimize and full reload; a fresh browser can then mix module
+        // versions and fail with "useHead() was called without provide context".
+        'date-fns', 'date-fns/locale', 'marked', 'debug',
+        // Composed Codocs/editor imports must be available before a logged-in
+        // page mounts. Their CommonJS transitive dependencies also need bundling.
+        'errx', '@milkdown/crepe', '@milkdown/utils', '@milkdown/plugin-collab',
+        '@milkdown/plugin-upload', 'remark-breaks', '@milkdown/core',
+        '@milkdown/prose/state', '@milkdown/prose/tables', 'mermaid',
+        '@milkdown/preset-commonmark', '@milkdown/prose/schema-list',
+        '@milkdown/prose/commands', '@milkdown/preset-gfm', 'pptx-preview', 'diff',
+        'yjs', 'lib0/encoding', 'lib0/decoding', 'y-protocols/sync',
+        'y-protocols/awareness', '@hocuspocus/common', 'pdfjs-dist'
+      ]
+      if (!config.optimizeDeps) return
+      config.optimizeDeps.exclude = (config.optimizeDeps.exclude || []).filter(name => !dependencies.includes(name))
+      config.optimizeDeps.include = [...new Set([...(config.optimizeDeps.include || []), ...dependencies])]
+      // Manual refresh keeps the current app alive: late discovery must never
+      // change the dependency URL hash and instantiate a second Vue runtime.
+      // Dependencies outside this explicit set are served as ordinary modules.
+      config.optimizeDeps.noDiscovery = true
+      config.plugins?.push({
+        name: 'hzy0-compact-route-metadata',
+        apply: 'serve',
+        enforce: 'post',
+        transform(code, id) {
+          if (!/[?&]macro=true(?:&|$)/.test(id)) return
+          // Nuxt extracts tiny route metadata but upstream Vue maps retain the
+          // entire SFC. Every route eagerly imports this metadata. Drop only
+          // those irrelevant maps; the actual page keeps its debugger and HMR.
+          return { code, map: { version: 3, names: [], sources: [], mappings: '' } }
+        }
+      })
+    },
+    'pages:extend'(pages) {
+      validateHostNativePages(pages, hostNativePages)
+      annotateHostNativePageAuthorization(pages, hostNativePages)
+      pages.push(...registerBusinessPages(pages, businessModules, fileURLToPath(new URL('./app/module-entry.vue', import.meta.url))))
+    }
+  },
+  // The gateway forwards root /api/* to Console, so Host icons are served from
+  // the Host's own public prefix (outside the /enterprise/api readiness fence).
+  icon: pilot ? { localApiEndpoint: '/enterprise/_nuxt_icon' } : {}
 })

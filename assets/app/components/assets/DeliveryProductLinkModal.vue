@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import type { ApiResponse, DeliveryItem, ListPayload, ProductAssetItem } from '~/types'
+import RemoteAssetObjectSelect from './RemoteAssetObjectSelect.vue'
+import type { ApiResponse, DeliveryItem } from '~/types'
 
 const props = defineProps<{
   open: boolean
@@ -18,8 +19,6 @@ const isOpen = computed({
 
 const toast = useToast()
 const submitting = ref(false)
-const loadingProducts = ref(false)
-const productOptions = ref<Array<{ label: string, value: number }>>([])
 const relationOptions = [
   { label: '交付产品', value: 'delivered_product' },
   { label: '支撑产品', value: 'supporting_product' },
@@ -31,28 +30,10 @@ const state = reactive({
   relation_type: 'delivered_product'
 })
 
-async function loadProducts() {
-  loadingProducts.value = true
-
-  try {
-    const response = await $fetch<ApiResponse<ListPayload<ProductAssetItem>>>('/api/v1/products')
-    const linkedIds = new Set((props.delivery?.linked_products || []).map(item => item.id))
-    productOptions.value = (response.data.items || [])
-      .filter(item => !linkedIds.has(item.id))
-      .map(item => ({ label: `${item.product_code} · ${item.product_name}`, value: item.id }))
-  } catch (error) {
-    console.error('[DeliveryProductLink] Failed to load products:', error)
-    toast.add({ title: '产品加载失败', description: '请刷新后重试。', color: 'error', icon: 'i-lucide-circle-alert' })
-  } finally {
-    loadingProducts.value = false
-  }
-}
-
 watch(() => props.open, async (open) => {
   if (open) {
     state.product_asset_id = undefined
     state.relation_type = 'delivered_product'
-    await loadProducts()
   }
 })
 
@@ -99,13 +80,11 @@ async function handleSubmit() {
     <template #body>
       <div class="space-y-4 p-4">
         <UFormField label="产品资产" required>
-          <USelectMenu
+          <RemoteAssetObjectSelect
             v-model="state.product_asset_id"
-            :items="productOptions"
-            :loading="loadingProducts"
-            value-key="value"
-            searchable
-            placeholder="请选择产品资产"
+            kind="products"
+            :enabled="isOpen"
+            :exclude-ids="(props.delivery?.linked_products || []).map(item => item.id)"
           />
         </UFormField>
 

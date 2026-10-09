@@ -10,7 +10,6 @@ import type {
   UserProjects,
   GitlabSyncResponse,
   ConflictDoc,
-  GitlabSubmitDoc,
   ApiResponse
 } from '~/types/account'
 import type { ProjectFileItem, ProjectDocsTreeItem } from '~/types/index'
@@ -124,7 +123,6 @@ interface AccountState {
 
   syncing: boolean
   resolving: boolean
-  submitting: boolean
   syncResult: GitlabSyncResponse | null
 }
 
@@ -148,7 +146,6 @@ export const useAccountStore = defineStore('account', {
 
     syncing: false,
     resolving: false,
-    submitting: false,
     syncResult: null
   }),
 
@@ -805,74 +802,6 @@ export const useAccountStore = defineStore('account', {
         throw error
       } finally {
         this.resolving = false
-      }
-    },
-
-    /**
-     * 提交项目文档（从 OSS 到 GitLab）
-     */
-    async submitDocuments(uid: string) {
-      if (!this.selectedProject) {
-        throw new Error('No project selected')
-      }
-
-      const changed = this.getChangedFiles
-      if (changed.length <= 0) {
-        throw new Error('没有需要提交的文件')
-      }
-
-      // 将树形结构扁平化为文件列表
-      const flattenFiles = (items: ProjectFileItem[]): ProjectFileItem[] => {
-        const result: ProjectFileItem[] = []
-        for (const item of items) {
-          if (!item.isDirectory) {
-            result.push(item)
-          }
-          if (item.children) {
-            result.push(...flattenFiles(item.children))
-          }
-        }
-        return result
-      }
-
-      const config = useRuntimeConfig()
-      const gitlabBaseUrl = config.public.gitlabBaseUrl || 'http://gitlab.wiztek.cn'
-      const repoPath = this.selectedProject.repoUrl?.replace(gitlabBaseUrl, '').replace(/^\/+/, '') || ''
-      const prefix = `${repoPath}/`
-
-      const docs: GitlabSubmitDoc[] = flattenFiles(changed).map(file => ({
-        oss_path: file.path,
-        gitlab_path: file.path.replace(prefix, '')
-      }))
-
-      this.submitting = true
-      try {
-        const response = await $fetch<{ code: number, data: Record<string, unknown> }>(
-          `/api/project-docs/gitlab-submit/${this.selectedProject.projectCode}`,
-          {
-            method: 'POST',
-            body: {
-              uid,
-              docs
-            }
-          }
-        )
-
-        if (response.code === 0) {
-          // 提交成功后更新 docsCommittedAt 并重新加载文件列表
-          if (this.selectedProject) {
-            this.selectedProject.docsCommittedAt = new Date().toISOString()
-            // 重新加载文件列表以清除修改状态
-            await this.loadDocuments(this.selectedProject)
-          }
-        }
-
-        return response.data
-      } catch (error) {
-        console.error('Failed to submit documents:', error)
-        throw error
-      } finally {
-        this.submitting = false
       }
     },
 

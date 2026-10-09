@@ -1,11 +1,11 @@
-import { productFeedbackRuntimeError } from '../server/utils/productFeedbackRuntimeError'
+import { productFeedbackRuntimeError } from '../server/utils/productFeedbackRuntimeError.ts'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { runInNewContext } from 'node:vm'
 import ts from 'typescript'
 import { createError } from 'h3'
-import { hashServiceCommandPayload } from '../../foundation/server/utils/tenantRuntimeClient'
+import { hashServiceCommandPayload } from './support/service-command-runtime.mjs'
 
 const compiled = ts.transpileModule(readFileSync(new URL('../server/utils/productFeedbackStatusService.ts', import.meta.url), 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText
 async function run(mode = '') {
@@ -15,6 +15,7 @@ async function run(mode = '') {
   const envelope = { operationId: id, targetApp: 'altoc', operationCode: 'aims.altoc.product-feedback.update-status.v1', requiredCapability: 'altoc:product-feedback:update-status', commandSchemaVersion: 'product-feedback-status.v1', idempotencyKey: 'original-key', commandSha256: await hashServiceCommandPayload(command), command }
   if (mode === 'tamper') command.sourceRevision = 4
   runInNewContext(compiled, { exports, require: (name: string) => {
+    name = name.replace(/\.ts$/, '')
     if (name === './productFeedbackRuntimeError') return { productFeedbackRuntimeError }
     if (name === 'h3') return { createError, setHeader: () => {}, getQuery: () => ({}), getHeader: () => 'Bearer token', getRequestURL: () => ({ pathname: '/api/v1/service/product-feedback/status' }), readBody: async () => ({ serviceCommand: envelope }) }
     if (name === './productFeedbackStatusAuth') return { requireProductFeedbackStatusAuth: async () => ({ tenant: 'TENANT', sourceDeployment: 'AIMS', targetDeployment: 'ALTOC' }) }

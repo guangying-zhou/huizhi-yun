@@ -1,0 +1,36 @@
+[
+  {
+    "logical": "aims_portfolio_members",
+    "physical": "aims_portfolio_members",
+    "ddl": "CREATE TABLE aims_portfolio_members (\n  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,\n  portfolio_id BIGINT UNSIGNED NOT NULL,\n  uid VARCHAR(64) COLLATE utf8mb4_bin NOT NULL,\n  relation_type ENUM('manager','contributor','viewer') NOT NULL,\n  status ENUM('active','inactive') NOT NULL DEFAULT 'active',\n  valid_from DATETIME(3) NOT NULL,\n  valid_until DATETIME(3) NULL,\n  revision BIGINT UNSIGNED NOT NULL DEFAULT 1,\n  created_by VARCHAR(64) COLLATE utf8mb4_bin NOT NULL,\n  updated_by VARCHAR(64) COLLATE utf8mb4_bin NOT NULL,\n  created_at DATETIME(3) NOT NULL,\n  updated_at DATETIME(3) NOT NULL,\n  PRIMARY KEY (id),\n  UNIQUE KEY uk_aims_portfolio_member (portfolio_id, uid),\n  KEY idx_aims_portfolio_member_uid (uid, status),\n  CONSTRAINT ck_aims_portfolio_member_dates CHECK (valid_until IS NULL OR valid_until > valid_from)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;",
+    "columns": [
+      "id",
+      "portfolio_id",
+      "uid",
+      "relation_type",
+      "status",
+      "valid_from",
+      "valid_until",
+      "revision",
+      "created_by",
+      "updated_by",
+      "created_at",
+      "updated_at"
+    ]
+  },
+  {
+    "logical": "aims_portfolio_doc_repos",
+    "physical": "aims_portfolio_doc_repos",
+    "ddl": "CREATE TABLE aims_portfolio_doc_repos (\n  portfolio_id BIGINT UNSIGNED NOT NULL,\n  integration_code VARCHAR(64) COLLATE utf8mb4_bin NOT NULL,\n  repo_path VARCHAR(255) COLLATE utf8mb4_bin NOT NULL,\n  row_version BIGINT UNSIGNED NOT NULL DEFAULT 1,\n  created_by VARCHAR(64) COLLATE utf8mb4_bin NOT NULL,\n  updated_by VARCHAR(64) COLLATE utf8mb4_bin NOT NULL,\n  created_at DATETIME(3) NOT NULL,\n  updated_at DATETIME(3) NOT NULL,\n  PRIMARY KEY (portfolio_id)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;",
+    "columns": [
+      "portfolio_id",
+      "integration_code",
+      "repo_path",
+      "row_version",
+      "created_by",
+      "updated_by",
+      "created_at",
+      "updated_at"
+    ]
+  }
+]

@@ -1,3 +1,4 @@
+import { handleEnterpriseKnowledgeLink } from '../utils/enterpriseKnowledgeLinkService'
 import { optionalReadPagination } from '@hzy/foundation/shared/utils/optionalReadPagination'
 import assetsProductDocumentMetadataService from '~~/server/utils/assetsProductDocumentMetadataService'
 import productDocumentCreateService from '../utils/productDocumentCreateService'
@@ -54,6 +55,7 @@ const BLOCKED_LEGACY_ROUTES = [
 
 export default defineEventHandler(async (event) => {
   const apiPath = currentApiPath(getRequestURL(event).pathname)
+  if (apiPath === '/api/v1/service/enterprise-knowledge-links') return handleEnterpriseKnowledgeLink(event)
   if (!apiPath) return
 
   const method = normalizeMethod(event.node.req.method)

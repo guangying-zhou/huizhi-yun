@@ -6,7 +6,7 @@ import { resolve, dirname } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
 test('useRecycleBin uses the Codocs module boundary and preserves standalone fallbacks', async () => {
-  const root = resolve(import.meta.dirname, '..')
+  resolve(import.meta.dirname, '..')
   const fetchCalls = []
   const toasts = []
   const oldFetch = globalThis.$fetch
@@ -57,7 +57,7 @@ test('useRecycleBin uses the Codocs module boundary and preserves standalone fal
       assert.match(fetchCalls[2].options.headers['Idempotency-Key'], /^[A-Za-z0-9][A-Za-z0-9:_-]{7,199}$/)
       assert.equal(toasts.at(-1).color, 'success')
 
-      globalThis.$fetch = async url => {
+      globalThis.$fetch = async (url) => {
         if (url.endsWith('/check-name')) return { success: true, data: { exists: true } }
         if (url.endsWith('/trash')) return { success: true, data: { items: [{ uuid: 'doc-1' }] } }
         throw new Error('restore failed')
@@ -94,7 +94,7 @@ test('useRecycleBin uses the Codocs module boundary and preserves standalone fal
         await assert.rejects(recycle.fetchTrashPage({ page: 2, pageSize: 20 }))
       }
 
-      globalThis.$fetch = async url => {
+      globalThis.$fetch = async (url) => {
         if (url.endsWith('/check-name')) return { success: true, data: {} }
         return { success: true, data: {} }
       }

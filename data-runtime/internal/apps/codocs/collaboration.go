@@ -152,6 +152,21 @@ func (a *Adapter) collabDocs(ctx context.Context, query url.Values) (map[string]
 		args = append(args, ownerUID)
 	}
 
+	// Sent shares come from the ACL facts, not recipient-only
+	// relation projections. A share survives in the sender's list only while
+	// that sender still owns or is explicitly shared into the live document.
+	relationSource := "document_relations"
+	if category == "shared" && sharedTab == "sent" {
+		relationSource = `(SELECT id, document_id, owner_uid AS related_uid,
+			1 AS status, 'shared_by_me' AS relation_type, 'share' AS source_type,
+			CAST(id AS CHAR) AS source_id, 0 AS can_edit, NULL AS metadata
+			FROM document_shares) `
+		where += ` AND (d.owner_uid = ? OR EXISTS (
+			SELECT 1 FROM document_shares current_share
+			WHERE current_share.document_id=d.id AND current_share.shared_to_uid=?))`
+		args = append(args, actorUID, actorUID)
+	}
+
 	orderSQL := " ORDER BY d.updated_at DESC"
 	if paged {
 		orderSQL += ", d.id DESC, dr.id ASC"
@@ -172,7 +187,7 @@ func (a *Adapter) collabDocs(ctx context.Context, query url.Values) (map[string]
 		       COALESCE(pr.execution_status, lr.execution_status) AS review_execution_status,
 		       COALESCE(lr.current_node, 0) AS review_current_node,
 		       COALESCE(lr.flow_snapshot, JSON_ARRAY()) AS flow_snapshot
-		FROM document_relations dr
+		FROM `+relationSource+` dr
 		INNER JOIN documents d ON d.id = dr.document_id
 		LEFT JOIN document_reviews lr
 		  ON dr.source_type = 'review' AND lr.id = CAST(dr.source_id AS UNSIGNED)
@@ -358,7 +373,7 @@ func locationLabel(ossPath string, docType string) string {
 	if docType == "department" {
 		return "部门文档"
 	}
-	if docType == "project" || docType == "git-project" {
+	if isProjectFamilyDocType(docType) {
 		return "项目文档"
 	}
 	return "个人文档"

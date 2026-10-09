@@ -71,7 +71,9 @@ function resume(row: Row) {
         >
           刷新记录
         </UButton>
-        <p class="text-xs text-muted sm:hidden">可左右滑动表格查看操作。</p>
+        <p class="text-xs text-muted sm:hidden">
+          可左右滑动表格查看操作。
+        </p>
         <UTable :data="result?.items || []" :columns="columns" :loading="loading">
           <template #requestBizId-cell="{ row }">
             <span class="block min-w-28 max-w-36 whitespace-normal break-all text-xs">{{ row.original.requestBizId }}</span>

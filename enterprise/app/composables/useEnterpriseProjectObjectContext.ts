@@ -1,3 +1,4 @@
+import { projectPageFailure } from '../../../aims/app/utils/projectPageFailure'
 import type { AimsProject, PaginatedList } from '../../../aims/app/types/aims'
 import { filterObjectGroups, isUsableProject, numericProjectId, projectReturnTarget, projectAllowsCreate, projectWorkspaceWithWriteAccess, projectRouteTab, projectTabAllows } from '../utils/object-navigation.mjs'
 import { enterpriseNavigation } from '../utils/enterprise-navigation'
@@ -23,10 +24,10 @@ export const enterpriseProjectObjectContextKey = Symbol('enterprise-project-obje
 // Created once by the Host layout, injected by pages. No global object cache or
 // independently-running consumer can refill an old user's project summary.
 export function useEnterpriseProjectObjectContext(options: { workspace: MaybeRefOrGetter<Workspace | null | undefined> }) {
-  const route = useRoute()
+  const route = useRouter().currentRoute
   const scope = useState<string>('enterprise-cache-scope', () => '')
   const workspace = computed(() => toValue(options.workspace) || null)
-  const id = computed(() => numericProjectId(route, workspace.value))
+  const id = computed(() => numericProjectId(route.value, workspace.value))
   // The summary is read through projects:view (the overview entry). Other
   // object actions may survive its revocation; they cannot retain this cached
   // project identity merely because some workspace group is still visible.
@@ -81,10 +82,10 @@ export function useEnterpriseProjectObjectContext(options: { workspace: MaybeRef
       project.value = response.data!
       if (!revalidating || !projects.value.length) void refreshProjects()
       return response.data!
-    } catch {
+    } catch (cause) {
       if (generation === detailGeneration) {
         project.value = null
-        error.value = '项目不可访问或暂不可用'
+        error.value = projectPageFailure(cause)
       }
       return null
     } finally { if (generation === detailGeneration) loading.value = false }
@@ -127,7 +128,7 @@ export function useEnterpriseProjectObjectContext(options: { workspace: MaybeRef
   const refreshRelationships = () => {
     if (active.value) void refresh()
   }
-  if (import.meta.client) {
+  if (import.meta.client && useRuntimeConfig().public.manualRefresh !== true) {
     onMounted(() => {
       window.addEventListener('focus', refreshRelationships)
       relationshipTimer = setInterval(() => {
@@ -142,7 +143,7 @@ export function useEnterpriseProjectObjectContext(options: { workspace: MaybeRef
   })
   const model = computed<EnterpriseProjectObjectModel | null>(() => {
     if (!active.value || !isUsableProject(project.value) || !workspace.value) return null
-    const backTo = projectReturnTarget(route.query as Record<string, unknown>, enterpriseNavigation.registeredPages)
+    const backTo = projectReturnTarget(route.value.query as Record<string, unknown>, enterpriseNavigation.registeredPages)
     return {
       objectPath: `/aims/projects/${id.value}`, label: project.value!.name,
       backTo, backLabel: backTo.startsWith('/aims/projects') ? '返回项目总览' : '返回产品上下文',
@@ -152,7 +153,7 @@ export function useEnterpriseProjectObjectContext(options: { workspace: MaybeRef
     }
   })
   const canCreateWorkItem = computed(() => Boolean(model.value && projectAllowsCreate(project.value) && workspace.value?.actions?.some(item => item.id === 'aims.project.create-work-item')))
-  const restrictedTab = computed(() => projectRouteTab(route.path))
+  const restrictedTab = computed(() => projectRouteTab(route.value.path))
   const tabDenied = computed(() => Boolean(active.value && project.value && restrictedTab.value && !projectTabAllows(project.value, restrictedTab.value)))
   const tabPending = computed(() => Boolean(restrictedTab.value && (!active.value || !project.value) && !error.value))
   return { tabDenied, tabPending, active, id, project, loading, error, model, canCreateWorkItem, refresh, refreshProjects }

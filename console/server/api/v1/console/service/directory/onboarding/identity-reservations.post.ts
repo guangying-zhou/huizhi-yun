@@ -17,8 +17,8 @@ export default defineEventHandler(async (event) => {
 
   const binding = resolvePeopleDirectoryTargetBinding(event, actor.tenantCode)
   const body = await readBody<Record<string, unknown>>(event).catch(() => ({} as Record<string, unknown>))
-  verifyPeopleDirectorySignature(event, body, binding)
-  const { command, uid, onboardingCode } = parseOnboardingProvisioningCommand(body, 'identity-reserve')
+  const sourceApp = verifyPeopleDirectorySignature(event, body, binding)
+  const { command, uid, onboardingCode } = parseOnboardingProvisioningCommand(body, 'identity-reserve', sourceApp)
 
   const runtime = await reserveConsoleDirectoryIdentity(event, {
     uid,
@@ -26,7 +26,7 @@ export default defineEventHandler(async (event) => {
     email: command.email,
     providerCode: command.providerCode,
     providerSubject: command.providerSubject,
-    sourceApp: 'people',
+    sourceApp,
     // 以入职单编码作为发起方业务键：同一入职单重复请求返回既有预留，
     // 网络重试不会占用第二个 UID。
     sourceBizCode: onboardingCode

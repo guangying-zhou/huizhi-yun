@@ -15,8 +15,8 @@ export default defineEventHandler(async (event) => {
   })
   const binding = resolvePeopleDirectoryTargetBinding(event, actor.tenantCode)
   const body = await readBody<Record<string, unknown>>(event).catch(() => ({} as Record<string, unknown>))
-  verifyPeopleDirectorySignature(event, body, binding)
-  const { command, uid } = parseOnboardingProvisioningCommand(body, 'activation-link')
+  const sourceApp = verifyPeopleDirectorySignature(event, body, binding)
+  const { command, uid } = parseOnboardingProvisioningCommand(body, 'activation-link', sourceApp)
   const providerCode = String(command.providerCode || '').trim().toLowerCase()
   if (providerCode !== 'dingtalk') {
     throw createError({ statusCode: 409, message: '受控入职激活链接目前只支持投递到钉钉员工身份。' })

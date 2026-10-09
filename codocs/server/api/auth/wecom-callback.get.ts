@@ -1,4 +1,5 @@
-import { createError, defineEventHandler, getHeader, getQuery, setCookie, sendRedirect } from 'h3'
+import { createError, defineEventHandler, getQuery, setCookie, sendRedirect } from 'h3'
+import { trustedClientAddress } from '@hzy/foundation/server/utils/trustedClientAddress'
 import { getAuthCookieOptions } from '@hzy/foundation/server/utils/cookie-domain'
 import { reportLoginAudit } from '@hzy/foundation/server/utils/accountApi'
 import { getUserByEmail } from '~~/server/utils/accountLookup'
@@ -14,12 +15,6 @@ interface LoginAuditPayload {
   failureReason?: string
   sessionId?: string
   ipAddress?: string | null
-}
-
-function getRequestIp(event: Parameters<typeof getHeader>[0]) {
-  const forwarded = getHeader(event, 'x-forwarded-for')
-  if (forwarded) return forwarded.split(',')[0]?.trim() || null
-  return getHeader(event, 'x-real-ip') || null
 }
 
 async function writeLoginAudit(payload: LoginAuditPayload) {
@@ -48,7 +43,7 @@ export default defineEventHandler(async (event) => {
       loginType: 'oauth',
       loginResult: 0,
       failureReason: 'Missing OAuth code',
-      ipAddress: getRequestIp(event)
+      ipAddress: trustedClientAddress(event) || null
     })
     throw createError({ statusCode: 400, message: '缺少授权码' })
   }
@@ -78,7 +73,7 @@ export default defineEventHandler(async (event) => {
         loginResult: 0,
         failureReason: `No account found for WeChat Work user: ${userid}`,
         sessionId: code,
-        ipAddress: getRequestIp(event)
+        ipAddress: trustedClientAddress(event) || null
       })
       throw createError({
         statusCode: 403,
@@ -123,7 +118,7 @@ export default defineEventHandler(async (event) => {
       loginType: 'oauth',
       loginResult: 1,
       sessionId: code,
-      ipAddress: getRequestIp(event)
+      ipAddress: trustedClientAddress(event) || null
     })
 
     return sendRedirect(event, '/')

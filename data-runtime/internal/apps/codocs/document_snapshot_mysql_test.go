@@ -197,6 +197,80 @@ func TestDocumentSnapshotsMySQL(t *testing.T) {
 			t.Fatalf("missing tables onV2=%v err=%v", onV2, e)
 		}
 	})
+	t.Run("personal first-open owner and shared writer race converts only once before tickets", func(t *testing.T) {
+		cmd := newDoc()
+		cmd.MarkdownSize = 6 * 1024 * 1024 // large image Markdown, within existing limit
+		exec(db, `INSERT INTO document_shares (document_id,owner_uid,shared_to_uid,permission) SELECT id,owner_uid,'first-open-writer','write' FROM documents WHERE uuid=?`, cmd.UUID)
+		exec(db, `INSERT INTO document_shares (document_id,owner_uid,shared_to_uid,permission) SELECT id,owner_uid,'first-open-reader','read' FROM documents WHERE uuid=?`, cmd.UUID)
+		reader := id
+		reader.Actor, reader.Key = "first-open-reader", "personal-first-open-reader"
+		exec(db, `UPDATE documents SET readonly_flag=1 WHERE uuid=?`, cmd.UUID)
+		_, e := a.OpenCollaborationSession(ctx, id, cmd.UUID)
+		status(e, 403)
+		exec(db, `UPDATE documents SET readonly_flag=0 WHERE uuid=?`, cmd.UUID)
+		_, e = a.OpenCollaborationSession(ctx, reader, cmd.UUID)
+		status(e, 403)
+		_, e = a.PrepareDocumentSnapshot(ctx, reader, cmd)
+		status(e, 403)
+		owner, writer := id, id
+		owner.Key = "personal-first-open-owner"
+		writer.Actor, writer.Key = "first-open-writer", "personal-first-open-writer"
+		for _, actor := range []PersonalFolderCreationIdentity{owner, writer} {
+			_, e = a.OpenCollaborationSession(ctx, actor, cmd.UUID)
+			var he httperror.Error
+			if !errors.As(e, &he) || he.Code != "document_not_on_snapshot_v2" {
+				t.Fatalf("first open before conversion: %v", e)
+			}
+		}
+		ownerPlan, writerPlan := prepare(owner, cmd), prepare(writer, cmd)
+		type result struct {
+			plan SnapshotPlan
+			err  error
+		}
+		results := make(chan result, 2)
+		go func() {
+			p, e := a.PublishDocumentSnapshot(ctx, owner, cmd, objectsFor(ownerPlan, false), verify)
+			results <- result{p, e}
+		}()
+		go func() {
+			p, e := a.PublishDocumentSnapshot(ctx, writer, cmd, objectsFor(writerPlan, false), verify)
+			results <- result{p, e}
+		}()
+		published := 0
+		for range 2 {
+			x := <-results
+			if x.err == nil {
+				published++
+				if x.plan.Generation != 1 {
+					t.Fatal(x.plan)
+				}
+				continue
+			}
+			var he httperror.Error
+			if !errors.As(x.err, &he) || he.Code != "snapshot_generation_conflict" {
+				t.Fatal(x.err)
+			}
+		}
+		if published != 1 {
+			t.Fatalf("publications=%d", published)
+		}
+		assertHead(cmd, 1, 1)
+		var versions int
+		if e = db.QueryRow(`SELECT COUNT(*) FROM document_versions WHERE document_id=(SELECT id FROM documents WHERE uuid=?)`, cmd.UUID).Scan(&versions); e != nil || versions != 1 {
+			t.Fatalf("versions=%d err=%v", versions, e)
+		}
+		first, e := a.OpenCollaborationSession(ctx, owner, cmd.UUID)
+		if e != nil {
+			t.Fatal(e)
+		}
+		second, e := a.OpenCollaborationSession(ctx, writer, cmd.UUID)
+		if e != nil || second.SessionID != first.SessionID || second.Generation != 1 {
+			t.Fatalf("join %+v %v", second, e)
+		}
+		_, e = a.OpenCollaborationSession(ctx, reader, cmd.UUID)
+		status(e, 403)
+		assertHead(cmd, 1, 1)
+	})
 	t.Run("collaboration sessions cover only v2 documents and block Host saves while active", func(t *testing.T) {
 		cmd := newDoc()
 		_, e := a.OpenCollaborationSession(ctx, id, cmd.UUID)

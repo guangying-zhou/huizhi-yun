@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import type { ApiResponse, AssetListItem, EnvironmentItem, ListPayload } from '~/types'
+import RemoteAssetObjectSelect from './RemoteAssetObjectSelect.vue'
+import type { ApiResponse, EnvironmentItem } from '~/types'
 
 const props = defineProps<{
   open: boolean
@@ -18,8 +19,6 @@ const isOpen = computed({
 
 const toast = useToast()
 const submitting = ref(false)
-const loadingAssets = ref(false)
-const assetOptions = ref<Array<{ label: string, value: number }>>([])
 const relationOptions = [
   { label: '计算资源', value: 'compute' },
   { label: '数据库', value: 'database' },
@@ -44,35 +43,9 @@ function hydrate() {
   state.is_primary = false
 }
 
-async function loadAssets() {
-  loadingAssets.value = true
-
-  try {
-    const response = await $fetch<ApiResponse<ListPayload<AssetListItem>>>('/api/v1/assets')
-    const linkedIds = new Set((props.environment?.linked_assets || []).map(item => item.id))
-    assetOptions.value = (response.data.items || [])
-      .filter(item => !linkedIds.has(item.id))
-      .map(item => ({
-        label: `${item.asset_code} · ${item.asset_name}`,
-        value: item.id
-      }))
-  } catch (error) {
-    console.error('[EnvironmentAssetBind] Failed to load assets:', error)
-    toast.add({
-      title: '资产加载失败',
-      description: '请刷新后重试。',
-      color: 'error',
-      icon: 'i-lucide-circle-alert'
-    })
-  } finally {
-    loadingAssets.value = false
-  }
-}
-
 watch(() => props.open, async (open) => {
   if (open) {
     hydrate()
-    await loadAssets()
   }
 })
 
@@ -131,13 +104,11 @@ async function handleSubmit() {
     <template #body>
       <div class="space-y-4 p-4">
         <UFormField label="选择资产" required>
-          <USelectMenu
+          <RemoteAssetObjectSelect
             v-model="state.asset_id"
-            :items="assetOptions"
-            :loading="loadingAssets"
-            value-key="value"
-            placeholder="请选择待绑定资产"
-            searchable
+            kind="assets"
+            :enabled="isOpen"
+            :exclude-ids="(props.environment?.linked_assets || []).map(item => item.id)"
           />
         </UFormField>
 

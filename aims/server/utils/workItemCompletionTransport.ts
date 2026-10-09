@@ -27,7 +27,7 @@ export async function sendWorkItemCompletion(event: H3Event | null, operation: C
   const sourceDeploymentCode = String(operation.deploymentCode || '')
   const gateway = event ? resolveTrustedTenantGatewayContext(event) : null
   const route = event ? resolveTrustedServiceAppRoute(event, 'workflow') : null
-  if (event && (!gateway || !route || gateway.tenant !== tenantCode || gateway.deployment !== sourceDeploymentCode || gateway.appCode !== 'aims')) {
+  if (event && (!gateway || !route || gateway.tenant !== tenantCode || gateway.deployment !== sourceDeploymentCode || !['aims', 'enterprise'].includes(gateway.appCode))) {
     throw createError({ statusCode: 503, message: 'Completion trusted route is unavailable.' })
   }
   const targetDeploymentCode = route?.deploymentCode || targetDeploymentOverride
@@ -49,7 +49,7 @@ export async function sendWorkItemCompletion(event: H3Event | null, operation: C
     const requestId = crypto.randomUUID()
     const signed = await buildServiceCommandRuntimeHeaders({
       token, method: 'POST', requestTarget: new URL(url, 'http://localhost').pathname, requestId,
-      tenantCode, sourceDeploymentCode, targetDeploymentCode, sourceApp: 'aims', sourceClientId: 'aims.runtime', targetApp: 'workflow',
+      tenantCode, sourceDeploymentCode, targetDeploymentCode, sourceApp: gateway?.appCode === 'enterprise' ? 'enterprise' : 'aims', sourceClientId: gateway?.appCode === 'enterprise' ? 'enterprise.runtime' : 'aims.runtime', targetApp: 'workflow',
       envelope: envelope.serviceCommand as SignedServiceCommandEnvelope
     })
     const options = {

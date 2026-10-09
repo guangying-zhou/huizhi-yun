@@ -339,6 +339,17 @@ func (r *Repository) markLatestDeadLetterGenerationClosure(ctx context.Context, 
 }
 
 func (r *Repository) AuthorizeDeadLetterNotification(ctx context.Context, input AuthorizeDeadLetterNotificationInput) (bool, string, error) {
+	return r.authorizeDeadLetterNotification(ctx, r.db, input)
+}
+
+func (r *Repository) AuthorizeDeadLetterNotificationInTransaction(ctx context.Context, tx *sql.Tx, input AuthorizeDeadLetterNotificationInput) (bool, string, error) {
+	if tx == nil {
+		return false, "", fmt.Errorf("notification transaction is required")
+	}
+	return r.authorizeDeadLetterNotification(ctx, tx, input)
+}
+
+func (r *Repository) authorizeDeadLetterNotification(ctx context.Context, executor notificationExecutor, input AuthorizeDeadLetterNotificationInput) (bool, string, error) {
 	if err := validateFailureNotificationScope(input.TenantCode, input.DeploymentCode, input.SourceApp); err != nil {
 		return false, "", err
 	}
@@ -352,7 +363,7 @@ func (r *Repository) AuthorizeDeadLetterNotification(ctx context.Context, input 
 	var closureState sql.NullString
 	var status string
 	var currentVersion, sourceVersion uint64
-	err := r.db.QueryRowContext(ctx, r.sql(authorizeDeadLetterNotificationSQL), input.OperationID, input.NotificationID, input.TenantCode, input.DeploymentCode, input.SourceApp).Scan(&recipientsJSON, &closureState, &status, &currentVersion, &sourceVersion)
+	err := executor.QueryRowContext(ctx, r.sql(authorizeDeadLetterNotificationSQL), input.OperationID, input.NotificationID, input.TenantCode, input.DeploymentCode, input.SourceApp).Scan(&recipientsJSON, &closureState, &status, &currentVersion, &sourceVersion)
 	if errors.Is(err, sql.ErrNoRows) {
 		return false, "not_found", nil
 	}

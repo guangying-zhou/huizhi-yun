@@ -211,7 +211,10 @@ export function validateConfig(input) {
   })
 
   const schedulerInput = record(input.scheduler)
-  allowKeys(schedulerInput, ['drain', 'policySync', 'alertAfterConsecutiveFailures'], 'scheduler', issues)
+  allowKeys(schedulerInput, ['drain', 'policySync', 'apf', 'aimsExecutor', 'alertAfterConsecutiveFailures'], 'scheduler', issues)
+  const aimsExecutor = schedulerInput.aimsExecutor ?? 'aims'
+  if (!['aims', 'enterprise'].includes(aimsExecutor)) issues.push('scheduler.aimsExecutor must be aims or enterprise')
+  if (aimsExecutor === 'enterprise' && !apps.enterprise) issues.push('Host Aims scheduler requires enterprise binding')
   const drainInput = record(schedulerInput.drain)
   allowKeys(drainInput, ['enabled', 'apps', 'maxWakes', 'concurrency', 'maxWallTimeMs', 'requestTimeoutMs'], 'scheduler.drain', issues)
   const drainApps = Array.isArray(drainInput.apps) ? [...new Set(drainInput.apps)] : []
@@ -220,7 +223,7 @@ export function validateConfig(input) {
   }
   for (const appCode of drainApps) {
     if (!DRAIN_APPS.has(appCode)) issues.push(`scheduler.drain.apps: ${String(appCode).slice(0, 32)} is not a scheduler app`)
-    else if (!apps[appCode]) issues.push(`scheduler.drain.apps: ${appCode} must be configured under apps (local deployments only)`)
+    else if (!apps[appCode] && !(appCode === 'aims' && aimsExecutor === 'enterprise' && apps.enterprise)) issues.push(`scheduler.drain.apps: ${appCode} must be configured under apps (local deployments only)`)
   }
   const drain = Object.freeze({
     enabled: booleanOr(drainInput.enabled, true, 'scheduler.drain.enabled', issues),
@@ -238,7 +241,17 @@ export function validateConfig(input) {
     intervalMinutes: integerOr(policyInput.intervalMinutes, 1, 1, 15, 'scheduler.policySync.intervalMinutes', issues),
     consoleTimeoutMs: integerOr(policyInput.consoleTimeoutMs, 35_000, 1_000, 120_000, 'scheduler.policySync.consoleTimeoutMs', issues)
   })
+  const apfInput = record(schedulerInput.apf)
+  allowKeys(apfInput, ['enabled', 'domains', 'generation'], 'scheduler.apf', issues)
+  const apfDomains = Array.isArray(apfInput.domains) ? apfInput.domains : []
+  const apfEnabled = booleanOr(apfInput.enabled, false, 'scheduler.apf.enabled', issues)
+  if (apfInput.domains !== undefined && (!Array.isArray(apfInput.domains) || new Set(apfDomains).size !== apfDomains.length || apfDomains.some(d => !['altoc', 'finance', 'people'].includes(d)))) issues.push('scheduler.apf.domains invalid')
+  const apfGeneration = typeof apfInput.generation === 'string' ? apfInput.generation : ''
+  if (apfEnabled && (!drain.enabled || !apps.enterprise || !apfDomains.length || !/^[1-9][0-9]{0,19}$/.test(apfGeneration) || BigInt(apfGeneration) > 18446744073709551615n)) issues.push('scheduler.apf requires drain, enterprise deployment, domains and canonical generation')
+  const apf = Object.freeze({ enabled: apfEnabled, domains: Object.freeze(apfDomains), generation: apfGeneration })
   const scheduler = Object.freeze({
+    apf,
+    aimsExecutor,
     drain,
     policySync,
     alertAfterConsecutiveFailures: integerOr(schedulerInput.alertAfterConsecutiveFailures, 3, 1, 100, 'scheduler.alertAfterConsecutiveFailures', issues)
@@ -297,6 +310,7 @@ export function buildWorkerEnv(config, { createBinding, disabledBinding }) {
     HZY_TENANT_GATEWAY_STATIC_DATA_RUNTIME_CODE: config.runtime.runtimeCode,
     // Adds Console to the trusted service route catalog (Worker buildTrustedServiceRouteCatalog); Cloudflare leaves it unset.
     HZY_TENANT_GATEWAY_SERVICE_ROUTES_INCLUDE_CONSOLE: 'true',
+    HZY_AIMS_SCHEDULER_EXECUTOR: scheduler.aimsExecutor || 'aims',
     HZY_ENTERPRISE_PILOT: config.enterprise.pilot ? 'true' : 'false',
     HZY_ENTERPRISE_AUTH_PILOT: config.enterprise.authPilot ? 'true' : 'false',
     HZY_POLICY_SYNC_HOSTS: scheduler.policySync.enabled ? site.publicHost : '',
@@ -324,6 +338,10 @@ export function buildWorkerEnv(config, { createBinding, disabledBinding }) {
     if (settings.originEnv) env[settings.originEnv] = app ? app.origin : DISABLED_ORIGIN
     if (settings.binding) env[settings.binding] = app ? createBinding(app.origin) : disabledBinding
   }
+  if (scheduler.apf.enabled) env.HZY_ENTERPRISE_APF_SCHEDULER_BINDINGS_JSON = JSON.stringify([{
+    host: site.publicHost, tenantCode: site.tenantCode, environment: site.environment,
+    deploymentCode: apps.enterprise.deploymentCode, owner: 'gateway', generation: scheduler.apf.generation, domains: scheduler.apf.domains
+  }])
   if (apps.console) env.HZY_CONSOLE_BASE_PATH = CONSOLE_BASE_PATH
   for (const name of ALWAYS_DISABLED_ORIGINS) env[name] = DISABLED_ORIGIN
   return env

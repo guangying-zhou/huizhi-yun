@@ -495,3 +495,58 @@ func TestEnterpriseLegacyWindowsDefaultTrueAndExplicitFalse(t *testing.T) {
 		}
 	})
 }
+
+func TestLocalCollabBindingIsExactAndPreservesPlatformAuthority(t *testing.T) {
+	for _, name := range []string{"valid", "no opt-in", "wrong deployment", "wrong tenant", "wrong runtime", "wildcard host", "wrong port", "disabled", "no snapshot", "no collaboration", "static conflict", "overlay conflict"} {
+		t.Run(name, func(t *testing.T) {
+			cfg := Config{Tenant: "C000001", Deployment: "c000001-test-tenant-runtime",
+				Server:             ServerConfig{Host: "127.0.0.1", Port: 18084},
+				DeploymentBindings: map[string]string{"aims": "C000001-test-aims"},
+				Apps:               AppsConfig{Codocs: CodocsConfig{Enabled: true, SnapshotV2Enabled: true, CollaborationV2Enabled: true}}}
+			local, configured := "C000001-test-collab", "C000001-test-collab"
+			switch name {
+			case "no opt-in":
+				local = ""
+			case "wrong deployment":
+				local = "C000001-collab"
+			case "wrong tenant":
+				cfg.Tenant = "C000002"
+			case "wrong runtime":
+				cfg.Deployment = "production-runtime"
+			case "wildcard host":
+				cfg.Server.Host = "0.0.0.0"
+			case "wrong port":
+				cfg.Server.Port = 18085
+			case "disabled":
+				cfg.Apps.Codocs.Enabled = false
+			case "no snapshot":
+				cfg.Apps.Codocs.SnapshotV2Enabled = false
+			case "no collaboration":
+				cfg.Apps.Codocs.CollaborationV2Enabled = false
+			case "static conflict":
+				configured = "other"
+			case "overlay conflict":
+				cfg.DeploymentBindings["collab"] = "other"
+			}
+			err := applyLocalCollabBinding(&cfg, configured, local)
+			if name != "valid" && name != "no opt-in" {
+				if err == nil {
+					t.Fatal("unsafe local binding accepted")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if cfg.DeploymentBindings["aims"] != "C000001-test-aims" {
+				t.Fatal("Platform binding changed")
+			}
+			if name == "valid" && cfg.DeploymentBindings["collab"] != local {
+				t.Fatal("local binding missing")
+			}
+			if name == "no opt-in" && cfg.DeploymentBindings["collab"] != "" {
+				t.Fatal("static fallback restored")
+			}
+		})
+	}
+}

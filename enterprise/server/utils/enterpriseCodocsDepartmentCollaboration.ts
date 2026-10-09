@@ -120,7 +120,7 @@ function refuse(status: number, code: string, message: string): never {
   throw createError({ statusCode: status, message, data: { code } })
 }
 
-async function assertNoActiveLegacyCollaboration(event: H3Event, doc: Record<string, unknown>) {
+export async function assertNoActiveLegacyCollaboration(event: H3Event, doc: Record<string, unknown>) {
   const quietAfter = Date.now() - V1_COLLABORATION_QUIET_MS
   const updated = Date.parse(String(doc.updated_at ?? ''))
   // Unparseable freshness cannot prove the room is idle: fail closed.

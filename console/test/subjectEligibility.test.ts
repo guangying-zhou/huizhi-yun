@@ -78,6 +78,8 @@ describe('purpose-bound subject eligibility contract', () => {
     ])
     const expectedKeys = [
       ...[...streamsByApp].flatMap(([app, streams]) => streams.map(stream => `${app}|${stream}`)),
+      ...['sales_due', 'sales_lead_due', 'billing_due', 'issuance_due', 'reconciliation_due', 'handover_due', 'asset_recovery_due'].map(p => `enterprise|apf_${p}`),
+      ...['altoc', 'finance', 'people'].map(domain => `enterprise|apf_${domain}_dead_letter`),
       'workflow|task_actionable',
       'workflow|instance_actionable',
       'workflow|instance_status',
@@ -91,7 +93,7 @@ describe('purpose-bound subject eligibility contract', () => {
     assert.deepEqual([...registry.keys()].sort(), expectedKeys)
 
     for (const [key, target] of registry) {
-      const app = key.split('|')[0]
+      const app = target.targetAppCode || key.split('|')[0]
       const manifest = JSON.parse(readFileSync(new URL(`../../${app}/app.manifest.json`, import.meta.url), 'utf8')) as {
         resources: Array<{ code: string, actions: string[] }>
       }

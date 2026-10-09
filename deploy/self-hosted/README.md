@@ -99,3 +99,9 @@ node /home/hzy/tools/health.mjs --app <app>
 - G-12 的 Host 根路径接口尚在并行开发，完整业务冒烟须等该批合并。
 - node-server 的 Nuxt `runtimeConfig` 与运行时环境变量映射必须在 S1 核对。脚本刻意不把 OIDC secret 编进产物；若部署时仍取构建默认值，须先补 `NUXT_*` 键或专用运行时读取，再发布。
 - Gateway 已有独立 systemd 示例，覆盖文件应做一次 `systemd-analyze verify` 与本机启动演练，且需将 Gateway 包路径与旧 `/opt/hzy/current` 区分；这里不改其源目录。
+
+### 登录请求头上限与临时 Cookie
+
+Foundation OIDC 临时 Cookie 仅发送到回调所属应用路径，最多保留两个并发登录状态，TTL 上限为 600 秒；超过 1024 字节的返回地址回退到应用首页。回调验证或依赖请求失败也删除已消费状态，退出时清理本应用遗留状态。其他应用的会话不清除。
+
+自托管生产可将应用 Node 参数设为 `--max-http-header-size=65536`，Gateway 的 `limits.maxHeaderBytes` 设为 `65536`，公网 nginx 仅在对应站点设置 `client_header_buffer_size 8k`、`large_client_header_buffers 4 32k`。单个请求头仍受 32 KiB 限制；Gateway 注入的受信上下文也占应用 Node 请求头预算。`cutover/b12b/aidcp.open.conf` 将 nginx 494 和上游 431 转为不缓存的友好 431 页面。修改前备份配置，`nginx -t` 通过后 reload；systemd 参数通过独立 drop-in 修改并保留原配置以便回滚。运行中 Runtime、权限、策略与数据库不随此调整。

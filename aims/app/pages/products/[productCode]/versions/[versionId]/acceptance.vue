@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { useAimsModule } from '../../../../../../layer/useAimsModule'
-const { moduleUrl, cacheKey } = useAimsModule()
 import type { AcceptanceInput, ProductVersionAcceptancePreview, AcceptanceCheck, AcceptanceException, VersionExecutionItem } from '../../../../../types/productVersionAcceptance'
+import { useAimsModule } from '../../../../../../layer/useAimsModule'
+
+const { moduleUrl, cacheKey } = useAimsModule()
 
 definePageMeta({ layoutHeader: true, layoutHeaderTitle: '版本整体验收', layoutHeaderProjectSwitcher: false })
 

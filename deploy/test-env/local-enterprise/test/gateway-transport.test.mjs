@@ -14,6 +14,7 @@ test('local Workflow opens only exact Host BFF methods and no public Workflow se
   const upstream = createServer((req, res) => {
     const routes = JSON.parse(req.headers['x-hzy-service-routes'] || '{}')
     assert.deepEqual(routes.aims, { origin: 'http://127.0.0.1:23141', deploymentCode: 'C000001-test-aims', basePath: '/aims/' })
+    assert.deepEqual(routes.enterprise, { origin: 'http://127.0.0.1:' + port, deploymentCode: 'enterprise-test', basePath: '/enterprise/' })
     assert.deepEqual(routes.workflow, { origin: 'http://127.0.0.1:23140', deploymentCode: 'C000001-test-workflow-local', basePath: '/workflow/' })
     res.writeHead(200); res.end(req.url)
   })
@@ -542,21 +543,58 @@ function request(port, path, headers, method = 'GET') { return new Promise((reso
 function postJson(port, path, body, host = `127.0.0.1:${port}`) { return new Promise((resolve, reject) => { const req = httpRequest({ hostname: '127.0.0.1', port, path, method: 'POST', headers: { host, 'content-type': 'application/json' } }, res => { let raw = ''; res.on('data', chunk => { raw += chunk }); res.on('end', () => resolve({ status: res.statusCode, headers: res.headers, body: JSON.parse(raw) })) }); req.once('error', reject); req.end(JSON.stringify(body)) }) }
 function upgrade(port, origin, path, extraHeaders = {}) { return new Promise(resolve => { const socket = connect(port, '127.0.0.1', () => socket.write(`GET ${path} HTTP/1.1\r\nHost: hzy0.isme.dev\r\nOrigin: ${origin}\r\nConnection: Upgrade\r\nUpgrade: websocket\r\n${Object.entries(extraHeaders).map(([key, value]) => `${key}: ${value}\r\n`).join('')}\r\n`)); let data = ''; socket.on('data', chunk => { data += chunk }); socket.on('close', () => resolve(data)); setTimeout(() => { socket.destroy(); resolve(data) }, 500) }) }
 
-test('Altoc twelve GET APIs use the real local proxy with atomic Enterprise identity and deny adjacent writes', async () => {
- const observed=[]
- const upstream=createServer((req,res)=>{observed.push({path:req.url,headers:req.headers});res.writeHead(req.headers.cookie ? 200 : 401);res.end('fixture')})
- const port=await listen(upstream),gateway=createLocalEnterpriseGateway(profile(port),'fixture-secret'),gatewayPort=await listen(gateway)
- try {
-  for(const folder of ['customers','contracts','payments','leads','opportunities','quotes'])for(const path of [`/altoc/api/v1/${folder}`,`/altoc/api/v1/${folder}/7`]){
-   assert.equal((await request(gatewayPort,path,{host:'hzy0.isme.dev',cookie:'session=fixture','x-hzy-app-code':'altoc','x-hzy-deployment':'forged','x-forwarded-prefix':'/altoc'})).statusCode,200)
-   const headers=observed.at(-1).headers
-   assert.equal(headers['x-hzy-app-code'],'enterprise');assert.equal(headers['x-hzy-deployment'],'enterprise-test');assert.equal(headers['x-forwarded-prefix'],'')
-   for(const method of ['POST','PATCH','PUT','DELETE'])assert.equal((await request(gatewayPort,path,{host:'hzy0.isme.dev'},method)).statusCode,404)
+test('Altoc twelve GET APIs preserve Enterprise identity; registered writes require a session and adjacent methods stay closed', async () => {
+  const observed = []
+  const upstream = createServer((req, res) => {
+    observed.push({ method: req.method, path: req.url, headers: req.headers })
+    res.writeHead(req.headers.cookie ? 200 : 401)
+    res.end('fixture')
+  })
+  const port = await listen(upstream)
+  const gateway = createLocalEnterpriseGateway(profile(port), 'fixture-secret')
+  const gatewayPort = await listen(gateway)
+  // WP4/APF-07 registered exact create/update BFFs. This independent closed
+  // expectation must not be derived from the same registry as the proxy.
+  const registeredWrites = new Set(['customers', 'contracts', 'leads', 'opportunities', 'quotes'].flatMap(folder => [
+    `POST /altoc/api/v1/${folder}`,
+    `PATCH /altoc/api/v1/${folder}/7`
+  ]))
+  const assertIdentity = (headers) => {
+    assert.equal(headers['x-hzy-app-code'], 'enterprise')
+    assert.equal(headers['x-hzy-deployment'], 'enterprise-test')
+    assert.equal(headers['x-forwarded-prefix'], '')
   }
-  assert.equal(observed.length,12)
-  assert.equal((await request(gatewayPort,'/altoc/api/v1/customers',{host:'hzy0.isme.dev'})).statusCode,401)
-  for(const path of ['/altoc/api/v1/customers/new','/altoc/api/v1/contracts/7/invoices','/altoc/settings'])assert.equal((await request(gatewayPort,path,{host:'hzy0.isme.dev'})).statusCode,404)
- }finally{await close(gateway);await close(upstream)}
+  try {
+    for (const folder of ['customers', 'contracts', 'payments', 'leads', 'opportunities', 'quotes']) {
+      for (const path of [`/altoc/api/v1/${folder}`, `/altoc/api/v1/${folder}/7`]) {
+        assert.equal((await request(gatewayPort, path, { host: 'hzy0.isme.dev', cookie: 'session=fixture', 'x-hzy-app-code': 'altoc', 'x-hzy-deployment': 'forged', 'x-forwarded-prefix': '/altoc' })).statusCode, 200)
+        assertIdentity(observed.at(-1).headers)
+        for (const method of ['POST', 'PATCH', 'PUT', 'DELETE']) {
+          const registered = registeredWrites.has(`${method} ${path}`)
+          const before = observed.length
+          const response = await request(gatewayPort, path, { host: 'hzy0.isme.dev', 'x-hzy-app-code': 'altoc', 'x-hzy-deployment': 'forged' }, method)
+          assert.equal(response.statusCode, registered ? 401 : 404, `${method} ${path}`)
+          assert.equal(observed.length, before + (registered ? 1 : 0), `${method} ${path}: unregistered methods must not reach upstream`)
+          if (registered) {
+            assert.equal(observed.at(-1).method, method)
+            assert.equal(observed.at(-1).path, path)
+            assert.equal(observed.at(-1).headers.cookie, undefined)
+            assertIdentity(observed.at(-1).headers)
+          }
+        }
+      }
+    }
+    assert.equal(observed.length, 12 + registeredWrites.size)
+    assert.equal((await request(gatewayPort, '/altoc/api/v1/customers', { host: 'hzy0.isme.dev' })).statusCode, 401)
+    for (const path of ['/altoc/api/v1/customers/new', '/altoc/api/v1/contracts/7/invoices', '/altoc/settings']) {
+      const before = observed.length
+      assert.equal((await request(gatewayPort, path, { host: 'hzy0.isme.dev' })).statusCode, 404)
+      assert.equal(observed.length, before, 'adjacent paths must not reach upstream')
+    }
+  } finally {
+    await close(gateway)
+    await close(upstream)
+  }
 })
 
 test('dev OIDC restart window offers a safe retry page without retrying or leaking upstream', async () => {
@@ -577,4 +615,20 @@ test('dev OIDC restart window offers a safe retry page without retrying or leaki
     assert.equal(api.statusCode,503); assert.match(api.headers['content-type'],/application\/json/)
     assert.equal(JSON.parse(api.body).code,'hzy0_upstream_error'); assert.equal(attempts,2)
   } finally { await close(gateway); await close(upstream) }
+})
+
+
+test('Collab token failures retain only constrained upstream machine codes', async () => {
+  const base = profile(23122)
+  let error = { data: { error: { code: 'oidc_signing_service_deployment_invalid' } }, message: 'secret token /path' }
+  const gateway = createLocalEnterpriseGateway({ ...base, features: { codocsSnapshotV2: true, codocsCollaborationV2: true }, listeners: { ...base.listeners, collab: { host: '127.0.0.1', port: 23131 } } }, 'fixture-gateway-secret', {
+    headers: async () => new Headers()
+  }, { collabTokenSecret: 'fixture-collab-secret', collabTokenFetch: async () => new Response(JSON.stringify(error), { status: 403 }) })
+  const port = await listen(gateway)
+  const body = { grant_type: 'client_credentials', client_id: 'collab.runtime', client_secret: 'fixture-collab-secret', audience: 'data-runtime', scope: 'codocs:collaboration-snapshots:read', source_binding: 'service-client-policy' }
+  try {
+    assert.deepEqual((await postJson(port, '/__hzy0/collab-token', body)).body, { statusCode: 403, code: 'oidc_signing_service_deployment_invalid' })
+    error = { code: 'secret.token.payload', message: 'secret token /path' }
+    assert.deepEqual((await postJson(port, '/__hzy0/collab-token', body)).body, { statusCode: 403 })
+  } finally { await close(gateway) }
 })

@@ -6,7 +6,7 @@ import { optionalReadPagination } from '../../foundation/shared/utils/optionalRe
 const code = buildSync({
   entryPoints: [new URL('../server/utils/enterpriseCodocsCollaboration.ts', import.meta.url).pathname],
   bundle: true, platform: 'node', format: 'cjs', write: false,
-  external: ['h3', '@hzy/foundation/*']
+  external: ['h3', '@hzy/foundation/*', './enterpriseCodocsPersonalCollaborationConvert']
 }).outputFiles[0].text
 
 function load(state) {

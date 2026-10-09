@@ -1,9 +1,9 @@
 import { createError, getQuery, getRouterParam, readBody, setHeader, setResponseStatus, type H3Event } from 'h3'
 import { maybeCallTenantRuntime } from '@hzy/foundation/server/utils/tenantRuntimeClient'
-import { dispatchProductFeedback } from './productFeedbackDispatch'
-import { requirePermission } from './checkPermission'
-import { getRequestUid } from './authIdentity'
-import { resolveCurrentAltocDataAccessQuery } from './altocScopedAuthorization'
+import { dispatchProductFeedback } from './productFeedbackDispatch.ts'
+import { requirePermission } from './checkPermission.ts'
+import { getRequestUid } from './authIdentity.ts'
+import { resolveCurrentAltocDataAccessQuery } from './altocScopedAuthorization.ts'
 
 type Row = Record<string, unknown>
 

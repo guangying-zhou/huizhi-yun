@@ -114,6 +114,7 @@ function schedulerCanonical(input: {
   issuedAt: string
   schedulerStorage: string
   schedulerGeneration: string
+  apfDomain?: string
 }) {
   const values = [
     'POST',
@@ -128,6 +129,7 @@ function schedulerCanonical(input: {
   ]
   if (input.appCode === 'people') values.push(input.consoleTargetDeployment)
   if (input.schedulerStorage) values.push('enterprise-scheduler-v1', input.schedulerStorage, input.schedulerGeneration)
+  if (input.apfDomain) values.push('enterprise-apf-v1', input.apfDomain)
   values.push(input.issuedAt)
   return values.join('\n')
 }
@@ -150,8 +152,10 @@ export async function requireTenantGatewaySchedulerRequest(event: H3Event, expec
   const signature = text(getHeader(event, 'x-hzy-scheduler-signature'))
   const schedulerStorage = text(getHeader(event, 'x-hzy-scheduler-storage'))
   const schedulerGeneration = text(getHeader(event, 'x-hzy-scheduler-generation'))
+  const apfDomain = text(getHeader(event, 'x-hzy-apf-domain'))
+  if (apfDomain && (expectedAppCode !== 'enterprise' || path !== '/enterprise/api/internal/apf/scheduler-inspect' || !['altoc', 'finance', 'people'].includes(apfDomain) || schedulerStorage !== 'unified')) throw createError({ statusCode: 403 })
   if ((schedulerStorage || schedulerGeneration)
-    && (!['aims', 'assets'].includes(expectedAppCode) || !['unified', 'recovered', 'disabled'].includes(schedulerStorage) || !isPositiveUint64Decimal(schedulerGeneration))) {
+    && (!(['aims', 'assets'].includes(expectedAppCode) || (expectedAppCode === 'enterprise' && ['/enterprise/api/internal/apf/scheduler-inspect', '/enterprise/api/internal/aims/drain'].includes(path))) || !['unified', 'recovered', 'disabled'].includes(schedulerStorage) || !isPositiveUint64Decimal(schedulerGeneration))) {
     throw createError({ statusCode: 403, statusMessage: 'Forbidden', message: 'scheduler storage binding invalid' })
   }
   if (
@@ -185,10 +189,11 @@ export async function requireTenantGatewaySchedulerRequest(event: H3Event, expec
     consoleTargetDeployment,
     schedulerStorage,
     schedulerGeneration,
+    apfDomain,
     issuedAt
   }))
   if (!constantTimeEquals(signature, expectedSignature)) {
     throw createError({ statusCode: 403, statusMessage: 'Forbidden', message: 'scheduler wake signature invalid' })
   }
-  return { ...context, requestId, runtimeEndpoint, consoleTargetDeployment, schedulerStorage, schedulerGeneration }
+  return { ...context, requestId, runtimeEndpoint, consoleTargetDeployment, schedulerStorage, schedulerGeneration, apfDomain }
 }

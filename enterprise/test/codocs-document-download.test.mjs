@@ -30,7 +30,10 @@ test('Enterprise Codocs document download enforces export permits and returns sa
   globalThis.__codocsDownloadSession = session
   globalThis.__codocsDownloadAuthorization = { resources: { documents: ['export'] }, actionPolicies: {} }
   globalThis.__codocsDownloadAuthorizationError = null
-  globalThis.__codocsDownloadPrepare = async (_event, options) => { preparations.push(options); return true }
+  globalThis.__codocsDownloadPrepare = async (_event, options) => {
+    preparations.push(options)
+    return true
+  }
   globalThis.__codocsDownloadTransport = async (_event, path, options) => {
     runtimeCalls.push({ path, options })
     return {
@@ -51,23 +54,37 @@ test('Enterprise Codocs document download enforces export permits and returns sa
     return '# exported markdown\n'
   }
   globalThis.__codocsDownloadRecovery = async () => ''
-  globalThis.__codocsDownloadAudit = async (...args) => { auditCalls.push(args) }
+  globalThis.__codocsDownloadAudit = async (...args) => {
+    auditCalls.push(args)
+  }
 
   const hooks = registerHooks({
     resolve(specifier, context, next) {
       let source
-      if (specifier.endsWith('/oss')) source = 'export const downloadDocument=async(...args)=>globalThis.__codocsDownloadOss(...args);export const downloadDocumentBuffer=async(...args)=>globalThis.__codocsDownloadOss(...args)'
-      if (specifier.endsWith('/yjsMarkdownRecovery')) source = 'export const hasMeaningfulMarkdownContent=value=>String(value??\'\').trim().length>0;export const recoverMarkdownFromYjsSnapshot=async(...args)=>globalThis.__codocsDownloadRecovery(...args)'
-      if (specifier.endsWith('/enterpriseCodocsDocumentAccessRecord')) source = 'export const recordEnterpriseCodocsDocumentAccess=async(...args)=>globalThis.__codocsDownloadAudit(...args)'
-      if (specifier.endsWith('/consoleSessionBridge')) source = 'export const resolveConsoleAuthWithSessionBridge=async()=>globalThis.__codocsDownloadSession'
-      if (specifier.endsWith('/tenantRuntimeClient')) source = 'export const prepareTenantRuntime=async(...args)=>globalThis.__codocsDownloadPrepare(...args);export const maybeCallTenantRuntime=(...args)=>globalThis.__codocsDownloadTransport(...args)'
-      if (specifier.endsWith('/platformBundleAuthorization')) source = 'export const loadAuthorizationSnapshotFromConsoleRuntime=async()=>{if(globalThis.__codocsDownloadAuthorizationError) throw globalThis.__codocsDownloadAuthorizationError;return globalThis.__codocsDownloadAuthorization}'
-      if (specifier.endsWith('/tenantGatewayTrust')) source = 'export const resolveTrustedTenantGatewayContext=()=>undefined'
-      if (source) return { url: `data:text/javascript,${encodeURIComponent(source)}`, shortCircuit: true }
+      if (specifier.endsWith('/oss'))
+        source = 'export const downloadDocument=async(...args)=>globalThis.__codocsDownloadOss(...args);export const downloadDocumentBuffer=async(...args)=>globalThis.__codocsDownloadOss(...args)'
+      if (specifier.endsWith('/yjsMarkdownRecovery'))
+        source = 'export const hasMeaningfulMarkdownContent=value=>String(value??\'\').trim().length>0;export const recoverMarkdownFromYjsSnapshot=async(...args)=>globalThis.__codocsDownloadRecovery(...args)'
+      if (specifier.endsWith('/enterpriseCodocsDocumentAccessRecord'))
+        source = 'export const recordEnterpriseCodocsDocumentAccess=async(...args)=>globalThis.__codocsDownloadAudit(...args)'
+      if (specifier.endsWith('/consoleSessionBridge'))
+        source = 'export const resolveConsoleAuthWithSessionBridge=async()=>globalThis.__codocsDownloadSession'
+      if (specifier.endsWith('/tenantRuntimeClient'))
+        source = 'export const prepareTenantRuntime=async(...args)=>globalThis.__codocsDownloadPrepare(...args);export const maybeCallTenantRuntime=(...args)=>globalThis.__codocsDownloadTransport(...args)'
+      if (specifier.endsWith('/platformBundleAuthorization'))
+        source = 'export const loadAuthorizationSnapshotFromConsoleRuntime=async()=>{if(globalThis.__codocsDownloadAuthorizationError) throw globalThis.__codocsDownloadAuthorizationError;return globalThis.__codocsDownloadAuthorization}'
+      if (specifier.endsWith('/tenantGatewayTrust'))
+        source = 'export const resolveTrustedTenantGatewayContext=()=>undefined'
+      if (source)
+        return { url: `data:text/javascript,${encodeURIComponent(source)}`, shortCircuit: true }
       let candidate
-      if (specifier.startsWith('@hzy/foundation/')) candidate = resolve(root, 'foundation', specifier.slice('@hzy/foundation/'.length))
-      else if (specifier.startsWith('.') && context.parentURL?.startsWith('file:')) candidate = resolve(dirname(fileURLToPath(context.parentURL)), specifier)
-      if (candidate && !existsSync(candidate) && existsSync(`${candidate}.ts`)) return { url: pathToFileURL(`${candidate}.ts`).href, shortCircuit: true }
+      if (specifier.startsWith('@hzy/foundation/'))
+        candidate = resolve(root, 'foundation', specifier.slice('@hzy/foundation/'.length))
+      else
+        if (specifier.startsWith('.') && context.parentURL?.startsWith('file:'))
+          candidate = resolve(dirname(fileURLToPath(context.parentURL)), specifier)
+      if (candidate && !existsSync(candidate) && existsSync(`${candidate}.ts`))
+        return { url: pathToFileURL(`${candidate}.ts`).href, shortCircuit: true }
       return next(specifier, context)
     }
   })
@@ -77,7 +94,9 @@ test('Enterprise Codocs document download enforces export permits and returns sa
     const app = createApp()
     const router = createRouter()
     router.get('/documents/:uuid/download', (await import('../server/routes/codocs/api/documents/[uuid]/download.get.ts')).default)
-    app.use(defineEventHandler(event => { event.context.consoleAuth = globalThis.__codocsDownloadSession }))
+    app.use(defineEventHandler((event) => {
+      event.context.consoleAuth = globalThis.__codocsDownloadSession
+    }))
     app.use(router)
     server = createServer(toNodeListener(app))
     await new Promise(done => server.listen(0, '127.0.0.1', done))
@@ -136,13 +155,16 @@ test('Enterprise Codocs document download enforces export permits and returns sa
       runtimeCalls.push({ path, options })
       return { handled: true, data: { success: true, data: { uuid: 'doc-1', oss_path: 'codocs/private/doc-1.md', doc_type: 'private', title: 'Stored' } } }
     }
-    globalThis.__codocsDownloadOss = async () => { throw new Error('secret storage endpoint') }
+    globalThis.__codocsDownloadOss = async () => {
+      throw new Error('secret storage endpoint')
+    }
     const storageError = await fetch(`${base}/documents/doc-1/download`)
     assert.equal(storageError.status, 503)
     const storageBody = await storageError.text()
     assert.doesNotMatch(storageBody, /secret storage endpoint/)
   } finally {
-    if (server) await new Promise(done => server.close(done))
+    if (server)
+      await new Promise(done => server.close(done))
     hooks.deregister()
     globalThis.useRuntimeConfig = oldConfig
     globalThis.defineEventHandler = oldDefineEventHandler

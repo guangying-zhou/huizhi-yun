@@ -10,5 +10,9 @@ export default defineEventHandler(async (event) => {
 })
 
 function validatedQuery(event: import('h3').H3Event) {
-  try { return notificationReadQuery(getQuery(event)) } catch { throw createError({ statusCode: 400, message: '通知分页参数无效' }) }
+  try {
+    return notificationReadQuery(getQuery(event))
+  } catch {
+    throw createError({ statusCode: 400, message: '通知分页参数无效' })
+  }
 }

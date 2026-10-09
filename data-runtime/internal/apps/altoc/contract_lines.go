@@ -900,6 +900,19 @@ func (a *Adapter) upsertPrimaryContractPartyTx(ctx context.Context, tx *sql.Tx, 
 }
 
 func (a *Adapter) recalculateContractLineTotalsTx(ctx context.Context, tx *sql.Tx, contractID int64, operator string) error {
+	// SELECT * remains compatible before W1 adds amount_basis. Historical header
+	// amounts are authoritative and must never be replaced by an empty line sum.
+	contract, err := altocQueryOneMap(ctx, tx, "SELECT * FROM contract WHERE id = ? FOR UPDATE", contractID)
+	if err != nil {
+		return err
+	}
+	if contract == nil {
+		return fmt.Errorf("contract not found")
+	}
+	if altocMapText(contract, "amount_basis") == "header" {
+		return nil
+	}
+
 	summary, err := altocQueryOneMap(ctx, tx, `
 		SELECT
 		  COALESCE(SUM(amount_tax_inclusive), 0) AS amount_tax_inclusive,
@@ -982,6 +995,9 @@ func contractDraftValidationIssues(contract map[string]any) []string {
 }
 
 func ensureContractDraftEditable(contract map[string]any) error {
+	if err := ensureContractLinesUnlocked(contract); err != nil {
+		return err
+	}
 	switch altocNormalizeContractStatus(contract["status"]) {
 	case "", "draft", "rejected":
 		return nil

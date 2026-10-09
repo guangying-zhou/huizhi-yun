@@ -1,0 +1,25 @@
+{
+  "method": "POST",
+  "path": "/v1/enterprise/console/feedback:attachment-put",
+  "key": "golden-1",
+  "token": "test-only-token",
+  "now": 1791374400000,
+  "body": {
+    "payload": "{\"id\":\"F1\",\"attachmentId\":\"11111111-1111-4111-8111-111111111111\",\"image\":\"YWJj\",\"sha256\":\"ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad\",\"contentType\":\"image/png\"}",
+    "authorization": {
+      "actorUid": "alice",
+      "tenant": "T1",
+      "deployment": "T1-enterprise",
+      "resource": "feedback",
+      "action": "submit",
+      "operation": "attachment-put",
+      "expiresAt": 1791374414000,
+      "bundleVersion": "v1",
+      "bundleHash": "sha256:golden",
+      "policyRevision": 7,
+      "global": false
+    }
+  },
+  "canonical": "[\"hzy-console-feedback-permit.v1\",\"POST\",\"/v1/enterprise/console/feedback:attachment-put\",\"golden-1\",\"alice\",\"T1\",\"T1-enterprise\",\"feedback\",\"submit\",\"attachment-put\",1791374414000,\"v1\",\"sha256:golden\",7,false,\"{\\\"id\\\":\\\"F1\\\",\\\"attachmentId\\\":\\\"11111111-1111-4111-8111-111111111111\\\",\\\"image\\\":\\\"YWJj\\\",\\\"sha256\\\":\\\"ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad\\\",\\\"contentType\\\":\\\"image/png\\\"}\"]",
+  "signature": "HVDXJYkZKx-Hpd1Ya3vEIssxvDaMW1KzPKzmwW3x4ZU"
+}

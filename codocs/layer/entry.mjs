@@ -33,7 +33,7 @@ export default Object.freeze({
     { id: 'codocs.documents.company.tech-specs', area: 'documents', group: 'company', label: '技术规范', to: '/codocs/company/tech-specs', permission: { resource: 'company', action: 'view' }, order: 50 },
     { id: 'codocs.documents.company.knowledge', area: 'documents', group: 'company', label: '公司知识库', to: '/codocs/company/knowledge', permission: { resource: 'company', action: 'view' }, order: 60 },
     { id: 'codocs.documents.template.company', area: 'console', group: 'config', label: '文档模板', to: '/codocs/company/templates', permission: { resource: 'company', action: 'view' }, order: 10 },
-    { id: 'codocs.workspace.self.journal', area: 'workspace', group: 'self', label: '工作汇报', to: '/codocs/mydocs/journal', permission: { resource: 'documents', action: 'view' }, order: 30 }
+    { id: 'codocs.workspace.self.journal', area: 'workspace', group: 'reports', label: '工作汇报', to: '/codocs/mydocs/journal', permission: { resource: 'documents', action: 'view' }, order: 30 }
   ]), objectWorkspaces: Object.freeze([]),
   pages: [
     appPage('/mydocs', 'mydocs', 'mydocs/index'),

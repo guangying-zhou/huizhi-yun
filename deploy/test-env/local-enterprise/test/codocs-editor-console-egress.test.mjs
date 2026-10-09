@@ -58,6 +58,15 @@ test('Codocs editor gets a private local-only env file, never a credential in ar
     assert.doesNotMatch(JSON.stringify(options.env), new RegExp(`${token}|${serviceSecret}`))
     child.emit('exit', 0)
     assert.throws(() => statSync(file), { code: 'ENOENT' })
+    const closed = { ...profile, features: { ...profile.features, codocsLegacyAimsServiceEnabled: false } }
+    startEditor(closed)
+    const closedFile = args[args.indexOf('--env-file') + 1]
+    assert.match(readFileSync(closedFile, 'utf8'), /^HZY_CODOCS_LEGACY_AIMS_SERVICE_ENABLED=false$/m)
+    child.emit('exit', 0)
+    startEditor({ ...closed, features: { ...closed.features, companySummaryCodocsDelivery: false } })
+    const legacyOnlyFile = args[args.indexOf('--env-file') + 1]
+    assert.match(readFileSync(legacyOnlyFile, 'utf8'), /^HZY_CODOCS_LEGACY_AIMS_SERVICE_ENABLED=false$/m)
+    child.emit('exit', 0)
     profile.features.companySummaryCodocsDelivery = false
     startEditor(profile)
     assert.equal(args.includes('--env-file'), false)

@@ -3,6 +3,7 @@
  *
  * Provides functions to download documents from OSS
  */
+import { isRepositoryCopyDocType } from '../../shared/utils/documentStorage'
 
 /**
  * Download document content from OSS
@@ -28,7 +29,7 @@ export async function downloadDocument(
       doc_type: normalizedDocType
     }
 
-    if (normalizedDocType === 'git-project') {
+    if (isRepositoryCopyDocType(normalizedDocType)) {
       if (!options.projectCode) {
         throw new Error('projectCode is required to download git project document content')
       }

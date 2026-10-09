@@ -1,3 +1,4 @@
+import type { SignedDrainSnapshot, ExternalDrainSnapshot, DrainBinding, DrainProviderReport, DrainDecision, ColdArchiveReview, SealedDrainEvidence, DrainEvidenceEntry } from './enterpriseDrainTypes'
 import { createHash, createHmac, createPublicKey, timingSafeEqual } from 'node:crypto'
 import type { RowDataPacket } from 'mysql2/promise'
 import { withTransaction, type TransactionExecutor } from './db.ts'
@@ -15,7 +16,7 @@ function fail(reason: string): never {
 const text = (value: unknown): value is string => typeof value === 'string' && !!value.trim() && value === value.trim()
 const coverage = ['deployed-worker-versions-and-direct-bindings', 'pre-wrapper-inflight-history', 'runtime-direct-callers', 'external-notification-providers', 'scheduled-consumers-and-other-app-outboxes']
 const providerApps = ['aims', 'assets', 'finance', 'altoc', 'codocs', 'people', 'console']
-async function verifyRegisteredBinding(tx: TransactionExecutor, snapshot: any, binding: any) {
+async function verifyRegisteredBinding(tx: TransactionExecutor, snapshot: ExternalDrainSnapshot, binding: DrainBinding) {
   if (!['test', 'prod', 'dev'].includes(snapshot.environment)) fail('environment_invalid')
   const tenant = await tx.queryRow<RowDataPacket>('SELECT tenant_code,status FROM tenants WHERE tenant_code=? FOR UPDATE', [snapshot.tenant])
   if (!tenant || tenant.status !== 'active') fail('tenant_missing_or_inactive')
@@ -27,8 +28,8 @@ async function verifyRegisteredBinding(tx: TransactionExecutor, snapshot: any, b
     if (byApp.has(row.app_code)) fail('deployment_ambiguous')
     byApp.set(row.app_code, row.deployment_code)
   }
-  if (binding.sources.some((source: any) => byApp.get(source.app) !== source.deployment)) fail('source_deployment_unregistered')
-  if (binding.providers.some((provider: any) => byApp.get(provider.app) !== provider.deployment)) fail('provider_deployment_unregistered')
+  if (binding.sources.some(source => byApp.get(source.app) !== source.deployment)) fail('source_deployment_unregistered')
+  if (binding.providers.some(provider => byApp.get(provider.app) !== provider.deployment)) fail('provider_deployment_unregistered')
   if (binding.unconfiguredProviders.some((app: string) => byApp.has(app))) fail('provider_configuration_conflict')
 }
 function signingKeyFact(key: { kid: string, publicKey: string }) {
@@ -41,15 +42,15 @@ function drainCredential() {
   fail('credential_unavailable')
 }
 export async function approveExternalDrain(input: {
-  report: any
-  seal: any
-  decisions: any[]
+  report: DrainProviderReport
+  seal: SignedDrainSnapshot
+  decisions: DrainDecision[]
   requestId: string
   approvalReference: string
   evidenceBase64: string
   evidenceSha256: string
   profileKey: { kid: string, publicKeySha256: string }
-  coldArchiveReviews: any[]
+  coldArchiveReviews: ColdArchiveReview[]
 }, actorUid: string, apply = false) {
   const { report, seal, decisions } = input
   const secret = drainCredential()
@@ -58,16 +59,16 @@ export async function approveExternalDrain(input: {
   } finally {
     secret.fill(0)
   }
-  const snapshot = JSON.parse(seal.payload)
+  const snapshot = JSON.parse(seal.payload) as ExternalDrainSnapshot
   if (typeof input.evidenceBase64 !== 'string' || input.evidenceBase64.length > 44 * 1024 * 1024
     || !/^[A-Za-z0-9+/]*={0,2}$/.test(input.evidenceBase64)) fail('evidence_file_invalid')
   const evidenceBytes = Buffer.from(input.evidenceBase64, 'base64')
   if (evidenceBytes.toString('base64') !== input.evidenceBase64 || evidenceBytes.length > 32 * 1024 * 1024
     || !/^[a-f0-9]{64}$/.test(input.evidenceSha256) || digest(evidenceBytes) !== input.evidenceSha256
     || snapshot.evidenceSha256 !== input.evidenceSha256) fail('evidence_file_changed')
-  let evidence: any
+  let evidence: SealedDrainEvidence
   try {
-    evidence = parseCanonicalJson(evidenceBytes)
+    evidence = parseCanonicalJson(evidenceBytes) as SealedDrainEvidence
   } catch {
     fail('evidence_file_invalid')
   }
@@ -85,33 +86,33 @@ export async function approveExternalDrain(input: {
   if (JSON.stringify(signingKeyFact(activeKey)) !== JSON.stringify(input.profileKey)) fail('profile_signing_key_mismatch')
   const binding = report?.binding
   if (!binding || report.schemaVersion !== 'enterprise-provider-receipts.v1' || snapshot.schemaVersion !== 'enterprise-external-drain.v1' || snapshot.mode !== 'sealed' || !snapshot.ingressDrained || !text(snapshot.tenant) || !text(snapshot.environment) || binding.tenant !== snapshot.tenant || binding.environment !== snapshot.environment || !text(binding.instanceId) || !text(binding.runtimeDeployment) || !Number.isSafeInteger(snapshot.revision) || snapshot.revision < 1 || !text(snapshot.seal?.cutoverKey) || !/^[1-9][0-9]{0,19}$/.test(snapshot.seal.targetGeneration) || BigInt(snapshot.seal.targetGeneration) > 18446744073709551615n) fail('identity_invalid')
-  if (!Array.isArray(binding.sources) || binding.sources.length !== 2 || new Set(binding.sources.map((value: any) => value.app)).size !== 2 || binding.sources.some((value: any) => !['aims', 'assets'].includes(value.app) || !text(value.deployment) || !/^[a-z][a-z0-9_]{0,63}$/.test(value.schema))) fail('source_closure_invalid')
+  if (!Array.isArray(binding.sources) || binding.sources.length !== 2 || new Set(binding.sources.map(value => value.app)).size !== 2 || binding.sources.some(value => !['aims', 'assets'].includes(value.app) || !text(value.deployment) || !/^[a-z][a-z0-9_]{0,63}$/.test(value.schema))) fail('source_closure_invalid')
   const providers = new Set(providerApps)
   if (!Array.isArray(binding.providers) || !Array.isArray(binding.unconfiguredProviders)) fail('provider_closure_invalid')
   for (const provider of binding.providers) {
     if (!providers.delete(provider.app) || !/^[a-z][a-z0-9_]{0,63}$/.test(provider.schema) || !text(provider.deployment)) fail('provider_closure_invalid')
   }
   for (const app of binding.unconfiguredProviders) if (!providers.delete(app)) fail('provider_closure_invalid')
-  if (providers.size || binding.sources.some((source: any) => !binding.providers.some((provider: any) => provider.app === source.app && provider.schema === source.schema && provider.deployment === source.deployment))) fail('provider_closure_invalid')
-  const expected = [...binding.sources.map((value: any) => ({ ...value, kind: 'source' })), ...binding.providers.map((value: any) => ({ ...value, kind: value.app === 'console' ? 'notification' : 'receipt' }))]
-  if (!Array.isArray(report.probes) || report.probes.length !== expected.length || expected.some((value: any) => report.probes.filter((probe: any) => ['kind', 'app', 'schema', 'deployment'].every(field => probe[field] === value[field])).length !== 1)) fail('probe_closure_invalid')
-  const entries = classifyProviderEvidence(binding, report.probes)
-  if (new Set(entries.map((entry: any) => entry.id)).size !== entries.length) fail('entry_closure_invalid')
-  if (entries.some((entry: any) => entry.classification === 'blocked') || coverage.some(scope => !entries.some((entry: any) => entry.id === `coverage:${scope}`))) fail('blocked_evidence')
-  const manual = entries.filter((entry: any) => entry.classification === 'manual-required')
+  if (providers.size || binding.sources.some(source => !binding.providers.some(provider => provider.app === source.app && provider.schema === source.schema && provider.deployment === source.deployment))) fail('provider_closure_invalid')
+  const expected = [...binding.sources.map(value => ({ ...value, kind: 'source' })), ...binding.providers.map(value => ({ ...value, kind: value.app === 'console' ? 'notification' : 'receipt' }))]
+  if (!Array.isArray(report.probes) || report.probes.length !== expected.length || expected.some(value => report.probes.filter(probe => (['kind', 'app', 'schema', 'deployment'] as const).every(field => probe[field] === value[field])).length !== 1)) fail('probe_closure_invalid')
+  const entries = classifyProviderEvidence(binding, report.probes) as DrainEvidenceEntry[]
+  if (new Set(entries.map(entry => entry.id)).size !== entries.length) fail('entry_closure_invalid')
+  if (entries.some(entry => entry.classification === 'blocked') || coverage.some(scope => !entries.some(entry => entry.id === `coverage:${scope}`))) fail('blocked_evidence')
+  const manual = entries.filter(entry => entry.classification === 'manual-required')
   if (!Array.isArray(input.coldArchiveReviews) || input.coldArchiveReviews.length !== 4
     || !['finance', 'people', 'altoc', 'webdev'].every((app) => {
-      const cold = evidence.coldArchive.find((item: any) => item.app === app)
+      const cold = evidence.coldArchive.find(item => item.app === app)!
       return input.coldArchiveReviews.filter(review => review.app === app && review.outcome === 'verified-manual'
         && review.evidenceSha256 === cold.evidenceSha256 && review.reference === cold.reference
         && text(review.explanation) && review.explanation.length >= 16).length === 1
     })) fail('cold_archive_manual_missing')
   for (const app of ['finance', 'people', 'altoc']) if (binding.unconfiguredProviders.includes(app)
-    && entries.some((item: any) => item.id === `coverage:unconfigured-provider:${app}` && item.classification === 'not-applicable')) fail('cold_archive_auto_pass')
-  if (!Array.isArray(decisions) || decisions.length !== manual.length || new Set(decisions.map(value => value.entryId)).size !== manual.length || manual.some((entry: any) => !decisions.some(decision => decision.entryId === entry.id && decision.entrySha256 === digest(entry) && ((entry.id.startsWith('operation:') || entry.id.startsWith('notification:') || ['coverage:pre-wrapper-inflight-history', 'coverage:external-notification-providers'].includes(entry.id)) ? ['verified-terminal', 'verified-not-sent'] : ['verified-terminal', 'verified-not-sent', 'verified-consumer-coverage']).includes(decision.outcome) && ['provider-query', 'provider-export', 'activity-ledger', 'deployment-inventory'].includes(decision.evidenceKind) && text(decision.reference) && decision.reference.length >= 8 && /^[a-f0-9]{64}$/.test(decision.evidenceSha256) && text(decision.explanation) && decision.explanation.length >= 16))) fail('manual_evidence_incomplete')
+    && entries.some(item => item.id === `coverage:unconfigured-provider:${app}` && item.classification === 'not-applicable')) fail('cold_archive_auto_pass')
+  if (!Array.isArray(decisions) || decisions.length !== manual.length || new Set(decisions.map(value => value.entryId)).size !== manual.length || manual.some(entry => !decisions.some(decision => decision.entryId === entry.id && decision.entrySha256 === digest(entry) && ((entry.id.startsWith('operation:') || entry.id.startsWith('notification:') || ['coverage:pre-wrapper-inflight-history', 'coverage:external-notification-providers'].includes(entry.id)) ? ['verified-terminal', 'verified-not-sent'] : ['verified-terminal', 'verified-not-sent', 'verified-consumer-coverage']).includes(decision.outcome) && ['provider-query', 'provider-export', 'activity-ledger', 'deployment-inventory'].includes(decision.evidenceKind) && text(decision.reference) && decision.reference.length >= 8 && /^[a-f0-9]{64}$/.test(decision.evidenceSha256) && text(decision.explanation) && decision.explanation.length >= 16))) fail('manual_evidence_incomplete')
   if (![input.requestId, input.approvalReference, actorUid].every(text)) fail('approval_audit_required')
   const actors = snapshot.contract?.actors
-  if (!Array.isArray(actors) || actors.length !== 2 || binding.sources.some((source: any) => !actors.some((actor: any) => actor.app === source.app && actor.deployment === source.deployment && /^[a-f0-9]{64}$/.test(actor.artifactSha256)))) fail('actor_mismatch')
+  if (!Array.isArray(actors) || actors.length !== 2 || binding.sources.some(source => !actors.some(actor => actor.app === source.app && actor.deployment === source.deployment && /^[a-f0-9]{64}$/.test(actor.artifactSha256)))) fail('actor_mismatch')
   const result = await withTransaction(async (tx) => {
     await verifyRegisteredBinding(tx, snapshot, binding)
     const payload = JSON.stringify({ type: 'enterprise-external-drain-approval.v1', tenant: binding.tenant, environment: binding.environment, cutoverKey: snapshot.seal.cutoverKey, generation: snapshot.seal.targetGeneration, sealRevision: snapshot.revision, sealPayloadSha256: digest(seal.payload), evidenceSha256: input.evidenceSha256, evidenceManifestSha256: snapshot.evidenceManifestSha256, platformKeyFingerprint: input.profileKey.publicKeySha256, actors, report: { ...report, entries }, decisions, coldArchiveReviews: input.coldArchiveReviews, actorUid, approvalReference: input.approvalReference, requestId: input.requestId })

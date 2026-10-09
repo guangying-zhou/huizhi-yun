@@ -3,6 +3,7 @@
 [Unit]
 After=network-online.target tailscaled.service mysqld.service hzy-data-runtime.service hzy-console.service hzy-enterprise.service hzy-workflow.service hzy-aims.service hzy-codocs.service hzy-platform.service
 Requires=hzy-data-runtime.service
+PartOf=hzy-data-runtime.service
 Wants=hzy-console.service hzy-enterprise.service hzy-workflow.service hzy-aims.service hzy-codocs.service hzy-platform.service
 
 [Service]

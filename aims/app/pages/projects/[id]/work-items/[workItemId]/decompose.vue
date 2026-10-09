@@ -17,13 +17,17 @@ import type {
   RequirementCategory,
   UiNode
 } from '../../../../../types/decompose'
+import ContentPageHeader from '@hzy/foundation/app/components/ContentPageHeader.vue'
 import DecomposeRequirementRow from '../../../../../components/decompose/DecomposeRequirementRow.vue'
 import { createCommandIntents } from '../../../../../utils/commandIntent'
 
 // 同一份代码供独立应用与企业宿主使用：非宿主模式下 moduleUrl 原样返回路径。
-const { moduleUrl } = useAimsModule()
+const { moduleUrl, hosted } = useAimsModule()
+const { hasPermission } = usePermissions()
+const canEditDecomposition = computed(() => hasPermission('work_items', 'edit'))
 const decomposeIntents = createCommandIntents()
 definePageMeta({
+  hostContentInset: false,
   layoutHeader: true,
   layoutHeaderTitle: '需求分解',
   layoutHeaderProjectSwitcher: false
@@ -412,7 +416,7 @@ function pushRequirement(
 }
 
 const summary = computed(() => buildSubmission())
-const canSubmit = computed(() => summary.value.items.length > 0 && !submitting.value)
+const canSubmit = computed(() => canEditDecomposition.value && summary.value.items.length > 0 && !submitting.value)
 
 // ---------- 打包合并 ----------
 // 只合并"已勾选且尚未归入任何 bundle"的子项；已在 bundle 中的保持不动
@@ -458,7 +462,7 @@ function openSubmitDialog() {
 }
 
 async function doSubmit() {
-  if (submitting.value || !context.value) return
+  if (!canEditDecomposition.value || submitting.value || !context.value) return
   if (!(submitForm.workHours > 0)) {
     toast.add({ title: '请填写实际投入工时', color: 'warning' })
     return
@@ -528,9 +532,10 @@ function onCancel() {
 </script>
 
 <template>
-  <div class="w-full h-full flex flex-col overflow-hidden">
+  <div class="@container w-full h-full flex flex-col overflow-hidden">
+    <ContentPageHeader :hosted="hosted" title="需求分解" class="px-4 pt-4 sm:px-6" />
     <!-- 顶部区：上下文 + 源文档紧凑工具栏（不随内容滚动） -->
-    <div class="shrink-0 px-6 pt-4 pb-2 space-y-3">
+    <div class="shrink-0 px-4 sm:px-6 pt-4 pb-2 space-y-3">
       <!-- 上下文（单行紧凑） -->
       <div v-if="context" class="flex flex-wrap items-center gap-3 px-3 py-2 rounded-lg border border-default bg-elevated/40 text-sm">
         <div class="flex items-center gap-1.5">
@@ -614,10 +619,10 @@ function onCancel() {
     </div>
 
     <!-- 中部：左右分栏 -->
-    <div class="flex-1 min-h-0 flex gap-4 px-6 pb-2 overflow-hidden">
+    <div class="flex-1 min-h-0 flex flex-col @4xl:flex-row gap-4 px-4 sm:px-6 pb-2 overflow-auto @4xl:overflow-hidden">
       <!-- 左：需求标题树（可交互） -->
       <UCard
-        class="flex-1 min-w-0 flex flex-col"
+        class="flex-1 min-w-0 min-h-48 @4xl:min-h-0 flex flex-col"
         :ui="{ body: 'flex-1 min-h-0 overflow-y-auto' }"
       >
         <template #header>
@@ -728,7 +733,7 @@ function onCancel() {
 
       <!-- 右：任务分解预览 -->
       <UCard
-        class="flex-1 min-w-0 flex flex-col"
+        class="flex-1 min-w-0 min-h-48 @4xl:min-h-0 flex flex-col"
         :ui="{ body: 'flex-1 min-h-0 overflow-y-auto' }"
       >
         <template #header>
@@ -745,8 +750,7 @@ function onCancel() {
         <div v-if="summary.items.length === 0" class="h-full flex items-center justify-center text-sm text-muted p-6 text-center">
           <div>
             <UIcon name="i-lucide-arrow-left-circle" class="size-6 text-muted mx-auto mb-2" />
-            从左侧勾选要分解的章节<br>
-            右侧将实时预览将要创建的目标与开发任务
+            勾选要分解的章节，预览将显示要创建的目标与开发任务
           </div>
         </div>
 
@@ -840,14 +844,22 @@ function onCancel() {
           个开发任务
         </template>
         <template v-else>
-          <span class="text-muted">请选择源文档并勾选要分解的章节</span>
+          <span v-if="canEditDecomposition" class="text-muted">请选择源文档并勾选要分解的章节</span>
         </template>
       </div>
-      <div class="flex gap-2">
+      <div class="flex flex-wrap items-center gap-2">
         <UButton color="neutral" variant="outline" @click="onCancel">
           取消
         </UButton>
-        <UButton color="primary" :disabled="!canSubmit" @click="openSubmitDialog">
+        <p v-if="!canEditDecomposition" class="text-sm text-muted basis-full @lg:basis-auto">
+          当前账号没有工作项编辑权限，仅可查看。
+        </p>
+        <UButton
+          v-if="canEditDecomposition"
+          color="primary"
+          :disabled="!canSubmit"
+          @click="openSubmitDialog"
+        >
           提交分解结果
         </UButton>
       </div>

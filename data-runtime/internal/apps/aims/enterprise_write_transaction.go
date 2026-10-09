@@ -58,9 +58,27 @@ func (a *Adapter) beginBoundEnterpriseTransaction(ctx context.Context) (*sql.Tx,
 		return nil, nil, err
 	}
 	b := a.enterpriseWrites
-	tx, resolved, err := b.registry.BeginWriteTransaction(ctx, b.writer)
+	reqs := []e.ResolveRequest{b.writer}
+	state, _ := ctx.Value(ticketTransactionKey{}).(*ticketTransactionState)
+	if state != nil && a.unifiedTicketTransactions() {
+		if a.ticketResultPrepare == nil {
+			return nil, nil, httperror.New(503, "service_ticket_result_owner_unavailable", "工单回写未就绪")
+		}
+		q := b.writer
+		q.Domain = "altoc"
+		q.OwnerDeployment = b.binding.Domains["altoc"].OwnerDeployment
+		reqs = append(reqs, q)
+	}
+	tx, resolved, err := b.registry.BeginWriteTransaction(ctx, reqs...)
 	if err != nil {
 		return nil, nil, err
+	}
+	if len(resolved) == 2 {
+		state.prepared, err = a.ticketResultPrepare(ctx, tx, resolved[1], resolved[0], state.ids)
+		if err != nil {
+			tx.Rollback()
+			return nil, nil, err
+		}
 	}
 	table, err := resolved[0].Table("service_command_receipt")
 	if err != nil {
@@ -115,4 +133,10 @@ func (a *Adapter) enterpriseOutbox() (io.TrustedContext, error) {
 // added to the adapter cannot be missing from the installed view family.
 func EnterpriseWriteViewNames() []string {
 	return []string{"aims_projects", "aims_project_members", "project_portfolios", "project_activity_logs", "project_lifecycle_events", "approval_records", "project_template_sets", "project_template_versions", "project_counters", "milestones", "deliverables", "work_items", "work_item_changelog", "aims_project_products", "product_versions", "product_version_features", "product_version_logs", "qa_checklist_versions", "deliverable_submissions", "deliverable_quality_reviews", "deliverable_waivers", "project_manager_delegations"}
+}
+
+// Server construction selects the registered physical worker. No HTTP field can
+// enable or disable retired cross-domain producers.
+func (a *Adapter) ConfigureRetainedAimsOperations(hostExecutor bool) {
+	a.retireAPFCommands = hostExecutor
 }

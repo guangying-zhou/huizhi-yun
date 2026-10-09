@@ -73,7 +73,7 @@ const {
   markRead,
   archive,
   markAllRead,
-  pageItems, pageTotal, pageLoading, pageError, loadNotificationPage, cacheFingerprint,
+  pageItems, pageTotal, pageLoading, pageError, loadNotificationPage, cacheFingerprint
 } = useNotifications()
 
 const status = props.serverPagination ? ref<NotificationStatusFilter>('all') : legacyStatus
@@ -84,21 +84,35 @@ const loading = computed(() => props.serverPagination ? pageLoading.value : lega
 const error = computed(() => props.serverPagination ? pageError.value : legacyError.value)
 const listLink = computed(() => props.serverPagination ? { path: props.listPath, query: route?.query } : props.listPath)
 async function loadList() {
-  if (!props.serverPagination) return await loadNotifications({ status: status.value })
+  if (!props.serverPagination)
+    return await loadNotifications({ status: status.value })
   const result = await loadNotificationPage({ status: status.value, page: page.value, pageSize })
-  if (result && page.value > Math.max(1, Math.ceil(result.total / pageSize))) page.value = Math.max(1, Math.ceil(result.total / pageSize))
+  if (result && page.value > Math.max(1, Math.ceil(result.total / pageSize)))
+    page.value = Math.max(1, Math.ceil(result.total / pageSize))
 }
-watch([page, status], () => { if (props.serverPagination) void loadList() })
+watch([page, status], () => {
+  if (props.serverPagination)
+    void loadList()
+})
 const selectedDetail = ref<NotificationDetail | null>(null)
 const detailLoading = ref(false)
 const detailErrorStatus = ref(0)
 const selectedNotificationId = computed(() => String(props.notificationId || '').trim())
 let detailGeneration = 0
-onScopeDispose(() => { detailGeneration++ })
+onScopeDispose(() => {
+  detailGeneration++
+})
 watch(cacheFingerprint, () => {
-  detailGeneration++; selectedDetail.value = null; detailLoading.value = false; detailErrorStatus.value = 0
-  if (props.serverPagination) { page.value = 1; void loadList() }
-  if (cacheFingerprint.value && selectedNotificationId.value) void loadSelectedDetail()
+  detailGeneration++
+  selectedDetail.value = null
+  detailLoading.value = false
+  detailErrorStatus.value = 0
+  if (props.serverPagination) {
+    page.value = 1
+    void loadList()
+  }
+  if (cacheFingerprint.value && selectedNotificationId.value)
+    void loadSelectedDetail()
 }, { flush: 'sync' })
 
 const notificationCenterPanelUi = computed(() => ({
@@ -144,7 +158,8 @@ const detailErrorPresentation = computed(() => {
 })
 
 const actionUrl = computed(() => {
-  if (!import.meta.client || !selectedDetail.value?.actionUrl) return ''
+  if (!import.meta.client || !selectedDetail.value?.actionUrl)
+    return ''
   return resolveNotificationActionUrl(selectedDetail.value, apps.value, window.location.origin, hostNotificationTarget())
 })
 
@@ -164,9 +179,11 @@ function responseStatusCode(error: unknown) {
 }
 
 function formatListTime(value: string | null | undefined) {
-  if (!value) return ''
+  if (!value)
+    return ''
   const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return ''
+  if (Number.isNaN(date.getTime()))
+    return ''
   return new Intl.DateTimeFormat('zh-CN', {
     month: '2-digit',
     day: '2-digit',
@@ -176,9 +193,11 @@ function formatListTime(value: string | null | undefined) {
 }
 
 function formatDate(value: string | null | undefined) {
-  if (!value) return '-'
+  if (!value)
+    return '-'
   const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return value
+  if (Number.isNaN(date.getTime()))
+    return value
   return new Intl.DateTimeFormat('zh-CN', {
     year: 'numeric',
     month: '2-digit',
@@ -202,7 +221,8 @@ async function loadSelectedDetail(notificationId = selectedNotificationId.value)
   detailLoading.value = true
   try {
     const detail = await loadDetail(notificationId)
-    if (selectedNotificationId.value !== notificationId || epoch !== detailGeneration || fingerprint !== cacheFingerprint.value) return
+    if (selectedNotificationId.value !== notificationId || epoch !== detailGeneration || fingerprint !== cacheFingerprint.value)
+      return
     selectedDetail.value = detail
     try {
       await markRead(notificationId)
@@ -210,7 +230,8 @@ async function loadSelectedDetail(notificationId = selectedNotificationId.value)
       // The authorized message remains useful if its read receipt is temporarily unavailable.
     }
   } catch (error) {
-    if (selectedNotificationId.value !== notificationId || epoch !== detailGeneration || fingerprint !== cacheFingerprint.value) return
+    if (selectedNotificationId.value !== notificationId || epoch !== detailGeneration || fingerprint !== cacheFingerprint.value)
+      return
     detailErrorStatus.value = responseStatusCode(error)
   } finally {
     if (selectedNotificationId.value === notificationId && epoch === detailGeneration) {
@@ -220,8 +241,11 @@ async function loadSelectedDetail(notificationId = selectedNotificationId.value)
 }
 
 async function selectStatus(nextStatus: NotificationStatusFilter) {
-  if (props.serverPagination) { status.value = nextStatus; page.value = 1 }
-  else await loadNotifications({ status: nextStatus })
+  if (props.serverPagination) {
+    status.value = nextStatus
+    page.value = 1
+  } else
+    await loadNotifications({ status: nextStatus })
 }
 
 async function selectNotification(item: NotificationItem) {
@@ -229,22 +253,29 @@ async function selectNotification(item: NotificationItem) {
     await loadSelectedDetail(item.notificationId)
     return
   }
-  if (props.serverPagination) await router.push({ path: props.detailPath(item.notificationId), query: route?.query })
-  else await router.push(props.detailPath(item.notificationId))
+  if (props.serverPagination)
+    await router.push({ path: props.detailPath(item.notificationId), query: route?.query })
+  else
+    await router.push(props.detailPath(item.notificationId))
 }
 
 async function archiveNotification(item: NotificationItem) {
   await archive(item.notificationId)
-  if (props.serverPagination) await loadList()
+  if (props.serverPagination)
+    await loadList()
   if (selectedNotificationId.value === item.notificationId) {
-    if (props.serverPagination) await router.push(listLink.value)
-    else await router.push(props.listPath)
+    if (props.serverPagination)
+      await router.push(listLink.value)
+    else
+      await router.push(props.listPath)
   }
 }
 
 async function markEverythingRead() {
-  if (props.serverPagination) await markAllRead({ status: status.value })
-  else await markAllRead()
+  if (props.serverPagination)
+    await markAllRead({ status: status.value })
+  else
+    await markAllRead()
   await loadList()
 }
 
@@ -260,14 +291,16 @@ async function reloadCenter() {
 }
 
 async function openAction() {
-  if (!actionUrl.value) return
+  if (!actionUrl.value)
+    return
   await navigateTo(actionUrl.value, {
     external: /^https?:\/\//i.test(actionUrl.value)
   })
 }
 
 watch(selectedNotificationId, (notificationId) => {
-  if (!import.meta.client) return
+  if (!import.meta.client)
+    return
   void loadSelectedDetail(notificationId)
 })
 
@@ -409,7 +442,13 @@ onMounted(async () => {
             </UTable>
             <div class="flex flex-wrap items-center justify-between gap-3 p-3">
               <span v-if="serverPagination" class="text-sm text-muted">共 {{ pageTotal }} 条</span>
-              <UPagination v-if="serverPagination" v-model:page="page" :items-per-page="pageSize" :total="pageTotal" :sibling-count="0" />
+              <UPagination
+                v-if="serverPagination"
+                v-model:page="page"
+                :items-per-page="pageSize"
+                :total="pageTotal"
+                :sibling-count="0"
+              />
               <span v-else class="text-sm text-muted">已加载 {{ items.length }} 条<span v-if="nextCursor">，还有更多</span></span>
               <UButton
                 v-if="!serverPagination && nextCursor"

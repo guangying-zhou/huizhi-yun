@@ -21,7 +21,7 @@ test('product cost uses original subject and preserves project grant intersectio
     '@hzy/foundation/server/utils/platformBundleAuthorization': {},
     '@hzy/foundation/server/utils/dataAccessScope': {},
     '@hzy/foundation/shared/utils/authorizationActions': actions,
-    '~~/app/config/permissions': { appCode: 'finance' }
+    '../../app/config/permissions': { appCode: 'finance' }
   })
   const project = (value: string) => ({ dimension: 'project', predicate: 'code', value })
   const permission = { appCode: 'finance', resourceCode: 'project_accounting', action: 'view' }

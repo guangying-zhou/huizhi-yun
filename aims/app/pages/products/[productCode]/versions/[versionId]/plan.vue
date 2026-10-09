@@ -5,7 +5,7 @@ import type { ProductRequestRecord } from '../../../../../types/productRequest'
 
 const { moduleUrl, hosted, cacheKey } = useAimsModule()
 
-definePageMeta({ layoutHeader: true, layoutHeaderTitle: '版本计划工作区', layoutHeaderProjectSwitcher: false })
+definePageMeta({ hostContentWidth: 'full', layoutHeader: true, layoutHeaderTitle: '版本计划工作区', layoutHeaderProjectSwitcher: false })
 
 type PlanStatus = 'draft' | 'confirmed' | 'stale'
 interface PlanSummary { selectedCount: number, estimatedPersonDays: string | null, unknownEstimateCount: number, remainingPersonDays: string | null, issues: string[] }

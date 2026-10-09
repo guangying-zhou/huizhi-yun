@@ -45,14 +45,14 @@ test('collab grants carry audience, tenant and deployment bindings and nothing b
   }
   // Collab holds no Host-delegation, Aims/Codocs OSS or tenant-runtime capability.
   const all = g7ExpectedGrants(bindings)
-  assert.equal(all.length, 36)
+  assert.equal(all.length, 30)
   assert.deepEqual(all.filter(item => item.client === COLLAB_CLIENT).map(item => item.scope), [...COLLAB_CAPABILITIES])
   assert.ok(!all.some(item => item.client === COLLAB_CLIENT && item.audience !== 'data-runtime'))
 })
 
 test('collab binding stays optional and follows the reviewed deployment code convention', () => {
   const { collab: _collab, ...withoutCollab } = bindings.deployments
-  assert.equal(g7ExpectedGrants({ tenant: bindings.tenant, deployments: withoutCollab }).length, 34)
+  assert.equal(g7ExpectedGrants({ tenant: bindings.tenant, deployments: withoutCollab }).length, 28)
   assert.throws(() => validateG7Bindings({ ...bindings, deployments: { ...bindings.deployments, collab: 'C000001-test-collab' } }), /reviewed production deployment code/)
   assert.throws(() => validateG7Bindings({ ...bindings, deployments: { ...bindings.deployments, extra: 'C000001-extra' } }), /unknown deployment binding/)
   assert.throws(() => validateCollabBindings({ tenant: 'C000001', deployments: { collab: 'C000002-collab' } }), /reviewed production deployment code/)

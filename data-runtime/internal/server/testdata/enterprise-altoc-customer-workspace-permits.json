@@ -1,0 +1,124 @@
+[
+  {
+    "name": "customer-filters",
+    "method": "POST",
+    "target": "/v1/enterprise/altoc/customers:list",
+    "token": "public-test-token",
+    "authorization": {
+      "actorUid": "person-a",
+      "tenant": "tenant-a",
+      "deployment": "enterprise-test",
+      "resource": "customer",
+      "action": "view",
+      "operation": "list",
+      "objectId": "",
+      "allowed": true,
+      "expiresAt": 1800000014000,
+      "bundleVersion": "v1",
+      "bundleHash": "hash",
+      "policyRevision": 42,
+      "scope": {
+        "access": "dept",
+        "departmentCodes": [
+          "D-1",
+          "部门二"
+        ]
+      },
+      "query": {
+        "page": 2,
+        "pageSize": 20,
+        "search": "合成",
+        "status": "active",
+        "customerId": "",
+        "contractId": "",
+        "ownerUid": "fixture-owner",
+        "industryCode": "IT",
+        "regionCode": "SD",
+        "updatedDateFrom": "2026-01-01",
+        "updatedDateTo": "2026-01-31",
+        "customerSort": "updated_desc"
+      }
+    },
+    "canonical": "[\"hzy-enterprise-altoc-read-permit.v1\",\"POST\",\"/v1/enterprise/altoc/customers:list\",\"person-a\",\"tenant-a\",\"enterprise-test\",\"customer\",\"view\",\"list\",\"\",true,1800000014000,\"v1\",\"hash\",42,\"dept\",[\"D-1\",\"部门二\"],2,20,\"合成\",\"active\",\"\",\"\",[\"ownerUid\",\"fixture-owner\"],[\"industryCode\",\"IT\"],[\"regionCode\",\"SD\"],[\"updatedDateFrom\",\"2026-01-01\"],[\"updatedDateTo\",\"2026-01-31\"],[\"customerSort\",\"updated_desc\"]]",
+    "signature": "a4SDae9C3-lq4CCHzd94REIPTRvsSrG7WnRVDDmvy3Q"
+  },
+  {
+    "name": "contact-page",
+    "method": "POST",
+    "target": "/v1/enterprise/altoc/customers:view",
+    "token": "public-test-token",
+    "authorization": {
+      "actorUid": "person-a",
+      "tenant": "tenant-a",
+      "deployment": "enterprise-test",
+      "resource": "customer",
+      "action": "view",
+      "operation": "view",
+      "objectId": "7",
+      "allowed": true,
+      "expiresAt": 1800000014000,
+      "bundleVersion": "v1",
+      "bundleHash": "hash",
+      "policyRevision": 42,
+      "scope": {
+        "access": "dept",
+        "departmentCodes": [
+          "D-1",
+          "部门二"
+        ]
+      },
+      "query": {
+        "page": 2,
+        "pageSize": 20,
+        "search": "fixture",
+        "status": "active",
+        "customerId": "",
+        "contractId": "",
+        "contactsOnly": true,
+        "decisionRole": "buyer",
+        "primaryOnly": true,
+        "starredOnly": true
+      }
+    },
+    "canonical": "[\"hzy-enterprise-altoc-read-permit.v1\",\"POST\",\"/v1/enterprise/altoc/customers:view\",\"person-a\",\"tenant-a\",\"enterprise-test\",\"customer\",\"view\",\"view\",\"7\",true,1800000014000,\"v1\",\"hash\",42,\"dept\",[\"D-1\",\"部门二\"],2,20,\"fixture\",\"active\",\"\",\"\",[\"contactsOnly\",true],[\"decisionRole\",\"buyer\"],[\"primaryOnly\",true],[\"starredOnly\",true]]",
+    "signature": "cQj-TFz18B1ZCh_K9AJ9IFLyAcomsP3JH2e7Py8ZMWg"
+  },
+  {
+    "name": "customer-workspace",
+    "method": "POST",
+    "target": "/v1/enterprise/altoc/customers:view",
+    "token": "public-test-token",
+    "authorization": {
+      "actorUid": "person-a",
+      "tenant": "tenant-a",
+      "deployment": "enterprise-test",
+      "resource": "customer",
+      "action": "view",
+      "operation": "view",
+      "objectId": "7",
+      "allowed": true,
+      "expiresAt": 1800000014000,
+      "bundleVersion": "v1",
+      "bundleHash": "hash",
+      "policyRevision": 42,
+      "scope": {
+        "access": "dept",
+        "departmentCodes": [
+          "D-1",
+          "部门二"
+        ]
+      },
+      "query": {
+        "page": 1,
+        "pageSize": 20,
+        "search": "",
+        "status": "",
+        "customerId": "",
+        "contractId": "",
+        "workspace": true
+      }
+    },
+    "canonical": "[\"hzy-enterprise-altoc-read-permit.v1\",\"POST\",\"/v1/enterprise/altoc/customers:view\",\"person-a\",\"tenant-a\",\"enterprise-test\",\"customer\",\"view\",\"view\",\"7\",true,1800000014000,\"v1\",\"hash\",42,\"dept\",[\"D-1\",\"部门二\"],1,20,\"\",\"\",\"\",\"\",[\"workspace\",true]]",
+    "signature": "bdoeaslEKqKVNVO0_fhfE6UqhVZHvkvrqKHhjGzJIZo"
+  }
+]

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/huizhi-yun/data-runtime/internal/documentcatalog"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -399,6 +400,31 @@ func (a *Adapter) cancelCompanyWeeklySummaryPublish(
 	if affected != 1 {
 		return nil, httperror.New(http.StatusConflict, "company_weekly_summary_publish_cancel_conflict", "publish state changed before cancellation")
 	}
+	// The reports about to be unfrozen, for the post-commit catalog reconcile.
+	unfrozenReportIDs := make([]string, 0)
+	unfrozenRows, err := tx.QueryContext(ctx, `
+		SELECT report.id
+		FROM project_weekly_reports report
+		INNER JOIN company_weekly_summary_items item
+		  ON item.summary_version_id = ?
+		 AND item.inclusion_status = 'included'
+		 AND item.report_version_id = report.current_frozen_version_id
+		WHERE report.status = 'frozen'
+	`, versionID)
+	if err != nil {
+		return nil, err
+	}
+	for unfrozenRows.Next() {
+		var reportID int64
+		if err := unfrozenRows.Scan(&reportID); err != nil {
+			unfrozenRows.Close()
+			return nil, err
+		}
+		unfrozenReportIDs = append(unfrozenReportIDs, strconv.FormatInt(reportID, 10))
+	}
+	if err := unfrozenRows.Close(); err != nil {
+		return nil, err
+	}
 	if _, err := tx.ExecContext(ctx, `
 		UPDATE project_weekly_reports report
 		INNER JOIN company_weekly_summary_items item
@@ -453,6 +479,8 @@ func (a *Adapter) cancelCompanyWeeklySummaryPublish(
 	if err := tx.Commit(); err != nil {
 		return nil, err
 	}
+	// Frozen weekly reports are document assets; keep the catalog in step.
+	a.syncDocumentCatalog(catalogKindWeeklyReport, documentcatalog.Filter{ObjectIDs: unfrozenReportIDs})
 	return map[string]any{
 		"periodKey": periodKey, "summaryVersionId": versionID,
 		"operationId": operationID, "operationStatus": "cancelled",
@@ -973,9 +1001,17 @@ func (a *Adapter) publishCompanyWeeklySummary(
 	if err != nil {
 		return nil, err
 	}
+	frozenReportIDs := make([]string, 0, len(obligations))
+	for _, item := range obligations {
+		if item.InclusionStatus == "included" && item.ReportID.Valid {
+			frozenReportIDs = append(frozenReportIDs, strconv.FormatInt(item.ReportID.Int64, 10))
+		}
+	}
 	if err := tx.Commit(); err != nil {
 		return nil, err
 	}
+	// Frozen weekly reports are document assets; keep the catalog in step.
+	a.syncDocumentCatalog(catalogKindWeeklyReport, documentcatalog.Filter{ObjectIDs: frozenReportIDs})
 	return map[string]any{
 		"summaryId": summaryID, "summaryVersionId": versionID, "revisionNo": nextRevision,
 		"periodKey": periodKey, "status": "publishing", "markdownSha256": markdownHash,

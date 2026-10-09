@@ -12,7 +12,7 @@ const sourceExtensions = ['', '.ts', '.js', '.mjs', '/index.ts', '/index.js', '/
 
 function files(dir) {
   if (!existsSync(dir)) return []
-  return readdirSync(dir, { withFileTypes: true }).flatMap(entry => {
+  return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
     if (entry.name.startsWith('.') || entry.name === 'node_modules') return []
     const path = join(dir, entry.name)
     return entry.isDirectory() ? files(path) : extensions.includes(extname(path)) ? [path] : []
@@ -101,8 +101,8 @@ export async function checkBusinessModuleAliases() {
       const found = extname(file) === '.vue'
         ? checkVuePresentationAliases(source, file)
         : ['.css', '.scss', '.sass', '.less'].includes(extname(file))
-          ? styleReferences(source).map(index => ({ line: lineAt(source, index), kind: 'style @import/url' }))
-          : []
+            ? styleReferences(source).map(index => ({ line: lineAt(source, index), kind: 'style @import/url' }))
+            : []
       for (const item of found) violations.push(`${relative(root, file)}:${item.line}: ${item.kind} cannot use ~/ or ~~/ in Host composition`)
     }
   }

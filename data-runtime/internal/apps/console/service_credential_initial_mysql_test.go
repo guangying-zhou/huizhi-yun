@@ -157,10 +157,18 @@ func TestInitialServiceCredentialMySQL(t *testing.T) {
 	if e = json.Unmarshal(templateRaw, &template); e != nil {
 		t.Fatal(e)
 	}
-	// Reviewed 2026-09-15: 64 committed capabilities plus the four work-item
-	// state/delete capabilities registered with this batch.
-	if len(template.ServicePolicy.Capabilities) != 68 {
-		t.Fatal("review changed capability set", len(template.ServicePolicy.Capabilities))
+	// The readiness-policy generator checks the exact set against Host operations.
+	// Exercise every current capability here without freezing a historical count.
+	if len(template.ServicePolicy.Capabilities) == 0 {
+		t.Fatal("readiness capability set is empty")
+	}
+	seenCapabilities := make(map[string]bool)
+	capabilityPattern := regexp.MustCompile(`^[a-z][a-z0-9-]*:[a-z][a-z0-9_-]*:[a-z][a-z0-9_-]*(?::[a-z][a-z0-9_-]*)*$`)
+	for _, capability := range template.ServicePolicy.Capabilities {
+		if !capabilityPattern.MatchString(capability) || seenCapabilities[capability] {
+			t.Fatal("invalid or duplicate readiness capability", capability)
+		}
+		seenCapabilities[capability] = true
 	}
 	var serviceID uint64
 	conn.QueryRow(`SELECT id FROM service_clients WHERE client_code='enterprise.runtime'`).Scan(&serviceID)
@@ -198,4 +206,56 @@ func TestInitialServiceCredentialMySQL(t *testing.T) {
 	if count != 1 {
 		t.Fatal("credential rotated")
 	}
+	t.Run("external_initial_only", func(t *testing.T) {
+		_, err := conn.Exec(`INSERT INTO service_clients(client_code,client_name,client_type,app_code,status) VALUES('collab.runtime','Collab','runtime','collab','active')`)
+		if err != nil {
+			t.Fatal(err)
+		}
+		writes := 0
+		ref := "HZY_INITIAL_EXTERNAL_FIXTURE"
+		external := InitialServiceCredential{ClientCode: "collab.runtime", AppCode: "collab", ActorID: "approved-fixture", ExternalSecretRef: ref, PersistSecret: func(s string) error { writes++; t.Setenv(ref, s); return nil }}
+		bad := external
+		bad.ClientCode = "absent.runtime"
+		if _, err = a.EnsureInitialServiceCredential(ctx, bad); err == nil {
+			t.Fatal("absent client accepted")
+		}
+		bad = external
+		bad.AppCode = "enterprise"
+		if _, err = a.EnsureInitialServiceCredential(ctx, bad); err == nil {
+			t.Fatal("wrong app accepted")
+		}
+		conn.Exec(`UPDATE service_clients SET status='disabled' WHERE client_code='collab.runtime'`)
+		if _, err = a.EnsureInitialServiceCredential(ctx, external); err == nil {
+			t.Fatal("disabled client accepted")
+		}
+		conn.Exec(`UPDATE service_clients SET status='active' WHERE client_code='collab.runtime'`)
+		bad = external
+		bad.PersistSecret = func(string) error { return fmt.Errorf("synthetic sink failure") }
+		if _, err = a.EnsureInitialServiceCredential(ctx, bad); err == nil {
+			t.Fatal("failed sink accepted")
+		}
+		var leaked int
+		conn.QueryRow(`SELECT COUNT(*) FROM vault_secrets WHERE owner_key='collab.runtime'`).Scan(&leaked)
+		if leaked != 0 {
+			t.Fatal("sink failure committed")
+		}
+		result, err := a.EnsureInitialServiceCredential(ctx, external)
+		if err != nil || !result.Created || writes != 1 {
+			t.Fatal("external create", err)
+		}
+		replayed, err := a.EnsureInitialServiceCredential(ctx, external)
+		if err != nil || replayed.Created || writes != 1 || result.CredentialID != replayed.CredentialID {
+			t.Fatal("external replay", err)
+		}
+		var secretBytes int
+		var hash string
+		if err = conn.QueryRow(`SELECT COALESCE(OCTET_LENGTH(v.ciphertext_blob),0),v.content_hash FROM vault_secret_versions v JOIN vault_secrets s ON s.current_version_id=v.id WHERE s.owner_key='collab.runtime'`).Scan(&secretBytes, &hash); err != nil || secretBytes != 0 || !vaultContentHashMatches(hash, os.Getenv(ref)) {
+			t.Fatal("database material contract", err)
+		}
+		t.Setenv(ref, "tampered")
+		if _, err = a.VerifyInitialServiceCredential(ctx, external); err == nil {
+			t.Fatal("tampered env accepted")
+		}
+	})
+
 }

@@ -10,7 +10,7 @@ import * as product from '../server/utils/productCrossDependencyInput'
 const query = { beforeVersionId: '1', beforeRecordId: '2', afterVersionId: '3', afterRecordId: '4', page: '2', pageSize: '10' }
 const compiled = ts.transpileModule(readFileSync(new URL('../server/utils/productReleaseDiffRuntime.ts', import.meta.url), 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText
 function harness(options: { method?: string, query?: Record<string, unknown>, denied?: boolean, wrongProduct?: boolean, unavailable?: boolean, failure?: boolean } = {}) {
-  const calls: { path: string, args: any }[] = [], permissions: string[] = [], headers: string[][] = []
+  const calls: { path: string, args: { scope: string, query: Record<string, unknown>, body: Record<string, unknown> } }[] = [], permissions: string[] = [], headers: string[][] = []
   const exports: { handleProductReleaseDiff?: (event: object) => Promise<unknown> } = {}
   runInNewContext(compiled, { exports, require: (name: string) => {
     if (name === 'h3') return { createError, getRouterParam: () => 'P-A', getQuery: () => options.query ?? query, setHeader: (_: unknown, key: string, value: string) => headers.push([key, value]) }

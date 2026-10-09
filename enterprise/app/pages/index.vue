@@ -14,7 +14,7 @@ import {
   type WorkbenchWorkTab
 } from '../utils/workbench'
 
-definePageMeta({ alias: ['/enterprise'] })
+definePageMeta({ alias: ['/enterprise'], name: 'enterprise-workbench', navigationOwner: 'console' })
 
 type NavNode = { id: string, label: string, to?: string, icon?: string, children?: readonly NavNode[] }
 type Entry = { id: string, label: string, to: string, icon: string }

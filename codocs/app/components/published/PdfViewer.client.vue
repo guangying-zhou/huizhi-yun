@@ -2,7 +2,7 @@
 import type { PDFDocumentLoadingTask, PDFDocumentProxy, RenderTask } from 'pdfjs-dist'
 import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?worker&url'
 
-const props = defineProps<{ src: string, title?: string }>()
+const props = defineProps<{ src: string, title?: string, watermarkText?: string }>()
 const { resolveCurrentAppPath } = useAppUrls()
 const viewport = useTemplateRef<HTMLDivElement>('viewport')
 const canvas = useTemplateRef<HTMLCanvasElement>('canvas')
@@ -183,15 +183,28 @@ onBeforeUnmount(() => {
       <UIcon name="i-lucide-loader-2" class="size-4 animate-spin" />正在加载 PDF…
     </div>
     <div v-show="!errorMessage" ref="viewport" class="max-h-[calc(100dvh-16rem)] min-h-64 w-full overflow-auto bg-elevated p-2">
-      <canvas
-        ref="canvas"
-        class="mx-auto block select-none"
-        :class="{ invisible: loading || rendering || errorMessage }"
-        :aria-label="`${title || 'PDF 文档'}，第 ${pageNumber} 页`"
-        role="img"
-        @contextmenu.prevent
-        @dragstart.prevent
-      />
+      <div class="relative mx-auto w-fit max-w-none">
+        <canvas
+          ref="canvas"
+          class="mx-auto block select-none"
+          :class="{ invisible: loading || rendering || errorMessage }"
+          :aria-label="`${title || 'PDF 文档'}，第 ${pageNumber} 页`"
+          role="img"
+          @contextmenu.prevent
+          @dragstart.prevent
+        />
+        <div v-if="watermarkText && !loading && !errorMessage" class="pdf-watermark" aria-hidden="true">
+          <div class="pdf-watermark-grid">
+            <span v-for="n in 96" :key="n">{{ watermarkText }}</span>
+          </div>
+        </div>
+      </div>
     </div>
   </section>
 </template>
+
+<style scoped>
+.pdf-watermark { position: absolute; inset: 0; overflow: hidden; pointer-events: none; user-select: none; }
+.pdf-watermark-grid { position: absolute; top: -50%; left: -50%; width: 200%; height: 200%; display: flex; flex-wrap: wrap; align-content: flex-start; transform: rotate(-24deg); }
+.pdf-watermark-grid > span { box-sizing: border-box; flex: 0 0 280px; height: 180px; padding: 80px 24px 0; overflow: hidden; white-space: nowrap; font-size: 16px; color: rgba(100, 116, 139, 0.2); }
+</style>

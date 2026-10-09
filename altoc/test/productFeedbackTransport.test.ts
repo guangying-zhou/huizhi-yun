@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs'
 import { runInNewContext } from 'node:vm'
 import ts from 'typescript'
 import { createError } from 'h3'
-import { buildServiceCommandRuntimeHeaders, verifyServiceCommandRuntimeHeaders, hashServiceCommandPayload } from '@hzy/foundation/server/utils/tenantRuntimeClient'
+import { buildServiceCommandRuntimeHeaders, verifyServiceCommandRuntimeHeaders, hashServiceCommandPayload } from './support/service-command-runtime.mjs'
 
 const code = ts.transpileModule(readFileSync(new URL('../server/utils/productFeedbackTransport.ts', import.meta.url), 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText
 
@@ -16,6 +16,7 @@ test('feedback transport signs separate deployments and rejects missing routes b
     const envelope = { operationId: '123e4567-e89b-42d3-a456-426614174001', operationCode: 'altoc.aims.product-request.create-from-feedback.v1', targetApp: 'aims', requiredCapability: 'aims:product-request:create-from-feedback', idempotencyKey: 'key', commandSchemaVersion: 'product-feedback-create.v1', commandSha256: await hashServiceCommandPayload(command), command }
 
     runInNewContext(code, { exports, URL, crypto: { randomUUID: () => 'request-id' }, require: (name: string) => {
+      name = name.replace(/\.ts$/, '')
       if (name === 'h3') return { createError }
       if (name.endsWith('/serviceAppUrl')) return {
         resolveServiceAppBaseUrl: () => 'https://tenant.example',

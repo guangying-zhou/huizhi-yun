@@ -113,6 +113,7 @@ function acceptsConsoleApplicationAccessToken(pathname: string, method: string) 
 // 跳过下方 OIDC 验签与未认证 401 拦截。业务模块的 service API（requireServiceScope）必须走验签，
 // 由 resolveConsoleAuthContext 设置 authenticated=true，因此不能放进该白名单。
 function acceptsConsoleServiceToken(pathname: string) {
+  if (['/altoc/api/v1/service/product-feedback/status', '/altoc/api/v1/service/product-feedback/progress'].includes(pathname)) return true
   return pathname === '/api/v1/console/vault/resolve'
     || pathname === '/api/v1/console/service/business-domains'
     || pathname.startsWith('/api/v1/console/service/work-calendar/')

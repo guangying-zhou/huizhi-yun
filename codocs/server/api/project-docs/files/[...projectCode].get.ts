@@ -6,6 +6,7 @@ import { extractGitProjectPath } from '@hzy/foundation/server/utils/gitIntegrati
 import { callCodocsTenantRuntime } from '~~/server/utils/codocsRuntime'
 import { fetchDirectoryResponse } from '~~/server/utils/directoryCompat'
 import { createProjectsOSSClient } from '~~/server/utils/oss'
+import { REPOSITORY_COPY_DOC_TYPE } from '../../../../shared/utils/documentStorage'
 import { requireRequestUid } from '~~/server/utils/authIdentity'
 import { requirePermission } from '~~/server/utils/checkPermission'
 
@@ -126,7 +127,7 @@ const listGitProjectDocsFromOSS = async (prefix: string) => {
         name: relativePath,
         path: objectName,
         oss_path: objectName,
-        doc_type: 'git-project',
+        doc_type: REPOSITORY_COPY_DOC_TYPE,
         size: object.size || 0,
         createdAt: object.lastModified || null,
         lastModified: object.lastModified || null,

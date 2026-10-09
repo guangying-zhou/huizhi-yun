@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import type { ApiResponse, DigitalAssetItem, ListPayload, ProductAssetItem } from '../../types'
+import RemoteAssetObjectSelect from './RemoteAssetObjectSelect.vue'
+import type { ApiResponse, DigitalAssetItem } from '../../types'
 
 const props = defineProps<{ open: boolean, asset: DigitalAssetItem | null }>()
 const emit = defineEmits<{
@@ -14,31 +15,11 @@ const isOpen = computed({
 
 const toast = useToast()
 const submitting = ref(false)
-const loadingProducts = ref(false)
-const productOptions = ref<Array<{ label: string, value: number }>>([])
 const state = reactive({ product_asset_id: undefined as number | undefined })
-
-async function loadProducts() {
-  loadingProducts.value = true
-  try {
-    const response = await $fetch<ApiResponse<ListPayload<ProductAssetItem>>>('/api/v1/products')
-    const linkedIds = new Set((props.asset?.linked_products || []).map(item => item.id))
-    productOptions.value = (response.data.items || []).filter(item => !linkedIds.has(item.id)).map(item => ({
-      label: `${item.product_code} · ${item.product_name}`,
-      value: item.id
-    }))
-  } catch (error) {
-    console.error('[DigitalAssetProductLink] Failed to load products:', error)
-    toast.add({ title: '产品加载失败', description: '请刷新后重试。', color: 'error', icon: 'i-lucide-circle-alert' })
-  } finally {
-    loadingProducts.value = false
-  }
-}
 
 watch(() => props.open, async (open) => {
   if (open) {
     state.product_asset_id = undefined
-    await loadProducts()
   }
 })
 
@@ -76,13 +57,11 @@ async function handleSubmit() {
     <template #body>
       <div class="space-y-4 p-4">
         <UFormField label="产品资产" required>
-          <USelectMenu
+          <RemoteAssetObjectSelect
             v-model="state.product_asset_id"
-            :items="productOptions"
-            :loading="loadingProducts"
-            value-key="value"
-            searchable
-            placeholder="请选择产品资产"
+            kind="products"
+            :enabled="isOpen"
+            :exclude-ids="(props.asset?.linked_products || []).map(item => item.id)"
           />
         </UFormField>
       </div>

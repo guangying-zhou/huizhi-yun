@@ -17,7 +17,7 @@
 - 配置目标由 Console 管理；当前保留 `.env` 是 standalone 或迁移期启动方式。
 - Console embedded 模式下，Console 的 `DB_*` 指向 `hzy_console`；Collab 不允许直连 Codocs DB，必须通过 `HZY_TENANT_RUNTIME_URL` 或 `COLLAB_CODOCS_RUNTIME_URL` 调用 Codocs runtime 获取文档上下文、权限和版本写入能力。
 - 旧 v1 文档仍由 Collab 直接使用 OSS；Console embedded 模式可从 Console `oss.default` 解析注入，standalone/迁移期沿用 `COLLAB_OSS_*` / legacy `ALIYUN_OSS_*`。此配置不用于 v2 快照。
-- 自托管生产以独立进程运行（`deploy/self-hosted/systemd/hzy-collab.service`，回环 `127.0.0.1:31007`，`env/collab.env.example`）；发布包由 `deploy/self-hosted/bundle-collab.mjs` 用 esbuild 打成单文件。**Hocuspocus 3.4.4 忽略 `address` 配置，实际绑定通配地址**（`lsof` 显示 `*:PORT`）；打包时注入监听补丁把无 host 的 `listen(port)` 固定到 `COLLAB_ADDRESS`，`health.mjs` 在启动后从外部再核验。改用 `tsx`/源码直接运行（如 hzy0 脚手架）不含该补丁，须另行限制监听面。
+- 自托管生产以独立进程运行（`deploy/self-hosted/systemd/hzy-collab.service`，回环 `127.0.0.1:31007`，`env/collab.env.example`）；发布包由 `deploy/self-hosted/bundle-collab.mjs` 用 esbuild 打成单文件。Hocuspocus 3.4.4 将 `address` 传给 Node，而 Node 监听选项使用 `host`。provider 现通过实例级 `bindLoopbackListener` 显式绑定 `COLLAB_ADDRESS`，仅接受 `127.0.0.1` / `::1`，拒绝通配、非回环及未知监听签名，不修改全局原型。源码和 embedded 运行均受保护；生产打包仍保留已有监听补丁，`health.mjs` 在启动后从外部再核验。真实监听回归见 `test/loopbackListener.test.ts`。
 - v2 快照文档（写入协调合同阶段 B）走独立路径：`COLLAB_V2_ENABLED=true` 时，连接 token 为 Host 签发的一次性票据 `v2.<hex>`，以 `collab.runtime` 服务身份（Foundation `createStandaloneServiceTokenClient`）兑换后才加载；Collab 不持有 OSS 凭据，快照字节经 Runtime `/v1/codocs/collaboration-snapshots:upload|download`，再以精确版本配对发布；租约续租失败即断开。旧 v1 文档路径与 HMAC token 不变。见 `docs/Codocs-Document-Write-Coordination.md`。
 
 ## 部门文档协作（C1，设计 `docs/Codocs-Host-Department-Collaboration-Design.md` §2.4）

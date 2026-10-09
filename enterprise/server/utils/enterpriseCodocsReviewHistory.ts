@@ -17,7 +17,7 @@ export async function enterpriseCodocsReviewByOssPath(event: H3Event) {
   const params = getRequestURL(event).searchParams
   if (Object.keys(raw).length !== 1 || typeof raw.path !== 'string' || params.getAll('path').length !== 1) throw createError({ statusCode: 400, message: '发文路径参数无效' })
   const path = raw.path.trim()
-  if (!path || [...path].length > 1024 || /[\u0000\r\n]/.test(path) || path.startsWith('/')) throw createError({ statusCode: 400, message: '发文路径参数无效' })
+  if (!path || [...path].length > 1024 || Array.from(path).some(char => char === '\u0000' || char === '\n' || char === '\r') || path.startsWith('/')) throw createError({ statusCode: 400, message: '发文路径参数无效' })
   if (path.startsWith('codocs/departments/') && ['records', 'outsides', 'rules'].includes(path.split('/')[3] || '')) {
     const asset = departmentAssetPath(path)
     await requireDepartmentAsset(event, asset.deptCode, 'view')

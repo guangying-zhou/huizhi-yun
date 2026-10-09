@@ -23,7 +23,7 @@ describe('restricted directory service read contract', () => {
   test('returns sharing identity fields without administrative PII', () => {
     const route = source('server/api/v1/console/service/directory/users/index.get.ts')
 
-    for (const field of ['uid', 'realName', 'displayName', 'avatar', 'deptCode', 'deptName', 'positionTitle']) {
+    for (const field of ['uid', 'realName', 'displayName', 'avatar', 'status', 'deptCode', 'deptName', 'positionTitle']) {
       assert.match(route, new RegExp(`${field}: user\\.${field}`))
     }
     assert.doesNotMatch(route, /mobile(?:Tail4)?: user\.|email: user\./)

@@ -36,15 +36,17 @@ export function documentEnvelope<T>(response: { code?: number, data?: T }): T {
   return response.data
 }
 
-export async function hostProjectDocumentContext(event: H3Event, provider: DocumentReadPermitProvider, projectId: string, documentId?: string, repoProjectCode?: string, documentUuid?: string) {
+export async function hostProjectDocumentContext<T = HostProjectDocumentContext>(event: H3Event, provider: DocumentReadPermitProvider, projectId: string, documentId?: string, repoProjectCode?: string, documentUuid?: string, accessAction?: 'view' | 'download' | 'edit', repositoryRead?: { operation: 'file' | 'markdown-tree', path?: string, ref?: string, commitId?: string }) {
   const user = await documentActor(event, 'view')
   const permit = await provider(projectId)
   const { projectId: _parentId, ...projectAuthorization } = permit.authorization
   const project = documentEnvelope(await callEnterpriseRuntime<{ code: number, data: Record<string, unknown> }>(event, 'aims.project-view', { tenant: user.tenant, deployment: user.deployment, projectId, authorization: projectAuthorization, query: permit.query }))
   const object = projectAuthorizationObjectFromFacts(requireAimsProjectAuthorizationRecord(project, projectId), project.members as Record<string, unknown>[], user.uid, projectId)
   const admin = await loadScopedAuthorizationFromConsoleRuntime(event, user.uid, 'aims', { resourceCode: 'projects', action: 'admin', object })
-  return documentEnvelope(await callEnterpriseRuntime<{ code: number, data: HostProjectDocumentContext }>(event, 'aims.project-document-context', {
+  return documentEnvelope(await callEnterpriseRuntime<{ code: number, data: T }>(event, repositoryRead ? 'aims.project-document-repository-read' : accessAction ? 'aims.project-document-access-check' : 'aims.project-document-context', {
     tenant: user.tenant, deployment: user.deployment, projectId, documentId, repoProjectCode, documentUuid,
+    ...(accessAction ? { accessAction } : {}),
+    ...(repositoryRead ? { repositoryRead } : {}),
     projectAdmin: admin.decision?.allowed === true,
     projectReadAuthorization: permit.authorization,
     projectScopeQuery: permit.query,

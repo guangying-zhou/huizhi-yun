@@ -105,12 +105,21 @@ test('hzy0 maps the Host Workflow switch to the explicit loopback configuration'
   assert.equal(childEnv.HZY_ENTERPRISE_HOST_WORKFLOW_ENABLED, 'true')
   assert.equal(childEnv.HZY_ENTERPRISE_WORKFLOW_ORIGIN, 'http://127.0.0.1:23140')
   assert.equal(Object.hasOwn(childEnv, 'HZY_WORKFLOW_API_URL'), false)
+  assert.equal(childEnv.HZY_WORKFLOW_SERVICE_BASE_URL, 'http://127.0.0.1:23140/workflow')
   // Same Workflow base URL as the former HZY_WORKFLOW_API_URL override.
   assert.equal(resolveEnterpriseHostWorkflowConfig(childEnv).apiBaseUrl, 'http://127.0.0.1:23140/workflow')
+  const delivery = profile(true)
+  delivery.features.companySummaryCodocsDelivery = true
+  delivery.listeners.codocsEditor = { host: '127.0.0.1', port: 23130 }
+  start(delivery, 'dev')
+  assert.equal(childEnv.HZY_CODOCS_SERVICE_BASE_URL, 'http://127.0.0.1:23130/codocs')
+  start(profile(true), 'dev')
+  assert.equal(Object.hasOwn(childEnv, 'HZY_CODOCS_SERVICE_BASE_URL'), false)
   for (const workflowLocal of [false, undefined]) {
     start(profile(workflowLocal), 'dev')
     assert.equal(childEnv.HZY_ENTERPRISE_HOST_WORKFLOW_ENABLED, 'false')
     assert.equal(Object.hasOwn(childEnv, 'HZY_ENTERPRISE_WORKFLOW_ORIGIN'), false)
+    assert.equal(Object.hasOwn(childEnv, 'HZY_WORKFLOW_SERVICE_BASE_URL'), false)
     // Explicitly disabled: the bridge fails closed instead of using discovery.
     assert.deepEqual(resolveEnterpriseHostWorkflowConfig(childEnv), { mode: 'disabled' })
   }
@@ -124,4 +133,13 @@ test('retired Aims renderer and validator warn until all three legacy windows cl
   for (const flag of ['allowLegacyAimsCallbacks', 'allowLegacyNotificationDetails', 'codocsLegacyAimsServiceEnabled']) profile.features[flag] = false
   assert.deepEqual(profileSummary(profile).problems, [])
   assert.equal(validateProfile(profile).filter(issue => issue.startsWith('problem:')).length, 0)
+})
+
+
+test('Console reports the dedicated Collab runtime only when the private switch is enabled', () => {
+  const runner = readFileSync('deploy/test-env/local-enterprise/run-process.mjs', 'utf8')
+  const expression = runner.match(/CONSOLE_COLLAB_MODE: (.+), HZY_CONSOLE_PLATFORM_LIFECYCLE_SYNC_ENABLED/)[1]
+  for (const [features, expected] of [[{}, 'disabled'], [{ codocsCollaborationV2: false }, 'disabled'], [{ codocsCollaborationV2: true }, 'external']]) {
+    assert.equal(runInNewContext(expression, { profile: { features } }), expected)
+  }
 })

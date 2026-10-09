@@ -1,4 +1,4 @@
-import type { H3Event } from 'h3'
+import { createError, type H3Event } from 'h3'
 import {
   fetchConsoleServiceJson,
   requestServiceAccessToken,
@@ -56,9 +56,16 @@ export async function resolveWorkflowProjectDirectorRoleHolder(event: H3Event) {
   } catch {
     throw createError({ statusCode: 503, message: 'authorization_role_holders_policy_unavailable' })
   }
+  return projectDirectorFromResponse(response)
+}
+
+export function projectDirectorFromResponse(response: RoleHolderResponse) {
   const role = response.data?.roles?.find(item => text(item.roleCode) === 'project_director')
   if (response.code !== undefined && response.code !== 0) {
     throw createError({ statusCode: 503, message: response.message || 'authorization_role_holders_policy_unavailable' })
+  }
+  if ((role?.holders?.length || 0) > 1 || role?.status === 'ambiguous') {
+    throw createError({ statusCode: 409, message: 'role_holder_ambiguous' })
   }
   if (!role || role.status !== 'resolved' || role.holders?.length !== 1) {
     console.warn('[WorkflowRoleHolder] Project director role holder is unresolved', {
@@ -77,5 +84,20 @@ export async function resolveWorkflowProjectDirectorRoleHolder(event: H3Event) {
     uid,
     revision,
     displayName: text(role.holders[0]?.displayName) || uid
+  }
+}
+
+// Only missing/unresolved role facts degrade. Conflicts and dependency errors
+// retain their original status. Runtime decides whether a write needs this role.
+export async function workflowProjectDirectorFacts(event: H3Event) {
+  try {
+    return await resolveWorkflowProjectDirectorRoleHolder(event)
+  } catch (error) {
+    const failure = error as { statusCode?: number, message?: string }
+    if (failure.statusCode === 409
+      && ['role_holder_missing', 'role_holder_unresolved'].includes(failure.message || '')) {
+      return null
+    }
+    throw error
   }
 }

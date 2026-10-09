@@ -1,0 +1,128 @@
+{
+  "method": "POST",
+  "cases": [
+    {
+      "target": "/v1/enterprise/finance/reconciliation:allocate-batch",
+      "body": {
+        "authorization": {
+          "actorUid": "Person",
+          "tenant": "C000001",
+          "deployment": "Host",
+          "resource": "reconciliation",
+          "action": "confirm",
+          "operation": "reconciliation-allocate-batch",
+          "objectId": "R-MARKED",
+          "allowed": true,
+          "expiresAt": 123,
+          "bundleVersion": "1",
+          "bundleHash": "hash",
+          "policyRevision": 38,
+          "scope": {
+            "access": "all",
+            "departmentCodes": []
+          }
+        },
+        "finance": {
+          "code": "R-MARKED",
+          "page": 0,
+          "pageSize": 0,
+          "search": "",
+          "status": "",
+          "accountCode": "",
+          "startDate": "",
+          "endDate": "",
+          "payload": {
+            "receiptVersion": 3,
+            "items": [
+              {
+                "contractCode": "CT1",
+                "billingScheduleCode": "BS1",
+                "scheduleVersion": 4,
+                "amount": "60.00"
+              },
+              {
+                "contractCode": "CT2",
+                "billingScheduleCode": "BS2",
+                "scheduleVersion": 5,
+                "amount": "40.00"
+              }
+            ]
+          }
+        }
+      },
+      "canonical": "[\"hzy-enterprise-apf-permit.v1\",\"POST\",\"/v1/enterprise/finance/reconciliation:allocate-batch\",\"Person\",\"C000001\",\"Host\",\"reconciliation\",\"confirm\",\"reconciliation-allocate-batch\",\"R-MARKED\",true,123,\"1\",\"hash\",38,\"all\",[],\"\",\"\",\"\",0,0,0,\"\",[\"R-MARKED\",0,0,\"\",\"\",\"\",\"\",\"\",[[\"items\",[{\"amount\":\"60.00\",\"billingScheduleCode\":\"BS1\",\"contractCode\":\"CT1\",\"scheduleVersion\":4},{\"amount\":\"40.00\",\"billingScheduleCode\":\"BS2\",\"contractCode\":\"CT2\",\"scheduleVersion\":5}]],[\"receiptVersion\",3]]]]"
+    },
+    {
+      "target": "/v1/enterprise/finance/receivable-adjustments:confirm",
+      "body": {
+        "authorization": {
+          "actorUid": "Person",
+          "tenant": "C000001",
+          "deployment": "Host",
+          "resource": "receivable_adjustments",
+          "action": "confirm",
+          "operation": "receivable-adjustments-confirm",
+          "objectId": "AD-MARKED",
+          "allowed": true,
+          "expiresAt": 123,
+          "bundleVersion": "1",
+          "bundleHash": "hash",
+          "policyRevision": 38,
+          "scope": {
+            "access": "all",
+            "departmentCodes": []
+          }
+        },
+        "finance": {
+          "code": "AD-MARKED",
+          "page": 0,
+          "pageSize": 0,
+          "search": "",
+          "status": "",
+          "accountCode": "",
+          "startDate": "",
+          "endDate": "",
+          "payload": {
+            "expectedVersion": 6
+          }
+        }
+      },
+      "canonical": "[\"hzy-enterprise-apf-permit.v1\",\"POST\",\"/v1/enterprise/finance/receivable-adjustments:confirm\",\"Person\",\"C000001\",\"Host\",\"receivable_adjustments\",\"confirm\",\"receivable-adjustments-confirm\",\"AD-MARKED\",true,123,\"1\",\"hash\",38,\"all\",[],\"\",\"\",\"\",0,0,0,\"\",[\"AD-MARKED\",0,0,\"\",\"\",\"\",\"\",\"\",[[\"expectedVersion\",6]]]]"
+    },
+    {
+      "target": "/v1/enterprise/finance/historical-finance:page",
+      "body": {
+        "authorization": {
+          "actorUid": "Person",
+          "tenant": "C000001",
+          "deployment": "Host",
+          "resource": "historical_finance",
+          "action": "view",
+          "operation": "historical-finance-page",
+          "objectId": "",
+          "allowed": true,
+          "expiresAt": 123,
+          "bundleVersion": "1",
+          "bundleHash": "hash",
+          "policyRevision": 38,
+          "scope": {
+            "access": "all",
+            "departmentCodes": []
+          }
+        },
+        "finance": {
+          "code": "",
+          "page": 2,
+          "pageSize": 20,
+          "search": "CT-MARKED",
+          "status": "pending",
+          "accountCode": "",
+          "startDate": "",
+          "endDate": "",
+          "payload": {}
+        }
+      },
+      "canonical": "[\"hzy-enterprise-apf-permit.v1\",\"POST\",\"/v1/enterprise/finance/historical-finance:page\",\"Person\",\"C000001\",\"Host\",\"historical_finance\",\"view\",\"historical-finance-page\",\"\",true,123,\"1\",\"hash\",38,\"all\",[],\"\",\"\",\"\",0,0,0,\"\",[\"\",2,20,\"CT-MARKED\",\"pending\",\"\",\"\",\"\",[]]]"
+    }
+  ]
+}

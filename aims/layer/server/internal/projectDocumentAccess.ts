@@ -60,19 +60,7 @@ export async function readProjectDocumentAccessPolicy(event: H3Event, provider: 
 /** POST .../access-check —— 只做判定，不写审计以外的任何状态。 */
 export async function checkProjectDocumentAccess(event: H3Event, provider: DocumentReadPermitProvider, projectId: number, documentId: number, action: DocumentAccessAction) {
   requireIds(projectId, documentId)
-  const { uid } = await documentActor(event, 'view')
-  const context = await hostProjectDocumentContext(event, provider, String(projectId), String(documentId))
-  const result = await checkCodocsDocumentAccess({
-    event,
-    documentUuid: context.documentUuid!,
-    documentRefType: context.documentRefType!,
-    sourceProjectCode: context.projectCode,
-    action,
-    actorUid: uid,
-    actorProjectCodes: context.actorProjectCodes,
-    actorDeptCodes: context.actorDeptCodes,
-    actorRoles: context.actorRoles
-  })
+  const result = await hostProjectDocumentContext<{ allowed: boolean, permission: string, readonly: boolean, reason: string }>(event, provider, String(projectId), String(documentId), undefined, undefined, action)
   return { code: 0, data: result }
 }
 

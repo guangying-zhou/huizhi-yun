@@ -49,6 +49,12 @@ test('document load failures map 503 storage/session codes to Chinese and never 
     assert.equal(documentLoadErrorMessage(make(503, 'console_session_verification_unavailable')), '登录状态暂时无法核验，请稍后重试')
     assert.equal(documentLoadErrorMessage(make(503, 'other')), '服务暂时不可用，请稍后重试')
     assert.equal(documentLoadErrorMessage(make(500, 'boom')), '文档加载失败，请稍后重试')
+    assert.equal(documentLoadErrorMessage(make(401, 'x')), '登录状态已失效，请重新登录')
+    assert.equal(documentLoadErrorMessage(make(404, 'x')), '文档不存在或已移除，请返回文档列表确认')
     assert.equal(documentLoadErrorMessage(make(403, 'x')), '你没有查看此文档正文的权限，请返回文档列表')
   }
+})
+
+test('retired document routes use safe migration guidance', () => {
+  assert.equal(documentLoadErrorMessage({ statusCode: 410, message: 'GET /internal/legacy' }), '此文档入口已下线，请返回文档列表使用现有功能')
 })

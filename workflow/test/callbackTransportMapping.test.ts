@@ -39,9 +39,17 @@ test('actual callback sender maps Aims URL, target and capability together witho
     return {}
   } })
   const callbacks = ['aims', 'codocs', 'assets', 'workflow'].map((app, i) => ({ effectId: i + 1, versionNo: 11, url: '/api/v1/service/workflow/callback', payload: { app_code: app, event: 'flow_completed', idempotencyKey: `original:${i}` } }))
-  const result = await exports.sendRuntimeCallbacks!({}, callbacks)
-  assert.equal(result.length, 4)
-  assert.deepEqual(targets, ['enterprise', 'codocs', 'assets', 'workflow'])
+  const financeCallbacks = ['/api/v1/finance/workflow/callback', '/finance/api/v1/finance/workflow/callback'].map((url, i) => ({ effectId: 5 + i, versionNo: 11, url, payload: { app_code: 'finance', resource_code: 'invoices', action_code: 'request', event: 'flow_completed', idempotencyKey: `finance-original:${i}` } }))
+  const result = await exports.sendRuntimeCallbacks!({}, [...callbacks, ...financeCallbacks])
+  assert.equal(result.length, 6)
+  assert.deepEqual(targets, ['enterprise', 'codocs', 'assets', 'workflow', 'enterprise', 'enterprise'])
+  for (const [i, callback] of financeCallbacks.entries()) {
+    assert.equal(requests[4 + i]!.url, 'https://site.test/enterprise/api/v1/service/workflow/callback')
+    assert.equal(requests[4 + i]!.body, callback.payload)
+    assert.equal(callback.url, i ? '/finance/api/v1/finance/workflow/callback' : '/api/v1/finance/workflow/callback')
+    assert.equal(tokens[4 + i]!.audience, 'enterprise')
+    assert.equal(tokens[4 + i]!.scope, 'enterprise:workflow-callback:execute')
+  }
   for (const [i, callback] of callbacks.entries()) {
     const target = workflowCallbackTarget(callback.payload.app_code)
     assert.equal(requests[i]!.url, `https://site.test/${target.appCode}${callback.url}`)

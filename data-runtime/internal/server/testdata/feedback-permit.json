@@ -1,0 +1,25 @@
+{
+  "method": "POST",
+  "path": "/v1/enterprise/console/feedback:draft",
+  "key": "golden-1",
+  "token": "test-only-token",
+  "now": 1791374400000,
+  "body": {
+    "payload": "{\"text\":{\"kind\":\"bug\",\"title\":\"按钮 <测试>\",\"description\":\"换行\\nUnicode  \",\"priority\":\"mid\",\"pageUrl\":\"/enterprise\"}}",
+    "authorization": {
+      "actorUid": "alice",
+      "tenant": "T1",
+      "deployment": "T1-enterprise",
+      "resource": "feedback",
+      "action": "submit",
+      "operation": "draft",
+      "expiresAt": 1791374414000,
+      "bundleVersion": "v1",
+      "bundleHash": "sha256:golden",
+      "policyRevision": 7,
+      "global": false
+    }
+  },
+  "canonical": "[\"hzy-console-feedback-permit.v1\",\"POST\",\"/v1/enterprise/console/feedback:draft\",\"golden-1\",\"alice\",\"T1\",\"T1-enterprise\",\"feedback\",\"submit\",\"draft\",1791374414000,\"v1\",\"sha256:golden\",7,false,\"{\\\"text\\\":{\\\"kind\\\":\\\"bug\\\",\\\"title\\\":\\\"按钮 <测试>\\\",\\\"description\\\":\\\"换行\\\\nUnicode\\u2028\\u2029\\\",\\\"priority\\\":\\\"mid\\\",\\\"pageUrl\\\":\\\"/enterprise\\\"}}\"]",
+  "signature": "Q2HSitFmZaR5EWWEUZCFdCLGV2waFpFD2ko0cZqd188"
+}

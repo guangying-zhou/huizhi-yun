@@ -24,12 +24,17 @@ describe('GitLab fixed Tenant Runtime operations', () => {
       'commit-diff',
       'markdown-tree',
       'file',
-      'commit',
-      'issue-upsert',
-      'resolve-actions'
+      'issue-upsert'
     ]) {
       assert.match(source, new RegExp(`['"]${operation}['"]`))
     }
+  })
+
+  test('repository content is read-only: no commit helper or write operation remains', () => {
+    // Document asset design DOC-01. A caller could previously choose the
+    // repository, branch, file actions and author from the request body.
+    assert.doesNotMatch(source, /['"]commit['"]|['"]resolve-actions['"]/)
+    assert.doesNotMatch(source, /createGitCommit|resolveGitCommitActions|CreateGitCommitInput|GitCommitAction/)
   })
 
   test('group project listing stays behind the fixed operation boundary and requests the complete catalog', () => {

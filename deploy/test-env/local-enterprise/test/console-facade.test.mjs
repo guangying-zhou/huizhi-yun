@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { consoleAvatarFacadePath, consoleFacadeRoute, createConsoleFacade, allowedPublicFacadeToken } from '../console-facade.mjs'
+import { consoleAvatarFacadePath, consoleFacadeRoute, createConsoleFacade, allowedPublicFacadeToken, allowedConsoleSyncOrigin } from '../console-facade.mjs'
 import { fileURLToPath } from 'node:url'
 
 test('public token endpoint never grants runtime identity or alternate clients', () => {
@@ -14,7 +14,7 @@ test('public token endpoint never grants runtime identity or alternate clients',
 test('only authentication pages, protocols and resources are public', () => {
   for (const path of ['/console/login', '/console/oauth/authorize', '/console/api/auth/oidc-callback',
     '/console/.well-known/openid-configuration', '/console/_nuxt/entry.js']) assert.equal(consoleFacadeRoute(path, 'GET'), true)
-  for (const path of ['/console/api/internal/probe', '/console/api/v1/console/vault', '/console/admin',
+  for (const path of ['/console/api/internal/probe', '/console/api/v1/console/vault', '/console/directory/users',
     '/console/%61pi/auth/oidc-callback', '/console/api/auth/../internal/probe']) assert.equal(consoleFacadeRoute(path, 'GET'), false)
   assert.equal(consoleFacadeRoute('/console/login', 'POST'), false)
   assert.equal(consoleFacadeRoute('/console/oauth/token', 'POST'), true)
@@ -104,6 +104,13 @@ test('facade strips spoofed headers and isolates private Enterprise source from 
   assert.equal(notificationHeaders.get('x-hzy-app-code'), 'enterprise')
   assert.equal(notificationHeaders.get('x-hzy-deployment'), 'C000001-test-enterprise')
   const jwt = claims => `Bearer e30.${Buffer.from(JSON.stringify(claims)).toString('base64url')}.sig`
+  const lifecyclePath = 'https://hzy-test.huizhi.yun/api/v1/console/notifications/actionable-lifecycle'
+  await workflowFacade.fetch(lifecyclePath, { method: 'POST', body: '{}', headers: { authorization: jwt({ source_app: 'enterprise', client_id: 'enterprise.runtime', deployment: 'C000001-test-enterprise' }) } })
+  assert.deepEqual(localSources.at(-1), { app: 'enterprise', deployment: 'C000001-test-enterprise' })
+  for (const claims of [{ source_app: 'enterprise', client_id: 'aims.runtime', deployment: 'C000001-test-enterprise' }, { source_app: 'enterprise', client_id: 'enterprise.runtime', deployment: 'other' }]) {
+    await workflowFacade.fetch(lifecyclePath, { method: 'POST', body: '{}', headers: { authorization: jwt(claims) } })
+    assert.deepEqual(localSources.at(-1), { app: 'console', deployment: 'wiztek-test-console' })
+  }
   await workflowFacade.fetch('https://hzy-test.huizhi.yun/api/v1/console/notifications/publish', { method: 'POST', body: '{}',
     headers: { authorization: jwt({ source_app: 'workflow', deployment: 'C000001-test-workflow-local' }) } })
   assert.deepEqual(localSources.at(-1), { app: 'console', deployment: 'wiztek-test-console' })
@@ -165,4 +172,21 @@ test('console facade admits only encoded dev virtual modules inside this console
   // Other encoded Console paths remain rejected.
   assert.equal(consoleFacadeRoute('/console/_nuxt/%2e%2e/secret', 'GET'), false)
   assert.equal(consoleFacadeRoute('/console/_nuxt/@fs%2Fetc%2Fpasswd', 'GET'), false)
+})
+
+ test('directory sync exposes only exact pages and methods, with same-origin writes', () => {
+  for (const path of ['/console/admin', '/console/directory/sync', '/console/api/v1/console/auth/me', '/console/api/auth/permissions', '/console/api/activation/status', '/console/api/v1/console/authorization/simulation-sessions/current', '/console/api/v1/console/directory/sync-jobs']) {
+    assert.equal(consoleFacadeRoute(path, 'GET'), true)
+    assert.equal(consoleFacadeRoute(path, 'DELETE'), false)
+  }
+  const path = '/console/api/v1/console/directory/sync-jobs'
+  assert.equal(consoleFacadeRoute(path, 'POST'), true)
+  for (const other of [path+'/', path+'/other', path+'/../users', '/console/api/activation/bundle-refresh', '/console/api/v1/console/directory/users', '/console/directory/sync/other']) assert.equal(consoleFacadeRoute(other, 'POST'), false)
+  assert.equal(allowedConsoleSyncOrigin(path, 'POST', new Headers({origin:'https://hzy0.isme.dev','sec-fetch-site':'same-origin'})), true)
+  for (const headers of [{}, {origin:'https://evil.test'}, {origin:'https://hzy0.isme.dev','sec-fetch-site':'cross-site'}]) assert.equal(allowedConsoleSyncOrigin(path,'POST',new Headers(headers)), false)
+ })
+
+test('directory sync facade cannot be constructed for another tenant or deployment', () => {
+  const tenant = {tenantCode:'C000001',environment:'test',apps:{console:{deploymentCode:'wiztek-test-console'},enterprise:{deploymentCode:'C000001-test-enterprise'}},dataRuntime:{endpoint:'https://hzy-test-runtime.isme.dev'},login:{oidc:{issuer:'https://sso.wiztek.cn/realms/wiztek',clientId:'hzy_local_console'}}}
+  for (const change of [{tenantCode:'other'},{environment:'prod'},{apps:{...tenant.apps,console:{deploymentCode:'other'}}},{apps:{...tenant.apps,enterprise:{deploymentCode:'other'}}}]) assert.throws(()=>createConsoleFacade({localSecret:'fixture',credentials:{},registryVars:{},tenant:{...tenant,...change}}),/Local Console binding rejected/)
 })

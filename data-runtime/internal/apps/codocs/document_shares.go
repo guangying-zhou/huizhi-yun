@@ -98,6 +98,9 @@ func (a *Adapter) createDocumentShare(ctx context.Context, uuid string, body map
 	if targetUID == "" {
 		return nil, httperror.New(http.StatusBadRequest, "invalid_request", "Target uid is required")
 	}
+	if targetUID == ownerUID || targetUID == actorUID {
+		return nil, httperror.New(http.StatusBadRequest, "share_self_not_allowed", "Document cannot be shared with its owner or actor")
+	}
 	permission := normalizePermission(firstNonEmpty(stringValue(body["permission"]), "read"))
 	message := firstNonEmpty(stringValue(body["message"]), stringValue(body["remark"]))
 

@@ -44,3 +44,8 @@ func altocProductFeedbackSnapshot(ticket map[string]any) (map[string]any, string
 	digest, err := integrationoperation.ValidateAndDigestCommand(snapshot)
 	return snapshot, digest, err
 }
+
+// ProductFeedbackSnapshot exposes the existing immutable source shape, not an additional producer.
+func ProductFeedbackSnapshot(ticket map[string]any) (map[string]any, string, error) {
+	return altocProductFeedbackSnapshot(ticket)
+}

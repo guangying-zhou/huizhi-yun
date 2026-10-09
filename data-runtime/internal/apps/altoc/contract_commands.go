@@ -48,6 +48,13 @@ func (a *Adapter) changeContractStatus(ctx context.Context, identifier string, b
 		return nil, err
 	}
 
+	// W1 §5.4: completing or terminating an imported contract stays available.
+	if action != "close_fulfillment" && action != "terminate" {
+		if err := ensureContractNotHistorical(contract); err != nil {
+			return nil, err
+		}
+	}
+
 	operator := altocActor(body)
 	reason := firstBodyText(body, "reason", "reject_reason", "rejectReason")
 	currentStatus := contractLifecycleStatus(contract)
@@ -216,6 +223,9 @@ func (a *Adapter) completeContractStage(ctx context.Context, identifier string, 
 	}
 	if contract == nil {
 		return nil, httperror.New(http.StatusNotFound, "record_not_found", "contract not found")
+	}
+	if err := ensureContractNotHistorical(contract); err != nil {
+		return nil, err
 	}
 	if err := altocRequireRecordWrite(body, "contract", contract, "owner_user_id", "owner_dept_code"); err != nil {
 		return nil, err

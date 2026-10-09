@@ -37,6 +37,12 @@ type dueTestPage struct {
 }
 
 func TestSchedulerRegistryMappedDueNotificationMySQL(t *testing.T) {
+	testSchedulerRegistryMappedDueNotificationMySQL(t, "aims", "aims.runtime")
+}
+func TestHostSchedulerRegistryMappedDueNotificationMySQL(t *testing.T) {
+	testSchedulerRegistryMappedDueNotificationMySQL(t, "enterprise", "enterprise.runtime")
+}
+func testSchedulerRegistryMappedDueNotificationMySQL(t *testing.T, executor, client string) {
 	socket := os.Getenv("HZY_ENTERPRISE_SCHEDULER_TEST_SOCKET")
 	if socket == "" {
 		t.Skip("requires dedicated temporary MySQL")
@@ -97,7 +103,7 @@ func TestSchedulerRegistryMappedDueNotificationMySQL(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	source, err := e.NewOutboundSource(q, resolved, "real-aims-worker", "aims.runtime")
+	source, err := e.NewOutboundSource(q, resolved, "real-aims-worker", client)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -121,7 +127,7 @@ func TestSchedulerRegistryMappedDueNotificationMySQL(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	identity := e.SchedulerIdentity{Tenant: "tenant-a", Deployment: "real-aims-worker", SourceApp: "aims", ClientID: "aims.runtime", Subject: "aims.runtime"}
+	identity := e.SchedulerIdentity{Tenant: "tenant-a", Deployment: "real-aims-worker", SourceApp: executor, ClientID: client, Subject: client}
 
 	asOf := time.Now().UTC().Truncate(time.Second)
 	exec("INSERT INTO u_aims_projects(project_code,name,short_name,leader_uid,created_by) VALUES('P-DUE','Due project','DUE','leader-1','seed')")
@@ -163,7 +169,7 @@ func TestSchedulerRegistryMappedDueNotificationMySQL(t *testing.T) {
 	}
 
 	bad := identity
-	bad.ClientID = "enterprise.runtime"
+	bad.ClientID = "other.runtime"
 	if _, err = service.DueNotification(ctx, bad, "scan-due", scanBody()); !errors.Is(err, e.ErrBindingMismatch) {
 		t.Fatal("borrowed identity accepted", err)
 	}

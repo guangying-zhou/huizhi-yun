@@ -10,7 +10,6 @@ import AimsDocumentPreview from '../../../components/AimsDocumentPreview.vue'
 import ProjectEnvironmentPanel from '../../../components/project/ProjectEnvironmentPanel.vue'
 import ProjectNavbar from '../../../components/project/ProjectNavbar.vue'
 
-
 // 同一份代码供独立应用与企业宿主使用：非宿主模式下 moduleUrl 原样返回路径。
 const { moduleUrl } = useAimsModule()
 definePageMeta({

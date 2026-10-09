@@ -4,7 +4,7 @@ import type { ProductRequestRecord } from '../../../../../types/productRequest'
 
 const { moduleUrl, cacheKey } = useAimsModule()
 
-definePageMeta({ layoutHeader: true, layoutHeaderTitle: '功能关联需求', layoutHeaderProjectSwitcher: false })
+definePageMeta({ hostContentWidth: 'full', layoutHeader: true, layoutHeaderTitle: '功能关联需求', layoutHeaderProjectSwitcher: false })
 const route = useRoute()
 const code = computed(() => String(route.params.productCode || ''))
 const featureId = computed(() => String(route.params.featureId || ''))

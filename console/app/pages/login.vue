@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { publicLoginFailure, publicLoginRequestId } from '../../shared/utils/loginFailure'
+
 type LoginProvider = 'oidc' | 'cas' | 'wecom' | 'dingtalk'
 const DEFAULT_OIDC_DISPLAY_NAME = '企业统一身份登录'
 const MAX_OIDC_DISPLAY_NAME_LENGTH = 10
@@ -8,7 +10,7 @@ definePageMeta({
 })
 
 useSeoMeta({
-  title: '登录 · 汇智云数智协同平台',
+  title: '登录',
   description: '选择企业登录方式进入汇智云数智协同平台。'
 })
 
@@ -36,7 +38,18 @@ const loginConfig = ref({
 const loadingLoginConfig = ref(false)
 const redirecting = ref(false)
 const redirectingProvider = ref<LoginProvider | null>(null)
-const loginError = ref('')
+const hasLoginFailure = computed(() => typeof route.query.login_failure === 'string')
+const requestId = computed(() => publicLoginRequestId(route.query.request_id))
+const loginError = ref(hasLoginFailure.value ? publicLoginFailure(route.query.login_failure) : '')
+const copiedRequestId = ref(false)
+async function copyRequestId() {
+  try {
+    await navigator.clipboard.writeText(requestId.value)
+    copiedRequestId.value = true
+  } catch {
+    copiedRequestId.value = false
+  }
+}
 const acceptedTerms = ref(true)
 
 const productLogo = computed(() => resolveCurrentAppUrl('/brand/hzy-logo.png'))
@@ -225,19 +238,17 @@ const statusText = computed(() => {
   if (loginError.value) return '无法跳转登录'
   if (redirecting.value) return '正在跳转登录...'
   if (loadingLoginConfig.value) return '正在加载登录方式...'
-  if (availableProviders.value.length > 1) return '选择登录方式'
+  if (availableProviders.value.length > 1 || hasLoginFailure.value) return '选择登录方式'
   return '正在跳转登录...'
 })
 
 const isBusy = computed(() => !loggedOut.value && !loginError.value && (loadingLoginConfig.value || redirecting.value))
-const showProviderChoices = computed(() => !loadingLoginConfig.value && !loggedOut.value && availableProviders.value.length > 1)
+const showProviderChoices = computed(() => !loadingLoginConfig.value && !loggedOut.value && (availableProviders.value.length > 1 || hasLoginFailure.value))
 
 onMounted(async () => {
-  if (loggedOut.value) {
-    return
-  }
-
+  if (loggedOut.value) return
   await loadLoginConfig()
+  if (hasLoginFailure.value) return
 
   const current = await $fetch<{
     code: number
@@ -400,6 +411,17 @@ onMounted(async () => {
       >
         {{ loginError }}
       </p>
+      <div v-if="requestId" class="flex min-w-0 flex-col items-center gap-2 text-sm text-muted">
+        <span class="max-w-full select-all break-all">请求编号：{{ requestId }}</span>
+        <UButton
+          color="neutral"
+          variant="outline"
+          icon="i-lucide-copy"
+          @click="copyRequestId"
+        >
+          {{ copiedRequestId ? '已复制请求编号' : '复制请求编号' }}
+        </UButton>
+      </div>
       <p
         v-if="!loginError && !loadingLoginConfig && !hasLoginMethod()"
         class="login-message"

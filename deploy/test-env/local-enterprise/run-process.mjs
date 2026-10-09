@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { spawn } from 'node:child_process'
+import { superviseChild } from './child-lifecycle.mjs'
 import { parseArgs } from 'node:util'
 import { fileURLToPath } from 'node:url'
 import { dirname, join, resolve } from 'node:path'
@@ -33,16 +34,7 @@ const child = app === 'gateway'
       : app === 'console' ? startConsole(profile)
       : app === 'collab' ? startCollab(profile) : app === 'workflow' ? startWorkflow(profile) : app === 'aims' ? startAims(profile) : startCodocsEditor(profile)
 
-const stop = signal => {
-  if (!child.killed) child.kill(signal)
-}
-process.once('SIGINT', () => stop('SIGINT'))
-process.once('SIGTERM', () => stop('SIGTERM'))
-child.once('exit', code => process.exitCode = code ?? 1)
-child.once('error', error => {
-  console.error(`${app} failed to start: ${error.message}`)
-  process.exitCode = 1
-})
+superviseChild(child, { app })
 
 function startGateway(profile) {
   return spawn(process.execPath, [resolve(root, 'deploy/test-env/local-enterprise/gateway.mjs'), '--profile', values.profile], {
@@ -55,7 +47,7 @@ function startGateway(profile) {
 
 function startCodocsEditor(profile) {
   const listener = record(profile.listeners).codocsEditor
-  const privateVars = profile.features?.companySummaryCodocsDelivery === true ? localCodocsEditorEnvFile(profile) : null
+  const privateVars = (profile.features?.companySummaryCodocsDelivery === true || profile.features?.codocsLegacyAimsServiceEnabled === false) ? localCodocsEditorEnvFile(profile) : null
   let child
   try {
     child = spawn('wrangler', ['dev', '--config', resolve(root, 'deploy/test-env/.cloudflare-workers/codocs/wrangler.json'),
@@ -84,7 +76,7 @@ function startCollab(profile) {
   const listener = profile.listeners.collab
   const inherited = Object.fromEntries(['HOME', 'PATH', 'TMPDIR', 'LANG', 'LC_ALL']
     .filter(key => process.env[key]).map(key => [key, process.env[key]]))
-  return spawn('pnpm', ['--dir', 'collab', 'exec', 'tsx', 'src/server.ts'], {
+  return spawn('pnpm', ['--config.verify-deps-before-run=false', '--dir', 'collab', 'exec', 'tsx', 'src/server.ts'], {
     cwd: root, stdio: 'inherit', env: {
       ...inherited,
       COLLAB_SERVICE_CLIENT_SECRET: clientSecret,
@@ -105,7 +97,7 @@ function startWorkflow(profile) {
   if (profile.features?.workflowLocal !== true || profile.runtime.transportMode !== 'loopback') throw Error('Local Workflow requires the approved switch and loopback Runtime')
   const listener = profile.listeners.workflow
   const clientSecret = readLocalWorkflowClientSecret(values.profile)
-  return spawn('pnpm', ['--dir', 'workflow', 'exec', 'nuxt', 'dev', '--dotenv', '/dev/null', '--host', listener.host, '--port', String(listener.port)], {
+  return spawn('pnpm', ['--config.verify-deps-before-run=false', '--dir', 'workflow', 'exec', 'nuxt', 'dev', '--dotenv', '/dev/null', '--host', listener.host, '--port', String(listener.port)], {
     cwd: root, stdio: 'inherit', env: {
       ...processEnvironment(profile), HZY_APP_CODE: 'workflow', NUXT_APP_BASE_URL: '/workflow/',
       HZY_DATA_ACCESS_MODE: 'tenant-runtime', HZY_WORKFLOW_DATA_ACCESS_MODE: 'tenant-runtime',
@@ -132,10 +124,11 @@ function startWorkflow(profile) {
 }
 
 function startAims(profile) {
+  if (profile.features?.aimsRetired === true) throw Error('Aims physical process is retired')
   if (profile.features?.workflowLocal !== true || profile.runtime.transportMode !== 'loopback') throw Error('Local Aims receiver requires loopback Workflow and Runtime')
   const listener = profile.listeners.aims
   const clientSecret = readLocalAimsClientSecret(root)
-  return spawn('pnpm', ['--dir', 'aims', 'exec', 'nuxt', 'dev', '--dotenv', '/dev/null', '--host', listener.host, '--port', String(listener.port)], {
+  return spawn('pnpm', ['--config.verify-deps-before-run=false', '--dir', 'aims', 'exec', 'nuxt', 'dev', '--dotenv', '/dev/null', '--host', listener.host, '--port', String(listener.port)], {
     cwd: root, stdio: 'inherit', env: {
       ...processEnvironment(profile), HZY_APP_CODE: 'aims', NUXT_APP_BASE_URL: '/aims/',
       HZY_DATA_ACCESS_MODE: 'tenant-runtime', HZY_AIMS_DATA_ACCESS_MODE: 'tenant-runtime',
@@ -176,8 +169,11 @@ function startEnterprise(profile, mode) {
     // Without the loopback Workflow the bridge stays closed (503) and never
     // falls back to shared discovery, as before.
     ...(profile.features?.workflowLocal === true
-      ? { HZY_ENTERPRISE_HOST_WORKFLOW_ENABLED: 'true', HZY_ENTERPRISE_WORKFLOW_ORIGIN: `http://127.0.0.1:${profile.listeners.workflow.port}` }
+      ? { HZY_ENTERPRISE_HOST_WORKFLOW_ENABLED: 'true', HZY_ENTERPRISE_WORKFLOW_ORIGIN: `http://127.0.0.1:${profile.listeners.workflow.port}`,
+          HZY_WORKFLOW_SERVICE_BASE_URL: `http://127.0.0.1:${profile.listeners.workflow.port}/workflow` }
       : { HZY_ENTERPRISE_HOST_WORKFLOW_ENABLED: 'false' }),
+    ...(profile.features?.workflowLocal === true && profile.features?.companySummaryCodocsDelivery === true
+      ? { HZY_CODOCS_SERVICE_BASE_URL: `http://127.0.0.1:${profile.listeners.codocsEditor.port}/codocs` } : {}),
     HZY0_NOTIFICATIONS_IN_APP_ONLY: profile.features?.notificationsInAppOnly === true ? 'true' : 'false',
     ...(trust ? { HZY_ENTERPRISE_VERIFIED_POLICY_ENABLED: 'true', HZY_ENTERPRISE_POLICY_ISSUER: 'https://hzy.wiztek.cn',
       HZY_ENTERPRISE_POLICY_KEY_ID: trust.signingKid, HZY_ENTERPRISE_POLICY_PUBLIC_KEY: trust.signingPubkey,
@@ -209,8 +205,8 @@ function startEnterprise(profile, mode) {
     NUXT_PUBLIC_RUM_ENABLED: 'false',
   }
   if (mode === 'dev') {
-    console.error('[hzy0-enterprise] Composition/manifest/page-structure changes trigger a hard Nuxt reload. Gateway transport/topology/egress/facade changes require an explicit hzy0-gateway restart; profile/env changes require scoped process restart. See local-enterprise/README.md.')
-    return spawn('pnpm', ['--dir', 'enterprise', 'exec', 'nuxt', 'dev', '--dotenv', '/dev/null', '--host', enterprise.host, '--port', String(enterprise.port)], {
+    console.error('[hzy0-enterprise] Immutable candidate: HMR/file reload disabled; refresh the browser manually. Gateway transport/topology/egress/facade changes require an explicit hzy0-gateway restart; profile/env changes require scoped process restart. See local-enterprise/README.md.')
+    return spawn('pnpm', ['--config.verify-deps-before-run=false', '--dir', 'enterprise', 'exec', 'nuxt', 'dev', '--dotenv', '/dev/null', '--host', enterprise.host, '--port', String(enterprise.port)], {
       cwd: root, env, stdio: 'inherit'
     })
   }
@@ -230,7 +226,7 @@ function startConsole(profile) {
   // R1 steady service key: optional, beside the private profile, owner-only.
   const serviceKey = resolve(dirname(values.profile), 'console-service-key.pem')
   if (existsSync(serviceKey) && (statSync(serviceKey).mode & 0o077) !== 0) throw Error('Console service key must be owner-only (0600)')
-  return spawn('pnpm', ['--dir', 'console', 'exec', 'nuxt', 'dev', '--dotenv', '/dev/null', '--host', '127.0.0.1', '--port', '23100'], {
+  return spawn('pnpm', ['--config.verify-deps-before-run=false', '--dir', 'console', 'exec', 'nuxt', 'dev', '--dotenv', '/dev/null', '--host', '127.0.0.1', '--port', '23100'], {
     cwd: root, stdio: 'inherit', env: { ...processEnvironment(profile),
       ...(verified ? { HZY0_POLICY_EGRESS_URL: 'http://127.0.0.1:23121/__hzy0/platform-policy',
         HZY_PLATFORM_POLICY_BUNDLE_FETCH_TIMEOUT_MS: '65000' } : {}),
@@ -256,7 +252,10 @@ function startConsole(profile) {
       HZY_PLATFORM_BUNDLE_MAX_AGE_MS: '93600000', HZY_PLATFORM_RUNTIME_ENABLED: 'true',
       HZY_PLATFORM_HEARTBEAT_ENABLED: 'false', HZY_PLATFORM_BUNDLE_REFRESH_ON_BOOT: 'false',
       HZY_PLATFORM_AUTH_CLIENT_MATERIALIZE: 'false', HZY_CONSOLE_BACKGROUND_JOBS_ENABLED: 'false',
-      CONSOLE_COLLAB_MODE: 'disabled', HZY_CONSOLE_PLATFORM_LIFECYCLE_SYNC_ENABLED: 'false',
+      HZY_CONSOLE_FEEDBACK_DELIVERY_ENABLED: profile.features?.feedbackDeliveryEnabled === true ? 'true' : 'false',
+      // The profile owns a dedicated loopback Collab process; Console must not
+      // start a second embedded instance or report the enabled runtime disabled.
+      CONSOLE_COLLAB_MODE: profile.features?.codocsCollaborationV2 === true ? 'external' : 'disabled', HZY_CONSOLE_PLATFORM_LIFECYCLE_SYNC_ENABLED: 'false',
       NUXT_PUBLIC_RUM_ENABLED: 'false', NUXT_VITE_ALLOWED_HOSTS: 'hzy0.isme.dev'
     }
   })

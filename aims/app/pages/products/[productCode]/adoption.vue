@@ -4,7 +4,7 @@ import type { ProductAdoptionInstance, ProductAdoptionPage } from '~/types/produ
 import { productAdoptionRoles, productAdoptionStates } from '~/utils/productReadLabels'
 import { useAimsModule } from '../../../../layer/useAimsModule'
 
-definePageMeta({ layoutHeader: true, layoutHeaderTitle: '产品采用', layoutHeaderProjectSwitcher: false })
+definePageMeta({ hostContentWidth: 'full', layoutHeader: true, layoutHeaderTitle: '产品采用', layoutHeaderProjectSwitcher: false })
 const route = useRoute()
 const { moduleUrl, cacheKey } = useAimsModule()
 const code = computed(() => String(route.params.productCode || ''))

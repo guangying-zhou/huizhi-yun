@@ -10,7 +10,10 @@ test('discovery keeps module authorization separate and a parent needs only one 
   const loaded = []
   const ids = await resolveNavigationAccess(items, {
     available: true,
-    load: async module => { loaded.push(module); return { allowed: module === 'aims' } },
+    load: async (module) => {
+      loaded.push(module)
+      return { allowed: module === 'aims' }
+    },
     allows: snapshot => snapshot.allowed
   })
   assert.deepEqual(loaded.sort(), ['aims', 'assets'])
@@ -20,13 +23,17 @@ test('discovery keeps module authorization separate and a parent needs only one 
 })
 
 test('unavailable release/runtime and missing permission references fail closed', async () => {
-  const options = { available: false, load: () => { throw Error('must not load') }, allows: () => true }
+  const options = { available: false, load: () => {
+    throw Error('must not load')
+  }, allows: () => true }
   assert.deepEqual(await resolveNavigationAccess(items, options), [])
   assert.deepEqual(await resolveNavigationAccess([{ id: 'bad', module: 'aims' }], { ...options, available: true, load: async () => ({}) }), [])
 })
 
 test('authorization outage is not misreported as no permission', async () => {
-  await assert.rejects(resolveNavigationAccess(items, { available: true, load: async () => { throw Error('503') }, allows: () => true }), /503/)
+  await assert.rejects(resolveNavigationAccess(items, { available: true, load: async () => {
+    throw Error('503')
+  }, allows: () => true }), /503/)
 })
 
 test('object actions are filtered and empty object groups disappear', () => {
@@ -47,7 +54,9 @@ test('logout and new tenant/policy reject late responses; failed refresh removes
   let published
   const loader = createNavigationAccessLoader({
     fetchAccess: signal => new Promise((resolve, reject) => requests.push({ resolve, reject, signal })),
-    publish: (ids, status) => { published = { ids, status } }
+    publish: (ids, status) => {
+      published = { ids, status }
+    }
   })
   const old = loader.refresh('tenant-a/user-1/policy-1')
   const current = loader.refresh('tenant-b/user-2/policy-2')
@@ -72,17 +81,24 @@ test('logout and new tenant/policy reject late responses; failed refresh removes
 test('same-scope refresh keeps workspace and reference; confirmed revocation clears it', async () => {
   let resolve
   let state
-  const loader = createNavigationAccessLoader({ fetchAccess: () => new Promise(done => { resolve = done }), publish: (ids, status) => { state = { ids, status } } })
+  const loader = createNavigationAccessLoader({ fetchAccess: () => new Promise((done) => {
+    resolve = done
+  }), publish: (ids, status) => {
+    state = { ids, status }
+  } })
   const first = loader.refresh('verified-a')
-  resolve({ visibleIds: ['a'], maxAgeMs: 60_000 }); await first
+  resolve({ visibleIds: ['a'], maxAgeMs: 60_000 })
+  await first
   const ids = state.ids
   const second = loader.refresh('verified-a')
   assert.equal(state.ids, ids)
   assert.equal(filterWorkspaceAccess([{ groups: [{ items }] }], state.ids).length, 1)
-  resolve({ visibleIds: ['a'], maxAgeMs: 60_000 }); await second
+  resolve({ visibleIds: ['a'], maxAgeMs: 60_000 })
+  await second
   assert.equal(state.ids, ids)
   const revoked = loader.refresh('verified-a')
-  resolve({ visibleIds: [], maxAgeMs: 60_000 }); await revoked
+  resolve({ visibleIds: [], maxAgeMs: 60_000 })
+  await revoked
   assert.deepEqual(state.ids, [])
   loader.clear()
 })
@@ -91,36 +107,58 @@ test('old lease expiry hides menu without cancelling a newer validated refresh',
   let time = 0, expire, state
   const requests = []
   const loader = createNavigationAccessLoader({
-    now: () => time, schedule: (fn) => { expire = fn; return 1 }, cancel: () => {},
+    now: () => time, schedule: (fn) => {
+      expire = fn
+      return 1
+    }, cancel: () => {},
     fetchAccess: signal => new Promise((resolve, reject) => requests.push({ resolve, reject, signal })),
-    publish: (ids, status) => { state = { ids, status } }
+    publish: (ids, status) => {
+      state = { ids, status }
+    }
   })
-  const first = loader.refresh('a'); requests[0].resolve({ visibleIds: ['a'], maxAgeMs: 100 }); await first
+  const first = loader.refresh('a')
+  requests[0].resolve({ visibleIds: ['a'], maxAgeMs: 100 })
+  await first
   time = 50
   const pending = loader.refresh('a')
   assert.equal(state.status, 'refreshing')
-  time = 100; expire()
+  time = 100
+  expire()
   assert.deepEqual(state, { ids: [], status: 'expired' })
   assert.equal(requests[1].signal.aborted, false)
   time = 120
-  requests[1].resolve({ visibleIds: ['a'], maxAgeMs: 100 }); await pending
+  requests[1].resolve({ visibleIds: ['a'], maxAgeMs: 100 })
+  await pending
   assert.deepEqual(state, { ids: ['a'], status: 'ready' })
-  time = 150; expire()
+  time = 150
+  expire()
   assert.deepEqual(state, { ids: [], status: 'expired' })
-  const retry = loader.refresh('a'); requests[2].reject(Error('503')); await retry
+  const retry = loader.refresh('a')
+  requests[2].reject(Error('503'))
+  await retry
   assert.deepEqual(state, { ids: [], status: 'error' })
-  const slow = loader.refresh('a'); time = 300
-  requests[3].resolve({ visibleIds: ['a'], maxAgeMs: 100 }); await slow
+  const slow = loader.refresh('a')
+  time = 300
+  requests[3].resolve({ visibleIds: ['a'], maxAgeMs: 100 })
+  await slow
   assert.deepEqual(state, { ids: [], status: 'error' })
   loader.clear()
 })
 
 test('scope changes clear immediately; invalid leases fail closed', async () => {
   let resolve, state
-  const loader = createNavigationAccessLoader({ fetchAccess: () => new Promise(done => { resolve = done }), publish: (ids, status) => { state = { ids, status } } })
-  let pending = loader.refresh('a'); resolve({ visibleIds: ['a'], maxAgeMs: 60_000 }); await pending
-  pending = loader.refresh('b'); assert.deepEqual(state.ids, [])
-  resolve({ visibleIds: ['b'] }); await pending
+  const loader = createNavigationAccessLoader({ fetchAccess: () => new Promise((done) => {
+    resolve = done
+  }), publish: (ids, status) => {
+    state = { ids, status }
+  } })
+  let pending = loader.refresh('a')
+  resolve({ visibleIds: ['a'], maxAgeMs: 60_000 })
+  await pending
+  pending = loader.refresh('b')
+  assert.deepEqual(state.ids, [])
+  resolve({ visibleIds: ['b'] })
+  await pending
   assert.equal(state.status, 'error')
   loader.clear()
 })
@@ -131,7 +169,9 @@ test('same-scope timer, focus and route refreshes share a slow request', async (
   const loader = createNavigationAccessLoader({
     now: () => time,
     fetchAccess: signal => new Promise(resolve => requests.push({ signal, resolve })),
-    publish: (ids, status) => { state = { ids, status } },
+    publish: (ids, status) => {
+      state = { ids, status }
+    },
     schedule: () => 1,
     cancel: () => {}
   })
@@ -154,7 +194,9 @@ test('context switch aborts the shared request and rejects its late result', asy
   let state
   const loader = createNavigationAccessLoader({
     fetchAccess: signal => new Promise(resolve => requests.push({ signal, resolve })),
-    publish: (ids, status) => { state = { ids, status } },
+    publish: (ids, status) => {
+      state = { ids, status }
+    },
     schedule: () => 1, cancel: () => {}
   })
   const first = loader.refresh('tenant-a/user-a')
@@ -175,10 +217,13 @@ test('synchronous fetch failure clears the in-flight slot for a later retry', as
   let calls = 0, state
   const loader = createNavigationAccessLoader({
     fetchAccess: () => {
-      if (++calls === 1) throw Error('offline')
+      if (++calls === 1)
+        throw Error('offline')
       return Promise.resolve({ visibleIds: ['recovered'], maxAgeMs: 60_000 })
     },
-    publish: (ids, status) => { state = { ids, status } },
+    publish: (ids, status) => {
+      state = { ids, status }
+    },
     schedule: () => 1, cancel: () => {}
   })
   await loader.refresh('tenant/user')

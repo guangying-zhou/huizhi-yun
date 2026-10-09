@@ -85,8 +85,8 @@ export function scopedGrantsNeedAltocDepartmentTree(grants: FoundationScopedAuth
     ...(grant.scopes || [])
   ].some(scope => (
     stringValue(scope.dimension) === 'department'
-      && stringValue(scope.predicate) === 'tree'
-      && Boolean(stringValue(scope.value))
+    && stringValue(scope.predicate) === 'tree'
+    && Boolean(stringValue(scope.value))
   )))
 }
 

@@ -190,3 +190,15 @@ func (s *Server) verifiedPolicyStore(db *sql.DB, tenant, deployment string) poli
 	age, _ := s.verifiedPolicyMaxAge()
 	return policyenvelope.Store{DB: db, KID: s.cfg.Control.PlatformSigningKeyID, PublicKey: s.cfg.Control.PlatformSigningPublicKey, Binding: policyenvelope.Context{Issuer: s.cfg.Control.PlatformURL, Tenant: tenant, Environment: s.cfg.Apps.Console.PolicyEnvelope.Environment, Deployment: deployment, MaxAgeMS: age, Now: time.Now().UnixMilli()}}
 }
+
+// Exchange uses only local trust and the exact registered Console binding.
+// No caller-supplied environment or legacy policy source is accepted.
+func (s *Server) consoleExchangePolicyStore(db *sql.DB, tenant, deployment string) (policyenvelope.Store, error) {
+	if err := s.verifiedPolicyConfigured(); err != nil {
+		return policyenvelope.Store{}, err
+	}
+	if tenant != s.cfg.Tenant || deployment != s.cfg.DeploymentForApp("console") {
+		return policyenvelope.Store{}, httperror.New(503, "console_exchange_binding_mismatch", "Console policy binding is invalid")
+	}
+	return s.verifiedPolicyStore(db, tenant, deployment), nil
+}

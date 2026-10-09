@@ -25,6 +25,9 @@ func (a *Adapter) enqueueMilestoneReceivableBillableOperationTx(
 	contractCode sql.NullString,
 	body map[string]any,
 ) (map[string]any, error) {
+	if a.retireAPFCommands {
+		return map[string]any{"linked": false, "retired": true}, nil
+	}
 	// The target is derived only from the milestone row locked by the source
 	// transaction. Browser fields must never choose an Altoc receivable target.
 	if !paymentTermID.Valid {

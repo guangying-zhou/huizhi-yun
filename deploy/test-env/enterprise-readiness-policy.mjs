@@ -7,6 +7,7 @@
 import { readFileSync, writeFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import ts from 'typescript'
 import { enterprisePilotConfig } from './enterprise-pilot-config.mjs'
 
 export const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..')
@@ -14,14 +15,12 @@ export const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..')
 const paths = Object.freeze({
   enterpriseManifest: 'enterprise/app.manifest.json',
   foundationOperations: 'foundation/server/utils/enterpriseRuntimeClient.ts',
-  aimsManifest: 'aims/app.manifest.json',
   codocsManifest: 'codocs/app.manifest.json',
   consoleManifest: 'console/app.manifest.json',
   directoryTransport: 'foundation/server/utils/directoryApi.ts',
   directoryRoute: 'console/server/api/v1/console/service/directory/users/index.get.ts',
   aimsDocumentTransport: 'enterprise/server/utils/enterpriseAimsProjectDocuments.ts',
-  // 项目文档文件（预览/下载）的能力事实源。download 是导出性质的敏感动作，
-  // 与 read 分开声明，不能由 read 蕴含，因此这里必须逐条读出而不是取单一常量。
+  // 项目文档的 typed owning 入口；人员 read/export 与 U permit 由业务核心分别校验。
   aimsDocumentFilesTransport: 'enterprise/server/utils/enterpriseAimsProjectDocumentFiles.ts',
   // 项目文档候选来源（部门/项目集 Codocs 文档、仓库 Markdown）的能力事实源。
   aimsDocumentSourcesTransport: 'enterprise/server/utils/enterpriseAimsProjectDocumentSources.ts',
@@ -65,25 +64,40 @@ function runtimeOperations(source) {
   if (!entries.length) fail('READINESS_POLICY_OPERATIONS_MISSING')
   const capabilities = new Set()
   for (const [, path] of entries) {
-    const domain = /^\/v1\/enterprise\/(aims|assets|codocs|altoc|console)\/[^/?#]+$/.exec(path)?.[1]
+    const domain = /^\/v1\/enterprise\/(aims|assets|codocs|altoc|console|finance|people)\/[^/?#]+$/.exec(path)?.[1]
     if (!domain) fail('READINESS_POLICY_OPERATION_INVALID')
     capabilities.add(`${domain}:enterprise-host:execute`)
   }
   return [...capabilities].sort()
 }
-// 单个传输文件按动作声明多条 capability 时，从 `capabilities` 常量块逐条读出。
-// 只接受该块内的字面量，避免把文件里其他字符串误当成授权。
-function externalPolicyCapabilities(source, manifest, audience) {
-  const block = source.match(/const capabilities\s*=\s*Object\.freeze\(\{([\s\S]*?)\}\)/)?.[1]
-  if (!block) fail('READINESS_POLICY_EXTERNAL_INVALID')
-  // 只取值位置的字面量：键可能被引号包住（如 'project-document-sources'），
-  // 那是资源名不是能力，按全部引号字符串取会判成非法 capability。
-  const values = [...block.matchAll(/:\s*'([^']+)'/g)].map(match => exactCapability(match[1]))
-  if (!values.length) fail('READINESS_POLICY_EXTERNAL_INVALID')
-  for (const capability of values) {
-    if (!appHasCapability(manifest, capability) || capability.split(':')[0] !== audience) fail('READINESS_POLICY_EXTERNAL_INVALID')
+// P1 的项目文档在 owning typed 核心内走固定 U 操作，不再签发 Aims HTTP scope。
+const nativeBridges = {
+  aimsDocumentTransport: ['readHostProjectDocuments'],
+  aimsDocumentFilesTransport: ['readHostProjectDocumentFile'],
+  aimsDocumentSourcesTransport: ['readHostProjectDocumentSource'],
+  aimsDocumentWritesTransport: ['writeHostProjectDocument'],
+  aimsDocumentAccessTransport: ['readProjectDocumentAccessPolicy', 'checkProjectDocumentAccess', 'listProjectDocumentAccessAudit', 'updateProjectDocumentAccessPolicy']
+}
+function checkNativeBridge(source, expected) {
+  const tree = ts.createSourceFile('bridge.ts', source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS)
+  const bindings = new Map()
+  const calls = new Set()
+  function visit(node) {
+    if (ts.isImportDeclaration(node) && ts.isStringLiteral(node.moduleSpecifier)) {
+      if (/aims\/server\/utils\/(serviceIdentity|serviceToken|.*Transport)/i.test(node.moduleSpecifier.text)) fail('READINESS_POLICY_NATIVE_BRIDGE_INVALID')
+      if (node.moduleSpecifier.text === '../../../aims/layer/server/index') {
+        const named = node.importClause?.namedBindings
+        if (named && ts.isNamedImports(named)) for (const item of named.elements) {
+          if (!item.isTypeOnly) bindings.set(item.name.text, item.propertyName?.text || item.name.text)
+        }
+      }
+    }
+    if (ts.isCallExpression(node) && ts.isIdentifier(node.expression)) calls.add(node.expression.text)
+    if (ts.isStringLiteral(node) && /^(aims[.:](read|write)|aims:project-document)/.test(node.text)) fail('READINESS_POLICY_NATIVE_BRIDGE_INVALID')
+    ts.forEachChild(node, visit)
   }
-  return values
+  visit(tree)
+  if (tree.parseDiagnostics.length || expected.some(name => ![...bindings].some(([local, exported]) => exported === name && calls.has(local)))) fail('READINESS_POLICY_NATIVE_BRIDGE_INVALID')
 }
 
 function externalPolicy(source, audiencePattern, capabilityPatternSource, manifest) {
@@ -99,17 +113,8 @@ export function generateReadinessPolicies(repoRoot = root) {
   const capabilities = runtimeOperations(read(repoRoot, paths.foundationOperations))
   // Host service scopes derive from the fixed operation path domain. Personnel
   // manifest permissions remain separate and do not authorize service tokens.
-  const aimsManifest = json(repoRoot, paths.aimsManifest)
+  for (const [key, expected] of Object.entries(nativeBridges)) checkNativeBridge(read(repoRoot, paths[key]), expected)
   const codocsManifest = json(repoRoot, paths.codocsManifest)
-  const aimsReadPolicy = externalPolicy(read(repoRoot, paths.aimsDocumentTransport), null, /const capability\s*=\s*'([^']+)'/, aimsManifest)
-  const aimsFileCapabilities = externalPolicyCapabilities(read(repoRoot, paths.aimsDocumentFilesTransport), aimsManifest, aimsReadPolicy.audience)
-  const aimsSourceCapabilities = externalPolicyCapabilities(read(repoRoot, paths.aimsDocumentSourcesTransport), aimsManifest, aimsReadPolicy.audience)
-  const aimsWriteCapabilities = externalPolicyCapabilities(read(repoRoot, paths.aimsDocumentWritesTransport), aimsManifest, aimsReadPolicy.audience)
-  const aimsAccessCapabilities = externalPolicyCapabilities(read(repoRoot, paths.aimsDocumentAccessTransport), aimsManifest, aimsReadPolicy.audience)
-  const aimsPolicy = {
-    audience: aimsReadPolicy.audience,
-    capabilities: [...new Set([...aimsReadPolicy.capabilities, ...aimsFileCapabilities, ...aimsSourceCapabilities, ...aimsWriteCapabilities, ...aimsAccessCapabilities])].sort()
-  }
   const codocsAssetsPolicy = externalPolicy(read(repoRoot, paths.codocsDocumentTransport), /audience:\s*'([^']+)'/, /requiredCapability:\s*'([^']+)'/, codocsManifest)
   const codocsProjectPolicy = externalPolicy(read(repoRoot, paths.enterpriseCodocsTransport), /const audience\s*=\s*'([^']+)'/, /const requiredCapability\s*=\s*'([^']+)'/, codocsManifest)
   if (codocsAssetsPolicy.audience !== codocsProjectPolicy.audience) fail('READINESS_POLICY_EXTERNAL_INVALID')
@@ -127,7 +132,7 @@ export function generateReadinessPolicies(repoRoot = root) {
     'console/server/api/v1/console/service/business-domains.get.ts'].map(path => read(repoRoot, path))
   if (consoleCapabilities.some(cap => !directoryRoutes.some(source => source.includes(`'${cap}'`)))) fail('READINESS_POLICY_DIRECTORY_CONTRACT_MISMATCH')
   const consolePolicy = { audience: 'console', capabilities: consoleCapabilities }
-  const externalServicePolicies = [aimsPolicy, codocsPolicy, consolePolicy].sort((left, right) => left.audience.localeCompare(right.audience))
+  const externalServicePolicies = [codocsPolicy, consolePolicy].sort((left, right) => left.audience.localeCompare(right.audience))
   const runtimeAudience = enterprisePilotConfig().registryPatch?.apps?.enterprise?.dataRuntime?.audience
   if (!['data-runtime', 'tenant-runtime'].includes(runtimeAudience)) fail('READINESS_POLICY_RUNTIME_AUDIENCE_INVALID')
   const result = {

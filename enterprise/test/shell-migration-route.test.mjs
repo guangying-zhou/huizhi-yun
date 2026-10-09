@@ -41,11 +41,17 @@ test('real migration handler validates Gateway credentials and Console binding b
       { 'x-hzy-gateway-token': 'forged' }, { 'x-hzy-gateway-token': '' }, { 'x-hzy-gateway': '' },
       { 'x-hzy-app-code': 'aims' }, { 'x-hzy-deployment': 'wrong-console' },
       { 'x-hzy-enterprise-shell-pages': '' }, { 'x-hzy-enterprise-shell-pages': 'null' }
-    ]) assert.deepEqual(await request('/aims/projects', override), { migrated: false })
+    ])
+      assert.deepEqual(await request('/aims/projects', override), { migrated: false })
   } finally {
-    if (server) { server.closeAllConnections(); await new Promise(resolve => server.close(resolve)) }
+    if (server) {
+      server.closeAllConnections()
+      await new Promise(resolve => server.close(resolve))
+    }
     hooks.deregister()
-    if (prior === undefined) delete globalThis.useRuntimeConfig
-    else globalThis.useRuntimeConfig = prior
+    if (prior === undefined)
+      delete globalThis.useRuntimeConfig
+    else
+      globalThis.useRuntimeConfig = prior
   }
 })

@@ -49,7 +49,18 @@ export class SubjectEligibilityError extends Error {
   }
 }
 
-const registry = new Map<string, Pick<SubjectEligibilityRequest, 'resourceCode' | 'action'>>([
+const registry = new Map<string, Pick<SubjectEligibilityRequest, 'resourceCode' | 'action'> & { targetAppCode?: string }>([
+  ['enterprise|apf_altoc_dead_letter', { targetAppCode: 'altoc', resourceCode: 'integration_operations', action: 'view' }],
+  ['enterprise|apf_finance_dead_letter', { targetAppCode: 'finance', resourceCode: 'integration_operations', action: 'view' }],
+  ['enterprise|apf_people_dead_letter', { targetAppCode: 'people', resourceCode: 'integration_operations', action: 'view' }],
+  ['enterprise|apf_sales_lead_due', { targetAppCode: 'altoc', resourceCode: 'lead', action: 'view' }],
+  ['enterprise|apf_sales_due', { targetAppCode: 'altoc', resourceCode: 'opportunity', action: 'view' }],
+  ['enterprise|apf_billing_due', { targetAppCode: 'altoc', resourceCode: 'receivable', action: 'view' }],
+  ['enterprise|apf_issuance_due', { targetAppCode: 'finance', resourceCode: 'invoices', action: 'view' }],
+  ['enterprise|apf_reconciliation_due', { targetAppCode: 'finance', resourceCode: 'receipts', action: 'view' }],
+  ['enterprise|apf_handover_due', { targetAppCode: 'people', resourceCode: 'offboarding_tasks', action: 'view' }],
+  ['enterprise|apf_asset_recovery_due', { targetAppCode: 'people', resourceCode: 'offboarding_tasks', action: 'view' }],
+
   ['aims|response_due', { resourceCode: 'work_items', action: 'view' }],
   ['aims|resolution_due', { resourceCode: 'work_items', action: 'view' }],
   ['aims|work_item_due', { resourceCode: 'work_items', action: 'view' }],
@@ -146,6 +157,7 @@ export function resolveBoundSubjectEligibilityRequest(
   ) {
     throw new SubjectEligibilityError(403, 'subject_eligibility_runtime_binding_mismatch', 'tenant or deployment binding mismatch')
   }
+  if (request.purpose.startsWith('apf_') && (actor.appCode !== 'enterprise' || actor.actorId !== 'enterprise.runtime')) throw new SubjectEligibilityError(403, 'subject_eligibility_source_invalid', 'Source is invalid')
   const target = registry.get(`${actor.appCode}|${request.purpose}`)
   if (!target) {
     throw new SubjectEligibilityError(403, 'subject_eligibility_tuple_unregistered', 'eligibility purpose is not registered for caller')
@@ -193,6 +205,10 @@ export function notificationDetailEligibilityTarget(
 ): NotificationDetailEligibilityTarget | null {
   const sourceAppCode = text(sourceAppCodeInput).toLowerCase()
   const descriptorResource = text(descriptorResourceInput)
+  if (sourceAppCode === 'enterprise') {
+    const target = registry.get(`enterprise|${descriptorResource}`)
+    return target?.targetAppCode ? { targetAppCode: target.targetAppCode, resourceCode: target.resourceCode, action: 'view' } : null
+  }
   const resourceCode = notificationDetailRegistry.get(`${sourceAppCode}|${descriptorResource}`)
   if (!resourceCode) return null
   return { targetAppCode: sourceAppCode, resourceCode, action: 'view' }

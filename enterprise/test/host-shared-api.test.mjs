@@ -6,7 +6,7 @@ import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { dirname, relative, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { createApp, createError, createRouter, defineEventHandler, toNodeListener } from 'h3'
-import { enterpriseSharedApiBase, resolveEnterprisePilotPath } from '../../deploy/test-env/enterprise-topology.mjs'
+import { enterpriseSharedApiBase, resolveEnterprisePilotPath, resolveEnterprisePilotPath as apfRoute } from '../../deploy/test-env/enterprise-topology.mjs'
 import { isBusinessApiReady } from '../composition/business-api-readiness.mjs'
 import { ENTERPRISE_SHARED_API_BASE, resolveSharedApiPath } from '../../foundation/shared/utils/sharedApiPath.ts'
 
@@ -168,4 +168,12 @@ test('the Workflow boundary applies the same seven exact operations under the sh
   const boundary = readFileSync(resolve(root, 'enterprise/server/middleware/02-workflow-boundary.ts'), 'utf8')
   assert.match(boundary, /const hostShared = '\/enterprise\/api\/foundation\/workflow-proxy\/'/)
   assert.match(boundary, /requested\.startsWith\(hostShared\) \? `\/api\/workflow-proxy\/\$\{requested\.slice\(hostShared\.length\)\}` : requested/)
+})
+
+test('Finance and Altoc BFF readiness is reused by the Gateway without a second API list', async () => {
+  const { businessApiRoutes } = await import('../composition/business-api-routes.generated.mjs')
+  for (const [method, pattern] of businessApiRoutes.filter(([, path]) => /^\/(finance|altoc)\/api\/v1\//.test(path))) {
+    const path = pattern.replace(/:[A-Za-z]+/g, '7')
+    assert.deepEqual(apfRoute(path, '', method), { path, kind: 'api' })
+  }
 })

@@ -91,6 +91,9 @@ func (a *Adapter) ConsoleIssueOnboardingActivationCredential(
 	onboardingCode string,
 	sourceApp string,
 ) (map[string]any, error) {
+	if _, e := onboardingSource([]string{sourceApp}); e != nil {
+		return nil, e
+	}
 	uid = strings.TrimSpace(uid)
 	operationID = strings.TrimSpace(operationID)
 	onboardingCode = strings.TrimSpace(onboardingCode)
@@ -107,8 +110,8 @@ func (a *Adapter) ConsoleIssueOnboardingActivationCredential(
 	err = tx.QueryRowContext(ctx, `SELECT status FROM integration_operation
 		WHERE operation_id=? AND operation_code='console.directory-connector.create-user.v1'
 		  AND target_app='directory-connector' AND source_biz_code=?
-		  AND JSON_UNQUOTE(JSON_EXTRACT(command_json,'$.sourceApp'))='people'
-		  AND JSON_UNQUOTE(JSON_EXTRACT(command_json,'$.sourceBizCode'))=? FOR UPDATE`, operationID, uid, onboardingCode).
+		  AND JSON_UNQUOTE(JSON_EXTRACT(command_json,'$.sourceApp'))=?
+		  AND JSON_UNQUOTE(JSON_EXTRACT(command_json,'$.sourceBizCode'))=? FOR UPDATE`, operationID, uid, sourceApp, onboardingCode).
 		Scan(&operationStatus)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, httperror.New(http.StatusNotFound, "directory_connector_operation_not_found", "LDAP onboarding operation was not found")

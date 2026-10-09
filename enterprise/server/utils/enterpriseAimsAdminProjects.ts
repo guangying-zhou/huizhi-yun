@@ -7,11 +7,11 @@ import { enterpriseAimsPersonnel } from './enterpriseAimsPersonnel'
 import { enterpriseProjectUpdateFields } from './enterpriseAimsProjectUpdate'
 
 const idPattern = /^[1-9]\d*$/
-const queryFields = new Set(['page', 'pageSize', 'search', 'category', 'lifecycleStatus', 'portfolioId'])
+const queryFields = new Set(['page', 'pageSize', 'search', 'category', 'lifecycleStatus', 'portfolioId', 'projectId', 'sort', 'tree'])
 const categories = new Set(['product_dev', 'custom_dev', 'delivery', 'maintenance', 'sales', 'presales', 'improvement', 'compliance', 'routine'])
 const states = new Set(['draft', 'approval_pending', 'active', 'paused', 'completed', 'archived'])
 
-async function requireAdmin(event: H3Event) {
+export async function requireAimsHostAdmin(event: H3Event) {
   setHeader(event, 'Cache-Control', 'private, no-store')
   const user = await requireEnterpriseUser(event)
   const snapshot = await loadAuthorizationSnapshotFromConsoleRuntime(user.uid, 'aims', event)
@@ -39,10 +39,12 @@ export async function enterpriseAimsAdminProjectList(event: H3Event) {
     if (key === 'search' && [...raw].length > 100) throw createError({ statusCode: 400, message: '搜索词过长' })
     if (key === 'category' && !categories.has(raw)) throw createError({ statusCode: 400, message: '项目分类无效' })
     if (key === 'lifecycleStatus' && !states.has(raw)) throw createError({ statusCode: 400, message: '项目状态无效' })
-    if (key === 'portfolioId' && !idPattern.test(raw)) throw createError({ statusCode: 400, message: '项目集标识无效' })
+    if (key === 'tree' && raw !== 'true') throw createError({ statusCode: 400, message: '树形参数无效' })
+    if (key === 'sort' && !['code', 'name', 'updated', 'start'].includes(raw)) throw createError({ statusCode: 400, message: '排序无效' })
+    if (((key === 'portfolioId' && raw !== '0') || key === 'projectId') && !idPattern.test(raw)) throw createError({ statusCode: 400, message: '项目集标识无效' })
     query[key] = raw
   }
-  const { user, authorization } = await requireAdmin(event)
+  const { user, authorization } = await requireAimsHostAdmin(event)
   await prepareEnterpriseRuntime(event, 'aims.admin-project-list')
   return await callEnterpriseRuntime(event, 'aims.admin-project-list', { tenant: user.tenant, deployment: user.deployment, query, authorization })
 }
@@ -55,7 +57,7 @@ export async function enterpriseAimsAdminProjectUpdate(event: H3Event) {
   if (!key || key.length > 191) throw createError({ statusCode: 400, message: '缺少有效操作标识' })
   const input = await readBody<Record<string, unknown>>(event)
   if (!input || Array.isArray(input) || !Object.keys(input).length || Object.keys(input).some(field => !enterpriseProjectUpdateFields.has(field))) throw createError({ statusCode: 400, message: '管理员编辑字段无效' })
-  const { user, authorization } = await requireAdmin(event)
+  const { user, authorization } = await requireAimsHostAdmin(event)
   await prepareEnterpriseRuntime(event, 'aims.admin-project-update')
   const personnel = await enterpriseAimsPersonnel(event, user, input, 'leaderUid', 'projects', projectId, 'edit')
   return await callEnterpriseRuntime(event, 'aims.admin-project-update', { tenant: user.tenant, deployment: user.deployment, projectId, input, personnel, authorization: { ...authorization, projectId } }, { idempotencyKey: key })

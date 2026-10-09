@@ -142,6 +142,7 @@ export default defineNuxtConfig({
   compatibilityDate: '2026-01-19',
 
   nitro: {
+    typescript: { tsConfig: { compilerOptions: { allowImportingTsExtensions: true } } },
     scheduledTasks: {
       '*/15 * * * *': ['notifications:finance-due', 'integration-operations:finance-altoc-summary']
     },
@@ -167,6 +168,7 @@ export default defineNuxtConfig({
       sourcemap: false
     }
   },
+  typescript: { tsConfig: { compilerOptions: { allowImportingTsExtensions: true } } },
 
   eslint: {
     config: {

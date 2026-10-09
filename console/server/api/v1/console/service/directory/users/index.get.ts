@@ -21,6 +21,8 @@ function sharingUser(user: Awaited<ReturnType<typeof batchDirectoryUsers>>[numbe
     realName: user.realName,
     displayName: user.displayName,
     avatar: user.avatar,
+    // Directory account state is required by recipient selectors; unknown stays unselectable.
+    status: user.status,
     deptCode: user.deptCode,
     deptName: user.deptName,
     positionTitle: user.positionTitle

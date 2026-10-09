@@ -24,7 +24,10 @@ test('Enterprise Codocs folder detail mutations bridge exact scoped operations',
   globalThis.defineEventHandler = handler => handler
   globalThis.__codocsFolderSession = session
   globalThis.__codocsFolderAuthorization = { resources: { documents: ['view', 'edit'] }, actionPolicies: {} }
-  globalThis.__codocsFolderPrepare = async (_event, options) => { preparations.push(options); return true }
+  globalThis.__codocsFolderPrepare = async (_event, options) => {
+    preparations.push(options)
+    return true
+  }
   globalThis.__codocsFolderHash = payload => createHash('sha256').update(JSON.stringify(payload)).digest('hex')
   globalThis.__codocsFolderTransport = async (_event, path, options) => {
     calls.push({ path, options })
@@ -34,15 +37,24 @@ test('Enterprise Codocs folder detail mutations bridge exact scoped operations',
   const hooks = registerHooks({
     resolve(specifier, context, next) {
       let source
-      if (specifier.endsWith('/consoleSessionBridge')) source = 'export const resolveConsoleAuthWithSessionBridge=async()=>globalThis.__codocsFolderSession'
-      if (specifier.endsWith('/tenantRuntimeClient')) source = 'export const prepareTenantRuntime=async(...args)=>globalThis.__codocsFolderPrepare(...args);export const maybeCallTenantRuntime=(...args)=>globalThis.__codocsFolderTransport(...args);export const hashServiceCommandPayload=async payload=>globalThis.__codocsFolderHash(payload)'
-      if (specifier.endsWith('/platformBundleAuthorization')) source = 'export const loadAuthorizationSnapshotFromConsoleRuntime=async()=>globalThis.__codocsFolderAuthorization'
-      if (specifier.endsWith('/tenantGatewayTrust')) source = 'export const resolveTrustedTenantGatewayContext=()=>undefined'
-      if (source) return { url: `data:text/javascript,${encodeURIComponent(source)}`, shortCircuit: true }
+      if (specifier.endsWith('/consoleSessionBridge'))
+        source = 'export const resolveConsoleAuthWithSessionBridge=async()=>globalThis.__codocsFolderSession'
+      if (specifier.endsWith('/tenantRuntimeClient'))
+        source = 'export const prepareTenantRuntime=async(...args)=>globalThis.__codocsFolderPrepare(...args);export const maybeCallTenantRuntime=(...args)=>globalThis.__codocsFolderTransport(...args);export const hashServiceCommandPayload=async payload=>globalThis.__codocsFolderHash(payload)'
+      if (specifier.endsWith('/platformBundleAuthorization'))
+        source = 'export const loadAuthorizationSnapshotFromConsoleRuntime=async()=>globalThis.__codocsFolderAuthorization'
+      if (specifier.endsWith('/tenantGatewayTrust'))
+        source = 'export const resolveTrustedTenantGatewayContext=()=>undefined'
+      if (source)
+        return { url: `data:text/javascript,${encodeURIComponent(source)}`, shortCircuit: true }
       let candidate
-      if (specifier.startsWith('@hzy/foundation/')) candidate = resolve(root, 'foundation', specifier.slice('@hzy/foundation/'.length))
-      else if (specifier.startsWith('.') && context.parentURL?.startsWith('file:')) candidate = resolve(dirname(fileURLToPath(context.parentURL)), specifier)
-      if (candidate && !existsSync(candidate) && existsSync(`${candidate}.ts`)) return { url: pathToFileURL(`${candidate}.ts`).href, shortCircuit: true }
+      if (specifier.startsWith('@hzy/foundation/'))
+        candidate = resolve(root, 'foundation', specifier.slice('@hzy/foundation/'.length))
+      else
+        if (specifier.startsWith('.') && context.parentURL?.startsWith('file:'))
+          candidate = resolve(dirname(fileURLToPath(context.parentURL)), specifier)
+      if (candidate && !existsSync(candidate) && existsSync(`${candidate}.ts`))
+        return { url: pathToFileURL(`${candidate}.ts`).href, shortCircuit: true }
       return next(specifier, context)
     }
   })
@@ -55,7 +67,9 @@ test('Enterprise Codocs folder detail mutations bridge exact scoped operations',
     router.get('/folders/:id', (await import('../server/routes/codocs/api/folders/[id].get.ts')).default)
     router.patch('/folders/:id', (await import('../server/routes/codocs/api/folders/[id].patch.ts')).default)
     router.delete('/folders/:id', (await import('../server/routes/codocs/api/folders/[id].delete.ts')).default)
-    app.use(defineEventHandler(event => { event.context.consoleAuth = globalThis.__codocsFolderSession }))
+    app.use(defineEventHandler((event) => {
+      event.context.consoleAuth = globalThis.__codocsFolderSession
+    }))
     app.use(router)
     server = createServer(toNodeListener(app))
     await new Promise(done => server.listen(0, '127.0.0.1', done))
@@ -157,7 +171,8 @@ test('Enterprise Codocs folder detail mutations bridge exact scoped operations',
     globalThis.__codocsFolderTransport = async () => ({ handled: false })
     assert.equal((await request('/folders/42', 'GET')).status, 503)
   } finally {
-    if (server) await new Promise(done => server.close(done))
+    if (server)
+      await new Promise(done => server.close(done))
     hooks.deregister()
     globalThis.useRuntimeConfig = oldConfig
     globalThis.defineEventHandler = oldDefineEventHandler

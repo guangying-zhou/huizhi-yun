@@ -15,25 +15,28 @@ import (
 // annotation and collaboration domains, so this file deliberately owns the
 // shared detail-read helpers rather than duplicating any ACL decision.
 func (a *Adapter) documentAccess(ctx context.Context, uuid string, query url.Values) (map[string]any, error) {
+	return a.documentAccessWithReader(ctx, a.db, uuid, query, false)
+}
+func (a *Adapter) documentAccessWithReader(ctx context.Context, db documentReadDB, uuid string, query url.Values, lock bool) (map[string]any, error) {
 	actorUID := actorFromQuery(query)
 	if actorUID == "" {
 		return nil, httperror.New(http.StatusUnauthorized, "current_user_required", "Current user is required")
 	}
 	includeDeleted := query.Get("include_deleted") == "1" || query.Get("includeDeleted") == "true"
-	doc, err := a.documentByUUID(ctx, uuid, includeDeleted)
+	doc, err := readDocumentByUUID(ctx, db, uuid, includeDeleted, lock)
 	if err != nil {
 		return nil, err
 	}
 	ownerUID := stringValue(doc["owner_uid"])
 	sharePermission := ""
 	if actorUID != "" && actorUID != ownerUID {
-		permission, shareErr := a.sharePermission(ctx, int64Value(doc["id"]), actorUID)
+		permission, shareErr := readDocumentSharePermission(ctx, db, int64Value(doc["id"]), actorUID, lock)
 		if shareErr != nil {
 			return nil, shareErr
 		}
 		sharePermission = permission
 		if sharePermission == "" {
-			canRead, relationErr := a.relationCanRead(ctx, int64Value(doc["id"]), actorUID)
+			canRead, relationErr := a.relationCanReadWithReader(ctx, db, int64Value(doc["id"]), actorUID, lock)
 			if relationErr != nil {
 				return nil, relationErr
 			}
@@ -129,16 +132,23 @@ func readDocumentSharePermission(ctx context.Context, db documentReadDB, docID i
 }
 
 func (a *Adapter) relationCanRead(ctx context.Context, docID int64, actorUID string) (bool, error) {
+	return a.relationCanReadWithReader(ctx, a.db, docID, actorUID, false)
+}
+func (a *Adapter) relationCanReadWithReader(ctx context.Context, db documentReadDB, docID int64, actorUID string, lock bool) (bool, error) {
 	exists, err := a.tableExists(ctx, "document_relations")
 	if err != nil || !exists {
 		return false, err
 	}
 	var count int
-	if err := a.db.QueryRowContext(ctx, `
+	statement := `
       SELECT COUNT(*)
       FROM document_relations
       WHERE document_id = ? AND related_uid = ? AND status = 1 AND can_read = 1
-        AND (source_type <> 'project_preview_access' OR updated_at >= DATE_SUB(NOW(), INTERVAL 12 HOUR))`,
+        AND (source_type <> 'project_preview_access' OR updated_at >= DATE_SUB(NOW(), INTERVAL 12 HOUR))`
+	if lock {
+		statement += " FOR UPDATE"
+	}
+	if err := db.QueryRowContext(ctx, statement,
 		docID,
 		actorUID,
 	).Scan(&count); err != nil {

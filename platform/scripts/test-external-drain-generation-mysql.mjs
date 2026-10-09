@@ -6,7 +6,7 @@ import { buildTemporaryMySqlPlan, withTemporaryMySql } from '../../scripts/test/
 
 const rootDir = resolve(import.meta.dirname, '../..')
 const plan = await buildTemporaryMySqlPlan({ rootDir })
-await withTemporaryMySql(plan, async context => {
+await withTemporaryMySql(plan, async (context) => {
   const db = await mysql.createConnection({ ...context.connection('console'), multipleStatements: true })
   try {
     await db.query(`CREATE TABLE enterprise_external_drain_approvals (

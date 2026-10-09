@@ -1,3 +1,4 @@
+import { trustedClientAddress } from '~~/server/utils/trustedClientAddress'
 import { requireRuntimeReleaseEnvironment } from '~~/server/utils/runtimeReleaseEnvironment'
 import type { RowDataPacket } from 'mysql2/promise'
 import { normalizeNullableString, ok, requireString } from '~~/server/utils/api'
@@ -21,7 +22,7 @@ export default defineEventHandler(async (event) => {
     version,
     releaseSigningKeyId: settings.releaseSigningKeyId,
     accountId: account?.id || null,
-    ip: String(getRequestIP(event, { xForwardedFor: true }) || '').trim() || null,
+    ip: trustedClientAddress(event) || null,
     userAgent: String(getHeader(event, 'user-agent') || '').trim().slice(0, 500) || null,
     note,
     confirmRollback: body.confirmRollback === true,

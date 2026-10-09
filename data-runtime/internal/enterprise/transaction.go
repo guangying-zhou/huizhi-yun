@@ -14,6 +14,12 @@ func (r *Registry) BeginWriteTransaction(ctx context.Context, requests ...Resolv
 	return r.beginDomainTransaction(ctx, Write, sql.LevelReadCommitted, requests...)
 }
 
+// BeginRepeatableWriteTransaction retains the generation fence and grants only
+// the same explicit writer set, with next-key protection for complete inputs.
+func (r *Registry) BeginRepeatableWriteTransaction(ctx context.Context, requests ...ResolveRequest) (*sql.Tx, []Resolved, error) {
+	return r.beginDomainTransaction(ctx, Write, sql.LevelRepeatableRead, requests...)
+}
+
 // BeginSchedulerTransaction independently resolves scheduler authority and holds
 // the persistent generation fence for claim/ack mutations. A unified reader or
 // writer does not implicitly become the owner of background task consumption.

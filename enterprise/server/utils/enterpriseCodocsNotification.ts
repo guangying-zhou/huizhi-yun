@@ -9,6 +9,7 @@ export function sendEnterpriseCodocsNotification(input: EnterpriseCodocsNotifica
   return sendNotification({
     ...input,
     sourceAppCode: 'enterprise',
+    resolveExternalIdentities: true,
     metadata: { ...input.metadata, notificationKind: 'business_event', moduleAppCode: 'codocs' }
   })
 }

@@ -29,23 +29,31 @@ async function readDocument(event: H3Event, action: keyof typeof operations, ser
   let skipContent = metadataOnly === true
   const parameters = getRequestURL(event).searchParams
   for (const [key, value] of Object.entries(getQuery(event))) {
-    if (typeof value !== 'string' || parameters.getAll(key).length !== 1) throw createError({ statusCode: 400, message: '文档筛选参数无效' })
+    if (typeof value !== 'string' || parameters.getAll(key).length !== 1)
+      throw createError({ statusCode: 400, message: '文档筛选参数无效' })
     if (action === 'view' && key === 'skip_content') {
-      if (value !== '0' && value !== '1') throw createError({ statusCode: 400, message: '正文读取参数无效' })
-      if (metadataOnly !== undefined) throw createError({ statusCode: 400, message: '项目正文读取不接受筛选参数' })
+      if (value !== '0' && value !== '1')
+        throw createError({ statusCode: 400, message: '正文读取参数无效' })
+      if (metadataOnly !== undefined)
+        throw createError({ statusCode: 400, message: '项目正文读取不接受筛选参数' })
       skipContent = value === '1'
       continue
     }
     // Old personal pages submit their own owner. Never forward a selected user
     // as authority; Runtime derives personal ownership from the signed actor.
     if (key === 'owner' || key === 'owner_uid') {
-      if (value !== user.uid) throw createError({ statusCode: 403, message: '不能选择其他用户的私人文档' })
+      if (value !== user.uid)
+        throw createError({ statusCode: 403, message: '不能选择其他用户的私人文档' })
       continue
     }
     query[key] = value
   }
   if (action === 'trash' || action === 'list' || action === 'folders') {
-    try { optionalReadPagination(query) } catch { throw createError({ statusCode: 400, message: '分页参数无效' }) }
+    try {
+      optionalReadPagination(query)
+    } catch {
+      throw createError({ statusCode: 400, message: '分页参数无效' })
+    }
   }
   if ((action === 'list' || action === 'folders') && 'pageSize' in query && ('limit' in query || 'page_size' in query)) {
     throw createError({ statusCode: 400, message: '分页参数不能与旧 limit 混用' })
@@ -81,11 +89,13 @@ async function readDocument(event: H3Event, action: keyof typeof operations, ser
     if (action === 'view' && serverUuid === undefined && metadataOnly === undefined && (error as { statusCode?: number }).statusCode === 403) {
       const { resolveEnterpriseDepartmentDocumentFallback } = await import('./enterpriseCodocsDepartmentDocuments')
       const fallback = await resolveEnterpriseDepartmentDocumentFallback(event, getRouterParam(event, 'uuid') ?? '')
-      if (fallback) return fallback
+      if (fallback)
+        return fallback
     }
     throw error
   }
-  if (action !== 'view') return result
+  if (action !== 'view')
+    return result
   const { withEnterpriseCodocsDocumentContent } = await import('./enterpriseCodocsDocumentContent')
   return await withEnterpriseCodocsDocumentContent(event, result, serverUuid ?? getRouterParam(event, 'uuid') ?? '', skipContent)
 }
@@ -95,6 +105,7 @@ export const enterpriseCodocsDocumentRead = (event: H3Event, action: keyof typeo
 // Internal composition only: UUID comes from the project-bound Aims response,
 // while the normal Codocs read still independently checks the actor's ACL.
 export async function enterpriseCodocsDocumentViewByUuid(event: H3Event, uuid: string, metadataOnly = false) {
-  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(uuid) || uuid === '00000000-0000-0000-0000-000000000000') throw createError({ statusCode: 503, message: '项目文档正文绑定无效' })
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(uuid) || uuid === '00000000-0000-0000-0000-000000000000')
+    throw createError({ statusCode: 503, message: '项目文档正文绑定无效' })
   return await readDocument(event, 'view', uuid, metadataOnly)
 }

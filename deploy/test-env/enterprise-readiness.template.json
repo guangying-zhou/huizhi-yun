@@ -53,24 +53,15 @@
       "altoc:enterprise-host:execute",
       "assets:enterprise-host:execute",
       "codocs:enterprise-host:execute",
-      "console:enterprise-host:execute"
+      "console:enterprise-host:execute",
+      "finance:enterprise-host:execute",
+      "people:enterprise-host:execute"
     ],
     "audiences": [
       "data-runtime"
     ]
   },
   "externalServicePolicies": [
-    {
-      "audience": "aims",
-      "capabilities": [
-        "aims:project-document-access:manage",
-        "aims:project-document-access:read",
-        "aims:project-document-sources:read",
-        "aims:project-documents:download",
-        "aims:project-documents:read",
-        "aims:project-documents:write"
-      ]
-    },
     {
       "audience": "codocs",
       "capabilities": [

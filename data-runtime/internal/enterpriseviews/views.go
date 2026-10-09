@@ -24,6 +24,7 @@ import (
 	"strings"
 
 	"github.com/huizhi-yun/data-runtime/internal/apps/aims"
+	pc "github.com/huizhi-yun/data-runtime/internal/apps/aims/productcenter"
 	"github.com/huizhi-yun/data-runtime/internal/apps/assets"
 	"github.com/huizhi-yun/data-runtime/internal/apps/workflow"
 	e "github.com/huizhi-yun/data-runtime/internal/enterprise"
@@ -51,6 +52,7 @@ func union(lists ...[]string) []string {
 // Aims is every logical name the unified Aims domain resolves through a view.
 func Aims() []string {
 	return union(
+		pc.FeedbackViewNames(),
 		enterpriseplanning.PilotViewNames(),
 		enterprisescheduler.CompletionViewNames(),
 		aims.EnterpriseWriteViewNames(),
@@ -231,7 +233,7 @@ func installedDomains(b e.Binding) []string {
 // binding configures such a domain its renamed mapping entries are an accepted
 // part of the live view family; each one still has to match its exact
 // definition like every other view.
-var SeparatelyInstalledDomains = []string{"altoc"}
+var SeparatelyInstalledDomains = []string{"altoc", "people", "finance"}
 
 // SeparatelyInstalled returns the renamed mapping entries of the separately
 // installed domains present in the binding.
@@ -243,7 +245,7 @@ func SeparatelyInstalled(b e.Binding) []string {
 			continue
 		}
 		for logical, physical := range d.Tables {
-			if physical != logical {
+			if physical != logical && !shared()[logical] {
 				out = append(out, logical)
 			}
 		}

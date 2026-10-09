@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import CommonEmptyState from '@hzy/foundation/app/components/common/EmptyState.vue'
+import { documentLoadErrorMessage } from '../../utils/departmentDocumentWriteError'
+
 import MyDocumentSpaceHeader from '../../components/MyDocumentSpaceHeader.vue'
 import { h, resolveComponent } from 'vue'
 import { useDocumentDownload } from '../../composables/useDocumentDownload'
@@ -54,7 +57,7 @@ const fetchFavorites = async () => {
   return response?.data?.items || []
 }
 
-const { data: documents, pending, refresh } = await useAsyncData(
+const { data: documents, pending, error: loadError, refresh } = await useAsyncData(
   cacheKey('my-favorites'),
   fetchFavorites,
   {
@@ -162,7 +165,13 @@ const handleRowSelect = (_e: Event, row: { original?: FavoriteDocument }) => {
     <div class="flex-1 overflow-auto p-4">
       <ClientOnly>
         <div>
+          <CommonEmptyState v-if="loadError" title="无法读取文档" :description="documentLoadErrorMessage(loadError)">
+            <UButton color="neutral" variant="outline" @click="refresh()">
+              重试
+            </UButton>
+          </CommonEmptyState>
           <UTable
+            v-else
             :key="`favorites-${documents?.length || 0}`"
             v-model:sorting="sorting"
             :data="documents || []"

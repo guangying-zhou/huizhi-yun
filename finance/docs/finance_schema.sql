@@ -1408,3 +1408,98 @@ CREATE TABLE IF NOT EXISTS product_cost_attribution_revision (
     CONSTRAINT chk_product_cost_revision CHECK (revision > 0),
     CONSTRAINT chk_product_cost_total CHECK (total_basis_points BETWEEN 0 AND 10000)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin COMMENT='产品成本归因不可变修订，完整产品比例集合';
+
+-- APF M1 fresh unified-domain candidate canonical is docs/apf_m1_schema.sql.
+-- Generated from docs/Enterprise-APF-Domain-Design.sql; do not combine with this legacy schema.
+-- No historical data import or existing-environment apply is part of M1.
+
+-- APF-13a unified Host canonical subset is defined in apf13a_schema_candidate.sql
+-- and data-runtime/internal/enterprise/domaininstall/finance_13a.json, not in the
+-- legacy expense_claim/project_expense_request definitions above. It adds row
+-- versions, trusted UID columns, unique source ledger and draft-by-default.
+-- Candidate delivery only: do not execute the legacy schema to install Host.
+
+-- APF-13b unified Host canonical payment subset:
+-- apf13b_schema_candidate.sql and domaininstall/finance_13b.json add only
+-- finance_payment_request after B1 + B3 + APF13a. Legacy payment_request
+-- above is not the Host mapping. No real schema/seed is executed by this delivery.
+
+-- B5-B: install through finance-receivables only; no parallel balance.
+CREATE TABLE finance_historical_readiness (
+  id BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
+  code VARCHAR(64) NOT NULL,
+  contract_id BIGINT UNSIGNED NOT NULL,
+  billing_schedule_id BIGINT UNSIGNED NOT NULL,
+  opening_batch_id BIGINT UNSIGNED NOT NULL,
+  contract_code VARCHAR(64) NOT NULL,
+  billing_schedule_code VARCHAR(64) NOT NULL,
+  currency_code CHAR(3) NOT NULL,
+  opening_amount DECIMAL(18,2) NOT NULL,
+  cutoff_date DATE NOT NULL,
+  review_hash CHAR(64) NOT NULL,
+  confirmation_sha256 CHAR(64) NOT NULL,
+  evidence_sha256 CHAR(64) NOT NULL,
+  activated_by VARCHAR(64) NOT NULL,
+  activated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  row_version BIGINT UNSIGNED NOT NULL DEFAULT 1,
+  created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+  UNIQUE KEY uq_code(code),
+  UNIQUE KEY uq_contract(contract_id),
+  UNIQUE KEY uq_schedule(billing_schedule_id),
+  CONSTRAINT fk_finance_ready_contract FOREIGN KEY(contract_id) REFERENCES altoc_contract(id),
+  CONSTRAINT fk_finance_ready_schedule FOREIGN KEY(billing_schedule_id) REFERENCES altoc_billing_schedule(id),
+  CONSTRAINT fk_finance_ready_batch FOREIGN KEY(opening_batch_id) REFERENCES mig_batch(id),
+  CHECK(opening_amount>0)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE finance_allocation_batch (
+  id BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
+  code VARCHAR(64) NOT NULL,
+  receipt_id BIGINT UNSIGNED NOT NULL,
+  receipt_code VARCHAR(64) NOT NULL,
+  currency_code CHAR(3) NOT NULL,
+  total_amount DECIMAL(18,2) NOT NULL,
+  allocation_lines JSON NOT NULL,
+  status VARCHAR(20) NOT NULL DEFAULT 'active',
+  created_by VARCHAR(64) NOT NULL,
+  reversed_by VARCHAR(64) DEFAULT NULL,
+  reversed_at DATETIME(3) DEFAULT NULL,
+  reverse_reason VARCHAR(1000) DEFAULT NULL,
+  row_version BIGINT UNSIGNED NOT NULL DEFAULT 1,
+  created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+  UNIQUE KEY uq_code(code),
+  KEY ix_receipt(receipt_id),
+  CONSTRAINT fk_finance_allocation_receipt FOREIGN KEY(receipt_id) REFERENCES finance_receipt(id),
+  CHECK(total_amount>0)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE finance_receivable_adjustment (
+  id BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
+  code VARCHAR(64) NOT NULL,
+  contract_id BIGINT UNSIGNED NOT NULL,
+  billing_schedule_id BIGINT UNSIGNED NOT NULL,
+  contract_code VARCHAR(64) NOT NULL,
+  billing_schedule_code VARCHAR(64) NOT NULL,
+  currency_code CHAR(3) NOT NULL,
+  adjustment_type VARCHAR(20) NOT NULL COMMENT 'discount/bad_debt/rounding/correction',
+  amount DECIMAL(18,2) NOT NULL,
+  reason VARCHAR(1000) NOT NULL,
+  status VARCHAR(20) NOT NULL DEFAULT 'draft',
+  entered_by VARCHAR(64) NOT NULL,
+  confirmed_by VARCHAR(64) DEFAULT NULL,
+  confirmed_at DATETIME(3) DEFAULT NULL,
+  reversed_by VARCHAR(64) DEFAULT NULL,
+  reversed_at DATETIME(3) DEFAULT NULL,
+  reverse_reason VARCHAR(1000) DEFAULT NULL,
+  row_version BIGINT UNSIGNED NOT NULL DEFAULT 1,
+  created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+  UNIQUE KEY uq_code(code),
+  KEY ix_schedule(billing_schedule_id,status),
+  CONSTRAINT fk_finance_adjustment_contract FOREIGN KEY(contract_id) REFERENCES altoc_contract(id),
+  CONSTRAINT fk_finance_adjustment_schedule FOREIGN KEY(billing_schedule_id) REFERENCES altoc_billing_schedule(id),
+  CHECK(amount<>0),
+  CHECK(confirmed_by IS NULL OR confirmed_by<>entered_by)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

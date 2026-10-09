@@ -272,14 +272,19 @@ func (a *Adapter) ConsoleReleaseOnboardingIdentityReservation(
 	reservationID string,
 	uid string,
 	onboardingCode string,
+	sources ...string,
 ) (map[string]any, error) {
+	source, e := onboardingSource(sources)
+	if e != nil {
+		return nil, e
+	}
 	reservationID = strings.TrimSpace(reservationID)
 	uid = strings.TrimSpace(uid)
 	onboardingCode = strings.TrimSpace(onboardingCode)
 	result, err := a.db.ExecContext(ctx, `UPDATE directory_identity_reservations
 		SET status='released',released_at=UTC_TIMESTAMP(3),updated_at=UTC_TIMESTAMP(3)
-		WHERE reservation_id=? AND uid=? AND source_app='people' AND source_biz_code=? AND status='active'`,
-		reservationID, uid, onboardingCode)
+		WHERE reservation_id=? AND uid=? AND source_app=? AND source_biz_code=? AND status='active'`,
+		reservationID, uid, source, onboardingCode)
 	if err != nil {
 		return nil, err
 	}
@@ -287,8 +292,8 @@ func (a *Adapter) ConsoleReleaseOnboardingIdentityReservation(
 	if affected == 0 {
 		var matching int
 		if err = a.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM directory_identity_reservations
-			WHERE reservation_id=? AND uid=? AND source_app='people' AND source_biz_code=?`,
-			reservationID, uid, onboardingCode).Scan(&matching); err != nil {
+			WHERE reservation_id=? AND uid=? AND source_app=? AND source_biz_code=?`,
+			reservationID, uid, source, onboardingCode).Scan(&matching); err != nil {
 			return nil, err
 		}
 		if matching != 1 {
@@ -301,7 +306,8 @@ func (a *Adapter) ConsoleReleaseOnboardingIdentityReservation(
 // consumeConsoleReservationTx 在账号创建排队成功后消费预留。消费后该 UID 由
 // directory_users 与 pending operation 接管，不再需要预留占位。
 func requireActiveConsoleReservationTx(ctx context.Context, tx *sql.Tx, body map[string]any) (string, error) {
-	if strings.ToLower(strings.TrimSpace(text(body["sourceApp"]))) != "people" {
+	source := strings.TrimSpace(text(body["sourceApp"]))
+	if source != "people" && source != "enterprise" {
 		return "", nil
 	}
 	reservationID := strings.TrimSpace(text(body["reservationId"]))
@@ -328,7 +334,7 @@ func requireActiveConsoleReservationTx(ctx context.Context, tx *sql.Tx, body map
 		expectedUsername = strings.TrimSpace(text(body["uid"]))
 	}
 	if uid != strings.TrimSpace(text(body["uid"])) || !strings.EqualFold(username, expectedUsername) ||
-		!strings.EqualFold(email, strings.TrimSpace(text(body["email"]))) || sourceApp != "people" ||
+		!strings.EqualFold(email, strings.TrimSpace(text(body["email"]))) || sourceApp != source ||
 		sourceBizCode != strings.TrimSpace(text(body["sourceBizCode"])) ||
 		providerCode != strings.ToLower(strings.TrimSpace(text(body["providerCode"]))) ||
 		providerSubject != strings.TrimSpace(text(body["providerSubject"])) {

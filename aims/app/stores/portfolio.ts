@@ -10,7 +10,8 @@ import type {
 
 export const usePortfolioStore = defineStore('portfolio', () => {
   // 同一份代码供独立应用与企业宿主使用：非宿主模式下 moduleUrl 原样返回路径。
-  const { moduleUrl } = useAimsModule()
+  const { moduleUrl, hosted } = useAimsModule()
+  const updateIntents = new Map<number, { signature: string, key: string }>()
   type RawProjectPortfolio = Partial<ProjectPortfolio> & {
     domain_code?: string | null
     owner_uid?: string | null
@@ -107,12 +108,22 @@ export const usePortfolioStore = defineStore('portfolio', () => {
     return res.data
   }
 
-  async function updatePortfolio(id: number, data: UpdatePortfolioRequest) {
+  async function updatePortfolio(id: number, data: UpdatePortfolioRequest, expectedVersion?: string) {
+    if (hosted && !expectedVersion) throw Error('项目集版本未加载，请刷新后重试')
+    const body = hosted ? { ...data, expectedVersion } : data
+    const signature = JSON.stringify(body)
+    let intent = updateIntents.get(id)
+    if (!intent || intent.signature !== signature) {
+      intent = { signature, key: crypto.randomUUID() }
+      updateIntents.set(id, intent)
+    }
     const res = await $fetch<{ code: number, data: null }>(moduleUrl(`/api/v1/portfolios/${id}`), {
       method: 'PUT',
-      body: data
+      ...(hosted ? { headers: { 'Idempotency-Key': intent.key } } : {}),
+      body
     })
     if (res.code === 0) {
+      updateIntents.delete(id)
       await fetchPortfolios()
     }
   }

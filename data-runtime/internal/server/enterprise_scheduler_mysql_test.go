@@ -128,12 +128,12 @@ func TestEnterpriseSchedulerHTTPMySQL(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, q := range []string{
-		"CREATE TABLE service_clients(id BIGINT PRIMARY KEY,status VARCHAR(20),current_credential_id BIGINT)",
+		"CREATE TABLE service_clients(id BIGINT PRIMARY KEY,status VARCHAR(20),current_credential_id BIGINT,client_code VARCHAR(128),client_name VARCHAR(128),client_type VARCHAR(20),app_code VARCHAR(64))",
 		"CREATE TABLE service_client_credentials(id BIGINT PRIMARY KEY,service_client_id BIGINT,client_id VARCHAR(128),status VARCHAR(20),expires_at DATETIME)",
-		"CREATE TABLE service_client_grants(service_client_id BIGINT,resource_code VARCHAR(128),action VARCHAR(64),status VARCHAR(20))",
-		"INSERT INTO service_clients VALUES(1,'active',7)",
+		"CREATE TABLE service_client_grants(service_client_id BIGINT,resource_code VARCHAR(128),action VARCHAR(64),status VARCHAR(20),scope_json JSON)",
+		"INSERT INTO service_clients VALUES(1,'active',7,'aims.runtime','fixture','runtime','aims')",
 		"INSERT INTO service_client_credentials VALUES(7,1,'aims.runtime','active',NULL)",
-		"INSERT INTO service_client_grants VALUES(1,'aims:integration_operation','execute','active')",
+		"INSERT INTO service_client_grants VALUES(1,'aims:integration_operation','execute','active',JSON_OBJECT('audience','data-runtime','semanticScope','aims:integration_operation:execute'))",
 	} {
 		exec(q)
 	}

@@ -443,18 +443,18 @@ func TestMySQLDepartmentCollaboration(t *testing.T) {
 		if ttl := time.Until(expires.UTC().Add(0)); ttl > DepartmentCollaborationSessionTTL+2*time.Second || ttl < 60*time.Second {
 			t.Fatalf("department lease ttl=%s", ttl)
 		}
-		// A member who is neither owner nor share-writer is refused.
-		_, err := env.open("writer", doc)
-		env.wantStatus(err, 403, "department_document_write_denied")
+		// Every current member can edit without an owner/share grant.
+		env.mustAdmit(env.mustOpen("writer", doc).Ticket)
+		var err error
 		env.share(doc, "reader", "read")
-		_, err = env.open("reader", doc)
-		env.wantStatus(err, 403, "department_document_write_denied")
+		env.mustAdmit(env.mustOpen("reader", doc).Ticket)
 		env.share(doc, "writer", "write")
 		env.mustOpen("writer", doc)
 		// The manager needs neither ownership nor a share.
 		env.mustOpen("mgr", doc)
-		// Leader (a member row too), parent manager and outsiders get no session.
-		for _, uid := range []string{"lead", "pmgr", "outsider"} {
+		// Direct leader writes; parent manager and outsiders get no session.
+		env.mustAdmit(env.mustOpen("lead", doc).Ticket)
+		for _, uid := range []string{"pmgr", "outsider"} {
 			_, err = env.open(uid, doc)
 			env.wantStatus(err, 403, "department_writer_required")
 		}
@@ -546,7 +546,6 @@ func TestMySQLDepartmentCollaboration(t *testing.T) {
 
 	t.Run("directory lock spans the codocs transaction and admission re-checks", func(t *testing.T) {
 		doc := env.v2Doc("owner")
-		env.share(doc, "writer", "write")
 		role, tx, err := env.directory.LockEnterpriseCodocsDepartmentAccess(env.ctx, "writer", "D1")
 		if err != nil || !role.CanWrite() {
 			t.Fatalf("role=%s err=%v", role, err)
@@ -585,9 +584,8 @@ func TestMySQLDepartmentCollaboration(t *testing.T) {
 		dcExec(t, env.dirDB, `UPDATE directory_user_departments SET status = 'active' WHERE uid = 'writer' AND dept_code = 'D1'`)
 	})
 
-	t.Run("member removed mid-session: renew reports revokedUids and publish is rejected", func(t *testing.T) {
+	t.Run("member without share removed mid-session: renew reports revokedUids and publish is rejected", func(t *testing.T) {
 		doc := env.v2Doc("owner")
-		env.share(doc, "writer", "write")
 		a := env.mustOpen("owner", doc)
 		env.mustAdmit(a.Ticket)
 		b := env.mustOpen("writer", doc)
@@ -645,7 +643,7 @@ func TestMySQLDepartmentCollaboration(t *testing.T) {
 		dcExec(t, env.dirDB, `UPDATE directory_user_departments SET status = 'active' WHERE dept_code = 'D1' AND uid IN ('owner','writer')`)
 	})
 
-	t.Run("manager change, user deactivation and share loss revoke on renew", func(t *testing.T) {
+	t.Run("manager change and user deactivation revoke on renew", func(t *testing.T) {
 		doc := env.v2Doc("owner")
 		env.share(doc, "writer", "write")
 		o := env.mustOpen("owner", doc)
@@ -664,11 +662,32 @@ func TestMySQLDepartmentCollaboration(t *testing.T) {
 			t.Fatalf("deactivation: revoked=%v err=%v", revoked, err)
 		}
 		dcExec(t, env.dirDB, `UPDATE directory_users SET status = 'active' WHERE uid = 'writer'`)
-		// Leader promotion: leader wins over member, so the promoted user loses write access.
+		// Local leader remains writable; inactive leaders still lose access.
 		dcExec(t, env.dirDB, `UPDATE directory_departments SET leader_uid = 'owner' WHERE dept_code = 'D1'`)
 		_, _, err = env.renew(o.SessionID, []string{"owner"}, true)
+		if err != nil {
+			t.Fatalf("local leader renew: %v", err)
+		}
+		dcExec(t, env.dirDB, `UPDATE directory_users SET status = 'disabled' WHERE uid = 'owner'`)
+		_, _, err = env.renew(o.SessionID, []string{"owner"}, true)
 		env.wantStatus(err, 409, "collaboration_session_invalid")
+		dcExec(t, env.dirDB, `UPDATE directory_users SET status = 'active' WHERE uid = 'owner'`)
 		dcExec(t, env.dirDB, `UPDATE directory_departments SET leader_uid = 'lead' WHERE dept_code = 'D1'`)
+	})
+
+	t.Run("direct leader without membership loses access when leadership ends", func(t *testing.T) {
+		dcExec(t, env.dirDB, `UPDATE directory_user_departments SET status='disabled' WHERE uid='lead' AND dept_code='D1'`)
+		defer dcExec(t, env.dirDB, `UPDATE directory_user_departments SET status='active' WHERE uid='lead' AND dept_code='D1'`)
+		defer dcExec(t, env.dirDB, `UPDATE directory_departments SET leader_uid='lead' WHERE dept_code='D1'`)
+		doc := env.v2Doc("owner")
+		opened := env.mustOpen("lead", doc)
+		env.mustAdmit(opened.Ticket)
+		if _, revoked, err := env.renew(opened.SessionID, []string{"lead"}, true); err != nil || len(revoked) != 0 {
+			t.Fatalf("leader renew: revoked=%v err=%v", revoked, err)
+		}
+		dcExec(t, env.dirDB, `UPDATE directory_departments SET leader_uid='someone' WHERE dept_code='D1'`)
+		_, _, err := env.renew(opened.SessionID, []string{"lead"}, true)
+		env.wantStatus(err, 409, "collaboration_session_invalid")
 	})
 
 	t.Run("unreported participants are marked left without ending the session", func(t *testing.T) {
@@ -777,6 +796,8 @@ func TestMySQLDepartmentCollaboration(t *testing.T) {
 		if _, epochAfter := env.head(doc); epochAfter != epochBefore+1 {
 			t.Fatalf("epoch %d -> %d", epochBefore, epochAfter)
 		}
+		// Removing a share does not remove current department membership.
+		env.mustAdmit(env.mustOpen("writer", doc).Ticket)
 	})
 
 	t.Run("edit-metadata does not disturb an active session", func(t *testing.T) {
@@ -800,7 +821,6 @@ func TestMySQLDepartmentCollaboration(t *testing.T) {
 
 	t.Run("v1 to v2 conversion: one winner, reading does not convert", func(t *testing.T) {
 		doc := env.newDoc("owner", "department", "D1")
-		env.share(doc, "writer", "write")
 		read, err := env.a.ReadDepartmentDocumentSnapshot(env.ctx, env.hostID("reader", ""), "D1", doc)
 		if err != nil || read.Generation != 0 || read.Objects != nil || read.LegacyPath != "legacy.md" {
 			t.Fatalf("read=%+v err=%v", read, err)
@@ -809,16 +829,16 @@ func TestMySQLDepartmentCollaboration(t *testing.T) {
 		if err = env.docDB.QueryRow(`SELECT COUNT(*) FROM document_snapshot_heads WHERE document_uuid = ?`, doc).Scan(&heads); err != nil || heads != 0 {
 			t.Fatalf("reading created a head (%d): %v", heads, err)
 		}
-		// Only writers convert; leader/reader cannot.
+		// Direct leaders can convert; parent leaders and outsiders cannot.
 		cmd := SnapshotCommand{UUID: doc, MarkdownSHA256: strings.Repeat("a", 64), MarkdownSize: 10}
-		leadRole, release := env.role("lead", "D1")
-		_, err = env.a.PrepareDepartmentConversionSnapshot(env.ctx, env.hostID("lead", "k-lead"), "D1", leadRole, cmd)
+		leadRole, release := env.role("pmgr", "D1")
+		_, err = env.a.PrepareDepartmentConversionSnapshot(env.ctx, env.hostID("pmgr", "k-parent"), "D1", leadRole, cmd)
 		release()
 		env.wantStatus(err, 403, "department_writer_required")
-		readerRole, release := env.role("reader", "D1")
-		_, err = env.a.PrepareDepartmentConversionSnapshot(env.ctx, env.hostID("reader", "k-reader"), "D1", readerRole, cmd)
+		outsiderRole, release := env.role("outsider", "D1")
+		_, err = env.a.PrepareDepartmentConversionSnapshot(env.ctx, env.hostID("outsider", "k-outsider"), "D1", outsiderRole, cmd)
 		release()
-		env.wantStatus(err, 403, "department_document_write_denied")
+		env.wantStatus(err, 403, "department_writer_required")
 		ownerRole, release := env.role("owner", "D1")
 		bad := cmd
 		bad.Generation = 1

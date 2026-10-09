@@ -29,20 +29,21 @@ var enterpriseAltocReadPaths = map[string]enterpriseAltocReadSpec{
 }
 
 type enterpriseAltocReadPermit struct {
-	ActorUID       string               `json:"actorUid"`
-	Tenant         string               `json:"tenant"`
-	Deployment     string               `json:"deployment"`
-	Resource       string               `json:"resource"`
-	Action         string               `json:"action"`
-	Operation      string               `json:"operation"`
-	ObjectID       string               `json:"objectId"`
-	ExpiresAt      int64                `json:"expiresAt"`
-	Allowed        bool                 `json:"allowed"`
-	Scope          altoc.BasicReadScope `json:"scope"`
-	Query          altoc.BasicReadQuery `json:"query"`
-	BundleVersion  string               `json:"bundleVersion"`
-	BundleHash     string               `json:"bundleHash"`
-	PolicyRevision *int64               `json:"policyRevision"`
+	CustomerRead   *enterpriseAltocReadPermit `json:"customerRead,omitempty"`
+	ActorUID       string                     `json:"actorUid"`
+	Tenant         string                     `json:"tenant"`
+	Deployment     string                     `json:"deployment"`
+	Resource       string                     `json:"resource"`
+	Action         string                     `json:"action"`
+	Operation      string                     `json:"operation"`
+	ObjectID       string                     `json:"objectId"`
+	ExpiresAt      int64                      `json:"expiresAt"`
+	Allowed        bool                       `json:"allowed"`
+	Scope          altoc.BasicReadScope       `json:"scope"`
+	Query          altoc.BasicReadQuery       `json:"query"`
+	BundleVersion  string                     `json:"bundleVersion"`
+	BundleHash     string                     `json:"bundleHash"`
+	PolicyRevision *int64                     `json:"policyRevision"`
 }
 type enterpriseAltocReadInput struct {
 	ID            string                    `json:"id"`
@@ -61,8 +62,22 @@ func validateEnterpriseAltocReadPermit(input enterpriseAltocReadInput, spec ente
 	if spec.Action == "list" && input.ID != "" || spec.Action == "view" && input.ID == "" {
 		return httperror.New(400, "enterprise_altoc_input_invalid", "Invalid Altoc read object")
 	}
-	if spec.Action == "view" && (input.Query.Search != "" || input.Query.Status != "" || input.Query.CustomerID != "" || input.Query.ContractID != "") {
+	if spec.Action == "view" && !input.Query.ContactsOnly && (input.Query.IndustryCode != "" || input.Query.RegionCode != "" || input.Query.UpdatedDateFrom != "" || input.Query.UpdatedDateTo != "" || input.Query.CustomerSort != "" || input.Query.DecisionRole != "" || input.Query.PrimaryOnly || input.Query.StarredOnly || input.Query.OwnerUID != "" || input.Query.AmountMin != "" || input.Query.AmountMax != "" || input.Query.Direction != "" || input.Query.ContractType != "" || input.Query.SignedDateFrom != "" || input.Query.SignedDateTo != "" || input.Query.Search != "" || input.Query.Status != "" || input.Query.CustomerID != "" || input.Query.ContractID != "" || input.Query.ParentContractID != "" || input.Query.CustomerIDs != "" || input.Query.IncludeDescendants || input.Query.ParentID != "" || input.Query.RootsOnly || input.Query.OwnerUnassigned || input.Query.Origin != "" || input.Query.Category != "") {
 		return httperror.New(400, "enterprise_altoc_input_invalid", "Altoc detail does not accept filters")
+	}
+	if input.Query.Workspace && (spec.Resource != "customer" || spec.Action != "view") {
+		return httperror.New(400, "enterprise_altoc_input_invalid", "Workspace requires customer view")
+	}
+	if input.Query.ContactsOnly && (spec.Resource != "customer" || spec.Action != "view" || input.ID == "") {
+		return httperror.New(400, "enterprise_altoc_input_invalid", "Contacts require an owning customer detail permit")
+	}
+	if c := p.CustomerRead; c != nil {
+		if spec.Resource != "contract" || c.CustomerRead != nil || c.BundleVersion != p.BundleVersion || c.BundleHash != p.BundleHash || c.PolicyRevision == nil || *c.PolicyRevision != *p.PolicyRevision || c.ExpiresAt != p.ExpiresAt || c.Query != (altoc.BasicReadQuery{Page: 1, PageSize: 20}) {
+			return httperror.New(403, "enterprise_altoc_permit_invalid", "Invalid customer projection authorization")
+		}
+		if err := validateEnterpriseAltocReadPermit(enterpriseAltocReadInput{Query: c.Query, Authorization: *c}, enterpriseAltocReadSpec{"customer", "list"}, verified, now); err != nil {
+			return err
+		}
 	}
 	return input.Query.Validate(spec.Resource)
 }
@@ -76,7 +91,7 @@ func (s *Server) routeEnterpriseAltocRead(r *http.Request, spec enterpriseAltocR
 		return routeResult{}, err
 	}
 	result := routeResult{Operation: "enterprise.altoc." + spec.Resource + "." + spec.Action, Auth: &verified.Service}
-	if s.enterpriseAltocReads == nil {
+	if s.enterpriseAltocReads == nil && !((spec.Resource == "customer" || spec.Resource == "contract") && s.enterpriseAPF != nil) {
 		return result, httperror.New(503, "enterprise_altoc_unavailable", "Altoc reads are not ready")
 	}
 	if r.URL.RawQuery != "" {
@@ -102,7 +117,18 @@ func (s *Server) routeEnterpriseAltocRead(r *http.Request, spec enterpriseAltocR
 	if err = verifyEnterpriseAltocReadPermitSignature(r, input.Authorization); err != nil {
 		return result, err
 	}
-	data, err := s.enterpriseAltocReads.Read(r.Context(), spec.Resource, input.ID, verified.ActorUID, input.Authorization.Scope, input.Query)
+	var data any
+	if spec.Resource == "customer" && s.enterpriseAPF != nil {
+		data, err = s.enterpriseAPF.CustomerRead(r.Context(), input.ID, verified.ActorUID, input.Authorization.Scope, input.Query)
+	} else if spec.Resource == "contract" && s.enterpriseAPF != nil {
+		customerScope := altoc.BasicReadScope{Access: "none"}
+		if input.Authorization.CustomerRead != nil {
+			customerScope = input.Authorization.CustomerRead.Scope
+		}
+		data, err = s.enterpriseAPF.ContractRead(r.Context(), input.ID, verified.ActorUID, input.Authorization.Scope, input.Query, customerScope)
+	} else {
+		data, err = s.enterpriseAltocReads.Read(r.Context(), spec.Resource, input.ID, verified.ActorUID, input.Authorization.Scope, input.Query)
+	}
 	if err != nil {
 		var known httperror.Error
 		if errors.As(err, &known) {
@@ -132,6 +158,29 @@ func enterpriseAltocReadPermitCanonical(r *http.Request, p enterpriseAltocReadPe
 		departments = []string{}
 	}
 	fields := []any{"hzy-enterprise-altoc-read-permit.v1", r.Method, r.URL.RequestURI(), p.ActorUID, p.Tenant, p.Deployment, p.Resource, p.Action, p.Operation, p.ObjectID, p.Allowed, p.ExpiresAt, p.BundleVersion, p.BundleHash, p.PolicyRevision, p.Scope.Access, departments, p.Query.Page, p.Query.PageSize, p.Query.Search, p.Query.Status, p.Query.CustomerID, p.Query.ContractID}
+	// Appended only when set, so permits signed before this field keep their bytes.
+	if p.Query.IncludeDescendants {
+		fields = append(fields, true)
+	}
+	for _, filter := range []struct {
+		key   string
+		value any
+		set   bool
+	}{
+		{"parentId", p.Query.ParentID, p.Query.ParentID != ""}, {"rootsOnly", true, p.Query.RootsOnly}, {"ownerUnassigned", true, p.Query.OwnerUnassigned}, {"origin", p.Query.Origin, p.Query.Origin != ""}, {"category", p.Query.Category, p.Query.Category != ""}, {"parentContractId", p.Query.ParentContractID, p.Query.ParentContractID != ""}, {"customerIds", p.Query.CustomerIDs, p.Query.CustomerIDs != ""},
+		{"signedDateFrom", p.Query.SignedDateFrom, p.Query.SignedDateFrom != ""}, {"signedDateTo", p.Query.SignedDateTo, p.Query.SignedDateTo != ""},
+		{"ownerUid", p.Query.OwnerUID, p.Query.OwnerUID != ""}, {"amountMin", p.Query.AmountMin, p.Query.AmountMin != ""}, {"amountMax", p.Query.AmountMax, p.Query.AmountMax != ""}, {"direction", p.Query.Direction, p.Query.Direction != ""}, {"contractType", p.Query.ContractType, p.Query.ContractType != ""},
+		{"workspace", true, p.Query.Workspace}, {"industryCode", p.Query.IndustryCode, p.Query.IndustryCode != ""}, {"regionCode", p.Query.RegionCode, p.Query.RegionCode != ""},
+		{"updatedDateFrom", p.Query.UpdatedDateFrom, p.Query.UpdatedDateFrom != ""}, {"updatedDateTo", p.Query.UpdatedDateTo, p.Query.UpdatedDateTo != ""}, {"customerSort", p.Query.CustomerSort, p.Query.CustomerSort != ""},
+		{"contactsOnly", true, p.Query.ContactsOnly}, {"decisionRole", p.Query.DecisionRole, p.Query.DecisionRole != ""}, {"primaryOnly", true, p.Query.PrimaryOnly}, {"starredOnly", true, p.Query.StarredOnly},
+	} {
+		if filter.set {
+			fields = append(fields, []any{filter.key, filter.value})
+		}
+	}
+	if p.CustomerRead != nil {
+		fields = append(fields, []any{"customerRead", enterpriseAltocReadPermitCanonical(r, *p.CustomerRead)})
+	}
 	return enterpriseAltocPermitFieldsCanonical(fields)
 }
 func enterpriseAltocPermitFieldsCanonical(fields []any) string {

@@ -42,7 +42,7 @@ test('the snapshot module allowlist is the composition registry, not a hand-writ
   try {
     const { hostAuthorizationApps } = await import('../server/utils/hostAuthorizationApps.ts')
     assert.deepEqual([...hostAuthorizationApps].sort(), navigationContributors.map(module => module.code).sort())
-    for (const code of ['aims', 'assets', 'codocs', 'altoc', 'console']) assert.ok(hostAuthorizationApps.includes(code))
+    for (const code of ['aims', 'assets', 'codocs', 'altoc', 'console', 'finance']) assert.ok(hostAuthorizationApps.includes(code))
   } finally {
     hooks.deregister()
   }
@@ -126,10 +126,10 @@ test('permissions endpoint: verified session, strict allowlist, normal merged sn
     const assets = await (await get('?app=assets')).json()
     assert.equal(assets.data.appCode, 'assets')
     assert.deepEqual(assets.data.resources, { products: ['view'] })
-    for (const code of ['codocs', 'console', 'altoc']) assert.equal((await get(`?app=${code}`)).status, 200)
+    for (const code of ['codocs', 'console', 'altoc', 'finance', 'people']) assert.equal((await get(`?app=${code}`)).status, 200)
 
     state.calls.length = 0
-    for (const query of ['', '?app=finance', '?app=AIMS', '?app=aims&app=assets', '?app=aims&role=system_admin', '?app=enterprise', '?module=aims']) {
+    for (const query of ['', '?app=not-installed', '?app=AIMS', '?app=aims&app=assets', '?app=aims&role=system_admin', '?app=enterprise', '?module=aims']) {
       const response = await get(query)
       assert.equal(response.status, 400, `${query} must be rejected`)
       assert.match(response.headers.get('content-type'), /application\/json/)
@@ -138,7 +138,7 @@ test('permissions endpoint: verified session, strict allowlist, normal merged sn
 
     state.denied = true
     assert.equal((await get('?app=aims')).status, 401)
-    assert.equal((await get('?app=finance')).status, 401, 'session is verified before the module is examined')
+    assert.equal((await get('?app=people')).status, 401, 'session is verified before the module is examined')
     state.denied = false
 
     state.policyFailure = true

@@ -79,6 +79,7 @@ describe('useAuthorization per-module state in the Enterprise Host', () => {
     const currentRoute = ref<{ meta: Record<string, unknown> }>({ meta: { authorizationApp: 'aims' } })
     const responses: Record<string, unknown> = {
       '/enterprise/api/auth/permissions?app=aims': { code: 0, data: { appCode: 'aims', uid: 'u1', roles: [], resources: { timesheet: ['submit'], products: ['view'] } } },
+      '/enterprise/api/auth/permissions?app=finance': { code: 0, data: { appCode: 'finance', uid: 'u1', roles: [], resources: { bank_accounts: ['admin'] } } },
       '/enterprise/api/auth/permissions?app=assets': { code: 0, data: { appCode: 'assets', uid: 'u1', roles: [], resources: { products: ['edit'] } } },
       // SPA fallback for an unregistered path: 200 text/html parsed as a string.
       '/enterprise/api/auth/permissions?app=codocs': '<!DOCTYPE html><html></html>'
@@ -118,6 +119,14 @@ describe('useAuthorization per-module state in the Enterprise Host', () => {
       currentRoute.value = { meta: { authorizationApp: 'aims' } }
       assert.deepEqual(authorization.getAuthorization()?.resources, { timesheet: ['submit'], products: ['view'] })
 
+      currentRoute.value = { meta: { authorizationApp: 'finance' } }
+      assert.equal(authorization.loaded.value, false)
+      await authorization.loadAuthorization()
+      assert.equal(authorization.authorizationApp.value, 'finance')
+      assert.deepEqual(authorization.getAuthorization()?.resources, { bank_accounts: ['admin'] })
+      assert.equal(authorization.loaded.value, true)
+      assert.equal(authorization.error.value, null)
+
       currentRoute.value = { meta: {} }
       const beforeUnowned = requests.length
       assert.deepEqual(await authorization.loadAuthorization(), authorization.getAuthorization())
@@ -130,9 +139,25 @@ describe('useAuthorization per-module state in the Enterprise Host', () => {
       assert.equal(authorization.getAuthorization(), null)
       assert.ok(authorization.error.value instanceof AuthorizationSnapshotResponseError, 'HTML is an error, not an empty snapshot')
 
+      // The shell must gate the router's incoming module while Nuxt's page
+      // route can still describe the outgoing page during a lazy transition.
+      const incomingMeta = ref<Record<string, unknown>>({ authorizationApp: 'assets' })
+      const shellAuthorization = useAuthorization({ routeMeta: () => incomingMeta.value })
+      assert.equal(authorization.authorizationApp.value, 'codocs')
+      assert.equal(shellAuthorization.authorizationApp.value, 'assets')
+      assert.deepEqual(shellAuthorization.getAuthorization()?.resources, { products: ['edit'] })
+      assert.equal(shellAuthorization.error.value, null)
+      incomingMeta.value = { authorizationApp: 'aims' }
+      assert.equal(shellAuthorization.authorizationApp.value, 'aims')
+      assert.deepEqual(shellAuthorization.getAuthorization()?.resources, { timesheet: ['submit'], products: ['view'] })
+      incomingMeta.value = {}
+      assert.deepEqual(shellAuthorization.getAuthorization()?.resources, {})
+      assert.equal(authorization.getAuthorization(), null, 'page scope retains its own failed module, not shell permissions')
+
       assert.deepEqual(requests, [
         '/enterprise/api/auth/permissions?app=aims',
         '/enterprise/api/auth/permissions?app=assets',
+        '/enterprise/api/auth/permissions?app=finance',
         '/enterprise/api/auth/permissions?app=codocs'
       ])
     } finally {
@@ -143,4 +168,56 @@ describe('useAuthorization per-module state in the Enterprise Host', () => {
       }
     }
   })
+})
+
+// Exercise the real Vue injection tree and the real cached authorization composable.
+test('static composition scopes isolate Finance and Altoc siblings and reload both on identity change', async () => {
+  const { createSSRApp, h, provide } = await import('vue')
+  const { renderToString } = await import('vue/server-renderer')
+  const { authorizationModuleScope } = await import('../app/utils/authorizationModuleScope')
+  const { useAuthorization } = await import('../app/composables/useAuthorization')
+  const globals = globalThis as Record<string, unknown>
+  const previous = Object.fromEntries(['useRuntimeConfig', 'useRoute', 'computed', 'watch', '$fetch'].map(key => [key, globals[key]]))
+  const snapshots: Array<ReturnType<typeof useAuthorization>> = []
+  let actor = 'cashier'
+  const fetches: string[] = []
+  const config = { public: { appCode: 'enterprise' } }
+  Object.assign(globals, {
+    useRuntimeConfig: () => config,
+    useRoute: () => ({ meta: { authorizationApp: 'altoc' }, query: { app: 'finance', authorizationApp: 'finance' } }), computed, watch,
+    $fetch: async (url: string) => {
+      fetches.push(url)
+      const app = new URL(url, 'https://fixture.invalid').searchParams.get('app')
+      return { code: 0, data: { appCode: app, uid: actor, resources: app === 'finance' ? { receipts: actor === 'cashier' ? ['confirm'] : ['view'] } : { receivable: ['view'] } } }
+    }
+  })
+  const child = { setup() {
+    snapshots.push(useAuthorization())
+    return () => h('span')
+  } }
+  const scoped = (app: 'finance' | 'altoc') => ({ setup() {
+    provide(authorizationModuleScope, app)
+    return () => h(child)
+  } })
+  try {
+    await renderToString(createSSRApp({ setup: () => () => h('div', [h(scoped('finance')), h(scoped('altoc')), h(child)]) }))
+    for (const snapshot of snapshots) await snapshot.loadAuthorization({ force: true })
+    assert.deepEqual(snapshots.map(s => s.authorizationApp.value), ['finance', 'altoc', 'altoc'])
+    assert.deepEqual(snapshots[0]!.getAuthorization()?.resources, { receipts: ['confirm'] })
+    assert.deepEqual(snapshots[1]!.getAuthorization()?.resources, { receivable: ['view'] })
+    snapshots[0]!.clearAuthorizationCache()
+    actor = 'reviewer'
+    for (const snapshot of snapshots) await snapshot.loadAuthorization({ force: true })
+    assert.deepEqual(snapshots[0]!.getAuthorization()?.resources, { receipts: ['view'] })
+    assert.equal(snapshots[1]!.getAuthorization()?.uid, 'reviewer')
+    assert.ok(fetches.every(url => /\?app=(finance|altoc)$/.test(url)))
+    config.public.appCode = 'finance'
+    const standalone = useAuthorization()
+    assert.equal(standalone.authorizationApp.value, null)
+  } finally {
+    for (const [key, value] of Object.entries(previous)) {
+      if (value === undefined) Reflect.deleteProperty(globals, key)
+      else globals[key] = value
+    }
+  }
 })

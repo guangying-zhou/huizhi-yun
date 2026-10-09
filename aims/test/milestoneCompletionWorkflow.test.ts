@@ -81,7 +81,11 @@ test('pending Workflow task follows the current singleton project director', () 
   const flow = read('../workflow/docs/migrations/010_aims_milestone_completion.sql')
 
   assert.match(middleware, /delete query\.current_project_director_uid/)
-  assert.match(middleware, /resolveWorkflowProjectDirectorRoleHolder/)
+  // Missing holders can degrade reads, but the wrapper still resolves current
+  // Console facts; do not require its extracted implementation in middleware.
+  assert.match(middleware, /import \{ workflowProjectDirectorFacts \} from ['"]~~\/server\/utils\/projectDirectorRoleHolder['"]/)
+  assert.match(middleware, /const director = await workflowProjectDirectorFacts\(event\)/)
+  assert.match(resolver, /export async function workflowProjectDirectorFacts\(event: H3Event\)[\s\S]*return await resolveWorkflowProjectDirectorRoleHolder\(event\)/)
   assert.match(resolver, /console:authorization-role-holders:read/)
   assert.match(reconciliation, /i\.action_code = 'milestone_completion'/)
   assert.match(reconciliation, /SET assignee_uid = \?, actionable_version = \?/)

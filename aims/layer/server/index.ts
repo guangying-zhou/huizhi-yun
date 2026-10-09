@@ -20,3 +20,6 @@ export { readHostProjectRequirements, writeHostProjectRequirement, type Requirem
 export { readHostProjectOutput, readHostProjectRepoCandidates } from './internal/projectOutput'
 
 export { writeHostDeliverableQuality, type QualityAction } from './internal/deliverableQuality'
+
+export { drainHostAimsScheduler, createHostAimsSchedulerIO } from './internal/scheduler'
+export { approvalActions as aimsApprovalActionDefinitions } from '../../app/config/permissions'

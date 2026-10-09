@@ -74,6 +74,7 @@ export type WorkflowEntityType = 'project' | 'milestone' | 'task' | 'bug'
 export type PortfolioStatus = 'active' | 'archived'
 
 export interface ProjectPortfolio {
+  editVersion?: string
   canDelete?: boolean
   id: number
   code: string

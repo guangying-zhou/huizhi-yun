@@ -13,6 +13,10 @@ import (
 // Invoked by the decision transaction after incrementing the workspace revision.
 // Every original feedback binding keeps its own target request identity.
 func enqueueFeedbackDecisionTx(ctx context.Context, tx *sql.Tx, trusted integrationoperation.TrustedContext, actor, product string, requestID int64, canonicalID, status string, revision uint64) error {
+	// D11: keep owning product facts; the retired cross-domain outbox is not produced.
+	if trusted.RetireAPFCommands {
+		return nil
+	}
 	rows, err := tx.QueryContext(ctx, `WITH RECURSIVE request_family AS (SELECT id FROM product_requests WHERE product_code=? AND id=? UNION ALL SELECT r.id FROM product_requests r INNER JOIN request_family f ON r.merged_into_id=f.id WHERE r.product_code=?) SELECT b.source_biz_id,r.biz_id FROM product_feedback_bindings b INNER JOIN request_family f ON f.id=b.request_id INNER JOIN product_requests r ON r.id=b.request_id AND r.product_code=b.product_code WHERE b.product_code=? AND b.source_app='altoc' AND b.source_type='service_ticket'`, product, requestID, product, product)
 	if err != nil {
 		return err

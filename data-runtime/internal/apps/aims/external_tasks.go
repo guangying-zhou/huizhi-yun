@@ -23,8 +23,7 @@ func (a *Adapter) handleExternalTasksRuntime(ctx context.Context, method, path s
 	if method != http.MethodGet {
 		return nil, "aims.service.tasks.list", true, httperror.New(http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
 	}
-	data, err := a.externalTasks(ctx, query)
-	return data, "aims.service.tasks.list", true, err
+	return nil, "aims.service.tasks.list", true, httperror.New(http.StatusGone, "aims_service_tasks_retired", "旧任务服务接口已退役，请使用 Enterprise 工作项页面；不再提供此机器读取合同")
 }
 
 func (a *Adapter) externalTasks(ctx context.Context, query url.Values) (map[string]any, error) {

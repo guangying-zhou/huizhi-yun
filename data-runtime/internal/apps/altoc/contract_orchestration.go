@@ -99,6 +99,9 @@ func (a *Adapter) ExecuteContractActivationInTransaction(ctx context.Context, tx
 	if err != nil {
 		return nil, err
 	}
+	if err := ensureContractNotHistorical(contract); err != nil {
+		return nil, err
+	}
 	if err := altocRequireActionScope(body, "contract", "edit"); err != nil {
 		return nil, err
 	}
@@ -689,6 +692,9 @@ func (a *Adapter) contractForActivationTx(ctx context.Context, tx *sql.Tx, ident
 func (a *Adapter) lockContractActivationJobTx(ctx context.Context, tx *sql.Tx, contractIdentifier string, jobIdentifier string) (map[string]any, map[string]any, error) {
 	contract, err := a.contractForActivationTx(ctx, tx, contractIdentifier)
 	if err != nil {
+		return nil, nil, err
+	}
+	if err := ensureContractNotHistorical(contract); err != nil {
 		return nil, nil, err
 	}
 	job, err := a.contractActivationJobDetailTx(ctx, tx, contract["id"], jobIdentifier)

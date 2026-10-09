@@ -54,7 +54,7 @@ export function classifyApplicationAccessIssue(errorValue: unknown): Application
 export function resolveApiErrorAlert(errorValue: unknown, options: ApiErrorAlertOptions = {}): ApiErrorAlert | null {
   if (!errorValue) return null
 
-  const { message, code, statusCode } = errorDetails(errorValue)
+  const { message, code, statusCode: _statusCode } = errorDetails(errorValue)
   const searchable = `${message} ${code}`.toLowerCase()
   const appName = options.appName?.trim()
   const detail = sanitizedDetail(message)

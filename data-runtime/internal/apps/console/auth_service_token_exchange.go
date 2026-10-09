@@ -3,6 +3,7 @@ package console
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"net/http"
 	"strings"
 	"time"
@@ -10,6 +11,7 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/huizhi-yun/data-runtime/internal/gatewaykeys"
 	"github.com/huizhi-yun/data-runtime/internal/httperror"
+	"github.com/huizhi-yun/data-runtime/internal/policyenvelope"
 )
 
 // ExchangeConsoleServiceClientToken is the credential-backed client_credentials
@@ -175,16 +177,8 @@ func (a *Adapter) exchangeConsoleServiceTokenWithKey(ctx context.Context, body m
 			return nil, err
 		}
 	}
-	var storedVersion, storedHash string
-	if err := tx.QueryRowContext(ctx, `
-		SELECT bundle_version,bundle_hash FROM policy_bundle_snapshots
-		WHERE tenant_code=? AND deployment_code=?
-		ORDER BY synced_at_ms DESC LIMIT 1
-	`, authTenant, authDeployment).Scan(&storedVersion, &storedHash); err != nil {
-		return nil, httperror.New(http.StatusServiceUnavailable, "console_exchange_policy_unavailable", "Verified Console policy summary is unavailable")
-	}
-	if storedVersion != policyVersion || storedHash != policyHash {
-		return nil, httperror.New(http.StatusServiceUnavailable, "console_exchange_policy_mismatch", "Verified Console policy summary differs from Runtime storage")
+	if err := a.verifyServiceTokenExchangePolicy(ctx, tx, authTenant, authDeployment, policyVersion, policyHash); err != nil {
+		return nil, err
 	}
 	var currentKey uint64
 	if err := tx.QueryRowContext(ctx, `
@@ -236,4 +230,40 @@ func (a *Adapter) exchangeConsoleServiceTokenWithKey(ctx context.Context, body m
 		"accessToken": signed, "tokenType": "Bearer", "expiresIn": ttlSeconds,
 		"scope": selected["scope"],
 	}, nil
+}
+
+// SetServiceTokenExchangePolicySource is configured at Runtime construction from
+// local Platform trust and exact Console binding, never from exchange inputs.
+func (a *Adapter) SetServiceTokenExchangePolicySource(source func(string, string) (policyenvelope.Store, error)) {
+	a.serviceTokenExchangePolicySource = source
+}
+
+func (a *Adapter) verifyServiceTokenExchangePolicy(ctx context.Context, tx *sql.Tx, tenant, deployment, version, hash string) error {
+	unavailable := func() error {
+		return httperror.New(http.StatusServiceUnavailable, "console_exchange_policy_unavailable", "Verified Console policy is unavailable")
+	}
+	if a.serviceTokenExchangePolicySource == nil {
+		return unavailable()
+	}
+	store, err := a.serviceTokenExchangePolicySource(tenant, deployment)
+	if err != nil {
+		return unavailable()
+	}
+	snapshot, renewal, err := store.ReadWithRenewalTx(ctx, tx)
+	if err != nil {
+		return unavailable()
+	}
+	raw, err := json.Marshal(snapshot.Envelope)
+	if err != nil {
+		return unavailable()
+	}
+	body, err := policyenvelope.VerifyAuthenticity(raw, store.KID, store.PublicKey, store.Binding)
+	validity := policyenvelope.EvaluateValidity(body, renewal, time.Now().UnixMilli())
+	if err != nil || (validity.Verdict != "valid" && validity.Verdict != "grace") {
+		return unavailable()
+	}
+	if body.BundleVersion != version || body.PayloadHash != hash {
+		return httperror.New(http.StatusServiceUnavailable, "console_exchange_policy_mismatch", "Verified Console policy summary differs from Runtime storage")
+	}
+	return nil
 }

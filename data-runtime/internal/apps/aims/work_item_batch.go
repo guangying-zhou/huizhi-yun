@@ -50,6 +50,7 @@ func (a *Adapter) batchUpdateWorkItems(ctx context.Context, query url.Values, bo
 	if len(ids) == 0 {
 		return nil, httperror.New(http.StatusBadRequest, "missing_work_item_ids", "ids 不能为空")
 	}
+	ctx = withTicketTransactionItems(ctx, ids...)
 	changesBody := bodyMap(body, "changes")
 	if changesBody == nil {
 		return nil, httperror.New(http.StatusBadRequest, "missing_changes", "changes 不能为空")

@@ -40,6 +40,8 @@ const personnelHelpers = new Map([
 
 // Reviewed variable/forwarded personnel-resource checks. A new site needs a
 // human trace back to a manifest literal before this inventory is updated.
+// Feedback forwarded resources originate exclusively in feedbackPermission(op),
+// a fixed operation map covered by feedbackHost and manifest contract tests.
 const forwardedResourceAllowlist = [
   'aims/server/api/v1/authorization/instance-conflict-explain.post.ts:27:9 requirePermission',
   'aims/server/utils/aimsScopedAuthorization.ts:93:24 loadScopedAuthorizationFromConsoleRuntime',
@@ -55,15 +57,16 @@ const forwardedResourceAllowlist = [
   'altoc/server/api/v1/documents/index.post.ts:111:9 requirePermission',
   'altoc/server/api/v1/documents/preview.get.ts:124:9 requirePermission',
   'altoc/server/middleware/altoc-permission.ts:29:9 requirePermission',
-  'altoc/server/utils/altocScopedAuthorization.ts:106:12 resolveAltocDataAccessQueryFromScopedGrants',
-  'altoc/server/utils/altocScopedAuthorization.ts:115:24 loadScopedAuthorizationFromConsoleRuntime',
-  'altoc/server/utils/altocScopedAuthorization.ts:124:17 resolveAltocDataAccessQueryFromScopedGrants',
+  'altoc/server/utils/altocScopedAuthorization.ts:105:12 resolveAltocDataAccessQueryFromScopedGrants',
+  'altoc/server/utils/altocScopedAuthorization.ts:114:24 loadScopedAuthorizationFromConsoleRuntime',
+  'altoc/server/utils/altocScopedAuthorization.ts:123:17 resolveAltocDataAccessQueryFromScopedGrants',
   'altoc/server/utils/checkPermission.ts:131:25 checkPermission',
   'assets/server/api/v1/authorization/instance-conflict-explain.post.ts:17:9 requirePermission',
   'assets/server/middleware/assets-permission.ts:20:9 requirePermission',
   'assets/server/utils/assetsScopedAuthorization.ts:43:24 loadScopedAuthorizationFromConsoleRuntime',
   'assets/server/utils/checkPermission.ts:37:12 authorizationResourcesAllow',
   'assets/server/utils/checkPermission.ts:63:25 checkPermission',
+  'assets/server/utils/enterpriseKnowledgeLinkService.ts:11:28 loadSubjectScopedAuthorizationByService',
   'assets/server/utils/productAdoptionAuthorization.ts:9:28 loadSubjectScopedAuthorizationByService',
   'codocs/server/utils/checkPermission.ts:34:10 authorizationResourcesAllow',
   'codocs/server/utils/checkPermission.ts:56:25 checkPermission',
@@ -73,6 +76,9 @@ const forwardedResourceAllowlist = [
   'console/server/middleware/page-access.ts:61:8 hasPermissionInSnapshot',
   'console/server/utils/checkPermission.ts:58:12 hasPermissionInSnapshot',
   'console/server/utils/checkPermission.ts:99:25 checkPermission',
+  'console/server/utils/feedbackAdmin.ts:19:127 loadPolicyScopedAuthorization',
+  'console/server/utils/feedbackHost.ts:22:18 evaluateFoundationScopedAuthorization',
+  'console/server/utils/feedbackHost.ts:23:16 evaluateFoundationScopedAuthorization',
   'console/server/utils/policyAuthorization.ts:570:12 evaluateFlatSnapshotPermission',
   'console/server/utils/policyScopedAuthorization.ts:100:7 evaluateFoundationScopedAuthorization',
   'console/server/utils/subjectEligibility.ts:48:28 evaluateFlatSnapshotPermission',
@@ -80,6 +86,10 @@ const forwardedResourceAllowlist = [
   'enterprise/server/routes/aims/api/v1/products/[productCode]/adoption.get.ts:34:28 loadScopedAuthorizationFromConsoleRuntime',
   'enterprise/server/routes/assets/api/v1/write-access.get.ts:12:30 loadScopedAuthorizationFromConsoleRuntime',
   'enterprise/server/routes/enterprise/api/navigation.get.ts:45:9 authorizationResourcesAllow',
+  'enterprise/server/utils/enterpriseAPF.ts:41:32 loadScopedAuthorizationFromConsoleRuntime',
+  'enterprise/server/utils/enterpriseAPF.ts:52:40 evaluateFoundationScopedAuthorization',
+  'enterprise/server/utils/enterpriseAPF.ts:66:22 resolveAltocDataAccessQueryFromScopedGrants',
+  'enterprise/server/utils/enterpriseAPF.ts:73:10 evaluateFoundationScopedAuthorization',
   'enterprise/server/utils/enterpriseAimsProjectPlan.ts:15:59 authorizationResourcesAllow',
   'enterprise/server/utils/enterpriseAimsTimeEntryReviews.ts:28:10 evaluateFoundationScopedAuthorization',
   'enterprise/server/utils/enterpriseAimsTimesheet.ts:115:40 authorizationResourcesAllow',
@@ -87,13 +97,22 @@ const forwardedResourceAllowlist = [
   'enterprise/server/utils/enterpriseAimsWorkItemWorkspace.ts:116:18 loadProjectCommandAuthorization',
   'enterprise/server/utils/enterpriseAimsWorkItemWrite.ts:31:13 loadProjectCommandAuthorization',
   'enterprise/server/utils/enterpriseAimsWorkItemWrite.ts:33:30 loadScopedAuthorizationFromConsoleRuntime',
-  'enterprise/server/utils/enterpriseAltocReads.ts:77:10 authorizationResourcesAllow',
-  'enterprise/server/utils/enterpriseAltocReads.ts:78:26 loadScopedAuthorizationFromConsoleRuntime',
-  'enterprise/server/utils/enterpriseAltocReads.ts:82:20 evaluateFoundationScopedAuthorization',
-  'enterprise/server/utils/enterpriseAltocReads.ts:97:22 resolveAltocDataAccessQueryFromScopedGrants',
+  'enterprise/server/utils/enterpriseAltocFinancialSummary.ts:25:28 loadScopedAuthorizationFromConsoleRuntime',
+  'enterprise/server/utils/enterpriseAltocKnowledge.ts:40:30 loadScopedAuthorizationFromConsoleRuntime',
+  'enterprise/server/utils/enterpriseAltocReads.ts:180:24 loadScopedAuthorizationFromConsoleRuntime',
+  'enterprise/server/utils/enterpriseAltocReads.ts:184:18 evaluateFoundationScopedAuthorization',
+  'enterprise/server/utils/enterpriseAltocReads.ts:199:20 resolveAltocDataAccessQueryFromScopedGrants',
+  'enterprise/server/utils/enterpriseAltocReads.ts:233:10 authorizationResourcesAllow',
   'enterprise/server/utils/enterpriseAssetsLinks.ts:18:28 loadScopedAuthorizationFromConsoleRuntime',
   'enterprise/server/utils/enterpriseAssetsProducts.ts:46:27 loadScopedAuthorizationFromConsoleRuntime',
+  'enterprise/server/utils/enterpriseFeedback.ts:15:47 loadScopedAuthorizationFromConsoleRuntime',
+  'enterprise/server/utils/enterpriseFinance.ts:66:24 loadScopedAuthorizationFromConsoleRuntime',
+  'enterprise/server/utils/enterpriseFinance.ts:68:8 evaluateFoundationScopedAuthorization',
+  'enterprise/server/utils/enterpriseFinanceLedger.ts:121:24 loadScopedAuthorizationFromConsoleRuntime',
   'enterprise/server/utils/enterpriseIPAssetsLinkProduct.ts:20:28 loadScopedAuthorizationFromConsoleRuntime',
+  'enterprise/server/utils/enterprisePeople.ts:52:24 loadScopedAuthorizationFromConsoleRuntime',
+  'enterprise/server/utils/enterprisePeople.ts:78:15 evaluateFoundationScopedAuthorization',
+  'enterprise/server/utils/enterprisePeopleFacts.ts:39:24 loadScopedAuthorizationFromConsoleRuntime',
   'enterprise/server/utils/enterpriseProductHandoffCandidates.ts:24:12 checkAimsScopedPermission',
   'enterprise/server/utils/enterpriseProductReadGate.ts:11:8 authorizationResourcesAllow',
   'finance/server/middleware/finance-permission.ts:23:9 requirePermission',
@@ -103,6 +122,7 @@ const forwardedResourceAllowlist = [
   'finance/server/utils/financeScopedAuthorization.ts:178:26 loadFinanceScopedGrants',
   'foundation/server/utils/applicationAuthorization.ts:794:20 evaluateFoundationScopedAuthorization',
   'foundation/server/utils/instanceConflictExplanation.ts:207:20 evaluateFoundationScopedAuthorization',
+  'foundation/server/utils/peopleScopeProjection.ts:29:53 evaluateFoundationScopedAuthorization',
   'foundation/server/utils/projectCommandAuthorization.ts:13:24 loadScopedAuthorizationFromConsoleRuntime',
   'foundation/server/utils/projectCommandAuthorization.ts:16:19 evaluateFoundationScopedAuthorization',
   'foundation/server/utils/projectScopeAuthorization.ts:44:47 evaluateFoundationScopedAuthorization',
@@ -124,7 +144,14 @@ function moduleFor(file, call, source) {
   const owner = file.split('/')[0]
   const helperName = call.expression.getText(source).split('.').at(-1)
   if (helperName === 'loadPolicyScopedAuthorization' && ts.isStringLiteral(call.arguments[1])) return call.arguments[1].text
+  if (helperName === 'loadScopedAuthorizationFromConsoleRuntime' && call.arguments[2] && ts.isStringLiteral(call.arguments[2])) return call.arguments[2].text
   if (owner !== 'enterprise' && owner !== 'foundation') return owner
+  // An evaluator call that names its app literally is checked against that app's manifest.
+  if (helperName === 'evaluateFoundationScopedAuthorization' && call.arguments[0] && ts.isObjectLiteralExpression(call.arguments[0])) {
+    const required = call.arguments[0].properties.find(p => ts.isPropertyAssignment(p) && p.name.getText(source) === 'required')
+    const app = required && ts.isObjectLiteralExpression(required.initializer) && required.initializer.properties.find(p => ts.isPropertyAssignment(p) && p.name.getText(source) === 'appCode')
+    if (app && ts.isStringLiteral(app.initializer) && modules.includes(app.initializer.text)) return app.initializer.text
+  }
   if (owner === 'foundation') return 'aims' // current Foundation project authorization adapters
   const name = file.toLowerCase()
   if (name.includes('contractactivation')) {
@@ -211,7 +238,8 @@ function inspect(file, code) {
         // Platform checkPermission(tenant, uid, app, resource, action) has a
         // different signature; index 1 is a UID, not a resource.
         && !(name === 'checkPermission' && file.startsWith('platform/'))) {
-        const owner = moduleFor(file, node, source)
+        // This Foundation helper has a fixed owning app, regardless of caller file.
+        const owner = name === 'loadProjectCommandAuthorization' ? 'aims' : moduleFor(file, node, source)
         const position = source.getLineAndCharacterOfPosition(node.getStart(source))
         const line = position.line + 1
         visits.push({ file, line, helper: name, owner })
@@ -302,4 +330,16 @@ test('a new variable-form personnel resource needs allowlist review', () => {
     callEnterpriseRuntime(event, 'aims.list', { authorization: { resource: resourceCode, action: 'view' } })
   `)
   assert.deepEqual(permit.forwarded, [])
+})
+
+test('Cross-domain project helper remains an Aims personnel gate', () => {
+  const result = inspect('enterprise/server/utils/enterpriseAltocFixture.ts', 'loadProjectCommandAuthorization(event, user, {resource:\'projects\',action:\'edit\'}); loadProjectCommandAuthorization(event,user,{resource:\'orphan\',action:\'edit\'})')
+  assert.equal(result.findings.length, 1)
+  assert.match(result.findings[0], /aims:orphan/)
+})
+
+test('explicit Finance scope in an Altoc helper is checked against Finance, not a filename guess', () => {
+  const result = inspect('enterprise/server/utils/enterpriseAltocFixture.ts', `loadScopedAuthorizationFromConsoleRuntime(event,uid,'finance',{resourceCode:'invoices',action:'view'});loadScopedAuthorizationFromConsoleRuntime(event,uid,'finance',{resourceCode:'orphan-finance',action:'view'})`)
+  assert.equal(result.findings.length, 1)
+  assert.match(result.findings[0], /finance:orphan-finance/)
 })

@@ -21,19 +21,33 @@ test('Enterprise publish execution uses exact action permits and durable notific
     const action = path.split(':').at(-1)
     return { handled: true, data: { success: true, data: { executionStatus: action === 'seal' ? 'pending_send' : action === 'send' ? 'pending_receive' : 'received', idempotent: false, initiatorUid: 'person-a', senderUid: 'person-b', documentTitle: 'Notice' } } }
   }
-  globalThis.__publishNotify = async input => { notifications.push(input); if (globalThis.__publishNotifyFail) throw Object.assign(new Error('private notify error'), { statusCode: 502 }) }
+  globalThis.__publishNotify = async (input) => {
+    notifications.push(input)
+    if (globalThis.__publishNotifyFail)
+      throw Object.assign(new Error('private notify error'), { statusCode: 502 })
+  }
   const hooks = registerHooks({ resolve(specifier, context, next) {
     let source
-    if (specifier.endsWith('/consoleSessionBridge')) source = 'export const resolveConsoleAuthWithSessionBridge=async()=>globalThis.__publishSession'
-    if (specifier.endsWith('/tenantRuntimeClient')) source = 'export const prepareTenantRuntime=async(...args)=>globalThis.__publishPrepare(...args);export const maybeCallTenantRuntime=(...args)=>globalThis.__publishTransport(...args)'
-    if (specifier.endsWith('/platformBundleAuthorization')) source = 'export const loadAuthorizationSnapshotFromConsoleRuntime=async()=>globalThis.__publishAuth'
-    if (specifier.endsWith('/tenantGatewayTrust')) source = 'export const resolveTrustedTenantGatewayContext=()=>undefined'
-    if (specifier.endsWith('/notify')) source = 'export const sendNotification=(...args)=>globalThis.__publishNotify(...args)'
-    if (source) return { url: `data:text/javascript,${encodeURIComponent(source)}`, shortCircuit: true }
+    if (specifier.endsWith('/consoleSessionBridge'))
+      source = 'export const resolveConsoleAuthWithSessionBridge=async()=>globalThis.__publishSession'
+    if (specifier.endsWith('/tenantRuntimeClient'))
+      source = 'export const prepareTenantRuntime=async(...args)=>globalThis.__publishPrepare(...args);export const maybeCallTenantRuntime=(...args)=>globalThis.__publishTransport(...args)'
+    if (specifier.endsWith('/platformBundleAuthorization'))
+      source = 'export const loadAuthorizationSnapshotFromConsoleRuntime=async()=>globalThis.__publishAuth'
+    if (specifier.endsWith('/tenantGatewayTrust'))
+      source = 'export const resolveTrustedTenantGatewayContext=()=>undefined'
+    if (specifier.endsWith('/notify'))
+      source = 'export const sendNotification=(...args)=>globalThis.__publishNotify(...args)'
+    if (source)
+      return { url: `data:text/javascript,${encodeURIComponent(source)}`, shortCircuit: true }
     let candidate
-    if (specifier.startsWith('@hzy/foundation/')) candidate = resolve(root, 'foundation', specifier.slice('@hzy/foundation/'.length))
-    else if (specifier.startsWith('.') && context.parentURL?.startsWith('file:')) candidate = resolve(dirname(fileURLToPath(context.parentURL)), specifier)
-    if (candidate && !existsSync(candidate) && existsSync(`${candidate}.ts`)) return { url: pathToFileURL(`${candidate}.ts`).href, shortCircuit: true }
+    if (specifier.startsWith('@hzy/foundation/'))
+      candidate = resolve(root, 'foundation', specifier.slice('@hzy/foundation/'.length))
+    else
+      if (specifier.startsWith('.') && context.parentURL?.startsWith('file:'))
+        candidate = resolve(dirname(fileURLToPath(context.parentURL)), specifier)
+    if (candidate && !existsSync(candidate) && existsSync(`${candidate}.ts`))
+      return { url: pathToFileURL(`${candidate}.ts`).href, shortCircuit: true }
     return next(specifier, context)
   } })
   let server
@@ -42,14 +56,19 @@ test('Enterprise publish execution uses exact action permits and durable notific
     router.post('/reviews/:id/seal', (await import('../server/routes/codocs/api/reviews/[id]/seal.post.ts')).default)
     router.post('/reviews/:id/send', (await import('../server/routes/codocs/api/reviews/[id]/send.post.ts')).default)
     router.post('/reviews/:id/receive', (await import('../server/routes/codocs/api/reviews/[id]/receive.post.ts')).default)
-    app.use(defineEventHandler(event => { event.context.consoleAuth = globalThis.__publishSession })); app.use(router)
-    server = createServer(toNodeListener(app)); await new Promise(done => server.listen(0, '127.0.0.1', done))
+    app.use(defineEventHandler((event) => {
+      event.context.consoleAuth = globalThis.__publishSession
+    }))
+    app.use(router)
+    server = createServer(toNodeListener(app))
+    await new Promise(done => server.listen(0, '127.0.0.1', done))
     const base = `http://127.0.0.1:${server.address().port}`
     const post = (action, body, key = `publish-${action}-key`) => fetch(`${base}/reviews/42/${action}`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Idempotency-Key': key }, body: JSON.stringify(body) })
     const bodies = { seal: { sealTypes: ['official'], pageCount: 2, remark: null }, send: { senderUid: 'person-b', receiverName: 'Receiver', receiverPhone: '123', channel: 'email', sentDate: '2026-09-19', targetAccount: 'a@example.test', remark: null }, receive: { receiveDate: '2026-09-19' } }
     for (const action of ['seal', 'send', 'receive']) {
       const notificationsBefore = notifications.length
-      const response = await post(action, bodies[action]); assert.equal(response.status, 200, action)
+      const response = await post(action, bodies[action])
+      assert.equal(response.status, 200, action)
       assert.equal(calls.at(-1).path, `/v1/enterprise/codocs/publish-execution:${action}`)
       assert.equal(calls.at(-1).options.scope, 'codocs:enterprise-host:execute')
       assert.equal(calls.at(-1).options.body.authorization.actorUid, 'person-a')
@@ -74,16 +93,22 @@ test('Enterprise publish execution uses exact action permits and durable notific
       }
     }
     globalThis.__publishAuth = { resources: { reviews: ['view'] }, actionPolicies: {} }
-    const before = calls.length; assert.equal((await post('seal', bodies.seal)).status, 403); assert.equal(calls.length, before)
+    const before = calls.length
+    assert.equal((await post('seal', bodies.seal)).status, 403)
+    assert.equal(calls.length, before)
     globalThis.__publishAuth = { resources: { reviews: ['admin', 'archive', 'view'] }, actionPolicies: {} }
     assert.equal((await post('seal', { ...bodies.seal, current_user: 'victim' })).status, 400)
     assert.equal((await post('receive', bodies.receive, 'short')).status, 400)
     globalThis.__publishNotifyFail = true
     const failed = await post('receive', bodies.receive, 'publish-receive-notify-retry')
-    assert.equal(failed.status, 503); assert.doesNotMatch(await failed.text(), /private notify error/)
+    assert.equal(failed.status, 503)
+    assert.doesNotMatch(await failed.text(), /private notify error/)
   } finally {
-    if (server) await new Promise(done => server.close(done)); hooks.deregister()
+    if (server)
+      await new Promise(done => server.close(done))
+    hooks.deregister()
     delete globalThis.__publishNotifyFail
-    for (const [key, value] of Object.entries(old)) value === undefined ? delete globalThis[key] : globalThis[key] = value
+    for (const [key, value] of Object.entries(old))
+      value === undefined ? delete globalThis[key] : globalThis[key] = value
   }
 })

@@ -546,3 +546,7 @@ pending -> acknowledged -> snoozed -> resolved -> ignored
 - Workflow 首版回调签名与重试机制是否与其他模块统一
 - 资源密钥类字段的加密方案是否统一复用平台级封装
 - 报表统计是否直接落库聚合，还是首版在线聚合查询
+
+### APF-16e 已有资产知识关联（候选）
+
+`POST /api/v1/service/enterprise-knowledge-links` 是独立精确 `assets:asset-link:create` Service API，验签来源 enterprise.runtime、tenant/deployment 和用户委托，不接受旧 assets:write。冻结命令固定 11 个字符串字段，与 Codocs 知识关联相同；operationCode=`enterprise.assets.knowledge-link.v1`。目标求当前 deliveries:edit、environments:view 对象范围并独立签给 Runtime；Runtime 先重验范围及 customer/contract/project 的权威资产环境关联，再同事务写已有文档引用与幂等 receipt。既有 Altoc delivery-document 链不变。无正文创建或公开权限升级，缺权不能泄露计数。部署门禁与 grant 候选见 MODULE_CONTRACTS APF-16e。

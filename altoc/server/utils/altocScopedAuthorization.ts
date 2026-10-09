@@ -1,5 +1,4 @@
 import type { H3Event } from 'h3'
-import type { FoundationScopedAuthorizationGrant } from '@hzy/foundation/server/utils/scopeEvaluator'
 import { loadScopedAuthorizationFromConsoleRuntime } from '@hzy/foundation/server/utils/platformBundleAuthorization'
 import { fetchDirectoryApi } from '@hzy/foundation/server/utils/directoryApi'
 import { getRequestUid } from '~~/server/utils/authIdentity'

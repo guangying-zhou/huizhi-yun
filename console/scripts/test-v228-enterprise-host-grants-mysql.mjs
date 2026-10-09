@@ -5,7 +5,7 @@ import { buildTemporaryMySqlPlan, withTemporaryMySql } from '../../scripts/test/
 import { applyV228, planV228, readV228Rows } from './v228-enterprise-host-grants.mjs'
 
 const plan = await buildTemporaryMySqlPlan({ rootDir: resolve(import.meta.dirname, '../..') })
-await withTemporaryMySql(plan, async context => {
+await withTemporaryMySql(plan, async (context) => {
   const db = await mysql.createConnection({ ...context.connection('console'), multipleStatements: true, dateStrings: true })
   try {
     // Mirror Console: unicode_ci tables inside a schema whose default (and so
@@ -15,7 +15,7 @@ await withTemporaryMySql(plan, async context => {
       CREATE TABLE service_client_grants(id BIGINT PRIMARY KEY,service_client_id BIGINT,resource_code VARCHAR(200),action VARCHAR(50),scope_json JSON,status VARCHAR(20),updated_at DATETIME) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
       INSERT INTO service_clients VALUES(1,'enterprise.runtime','enterprise'),(2,'workflow.runtime','workflow'),(3,'aims.runtime','aims'),(4,'codocs.runtime','codocs');`)
     const insert = async (id, client, resource, action, status, audience, semanticScope, source = 'enterprise-test-pilot') => {
-      await db.query(`INSERT INTO service_client_grants VALUES(?,?,?,?,?,?,UTC_TIMESTAMP())`,
+      await db.query('INSERT INTO service_client_grants VALUES(?,?,?,?,?,?,UTC_TIMESTAMP())',
         [id, client, resource, action, JSON.stringify({ audience, semanticScope, source, tenantCode: 'C000001' }), status])
     }
     for (const [i, domain] of ['aims', 'assets', 'codocs', 'altoc', 'console'].entries())
@@ -39,13 +39,13 @@ await withTemporaryMySql(plan, async context => {
     await assert.rejects(applyV228(db, '0'.repeat(64)), /V228_REVIEW_HASH_CHANGED/)
     assert.equal((await planV228(await readV228Rows(db))).targets.length, 3)
     await assert.rejects(applyV228(db, before.reviewHash, {
-      afterUpdate: async connection => { await connection.query("UPDATE service_client_grants SET action='write' WHERE id=301") }
+      afterUpdate: async (connection) => { await connection.query('UPDATE service_client_grants SET action=\'write\' WHERE id=301') }
     }), /V228_NON_TARGET_TABLE_CHANGED/)
     const [[untouched]] = await db.query('SELECT action,status FROM service_client_grants WHERE id=301')
     assert.deepEqual(untouched, { action: 'read', status: 'active' })
     assert.equal((await planV228(await readV228Rows(db))).targets.length, 3, 'tampering rolled back target revoke')
     await assert.rejects(applyV228(db, before.reviewHash, {
-      afterUpdate: async connection => { await connection.query("UPDATE service_client_grants SET action='write' WHERE id=305") }
+      afterUpdate: async (connection) => { await connection.query('UPDATE service_client_grants SET action=\'write\' WHERE id=305') }
     }), /V228_NON_TARGET_TABLE_CHANGED/)
     const [[otherClientUntouched]] = await db.query('SELECT action FROM service_client_grants WHERE id=305')
     assert.equal(otherClientUntouched.action, 'read')
@@ -58,7 +58,7 @@ await withTemporaryMySql(plan, async context => {
     await assert.rejects(applyV228(db, before.reviewHash), /V228_REVIEW_HASH_CHANGED/)
     // v2.29/v2.31 need not be installed before v2.28.
     await db.query('DELETE FROM service_client_grants WHERE id BETWEEN 200 AND 215')
-    await db.query("UPDATE service_client_grants SET status='active' WHERE id IN (13227385,13227427,13227428)")
+    await db.query('UPDATE service_client_grants SET status=\'active\' WHERE id IN (13227385,13227427,13227428)')
     const withoutScheduler = planV228(await readV228Rows(db))
     assert.equal(withoutScheduler.targets.length, 3)
     assert.equal((await applyV228(db, withoutScheduler.reviewHash)).revokedIds.length, 3)

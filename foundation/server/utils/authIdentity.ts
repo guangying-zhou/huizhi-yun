@@ -1,5 +1,6 @@
 import { createError, type H3Event } from 'h3'
 import { resolveConsoleAuthWithSessionBridge } from './consoleSessionBridge'
+import { isReservedDirectorySubject } from '../../shared/utils/reservedDirectorySubject'
 
 type ConsoleUserAuth = {
   authenticated?: boolean
@@ -9,7 +10,9 @@ type ConsoleUserAuth = {
 
 function verifiedUserUid(context: ConsoleUserAuth | undefined) {
   if (!context?.authenticated || context.subjectType !== 'user') return ''
-  return String(context.uid || '').trim()
+  const uid = String(context.uid || '').trim()
+  // A reserved subject (system, system:*, client:*) is never a signed-in user.
+  return isReservedDirectorySubject(uid) ? '' : uid
 }
 
 /**

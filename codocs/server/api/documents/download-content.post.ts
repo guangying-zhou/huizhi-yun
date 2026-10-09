@@ -7,6 +7,7 @@
 
 import type { H3Event } from 'h3'
 import { downloadDocument } from '../../utils/oss'
+import { REPOSITORY_COPY_DOC_TYPE, isRepositoryCopyDocType } from '../../../shared/utils/documentStorage'
 import { hasMeaningfulMarkdownContent, recoverMarkdownFromYjsSnapshot } from '../../utils/yjsMarkdownRecovery'
 import { getGitProjectInfo } from '@hzy/foundation/server/utils/gitIntegration'
 import { getCodocsDocumentMetadata } from '~~/server/utils/codocsRuntime'
@@ -98,7 +99,7 @@ async function resolveGitProjectOssPath(event: H3Event, body: RequestBody) {
     throw createError({ statusCode: 403, message: 'OSS 路径不属于当前项目' })
   }
 
-  return { ossPath, docType: 'git-project' }
+  return { ossPath, docType: REPOSITORY_COPY_DOC_TYPE }
 }
 
 async function resolveDocumentOssPath(event: H3Event, body: RequestBody) {
@@ -129,7 +130,7 @@ export default defineEventHandler(async (event) => {
   try {
     const body = await readBody<RequestBody>(event)
     const docType = text(body.doc_type)
-    const resolved = docType === 'git-project'
+    const resolved = isRepositoryCopyDocType(docType)
       ? await resolveGitProjectOssPath(event, body)
       : await resolveDocumentOssPath(event, body)
 

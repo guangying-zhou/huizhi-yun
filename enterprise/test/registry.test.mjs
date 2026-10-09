@@ -102,7 +102,7 @@ test('Codocs registers the nine non-slide mydocs pages and defers slides', () =>
   assert.equal(codocs.some(page => page.path === '/codocs/mydocs/slides'), false, 'slides must remain deferred')
   assert.equal(codocs.find(page => page.path === '/codocs')?.meta.moduleEntryPath, '/mydocs')
   const entrySource = readFileSync(new URL('../app/module-entry.vue', import.meta.url), 'utf8')
-  assert.match(entrySource, /\['aims', 'assets', 'codocs'\]\.includes\(moduleCode\)/)
+  assert.match(entrySource, /\['aims', 'assets', 'codocs', 'finance'\]\.includes\(moduleCode\)/)
   assert.equal(codocs.filter(page => page.path.startsWith('/codocs/mydocs')).length, expected.length)
   const journalFile = codocs.find(page => page.path === '/codocs/mydocs/journal')?.file
   assert.equal(codocs.find(page => page.path === '/codocs/mydocs/worklogs')?.file, journalFile)

@@ -31,5 +31,5 @@ test('business alias scan includes module layer presentation sources', async () 
 })
 
 test('Nitro module server scan rejects both app and root aliases', () => {
-  assert.equal(serverAliasTokens("import x from '~/x'; import y from '~~/y'").length, 2)
+  assert.equal(serverAliasTokens('import x from \'~/x\'; import y from \'~~/y\'').length, 2)
 })

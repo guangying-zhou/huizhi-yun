@@ -1,16 +1,7 @@
-export interface UserApplicationItem {
-  appCode: string
-  appName: string
-  description: string | null
-  icon: string | null
-  homeUrl: string | null
-  basePath?: string | null
-  apiBase?: string | null
-  sortOrder?: number | null
-  appType: string
-  serviceRole?: string | null
-  status?: string | null
-}
+import type { UserApplicationItem as FoundationUserApplicationItem } from '../../../foundation/app/composables/useUserApplications'
+
+// Keep the shared AppLauncher contract in sync without changing normalization.
+export type UserApplicationItem = FoundationUserApplicationItem
 
 const apps = ref<UserApplicationItem[]>([])
 const loaded = ref(false)

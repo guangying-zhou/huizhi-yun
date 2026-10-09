@@ -1,0 +1,4 @@
+export const serviceTicketOperations = ['service-tickets-page', 'service-tickets-view', 'service-tickets-create', 'service-tickets-update', 'service-tickets-close', 'service-tickets-reopen', 'service-ticket-dispatch', 'service-ticket-dispatch-resume', 'service-ticket-dispatch-view'] as const
+export type ServiceTicketOperation = typeof serviceTicketOperations[number]
+export const ticketFields = ['title', 'description', 'ticket_type', 'priority', 'owner_user_id', 'handler_user_id', 'reported_by_contact', 'reported_by_phone', 'reported_by_email']
+export const ticketRowFields = ['id', 'code', 'customer_id', 'contract_id', 'service_agreement_id', 'service_agreement_code', 'row_version', ...ticketFields, 'status', 'sla_status', 'entitlement_status', 'quota_consumed', 'response_due_at', 'resolution_due_at', 'first_responded_at', 'resolved_at', 'closed_at', 'aims_project_code', 'aims_work_item_key', 'aims_work_item_type', 'aims_dispatch_status']

@@ -166,6 +166,10 @@ func (a *Adapter) HandleRuntime(ctx context.Context, method string, path string,
 		result, err := a.listDocumentAccessAuditLogs(ctx, query)
 		return map[string]any{"success": true, "data": result}, "codocs.document_access.audit_logs.list", err
 	}
+	if method == http.MethodPost && path == "/v1/codocs/service/enterprise-knowledge-links" {
+		data, e := a.enterpriseKnowledgeLink(ctx, query, body)
+		return map[string]any{"success": e == nil, "data": data}, "codocs.enterprise.knowledge_link", e
+	}
 	if method == http.MethodPost && suffix == "service/ops-knowledge/link" {
 		result, err := a.linkOpsKnowledge(ctx, body)
 		return map[string]any{"success": true, "data": result}, "codocs.service.ops_knowledge.link", err

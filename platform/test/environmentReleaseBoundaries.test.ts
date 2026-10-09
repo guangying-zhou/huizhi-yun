@@ -6,7 +6,7 @@ import { spawnSync } from 'node:child_process'
 const source = (path: string) => readFileSync(new URL(path, import.meta.url), 'utf8')
 test('heartbeat authentication precedes environment lookup; pinned has no automatic target', () => {
   const s = source('../server/api/v1/runtime/agent-heartbeat.post.ts')
-  assert.ok(s.indexOf("message: 'invalid tenant runtime control token'") < s.lastIndexOf('dataRuntimeReleaseSettings('))
+  assert.ok(s.indexOf('message: \'invalid tenant runtime control token\'') < s.lastIndexOf('dataRuntimeReleaseSettings('))
   assert.match(s, /requireRuntimeReleaseUpdateMode\(instance\.release_update_mode\)/)
   assert.match(s, /requireRuntimeReleaseEnvironment\(instance\.environment\)/)
   assert.match(s, /desiredVersion: updateEnabled && releaseTarget.signingKeyCompatible \? releaseTarget.desiredVersion : ''/)

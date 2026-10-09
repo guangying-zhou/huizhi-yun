@@ -151,13 +151,15 @@ test('detail view reads the exact published body, projects fields and hints who 
     return result.data.department_collaboration.can_edit
   }
   const member = { role: 'member', canRead: true, canWrite: true, canManage: false }
+  assert.equal(await hints({ ...member, role: 'leader' }, { readonly: true }), true, 'direct leader can edit without CanManage')
   assert.equal(await hints(member, { readonly: false }), true, 'owner or write sharee')
-  assert.equal(await hints(member, { readonly: true }), false, 'a member who is neither owner nor write sharee')
+  assert.equal(await hints(member, { readonly: true }), true, 'current members edit others documents without a write share')
   assert.equal(await hints({ ...member, canManage: true }, { readonly: true }), true, 'a manager may edit others documents')
-  assert.equal(await hints({ ...member, canWrite: false }, { readonly: false }), false, 'leader and parent relations only read')
+  assert.equal(await hints({ ...member, canWrite: false }, { readonly: false }), false, 'parent and none relations only read')
   assert.equal(await hints({ ...member, canManage: true }, { readonly_flag: 1, readonly: true }), false, 'a read-only document has no session')
   assert.equal(await hints({ ...member, canManage: true }, { status: 2 }), false, 'archived copies have no session')
   assert.equal(await hints({ ...member, canManage: true }, { project_code: 'P1' }), false)
+  assert.equal(await hints(member, { oss_path: 'codocs/departments/D1/weekly-reports/w1.md' }), false, 'weekly reports stay outside collaboration')
 })
 
 test('detail view keeps the v1 body and offers no hint while the switch is off; validates the response', async () => {

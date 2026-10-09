@@ -2,6 +2,7 @@ package config
 
 import (
 	"github.com/huizhi-yun/data-runtime/internal/enterprise"
+	"github.com/huizhi-yun/data-runtime/internal/enterprise/domaininstall/migrationnamespace"
 	"testing"
 )
 
@@ -134,5 +135,25 @@ func TestWorkflowLaneExplicitOptInFailsClosed(t *testing.T) {
 	c.Apps.Workflow.DB.Database = c.Enterprise.DB.Database
 	if err := c.ValidateWorkflowLane(); err == nil {
 		t.Fatal("legacy independent adapter allowed unified DB")
+	}
+}
+
+func TestW1MigrationLedgerClosedNamespace(t *testing.T) {
+	c := enterpriseConfigFixture()
+	d := EnterpriseDomainConfig{OwnerDeployment: "enterprise-site", Read: enterprise.PathUnified, Write: enterprise.PathDisabled, Scheduler: enterprise.PathDisabled, Tables: map[string]string{}}
+	for _, name := range migrationnamespace.Tables() {
+		d.Tables[name] = name
+	}
+	c.Enterprise.Domains["migration"] = d
+	if _, e := c.EnterpriseBinding(); e != nil {
+		t.Fatal(e)
+	}
+	for _, change := range []func(*EnterpriseDomainConfig){func(d *EnterpriseDomainConfig) { d.Write = enterprise.PathUnified }, func(d *EnterpriseDomainConfig) { d.Scheduler = enterprise.PathUnified }, func(d *EnterpriseDomainConfig) { d.OwnerDeployment = "aims-site" }, func(d *EnterpriseDomainConfig) { d.Tables = map[string]string{"arbitrary": "arbitrary"} }} {
+		bad := d
+		change(&bad)
+		c.Enterprise.Domains["migration"] = bad
+		if _, e := c.EnterpriseBinding(); e == nil {
+			t.Fatal("unreviewed migration binding accepted")
+		}
 	}
 }

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-usePageTitle('汇智云流程')
+usePageTitle('流程工作台')
 const { setRefresh, clearRefresh } = usePageActions()
 
 const { user: authUser } = useAuth()

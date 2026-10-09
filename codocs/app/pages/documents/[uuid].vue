@@ -6,10 +6,13 @@
  */
 
 import { createCreationAttempt } from '../../../layer/creationAttempt.mjs'
+import { isRepositoryCopyDocType } from '../../../shared/utils/documentStorage'
 import { departmentCollaborationDisabledStatus, departmentCollaborationFailureText, departmentCollaborationView, hostCollaborationTicketRequest, versionHistoryRequests } from '../../../layer/departmentCollaboration.mjs'
-import { isPrivateUnsharedEditorCandidate } from '../../../layer/documentEditingBoundary.mjs'
+import { isPrivateUnsharedEditorCandidate, canStartPrivateCollaboration } from '../../../layer/documentEditingBoundary.mjs'
 import { documentLoadErrorMessage } from '../../utils/departmentDocumentWriteError'
 import { useCodocsModule } from '../../../layer/useCodocsModule'
+import { documentShareNotificationHint, persistedDocumentShareNotification } from '../../utils/documentShareNotification'
+import CollaborationPresence from '../../components/editor/CollaborationPresence.vue'
 import { useCollaboration } from '../../composables/useCollaboration'
 import { useDocumentPreviewBootstrap } from '../../composables/useDocumentPreviewBootstrap'
 import { useEditorTheme } from '../../composables/useEditorTheme'
@@ -85,6 +88,7 @@ interface AnnotationItem {
 interface MilkdownEditorExpose {
   setMarkdown: (value: string) => void
   getMarkdown: () => string
+  refreshShares: () => Promise<void> | undefined
   switchToTab: (tab: EditorSidebarTab) => void
 }
 
@@ -555,7 +559,7 @@ const collaboration = useCollaboration({
   }))
 })
 const isDocumentOwner = computed(() => Boolean(authUserId.value) && authUserId.value === docState.value.owner_uid)
-const isRepositorySyncDoc = computed(() => docState.value.doc_type === 'git-project')
+const isRepositorySyncDoc = computed(() => isRepositoryCopyDocType(docState.value.doc_type))
 // 企业/知识库/产品文档是只读发布物：不加入协作，也不展示协作状态。
 const isStaticReadonlyDoc = computed(() => ['company', 'knowledge', 'product'].includes(docState.value.doc_type))
 const supportsCollaboration = computed(() => (!hosted || hostedCollaborationV2 || isDepartmentDoc.value) && !isRepositorySyncDoc.value && !isStaticReadonlyDoc.value)
@@ -573,10 +577,16 @@ const isPrivateUnsharedDoc = computed(() => isPrivateUnsharedEditorCandidate({
 // converts or connects) and stops for good once Collab withdraws access.
 const departmentSessionWanted = computed(() => isDepartmentDoc.value && departmentCanEdit.value && departmentRequested.value
   && departmentPhase.value === 'ready' && !collaboration.closeKind.value)
-// In the Host, join collaboration only for verified shared documents: an open
-// session blocks normal saves, so an unshared document must never start one.
+const privateDocumentAclVerified = ref<{ uuid: string, actorUid: string } | null>(null)
+const privateCollaborationWanted = computed(() => canStartPrivateCollaboration({
+  docType: docState.value.doc_type, ownerUid: docState.value.owner_uid, actorUid: authUserId.value,
+  aclVerified: privateDocumentAclVerified.value?.uuid === documentId.value && privateDocumentAclVerified.value?.actorUid === authUserId.value, readonlyFlag: docState.value.readonly_flag,
+  sharesVerified: shareMembersLoaded.value, shareCount: shareMembers.value.length,
+  accessWithdrawn: Boolean(collaboration.closeKind.value)
+}))
+// Owner-only share lists cannot decide a sharee's effective write ACL.
 const shouldLoadFromCollaboration = computed(() => supportsCollaboration.value && !documentLoadFailure.value && Boolean(authUserId.value) && !viewingVersion.value && !isPrivateUnsharedDoc.value
-  && (!hosted || (docState.value.doc_type === 'private' && shareMembersLoaded.value && shareMembers.value.length > 0) || departmentSessionWanted.value))
+  && (!hosted || privateCollaborationWanted.value || departmentSessionWanted.value))
 const isLeavingDocumentPage = ref(false)
 const collaborationFallbackMode = ref<'none' | 'owner-edit' | 'viewer-readonly'>('none')
 const collaborationFallbackLoaded = ref(false)
@@ -635,31 +645,6 @@ const documentSourceDisplayName = computed(() => {
   if (!ownerUid) return ''
   if (ownerUid === authUserId.value) return '我'
   return ownerName.value || ownerUid
-})
-
-const onlineCollaborationMembers = computed(() => {
-  if (!collaboration.isConnected.value) {
-    return []
-  }
-
-  const members = new Map<string, { uid: string, name: string }>()
-  const selfUid = String(authUserId.value || '').trim()
-  if (selfUid) {
-    members.set(selfUid, {
-      uid: selfUid,
-      name: authRealName.value || selfUid
-    })
-  }
-
-  for (const collaborator of collaboration.collaborators.value) {
-    if (!collaborator.id || members.has(collaborator.id)) continue
-    members.set(collaborator.id, {
-      uid: collaborator.id,
-      name: collaborator.name || collaborator.id
-    })
-  }
-
-  return [...members.values()]
 })
 
 const fetchShareMembers = async () => {
@@ -940,6 +925,9 @@ let saveTimer: ReturnType<typeof setTimeout> | null = null
 const fetchDocument = async (options?: { forceContent?: boolean }) => {
   loading.value = true
   hasLoadedDocument.value = false
+  privateDocumentAclVerified.value = null
+  const aclDocumentId = documentId.value
+  const aclActorUid = authUserId.value
   documentLoadFailure.value = null
   slowLoadHint.value = false
   const slowLoadTimer = setTimeout(() => {
@@ -971,6 +959,10 @@ const fetchDocument = async (options?: { forceContent?: boolean }) => {
         ? (collaboration.getTextContent() || baseContent)
         : baseContent
 
+      privateDocumentAclVerified.value = response.data.doc_type === 'private' && response.data.readonly_flag === 0
+        && aclDocumentId === documentId.value && aclActorUid === authUserId.value
+        ? { uuid: aclDocumentId, actorUid: aclActorUid }
+        : null
       docState.value = {
         id: response.data.id,
         title: response.data.title || '未命名文档',
@@ -1075,9 +1067,9 @@ const fetchDocument = async (options?: { forceContent?: boolean }) => {
     }
   } catch (error: unknown) {
     clearDocumentPreviewBootstrap(documentId.value)
-    console.error('Failed to fetch document:', error)
     const failure = error as { statusCode?: number, status?: number, response?: { status?: number } }
     const failureStatus = failure?.statusCode || failure?.status || failure?.response?.status
+    if (![401, 403, 404].includes(failureStatus || 0)) console.error('Failed to fetch document:', error)
     documentLoadFailure.value = failureStatus === 403 ? 'forbidden' : 'unavailable'
     documentLoadFailureMessage.value = documentLoadErrorMessage({ ...(error as object), statusCode: failureStatus })
     collaboration.disconnect()
@@ -1551,7 +1543,7 @@ const handleShare = async (data: { uid: string, permission: 'read' | 'write' }) 
   try {
     const payload = { sharedToUid: data.uid, permission: data.permission, message: null }
     const attemptKey = documentAttempt.keyFor(cacheKey(`document-share:${documentId.value}:${data.uid}`), payload)
-    const response = await $fetch<ApiCodeResponse<{ notifiedOnly?: boolean }>>(moduleUrl(`/api/documents/${documentId.value}/shares`), {
+    const response = await $fetch<ApiCodeResponse<{ notifiedOnly?: boolean, notification?: unknown }>>(moduleUrl(`/api/documents/${documentId.value}/shares`), {
       method: 'POST',
       headers: { 'Idempotency-Key': attemptKey },
       body: payload
@@ -1568,14 +1560,23 @@ const handleShare = async (data: { uid: string, permission: 'read' | 'write' }) 
       } else {
         toast.add({
           title: '共享成功',
-          description: `已将文档共享给 ${data.uid}`,
+          description: documentShareNotificationHint(response.data) || `已将文档共享给 ${data.uid}`,
           color: 'success'
         })
       }
     } else {
       throw new Error(response.message)
     }
+    await fetchShareMembers()
+    await milkdownEditorRef.value?.refreshShares()
   } catch (error: unknown) {
+    const persisted = persistedDocumentShareNotification(error)
+    if (persisted) {
+      toast.add({ title: '已共享', description: persisted, color: 'success' })
+      await fetchShareMembers()
+      await milkdownEditorRef.value?.refreshShares()
+      return
+    }
     console.error('Share failed:', error)
     toast.add({
       title: '共享失败',
@@ -2102,9 +2103,15 @@ onBeforeUnmount(async () => {
             { label: '历史版本', icon: 'i-lucide-history', onSelect: toggleVersionHistory }
           ]"
         >
-          <UButton icon="i-lucide-more-vertical" variant="ghost" class="pr-0" />
+          <UButton
+            aria-label="文档操作"
+            icon="i-lucide-more-vertical"
+            variant="ghost"
+            class="pr-0"
+          />
           <UButton
             icon="i-lucide-x"
+            aria-label="返回文档列表"
             variant="ghost"
             class="pl-0"
             @click="goBack"
@@ -2166,33 +2173,14 @@ onBeforeUnmount(async () => {
         </div>
 
         <!-- 右侧：共享信息 + 在线成员 -->
-        <div class="flex items-center gap-3">
-          <span v-if="documentSourceDisplayName" class="text-xs text-muted">
+        <div class="flex min-w-0 flex-wrap items-center gap-3">
+          <span v-if="documentSourceDisplayName" class="max-w-48 truncate text-xs text-muted" :title="documentSourceDisplayName">
             由 <strong class="text-default">{{ documentSourceDisplayName }}</strong> 创建/共享
           </span>
           <span v-if="!isSharedDoc && shareMembers.length > 0" class="text-xs text-muted">
             已共享给 {{ shareMembers.length }} 人
           </span>
-          <template v-if="onlineCollaborationMembers.length > 0">
-            <span v-if="documentSourceDisplayName || shareMembers.length > 0" class="text-dimmed">|</span>
-            <div class="flex items-center gap-3">
-              <span class="text-xs text-muted whitespace-nowrap">在线成员</span>
-              <div
-                v-for="member in onlineCollaborationMembers"
-                :key="member.uid"
-                class="flex items-center gap-1.5"
-                :title="`${member.uid === authUserId ? '我' : member.name} · 在线`"
-              >
-                <span class="inline-block h-2 w-2 rounded-full shrink-0 bg-success/10" />
-                <span
-                  class="text-xs whitespace-nowrap"
-                  :class="member.uid === authUserId ? 'text-primary font-medium' : 'text-default'"
-                >
-                  {{ member.uid === authUserId ? '我' : member.name }}
-                </span>
-              </div>
-            </div>
-          </template>
+          <CollaborationPresence :members="collaboration.members.value" :self-id="authUserId" :connected="collaboration.isConnected.value" />
         </div>
       </div>
     </div>

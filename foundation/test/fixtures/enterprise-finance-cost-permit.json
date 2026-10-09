@@ -1,0 +1,45 @@
+{
+  "method": "POST",
+  "target": "/v1/enterprise/finance/project-labor:recalculate",
+  "body": {
+    "cost": {
+      "projectCode": "P1",
+      "periodMonth": "2026-10",
+      "code": "",
+      "page": 0,
+      "pageSize": 0,
+      "search": "",
+      "expectedVersion": 2,
+      "expectedInputHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "authorization": {
+      "actorUid": "Person",
+      "tenant": "C000001",
+      "deployment": "Host",
+      "resource": "project_accounting",
+      "action": "admin",
+      "operation": "project-labor-recalculate",
+      "objectId": "P1|2026-10|",
+      "allowed": true,
+      "expiresAt": 123,
+      "bundleVersion": "1",
+      "bundleHash": "hash",
+      "policyRevision": 38,
+      "scope": {
+        "access": "none",
+        "departmentCodes": []
+      },
+      "costScope": {
+        "access": "projects",
+        "projectCodes": [
+          "P1"
+        ],
+        "salary": {
+          "access": "none",
+          "departmentCodes": []
+        }
+      }
+    }
+  },
+  "canonical": "[\"hzy-enterprise-apf-permit.v1\",\"POST\",\"/v1/enterprise/finance/project-labor:recalculate\",\"Person\",\"C000001\",\"Host\",\"project_accounting\",\"admin\",\"project-labor-recalculate\",\"P1|2026-10|\",true,123,\"1\",\"hash\",38,\"none\",[],\"\",\"\",\"\",0,0,0,\"\",[\"P1\",\"2026-10\",\"\",0,0,\"\",2,\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"],[\"projects\",[\"P1\"],\"none\",[]]]"
+}

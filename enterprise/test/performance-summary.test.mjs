@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { summarizePerformance } from '../scripts/summarize-performance.mjs'
+
 const sample = value => ({ variant: 'enterprise', scenario: 'product-list', cache: 'warm', metric: 'ready', unit: 'ms', environment: 'test', role: 'product-manager', datasetRevision: 'fixture-v1', artifact: 'sha256:abc', value })
 test('calculates documented quantiles without altering input measurements', () => {
   const samples = Array.from({ length: 20 }, (_, i) => sample(20 - i))

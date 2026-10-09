@@ -18,7 +18,7 @@ const UButton = resolveComponent('UButton')
 function statusMeta(user: ConsoleDirectoryUser) {
   if (user.status === 1) return { label: '正常', color: 'success' as const }
   if (user.status === -1) return { label: '已删除', color: 'error' as const }
-  return { label: '停用', color: 'neutral' as const }
+  return { label: '已停用', color: 'neutral' as const }
 }
 
 function getDisplayName(user: ConsoleDirectoryUser) {
@@ -31,10 +31,10 @@ const userColumns: TableColumn<ConsoleDirectoryUser>[] = [
     header: '用户',
     cell: ({ row }) => {
       const user = row.original
-      return h('div', { class: 'flex items-center gap-3' }, [
+      return h('div', { class: ['flex items-center gap-3', user.status !== 1 ? 'opacity-60 text-muted' : ''] }, [
         h(UAvatar, { src: resolveAvatarSrc(user.avatar) || undefined, alt: getDisplayName(user), size: 'sm' }),
         h('div', [
-          h('p', { class: 'font-medium text-highlighted' }, getDisplayName(user)),
+          h('p', { class: user.status === 1 ? 'font-medium text-highlighted' : 'font-medium text-muted' }, getDisplayName(user)),
           h('p', { class: 'text-xs text-muted' }, user.uid)
         ])
       ])

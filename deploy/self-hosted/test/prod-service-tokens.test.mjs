@@ -97,3 +97,10 @@ test('full collab probe: 23 positives, every negative denied without a token, ex
     scope: item.scope, source_app: item.app, tenant: bindings.tenant, deployment: item.deployment, exp: 2_000_000_000 }) }) }),
   collabBindings, () => {}, async () => ({ status: 401 })), /PROBE_STATUS_MISMATCH/)
 })
+
+ test('P1 typed document calls do not restore the retired Aims HTTP grant family', () => {
+  const scopes = prodProbeMatrix(bindings).filter(row => row.client === 'enterprise.runtime').map(row => row.scope)
+  assert.deepEqual(scopes.filter(scope => scope.endsWith(':enterprise-host:execute')),
+    ['aims', 'assets', 'codocs', 'altoc', 'console'].map(domain => `${domain}:enterprise-host:execute`))
+  assert.ok(!scopes.some(scope => scope.startsWith('aims:project-document')))
+})

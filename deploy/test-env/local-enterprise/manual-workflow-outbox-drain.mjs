@@ -62,15 +62,16 @@ async function main() {
     || runtime.tenant !== 'C000001' || runtime.deploymentBindings?.workflow !== workflowDeployment
     || tenant.dataRuntime?.endpoint !== profile.runtime.canonicalEndpoint) throw Error('Local Workflow binding mismatch')
 
-  // Callbacks are delivered to Aims, so the trusted context must carry the Aims
-  // deployment as well; the wake itself still targets Workflow only.
-  const localTenant = { ...tenant, apps: { console: tenant.apps.console, aims: tenant.apps.aims, workflow: { deploymentCode: workflowDeployment, basePath: '/workflow' } } }
+  // Keep both exact callback owners in the trusted route catalog; the wake
+  // itself still targets Workflow only.
+  const localTenant = { ...tenant, apps: { console: tenant.apps.console, aims: tenant.apps.aims, enterprise: { deploymentCode: profile.identity.enterpriseDeployment }, workflow: { deploymentCode: workflowDeployment, basePath: '/workflow' } } }
   const requestId = `hzy0-workflow-outbox-${crypto.randomUUID()}`
   const headers = await schedulerRequestHeaders({
     HZY_TENANT_GATEWAY_INTERNAL_TOKEN: localSecret,
-    HZY_WORKFLOW_ORIGIN: `http://127.0.0.1:${profile.listeners.workflow.port}`
+    HZY_WORKFLOW_ORIGIN: `http://127.0.0.1:${profile.listeners.workflow.port}`,
+    HZY_ENTERPRISE_ORIGIN: `http://127.0.0.1:${profile.listeners.enterprise.port}`
   }, localTenant, 'hzy0.isme.dev', 'workflow', requestId, String(Date.now()), '', WORKFLOW_DRAIN_PATH)
-  headers['x-hzy-local-runtime-dial-url'] = 'http://127.0.0.1:18084'
+  headers.set('x-hzy-local-runtime-dial-url', 'http://127.0.0.1:18084')
   const response = await fetch(`http://127.0.0.1:${profile.listeners.workflow.port}/workflow${WORKFLOW_DRAIN_PATH}`, {
     method: 'POST', headers, body: '{}', redirect: 'error', signal: AbortSignal.timeout(60000)
   })

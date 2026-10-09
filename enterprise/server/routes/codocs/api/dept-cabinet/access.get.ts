@@ -4,7 +4,7 @@ import { departmentCabinetAuthorize, departmentCabinetQuery } from '~~/server/ut
 import { loadAuthorizationSnapshotFromConsoleRuntime } from '@hzy/foundation/server/utils/platformBundleAuthorization'
 import { authorizationResourcesAllow } from '@hzy/foundation/shared/utils/authorizationActions'
 
-export default defineEventHandler(async event => {
+export default defineEventHandler(async (event) => {
   setHeader(event, 'Cache-Control', 'no-store')
   const deptCode = departmentCabinetQuery(event, ['dept_code']).dept_code || ''
   const user = await departmentCabinetAuthorize(event, deptCode, 'view')

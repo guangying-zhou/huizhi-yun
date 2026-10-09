@@ -21,9 +21,9 @@ test('folder list returns runtime pagination facts and preserves HTTP errors', a
       const modules = new Map([
         ['~~/server/utils/authIdentity', `export const requireRequestUid=()=>${harness}.uid`],
         ['~~/server/utils/codocsRuntime', `export const callCodocsTenantRuntime=async (_event,_path,options)=>{${harness}.runtimeOptions=options;if(${harness}.runtime instanceof Error)throw ${harness}.runtime;return ${harness}.runtime}`],
-        ['~~/server/utils/checkPermission', `export const requirePermission=async()=>{if(${harness}.permissionError)throw ${harness}.permissionError}`],
+        ['~~/server/utils/checkPermission', `export const requirePermission=async()=>{if(${harness}.permissionError)throw ${harness}.permissionError}`]
       ])
-      const source = modules.get(specifier) || (specifier.endsWith('/departmentAccess') ? `export const requireDepartmentReadAccess=async()=>{if(globalThis.__folderListHarness.deptError)throw globalThis.__folderListHarness.deptError}` : null)
+      const source = modules.get(specifier) || (specifier.endsWith('/departmentAccess') ? 'export const requireDepartmentReadAccess=async()=>{if(globalThis.__folderListHarness.deptError)throw globalThis.__folderListHarness.deptError}' : null)
       if (source) return { url: `data:text/javascript,${encodeURIComponent(source)}`, shortCircuit: true }
       let candidate
       if (specifier.startsWith('~~/')) candidate = resolve(import.meta.dirname, '..', specifier.slice(3))

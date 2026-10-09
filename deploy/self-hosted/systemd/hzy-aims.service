@@ -3,6 +3,7 @@ Description=HZY self-hosted aims node-server
 After=network-online.target mysqld.service hzy-data-runtime.service
 Wants=network-online.target
 Requires=hzy-data-runtime.service
+PartOf=hzy-data-runtime.service
 StartLimitIntervalSec=120
 StartLimitBurst=6
 

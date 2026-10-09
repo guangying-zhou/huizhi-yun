@@ -11,11 +11,23 @@ function harness(options: { denyView?: boolean, unavailable?: boolean, commitOnl
   const calls: string[] = []
   const exports: { productRoadmapPermissions?: (event: unknown, code: string) => Promise<{ data: Record<string, unknown> }> } = {}
   runInNewContext(compiled, { exports, require: (name: string) => {
-    if (name === 'h3') return { createError }
-    if (name === './productAuthorization') return {
-      requireProductPermission: async (_event: unknown, _code: string, resource: string, action: string) => { calls.push(`${resource}:${action}`); if (options.denyView) throw createError({ statusCode: 404 }); return facts },
-      checkProductPermission: async (_event: unknown, _code: string, resource: string, action: string) => { calls.push(`${resource}:${action}`); if (options.unavailable) throw createError({ statusCode: 503 }); return { allowed: action === (options.commitOnly ? 'commit' : 'edit'), facts: action === (options.changedAction ?? 'edit') ? { ...facts, ...options.changed } : facts } }
-    }
+    if (name === 'h3')
+      return { createError }
+    if (name === './productAuthorization')
+      return {
+        requireProductPermission: async (_event: unknown, _code: string, resource: string, action: string) => {
+          calls.push(`${resource}:${action}`)
+          if (options.denyView)
+            throw createError({ statusCode: 404 })
+          return facts
+        },
+        checkProductPermission: async (_event: unknown, _code: string, resource: string, action: string) => {
+          calls.push(`${resource}:${action}`)
+          if (options.unavailable)
+            throw createError({ statusCode: 503 })
+          return { allowed: action === (options.commitOnly ? 'commit' : 'edit'), facts: action === (options.changedAction ?? 'edit') ? { ...facts, ...options.changed } : facts }
+        }
+      }
     throw new Error(name)
   } })
   return { run: () => exports.productRoadmapPermissions!({}, 'P-A'), calls }
@@ -32,14 +44,17 @@ test('roadmap permission snapshot keeps actions independent and hides actor', as
 })
 
 test('roadmap permissions reject invisible, unavailable and mixed-version facts', async () => {
-  const denied = harness({ denyView: true }); await assert.rejects(denied.run(), { statusCode: 404 }); assert.equal(denied.calls.length, 1)
+  const denied = harness({ denyView: true })
+  await assert.rejects(denied.run(), { statusCode: 404 })
+  assert.equal(denied.calls.length, 1)
   await assert.rejects(harness({ unavailable: true }).run(), { statusCode: 503 })
-  for (const changed of [{ revision: 3 }, { actor_uid: 'other' }, { product_code: 'P-B' }, { status: 'archived' }, { is_member: false }, { is_manager: true }]) await assert.rejects(harness({ changed }).run(), { statusCode: 409 })
+  for (const changed of [{ revision: 3 }, { actor_uid: 'other' }, { product_code: 'P-B' }, { status: 'archived' }, { is_member: false }, { is_manager: true }])
+    await assert.rejects(harness({ changed }).run(), { statusCode: 409 })
 })
 
 test('commit capability is independent of edit and uses matching facts', async () => {
- const result=await harness({commitOnly:true}).run()
- assert.equal(result.data.commit,true)
- assert.equal(result.data.edit,false)
- await assert.rejects(harness({changedAction:'commit',changed:{revision:3}}).run(),{statusCode:409})
+  const result = await harness({ commitOnly: true }).run()
+  assert.equal(result.data.commit, true)
+  assert.equal(result.data.edit, false)
+  await assert.rejects(harness({ changedAction: 'commit', changed: { revision: 3 } }).run(), { statusCode: 409 })
 })

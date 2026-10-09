@@ -10,6 +10,7 @@ import {
 import { loadHzyLocalDevRuntimeMode } from './localDevRuntime'
 import { createError, getHeader, getRequestURL, type H3Event } from 'h3'
 import { forwardedServiceRouteCatalogHeader } from './serviceRouteCatalog'
+import { isReservedDirectorySubject } from '../../shared/utils/reservedDirectorySubject'
 import type { ResourceActionPolicy } from '@hzy/authz-core'
 import type {
   FoundationObjectContext,
@@ -558,12 +559,21 @@ function expandGlobalAdminAuthorization(
   }
 }
 
+// A reserved subject (system, system:*, client:*) never holds personnel
+// authorization: refuse before any lookup, including the local-dev shortcut.
+function rejectReservedAuthorizationSubject(uid: string) {
+  if (isReservedDirectorySubject(uid)) {
+    throw createError({ statusCode: 403, message: '该主体不能被授权', data: { code: 'reserved_subject_not_authorizable' } })
+  }
+}
+
 export async function loadAuthorizationSnapshotFromConsoleRuntime(
   uid: string,
   targetAppCode: string,
   event: H3Event,
   options: LoadAuthorizationFromPlatformBundleOptions = {}
 ): Promise<RuntimeAuthorizationSnapshot> {
+  rejectReservedAuthorizationSubject(uid)
   if (shouldUseLocalDevAuthorization(event, options.localDev)) {
     return buildLocalDevAuthorizationSnapshot(uid, targetAppCode, options.localDev!)
   }
@@ -728,6 +738,7 @@ export async function loadScopedAuthorizationFromConsoleRuntime(
   targetAppCode: string,
   options: LoadScopedAuthorizationFromConsoleOptions = {}
 ): Promise<RuntimeScopedAuthorizationSnapshot> {
+  rejectReservedAuthorizationSubject(uid)
   const runtime = await getConsoleRuntimeConfig({ event })
   const seed = resolveConsoleRuntimeSeedConfig(undefined, event)
   const baseUrls = consoleAuthorizationBaseUrls(

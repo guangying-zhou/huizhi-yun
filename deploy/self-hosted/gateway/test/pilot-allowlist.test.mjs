@@ -4,6 +4,7 @@ import gateway, { tenantBindingMatchesExpected } from '../../../cloudflare/tenan
 import {
   enterpriseHostAllowlistFor,
   enterprisePilot,
+  resolveEnterprisePilotPath,
   parseEnterpriseHostAllowlist,
   validateEnterprisePilotBinding
 } from '../../../test-env/enterprise-topology.mjs'
@@ -129,4 +130,26 @@ test('expected site binding is a no-op when unset and exact when configured', ()
     { ...expected, dataRuntime: { endpoint: 'https://jp-runtime.example.test', runtimeCode: 'rt-1' } },
     { ...expected, dataRuntime: { ...expected.dataRuntime, runtimeCode: 'rt-2' } }
   ]) assert.equal(tenantBindingMatchesExpected(tenant, 'site.selfhosted-fixture.test', env(changed)), false)
+})
+
+
+test('self-hosted allowlist uses the same APF registered surface', async () => {
+  const { env, calls } = workerEnv()
+  for (const [method, path, kind] of [
+    ['GET', '/finance/bank-accounts', 'page'],
+    ['HEAD', '/finance/bank-accounts', 'page'],
+    ['POST', '/finance/api/v1/bank-accounts', 'api'],
+    ['PATCH', '/altoc/api/v1/customers/7', 'api'],
+    ['POST', '/altoc/api/v1/quotes/7/transition', 'api']
+  ]) {
+    assert.equal(resolveEnterprisePilotPath(path, '', method).kind, kind)
+    assert.equal((await gateway.fetch(new Request(`https://${prodEntry.host}${path}`, { method }), env)).status, 200)
+    assert.equal(calls.enterprise.at(-1).headers.get('x-hzy-app-code'), 'enterprise')
+    assert.equal(calls.enterprise.at(-1).headers.get('x-hzy-deployment'), prodEntry.deploymentCode)
+  }
+  const before = calls.enterprise.length
+  for (const path of ['/finance/api/v1/unknown', '/altoc/api/v1/customers/7/unknown']) {
+    assert.equal((await gateway.fetch(new Request(`https://${prodEntry.host}${path}`), env)).status, 503)
+  }
+  assert.equal(calls.enterprise.length, before)
 })

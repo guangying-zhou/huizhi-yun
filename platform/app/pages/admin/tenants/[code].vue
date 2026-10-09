@@ -328,6 +328,11 @@ function openTenantConsole() {
       class="mb-3.5"
     />
 
+    <EnvironmentAppReleases
+      v-if="tenant"
+      :tenant-code="tenant.tenantCode"
+    />
+
     <UCard :ui="{ body: 'p-5 sm:p-5' }">
       <div class="entity-h-row">
         <div class="entity-icon">

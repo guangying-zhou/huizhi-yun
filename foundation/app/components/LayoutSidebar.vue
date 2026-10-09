@@ -498,6 +498,18 @@ const slotProps = computed(() => ({
   navigationUi: navigationUi.value,
   currentAppCode
 }))
+function onWorkflowInstanceFound(p: { found: boolean, status?: string }) {
+  pageWorkflow?.setInstanceFound(p)
+}
+function onWorkflowSubmitted(p: { instanceId: number }) {
+  pageWorkflow?.onSubmitted(p)
+}
+function onWorkflowApproved(p: { taskId: number, instanceId: number, instanceStatus?: string }) {
+  if (p.instanceStatus === 'approved') pageWorkflow?.onApproved(p)
+}
+function onWorkflowRejected(p: { taskId: number, instanceId: number }) {
+  pageWorkflow?.onRejected(p)
+}
 </script>
 
 <template>
@@ -777,10 +789,10 @@ const slotProps = computed(() => ({
             :can-submit="pageWorkflowCanSubmit"
             :completeness-issues="pageWorkflowIssues"
             :before-submit="pageWorkflowBeforeSubmit"
-            @instance-found="(p: { found: boolean, status?: string }) => pageWorkflow?.setInstanceFound(p)"
-            @submitted="(p: { instanceId: number }) => pageWorkflow?.onSubmitted(p)"
-            @approved="(p: { taskId: number, instanceId: number, instanceStatus?: string }) => { if (p.instanceStatus === 'approved') pageWorkflow?.onApproved(p) }"
-            @rejected="(p: { taskId: number, instanceId: number }) => pageWorkflow?.onRejected(p)"
+            @instance-found="onWorkflowInstanceFound"
+            @submitted="onWorkflowSubmitted"
+            @approved="onWorkflowApproved"
+            @rejected="onWorkflowRejected"
           />
           <div
             v-else-if="isPageWorkflowInitializing"

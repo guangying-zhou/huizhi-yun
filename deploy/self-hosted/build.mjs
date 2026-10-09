@@ -6,11 +6,12 @@ import { tmpdir } from 'node:os'
 import { dirname, isAbsolute, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { parseArgs } from 'node:util'
+import { copyGatewayPayload } from './gateway-payload.mjs'
 import { bundleCollab } from './bundle-collab.mjs'
-import { APPS, BASE_PATHS, createManifest, sha256File, safeName, verifyManifest } from './release-lib.mjs'
+import { releaseApplications, BASE_PATHS, createManifest, sha256File, safeName, verifyManifest } from './release-lib.mjs'
 
 const repo = resolve(dirname(fileURLToPath(import.meta.url)), '../..')
-const { values } = parseArgs({ options: { commit: { type: 'string' }, version: { type: 'string' }, out: { type: 'string' }, apps: { type: 'string' } } })
+const { values } = parseArgs({ options: { commit: { type: 'string' }, version: { type: 'string' }, out: { type: 'string' }, apps: { type: 'string' }, 'aims-retired': { type: 'boolean', default: false } } })
 
 function run(command, args, cwd, env = process.env) {
   return new Promise((resolveRun, reject) => {
@@ -30,10 +31,10 @@ async function output(command, args, cwd) {
   })
 }
 
-export async function buildRelease({ commit, version, out, apps = APPS }) {
+export async function buildRelease({ commit, version, out, apps, aimsRetired = false }) {
   safeName(version)
   if (!isAbsolute(out)) throw Error('--out must be absolute')
-  if (!Array.isArray(apps) || apps.length === 0 || new Set(apps).size !== apps.length || apps.some(app => !APPS.includes(app))) throw Error('unknown or duplicate app')
+  apps = releaseApplications({ apps, aimsRetired })
   const sha = await output('git', ['rev-parse', '--verify', `${commit}^{commit}`], repo)
   if (!/^[a-f0-9]{40}$/.test(sha)) throw Error('commit SHA invalid')
   const node = (await readFile(join(repo, '.nvmrc'), 'utf8')).trim()
@@ -79,14 +80,7 @@ export async function buildRelease({ commit, version, out, apps = APPS }) {
       const packageDir = join(out, `${app}-${version}`)
       await mkdir(packageDir, { recursive: false })
       if (app === 'gateway') {
-        for (const path of ['deploy/self-hosted/gateway', 'deploy/cloudflare/tenant-gateway/src', 'foundation/shared',
-          'deploy/test-env/enterprise-host-routes.mjs', 'deploy/test-env/enterprise-topology.mjs',
-          // imported by gateway/config.mjs (../collab-deployment.mjs); rc3 shipped without it and needed a manual copy
-          'deploy/self-hosted/collab-deployment.mjs']) {
-          await mkdir(dirname(join(packageDir, path)), { recursive: true })
-          await cp(join(worktree, path), join(packageDir, path), { recursive: true, filter: source => !source.includes('/test/') })
-        }
-        await writeFile(join(packageDir, 'package.json'), '{"private":true,"type":"module"}\n')
+        await copyGatewayPayload(worktree, packageDir)
       } else if (app === 'collab') {
         await bundleCollab({ repo: worktree, outDir: packageDir })
       } else {
@@ -112,6 +106,6 @@ export async function buildRelease({ commit, version, out, apps = APPS }) {
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   if (!values.commit || !values.version || !values.out) throw Error('usage: build.mjs --commit SHA --version VERSION --out ABSOLUTE_DIR [--apps app,app]')
-  const result = await buildRelease({ commit: values.commit, version: values.version, out: values.out, apps: values.apps ? values.apps.split(',') : APPS })
+  const result = await buildRelease({ commit: values.commit, version: values.version, out: values.out, apps: values.apps ? values.apps.split(',') : undefined, aimsRetired: values['aims-retired'] })
   console.log(JSON.stringify(result, null, 2))
 }

@@ -55,6 +55,7 @@ func TestWorkflowPendingPaginationIsolatedMySQL(t *testing.T) {
 	exec("INSERT INTO flow_tasks VALUES(1,1,'viewer','pending','N','approval','2026-01-01',NULL),(2,2,'viewer','pending','N','approval','2026-01-01',NULL),(3,3,'viewer','pending','N','approval','2026-01-01',NULL),(4,4,'viewer','pending','N','approval','2026-01-01',NULL),(5,5,'viewer','pending','N','approval','2026-01-01',NULL),(6,6,'viewer','pending','N','approval','2026-01-01',NULL),(7,1,'outsider','pending','N','approval','2026-01-01',NULL),(8,1,'viewer','completed','N','approval','2026-01-01',NULL),(9,7,'viewer','pending','N','approval','2026-01-01',NULL)")
 	exec("INSERT INTO flow_instances VALUES(10,'I10','AIMS','tasks','complete','case app','/none','other','running',NULL),(11,'I11','aims','TASKS','complete','case resource','/none','other','running',NULL),(12,'I12','aims','tasks','complete ','trailing action','/none','other','running',NULL)")
 	exec("INSERT INTO flow_tasks VALUES(10,10,'viewer','pending','N','approval','2026-01-01',NULL),(11,11,'viewer','pending','N','approval','2026-01-01',NULL),(12,12,'viewer','pending','N','approval','2026-01-01',NULL)")
+	exec("ALTER TABLE flow_instances ADD COLUMN form_data JSON NULL")
 	a := &Adapter{db: db}
 	ctx := context.Background()
 	q := url.Values{"current_user": {"viewer"}, "app_code": {"aims"}, "resource_code": {"tasks"}, "action_code": {"complete"}, "exclude_initiator": {"true"}, "pageSize": {"1"}}
@@ -93,6 +94,19 @@ func TestWorkflowPendingPaginationIsolatedMySQL(t *testing.T) {
 	d = read()
 	if d["total"] != int64(1) || d["items"].([]map[string]any)[0]["task_id"] != int64(7) {
 		t.Fatal(d)
+	}
+	exec(`INSERT INTO flow_instances (id,instance_no,app_code,resource_code,action_code,biz_title,biz_url,initiator_uid,status,form_data) VALUES (20,'I20','aims','milestones','milestone_completion','director','/none','other','running','{"projectDirectorRoleCode":"project_director"}'),(21,'I21','aims','milestones','milestone_completion','ordinary milestone','/none','other','running',NULL)`)
+	exec("INSERT INTO flow_tasks VALUES(20,20,'viewer','pending','N','approval','2026-01-01',NULL),(21,21,'viewer','pending','N','approval','2026-01-01',NULL)")
+	q = url.Values{"current_user": {"viewer"}, "resource_code": {"milestones"}, "app_code": {"aims"}, "pageSize": {"1"}}
+	d = read()
+	if d["total"] != int64(1) || len(d["items"].([]map[string]any)) != 1 || d["items"].([]map[string]any)[0]["task_id"] != int64(21) {
+		t.Fatal("missing role must hide frozen director before COUNT/page, retaining ordinary milestone", d)
+	}
+	q.Set("current_project_director_uid", "viewer")
+	q.Set("pageSize", "20")
+	d = read()
+	if d["total"] != int64(2) || len(d["items"].([]map[string]any)) != 2 {
+		t.Fatal("resolved role must restore director pending row", d)
 	}
 	q = url.Values{"current_user": {"viewer"}, "page_size": {"20"}}
 	d = read()

@@ -52,6 +52,8 @@ interface Props {
   canManage?: boolean
 }
 
+const { user: currentUser } = useAuth()
+
 const props = withDefaults(defineProps<Props>(), {
   documentId: '',
   loading: false,
@@ -113,6 +115,7 @@ const searchResults = computed(() => {
 
   // 从 store 的用户列表中过滤
   return accountStore.allUsers.filter((user) => {
+    if (user.uid === currentUser.value) return false
     const matchUid = user.uid.toLowerCase().includes(searchTerm)
     const matchRealName = user.realName?.toLowerCase().includes(searchTerm)
     const matchEmail = user.email?.toLowerCase().includes(searchTerm)
@@ -195,7 +198,7 @@ const handleShare = () => {
     uid = atMatch[1]
   }
 
-  if (!uid) {
+  if (!uid || uid === currentUser.value) {
     return
   }
 

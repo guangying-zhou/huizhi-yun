@@ -118,3 +118,10 @@ test('Runtime owns canonical idempotency, replay and immutable persistence', () 
   assert.match(runtime, /INSERT INTO portal_notification_recipients/)
   assert.doesNotMatch(consoleSource, /SELECT |INSERT INTO|UPDATE |mysql2|queryRow|execute/)
 })
+
+test('publication identity opt-in preserves the frozen original-key canonical hash', () => {
+  const original = canonicalizePortalNotificationRequest(request(), actor)
+  for (const channel of ['wecom', 'dingtalk'] as const) {
+    assert.deepEqual(canonicalizePortalNotificationRequest(request({ resolveExternalChannel: channel }), actor), original)
+  }
+})

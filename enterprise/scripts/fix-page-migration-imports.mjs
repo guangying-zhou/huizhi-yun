@@ -10,17 +10,22 @@ import { fileURLToPath } from 'node:url'
 const root = resolve(fileURLToPath(new URL('../..', import.meta.url)))
 const apply = process.argv.includes('--apply')
 const input = process.argv.find(a => a.endsWith('.json'))
-if (!input) { console.error('用法: node fix-page-migration-imports.mjs <closure.json> [--apply]'); process.exit(2) }
+if (!input) {
+  console.error('用法: node fix-page-migration-imports.mjs <closure.json> [--apply]')
+  process.exit(2)
+}
 
 const relImport = (fromFile, toFile) => {
   let path = relative(dirname(resolve(root, fromFile)), resolve(root, toFile)).replace(/\.ts$/, '')
-  if (!path.startsWith('.')) path = './' + path
+  if (!path.startsWith('.'))
+    path = './' + path
   return path
 }
 
 // 插在最后一条 import 之后：保持既有顺序，避免把导入插进 <template> 或函数体
 function insertImports(source, lines) {
-  if (!lines.length) return source
+  if (!lines.length)
+    return source
   const scriptStart = source.indexOf('<script')
   const bodyStart = scriptStart >= 0 ? source.indexOf('>', scriptStart) + 1 : 0
   const region = source.slice(bodyStart)
@@ -58,17 +63,23 @@ for (const [file, work] of [...byFile].sort()) {
     const replacement = relImport(file, target)
     const pattern = new RegExp(`(from\\s+')${alias.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(')`, 'g')
     const next = source.replace(pattern, `$1${replacement}$2`)
-    if (next !== source) { source = next; aliasCount++; notes.push(`别名 ${alias} -> ${replacement}`) }
+    if (next !== source) {
+      source = next
+      aliasCount++
+      notes.push(`别名 ${alias} -> ${replacement}`)
+    }
   }
 
   const lines = []
   for (const [name, src] of work.symbols) {
-    if (new RegExp(`import\\s*\\{[^}]*\\b${name}\\b`).test(source)) continue
+    if (new RegExp(`import\\s*\\{[^}]*\\b${name}\\b`).test(source))
+      continue
     lines.push(`import { ${name} } from '${relImport(file, src)}'`)
     symbolCount++
   }
   for (const [name, src] of work.components) {
-    if (new RegExp(`import\\s+${name}\\s+from`).test(source)) continue
+    if (new RegExp(`import\\s+${name}\\s+from`).test(source))
+      continue
     lines.push(`import ${name} from '${relImport(file, src)}'`)
     componentCount++
   }
@@ -79,7 +90,8 @@ for (const [file, work] of [...byFile].sort()) {
     changed++
     console.log(`\n${file}`)
     notes.forEach(n => console.log(`   ${n}`))
-    if (apply) writeFileSync(resolve(root, file), source)
+    if (apply)
+      writeFileSync(resolve(root, file), source)
   }
 }
 console.log(`\n${apply ? '已写入' : 'DRY-RUN（加 --apply 执行）'}  文件 ${changed}  别名 ${aliasCount}  缺导入 ${symbolCount}  组件 ${componentCount}`)

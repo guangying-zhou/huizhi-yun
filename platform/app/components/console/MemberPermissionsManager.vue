@@ -247,6 +247,8 @@ const members = ref<MemberListItem[]>([])
 const assignableRoles = ref<AssignableRoleItem[]>([])
 const memberTotal = ref(0)
 const memberKeyword = ref('')
+const showInactive = ref(false)
+watch(showInactive, () => loadMembers())
 const selectedUid = ref('')
 const detail = ref<MemberDetailResponse | null>(null)
 const explainResult = ref<AuthorizationExplainResponse | null>(null)
@@ -553,6 +555,7 @@ async function loadMembers() {
       query: {
         tenantCode: tenantCode.value,
         keyword: memberKeyword.value.trim() || undefined,
+        showInactive: showInactive.value ? 'true' : undefined,
         page: 1,
         pageSize: 100
       }
@@ -875,6 +878,11 @@ watch(localRoleSimulationIncludeBaseline, () => {
                 placeholder="搜索姓名 / uid"
                 @keyup.enter="loadMembers"
               />
+              <UCheckbox
+                v-model="showInactive"
+                label="显示已停用"
+                class="mt-2"
+              />
             </div>
           </template>
 
@@ -883,7 +891,8 @@ watch(localRoleSimulationIncludeBaseline, () => {
               v-for="member in members"
               :key="member.uid"
               type="button"
-              class="w-full rounded-lg px-3 py-2 text-left transition hover:bg-muted"
+              class="w-full rounded-lg px-3 py-2 text-left transition hover:bg-muted disabled:opacity-60"
+              :disabled="member.status !== 'active'"
               :class="selectedUid === member.uid ? 'bg-muted ring-1 ring-primary' : ''"
               @click="selectedUid = member.uid"
             >
@@ -893,11 +902,17 @@ watch(localRoleSimulationIncludeBaseline, () => {
                   color="neutral"
                   variant="soft"
                 >
-                  {{ member.activeRoleCount }}
+                  {{ member.status === 'active' ? member.activeRoleCount : '已停用' }}
                 </UBadge>
               </div>
               <p class="mt-1 truncate font-mono text-xs text-muted">
                 {{ member.uid }}
+              </p>
+              <p
+                v-if="member.status !== 'active'"
+                class="text-xs text-muted"
+              >
+                账号已停用、授权不生效
               </p>
             </button>
             <div

@@ -15,8 +15,8 @@ export default defineEventHandler(async (event) => {
   })
   const binding = resolvePeopleDirectoryTargetBinding(event, actor.tenantCode)
   const body = await readBody<Record<string, unknown>>(event).catch(() => ({} as Record<string, unknown>))
-  verifyPeopleDirectorySignature(event, body, binding)
-  const { command, uid } = parseOnboardingProvisioningCommand(body, 'operation-status')
+  const sourceApp = verifyPeopleDirectorySignature(event, body, binding)
+  const { command, uid } = parseOnboardingProvisioningCommand(body, 'operation-status', sourceApp)
   const operationId = String(command.provisionOperationId || '').trim()
 
   const runtime = await getConsoleDirectoryConnectorOperationForServiceCommand(

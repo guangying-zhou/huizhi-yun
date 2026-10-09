@@ -26,39 +26,55 @@ function harness() {
   })
   return { route, calls, navigations, page: module.exports.default.setup({}, { expose: () => {} }) }
 }
-const settle = async () => { await new Promise(resolve => setImmediate(resolve)) }
+const settle = async () => {
+  await new Promise(resolve => setImmediate(resolve))
+}
 
 test('real Console SFC activation navigates migrated pages, never navigates on hover, and retains unmigrated iframe behavior', async () => {
   const h = harness()
-  let pending = h.page.prewarmApplication('aims'); await settle()
-  h.calls[0].resolve({ migrated: true, target: '/aims/projects' }); await pending
+  let pending = h.page.prewarmApplication('aims')
+  await settle()
+  h.calls[0].resolve({ migrated: true, target: '/aims/projects' })
+  await pending
   assert.deepEqual(h.navigations, [])
   assert.equal(h.page.frames.value.length, 0)
-  pending = h.page.activateRouteFrame(); await settle()
-  h.calls[1].resolve({ migrated: true, target: '/aims/projects/1?tab=x#part' }); await pending
+  pending = h.page.activateRouteFrame()
+  await settle()
+  h.calls[1].resolve({ migrated: true, target: '/aims/projects/1?tab=x#part' })
+  await pending
   assert.deepEqual(h.navigations, ['/aims/projects/1?tab=x#part'])
   assert.equal(h.page.frames.value.length, 0)
   h.route.query.target = '/aims/legacy'
-  pending = h.page.activateRouteFrame(); await settle()
-  h.calls[2].resolve({ migrated: false }); await pending
+  pending = h.page.activateRouteFrame()
+  await settle()
+  h.calls[2].resolve({ migrated: false })
+  await pending
   assert.equal(h.page.frames.value.length, 1)
   assert.match(h.page.frames.value[0].src, /aims\/legacy\?hzy_embed=1/)
 })
 
 test('real Console SFC rejects same-app late activations and retries a failed migration check without creating an iframe', async () => {
   const h = harness()
-  const old = h.page.activateRouteFrame(); await settle()
+  const old = h.page.activateRouteFrame()
+  await settle()
   h.route.query.target = '/aims/projects/2'
-  const latest = h.page.activateRouteFrame(); await settle()
-  h.calls[1].resolve({ migrated: true, target: '/aims/projects/2' }); await latest
-  h.calls[0].resolve({ migrated: true, target: '/aims/projects/1' }); await old
+  const latest = h.page.activateRouteFrame()
+  await settle()
+  h.calls[1].resolve({ migrated: true, target: '/aims/projects/2' })
+  await latest
+  h.calls[0].resolve({ migrated: true, target: '/aims/projects/1' })
+  await old
   assert.deepEqual(h.navigations, ['/aims/projects/2'])
-  let pending = h.page.activateRouteFrame(); await settle()
-  h.calls[2].reject(Error('unavailable')); await pending
+  let pending = h.page.activateRouteFrame()
+  await settle()
+  h.calls[2].reject(Error('unavailable'))
+  await pending
   assert.equal(h.page.migrationError.value, true)
   assert.equal(h.page.frames.value.length, 0)
-  pending = h.page.activateRouteFrame(); await settle()
-  h.calls[3].resolve({ migrated: true, target: '/aims/projects/2' }); await pending
+  pending = h.page.activateRouteFrame()
+  await settle()
+  h.calls[3].resolve({ migrated: true, target: '/aims/projects/2' })
+  await pending
   assert.equal(h.page.migrationError.value, false)
   assert.equal(h.navigations.length, 2)
 })

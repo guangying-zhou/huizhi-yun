@@ -74,7 +74,7 @@ func (s *Server) routeEnterpriseAltocSalesRead(r *http.Request, spec enterpriseA
 		return routeResult{}, err
 	}
 	result := routeResult{Operation: "enterprise.altoc." + spec.Resource + "." + spec.Action, Auth: &verified.Service}
-	if s.enterpriseAltocSalesReads == nil {
+	if s.enterpriseAltocSalesReads == nil && !(spec.Resource == "quotation" && s.enterpriseAPF != nil) {
 		return result, httperror.New(503, "enterprise_altoc_unavailable", "Altoc reads are not ready")
 	}
 	if r.URL.RawQuery != "" {
@@ -100,7 +100,12 @@ func (s *Server) routeEnterpriseAltocSalesRead(r *http.Request, spec enterpriseA
 	if err = verifyEnterpriseAltocSalesReadPermitSignature(r, input.Authorization); err != nil {
 		return result, err
 	}
-	data, err := s.enterpriseAltocSalesReads.Read(r.Context(), spec.Resource, input.ID, verified.ActorUID, input.Authorization.Scope, input.Query)
+	var data any
+	if spec.Resource == "quotation" && s.enterpriseAPF != nil {
+		data, err = s.enterpriseAPF.QuotationRead(r.Context(), input.ID, verified.ActorUID, input.Authorization.Scope, input.Query)
+	} else {
+		data, err = s.enterpriseAltocSalesReads.Read(r.Context(), spec.Resource, input.ID, verified.ActorUID, input.Authorization.Scope, input.Query)
+	}
 	if err != nil {
 		var known httperror.Error
 		if errors.As(err, &known) {

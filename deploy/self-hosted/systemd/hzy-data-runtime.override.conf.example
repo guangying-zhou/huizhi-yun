@@ -3,6 +3,8 @@
 [Unit]
 After=mysqld.service
 Wants=mysqld.service
+# Pull stopped dependents back into the Runtime start/restart transaction.
+Wants=hzy-console.service hzy-enterprise.service hzy-workflow.service hzy-aims.service hzy-codocs.service hzy-collab.service hzy-tenant-gateway.service
 
 [Service]
 EnvironmentFile=/etc/hzy/runtime.env

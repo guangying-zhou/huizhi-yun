@@ -68,7 +68,13 @@ func (s *Server) routeEnterpriseProjectDocumentAccessible(r *http.Request) (rout
 	if err != nil {
 		return result, projectDocumentDependencyError(err)
 	}
-	out, err := s.aims.ListEnterpriseAccessibleProjectDocuments(r.Context(), in.ProjectID, verified.ActorUID, directoryFacts.ManagementDeptCodes, in.Authorization.ProjectAdmin, func(ctx context.Context, uuid, ref string, f aimsapp.EnterpriseProjectDocumentAccessFacts) (map[string]any, error) {
+	// The read-only portfolio section uses the same typed dependencies as the
+	// portfolio document list; the project's own documents never depend on them.
+	ctx, err := s.enterprisePortfolioContext(r.Context(), verified.ActorUID, true)
+	if err != nil {
+		return result, err
+	}
+	out, err := s.aims.ListEnterpriseAccessibleProjectDocuments(ctx, in.ProjectID, verified.ActorUID, directoryFacts.ManagementDeptCodes, in.Authorization.ProjectAdmin, func(ctx context.Context, uuid, ref string, f aimsapp.EnterpriseProjectDocumentAccessFacts) (map[string]any, error) {
 		return s.codocs.CheckEnterpriseProjectDocument(ctx, uuid, ref, codocsapp.EnterpriseProjectDocumentFacts{ActorUID: f.ActorUID, ProjectCode: f.ProjectCode, ProjectCodes: f.ProjectCodes, Roles: f.Roles, DeptCodes: directoryFacts.DeptCodes})
 	})
 	if err != nil {

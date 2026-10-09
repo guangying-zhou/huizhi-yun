@@ -28,7 +28,7 @@ func (r EnterpriseCodocsDepartmentRole) CanRead() bool {
 }
 
 func (r EnterpriseCodocsDepartmentRole) CanWrite() bool {
-	return r == CodocsDepartmentManager || r == CodocsDepartmentMember
+	return r == CodocsDepartmentLeader || r == CodocsDepartmentManager || r == CodocsDepartmentMember
 }
 
 func (r EnterpriseCodocsDepartmentRole) CanManage() bool {

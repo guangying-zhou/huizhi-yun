@@ -775,3 +775,99 @@ test('unified Assets storage selection is signed for the Assets wake', async () 
   assert.equal(h.get('x-hzy-scheduler-generation'), '9')
   assert.equal(h.get('x-hzy-scheduler-signature')?.length, 64)
 })
+
+test('APF owners are default off, tuple-bound and unique; cron wakes all three domains through the signed Host path', async () => {
+  const tenant = resolvedTenantRecord('apf-fixture')
+  tenant.apps.enterprise = { deploymentCode: 'host-apf' }
+  const binding = { host: tenant.host, tenantCode: tenant.tenantCode, environment: 'prod', deploymentCode: 'host-apf', owner: 'gateway', generation: '7', domains: ['altoc', 'finance', 'people'] }
+  assert.equal(tenantGatewayModule.apfSchedulerBinding({}, tenant, tenant.host), null)
+  for (const bad of [{ ...binding, owner: 'legacy' }, { ...binding, deploymentCode: 'other' }, { ...binding, tenantCode: 'other' }, { ...binding, environment: 'test' }, { ...binding, domains: ['people', 'people'] }, { ...binding, generation: '01' }, { ...binding, domains: ['workflow'] }]) {
+    assert.throws(() => tenantGatewayModule.apfSchedulerBinding({ HZY_ENTERPRISE_APF_SCHEDULER_BINDINGS_JSON: JSON.stringify([bad]) }, tenant, tenant.host))
+  }
+  assert.throws(() => tenantGatewayModule.apfSchedulerBinding({ HZY_ENTERPRISE_APF_SCHEDULER_BINDINGS_JSON: JSON.stringify([binding, binding]) }, tenant, tenant.host))
+  const calls = []
+  const env = schedulerEnv({ HZY_TENANT_GATEWAY_SCHEDULER_MAX_WALL_TIME_MS: '45000', HZY_ENTERPRISE_ORIGIN: 'https://host-fixture.test', HZY_ENTERPRISE_APF_SCHEDULER_BINDINGS_JSON: JSON.stringify([binding]), HZY_ENTERPRISE_SERVICE: { async fetch(input, init) { calls.push(new Request(input, init)); return Response.json({ code: 0 }) } } })
+  const fake = async input => {
+    const path = new URL(input).pathname
+    if (path === '/internal/resolve') return Response.json({ data: tenant })
+    if (path === '/internal/runtime-bootstrap-token') return Response.json({ data: { token: 'fixture', expiresAt: new Date(Date.now() + 90000).toISOString() } })
+    throw new Error('unexpected call')
+  }
+  const run = () => tenantGatewayModule.runScheduledIntegrationDrains({ scheduledTime: Date.now() }, env, { fetchImpl: fake, loadPage: async () => ({ items: [{ host: tenant.host, tenantCode: tenant.tenantCode, environment: 'prod', appCodes: ['enterprise'] }] }) })
+  const counters = await run()
+  assert.equal(counters.attemptedWakes, 3, JSON.stringify(counters))
+  assert.equal(counters.succeededWakes, 3)
+  assert.deepEqual(calls.map(r => r.headers.get('x-hzy-apf-domain')).sort(), ['altoc', 'finance', 'people'])
+  for (const r of calls) {
+    const h = r.headers, domain = h.get('x-hzy-apf-domain')
+    assert.equal(new URL(r.url).pathname, '/enterprise/api/internal/apf/scheduler-inspect')
+    assert.deepEqual(await r.json(), { domain })
+    const canonical = ['POST', '/enterprise/api/internal/apf/scheduler-inspect', h.get('x-request-id'), tenant.tenantCode, 'host-apf', 'enterprise', 'prod', tenant.dataRuntime.endpoint, tenant.host, 'enterprise-scheduler-v1', 'unified', '7', 'enterprise-apf-v1', domain, h.get('x-hzy-scheduler-issued-at')].join('\n')
+    assert.equal(h.get('x-hzy-scheduler-signature'), createHmac('sha256', 'gateway-secret').update(canonical).digest('hex'))
+    assert.equal(h.has('x-hzy-actor-uid'), false)
+  }
+  calls.length = 0
+  delete env.HZY_ENTERPRISE_APF_SCHEDULER_BINDINGS_JSON
+  assert.equal((await run()).attemptedWakes, 0)
+  assert.equal(calls.length, 0)
+  env.HZY_ENTERPRISE_APF_SCHEDULER_BINDINGS_JSON = JSON.stringify([binding])
+  env.HZY_TENANT_GATEWAY_SCHEDULER_MAX_WAKES = '1'
+  assert.equal((await run()).attemptedWakes, 1)
+  assert.equal(calls.length, 1)
+})
+
+test('Host Aims selection signs the physical target and keeps owning generation', async () => {
+  const wakes = []
+  await runScheduled({ ...schedulerEnv({ HZY_TENANT_GATEWAY_SCHEDULER_SHARD_COUNT: '1', HZY_TENANT_GATEWAY_SCHEDULER_SHARD_INDEX: '0' }), HZY_AIMS_SCHEDULER_EXECUTOR: 'enterprise', HZY_ENTERPRISE_ORIGIN: 'https://enterprise.example.test' }, async (input, init) => {
+    const request = asRequest(input, init)
+    const url = new URL(request.url)
+    if (url.pathname === '/internal/tenant-scheduler') return Response.json({ data: { items: [{ ...tenantRecord('host-unified-signature'), appCodes: ['aims'] }], nextCursor: null } })
+    if (url.pathname === '/internal/resolve') {
+      const record = resolvedTenantRecord('host-unified-signature')
+      record.apps.enterprise = { deploymentCode: 'enterprise-dep' }
+      record.apps.aims.enterpriseScheduler = { storage: 'unified', generation: '7' }
+      return Response.json({ data: record })
+    }
+    if (url.pathname === '/internal/runtime-bootstrap-token') return Response.json({ data: { token: 'bootstrap', expiresAt: new Date(Date.now() + 90000).toISOString() } })
+    wakes.push(request)
+    return Response.json({ code: 0 })
+  }, { now: () => 100 })
+  assert.equal(wakes.length, 1)
+  assert.equal(new URL(wakes[0].url).pathname, '/enterprise/api/internal/aims/drain')
+  const h = wakes[0].headers
+  assert.equal(h.get('x-hzy-app-code'), 'enterprise')
+  assert.equal(h.get('x-hzy-deployment'), 'enterprise-dep')
+  assert.equal(h.get('x-hzy-scheduler-storage'), 'unified')
+  assert.equal(h.get('x-hzy-scheduler-generation'), '7')
+  const canonical = ['POST', '/enterprise/api/internal/aims/drain', h.get('x-request-id'),
+    'host-unified-signature', 'enterprise-dep', 'enterprise', 'prod', 'https://runtime-host-unified-signature.example.test',
+    'host-unified-signature.huizhi.yun', 'enterprise-scheduler-v1', 'unified', '7', h.get('x-hzy-scheduler-issued-at')].join('\n')
+  assert.equal(h.get('x-hzy-scheduler-signature'), createHmac('sha256', 'gateway-secret').update(canonical).digest('hex'))
+})
+
+test('Host selection never falls back to an old wake when target or storage is absent', async () => {
+  for (const [suffix, target, storage] of [['no-target', false, 'unified'], ['no-storage', true, ''], ['disabled', true, 'disabled']]) {
+    const code = `host-${suffix}`
+    const wakes = []
+    await runScheduled(schedulerEnv({ HZY_AIMS_SCHEDULER_EXECUTOR: 'enterprise', HZY_TENANT_GATEWAY_SCHEDULER_SHARD_COUNT: '1', HZY_TENANT_GATEWAY_SCHEDULER_SHARD_INDEX: '0' }), async (input, init) => {
+      const request = asRequest(input, init)
+      const path = new URL(request.url).pathname
+      if (path === '/internal/tenant-scheduler') return Response.json({ data: { items: [{ ...tenantRecord(code), appCodes: ['aims'] }], nextCursor: null } })
+      if (path === '/internal/resolve') {
+        const record = resolvedTenantRecord(code)
+        if (target) record.apps.enterprise = { deploymentCode: 'registered-host' }
+        if (storage) record.apps.aims.enterpriseScheduler = { storage, generation: '7' }
+        return Response.json({ data: record })
+      }
+      if (path === '/internal/runtime-bootstrap-token') return Response.json({ data: { token: 'fixture', expiresAt: new Date(Date.now() + 90000).toISOString() } })
+      wakes.push(request)
+      return Response.json({ code: 0 })
+    }, { now: () => 100 })
+    assert.equal(wakes.length, 0, suffix)
+  }
+})
+
+test('public HTTP cannot invoke the Host Aims signed wake', async () => {
+  const response = await tenantGateway.fetch(new Request('https://tenant-a.huizhi.yun/enterprise/api/internal/aims/drain', { method: 'POST' }), schedulerEnv())
+  assert.equal(response.status, 404)
+})

@@ -408,3 +408,9 @@ enterprise/enterprise.runtime 或兼容 aims/aims.runtime；不伪造来源上�
 | 接口 | 合同 |
 | --- | --- |
 | GET `/enterprise/api/org-brand` | 已认证本租户用户；仅返回 `{code:0,data:{shortName,displayName}}`；固定 Console Host U 操作，无管理员资料权限/新增 grant，私有 no-store；UI 失败回退企业编码。 |
+
+反馈列表补充：`GET /enterprise/api/feedback` 接受 `page`、`pageSize`（默认 20、1–100）、可选 `status`/`kind`，由 Console owning Runtime 在原租户/本人范围内筛选计数后分页；响应含 `items/total/page/pageSize`。Console 管理列表使用同一参数合同和现有管理员范围。非法状态/类型为 400，无新增权限或 schema。
+
+### 全局反馈图片（G2+G3）
+
+`PUT /enterprise/api/feedback/:id/attachments/:attachmentId` 接收已确认的 PNG/JPEG 二进制，单张 5 MiB，必须 Idempotency-Key；Console owning 层复核 feedback:submit 与本人范围，Runtime 重编码、私有暂存。草稿先冻结最多 5 个 attachmentIds，全部暂存后才能 submit。`GET` 同路径要求 feedback:view 与本人/管理员范围，返回 no-store JSON/base64，过期 410。图片门禁关闭 503、越权 403/404、意图/状态冲突 409、超限 413。管理清理操作只在 Console，Host 没有入口。

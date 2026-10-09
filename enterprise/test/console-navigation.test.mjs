@@ -19,12 +19,12 @@ const mutate = (change) => {
 }
 
 test('Console contributes manifest-owned navigation without becoming an installation module', () => {
-  assert.deepEqual(businessModules.map(module => module.code), ['aims', 'assets', 'codocs'])
+  assert.deepEqual(businessModules.map(module => module.code), ['aims', 'assets', 'codocs', 'finance', 'people'])
   const manifest = JSON.parse(readFileSync(new URL('../app.manifest.json', import.meta.url), 'utf8'))
   assert.deepEqual(manifest.composition.modules.map(module => module.appCode).sort(), ['aims', 'assets', 'codocs'])
   // Console administration stays a standalone console (ADR-018a D8): the Host keeps only the personal pages.
   assert.equal(leaves.length, 2)
-  assert.deepEqual(nav.primary.find(area => area.code === 'workspace').children.find(group => group.code === 'self').children.filter(item => item.module === 'console').map(item => item.to), ['/enterprise/notifications', '/enterprise/todos'])
+  assert.deepEqual(nav.primary.find(area => area.code === 'workspace').children.flatMap(group => group.children).filter(item => item.module === 'console').map(item => item.to), ['/enterprise', '/enterprise/todos'])
   // Business modules keep their own admin pages in that sidebar area; none of them is a Console page.
   assert.ok(!(nav.auxiliary.find(area => area.code === 'console')?.children || []).some(group => group.children.some(item => item.module === 'console')))
   assert.ok(!leaves.some(item => item.to === '/enterprise/profile' || item.permission))
@@ -36,7 +36,7 @@ test('Console contributes manifest-owned navigation without becoming an installa
 })
 
 test('Host native ownership, real files, Nuxt registration and deep links agree', () => {
-  assert.deepEqual(hostNativePages.filter(page => page.module === 'console').map(page => page.path), ['/enterprise/notifications', '/enterprise/notifications/:notificationId', '/enterprise/todos'])
+  assert.deepEqual(hostNativePages.filter(page => page.module === 'console').map(page => page.path), ['/enterprise', '/enterprise/notifications', '/enterprise/notifications/:notificationId', '/enterprise/todos', '/enterprise/announcements', '/enterprise/announcements/manage', '/enterprise/announcements/:announcementId', '/enterprise/help', '/enterprise/feedback', '/enterprise/feedback/:feedbackId'])
   validateHostNativePages(hostNativePages, hostNativePages)
   const detail = hostNativePages.find(page => page.path.includes(':notificationId'))
   const nuxtDynamic = hostNativePages.map(page => page === detail ? { ...page, path: page.path.replace(':notificationId', ':notificationId()') } : page)
@@ -44,8 +44,9 @@ test('Host native ownership, real files, Nuxt registration and deep links agree'
   assert.throws(() => validateHostNativePages(hostNativePages.slice(1), hostNativePages), /differs from Nuxt/)
   assert.throws(() => validateHostNativePages([...hostNativePages, hostNativePages[0]], hostNativePages), /differs from Nuxt/)
   assert.ok(matchRegisteredPage('/enterprise/notifications/N1', hostNativePages))
-  assert.equal(selectActiveLeaf([...nav.primary, ...nav.auxiliary], '/enterprise/notifications/N1'), 'console.workspace.notifications')
-  assert.throws(() => projectHostNativePages({ ...consoleNavigation, code: 'assets' }), /owner mismatch/)
+  assert.equal(selectActiveLeaf([...nav.primary, ...nav.auxiliary], '/enterprise'), 'console.workspace.home')
+  assert.ok(!leaves.some(item => item.to === '/enterprise/notifications'))
+  assert.throws(() => projectHostNativePages({ ...consoleNavigation, code: 'assets' }), /owner mismatch|Invalid/)
   for (const path of ['/enterprise/profile', '/enterprise/missing', '/enterprise/../login', 'https://example.test', '/enterprise/todos?uid=other']) {
     assert.throws(() => projectHostNativePages(mutate(declaration => declaration.pages.push(path))), /owner mismatch|missing|Invalid/)
   }
@@ -80,7 +81,7 @@ test('authenticated-self entries need a verified session and never load a manage
   const options = { available: true, authenticatedSelf: true, load: () => {
     throw Error('self must not load management permissions')
   } }
-  assert.deepEqual([...await resolveNavigationAccess(leaves, options)].sort(), ['console.workspace.notifications', 'console.workspace.todos'])
+  assert.deepEqual([...await resolveNavigationAccess(leaves, options)].sort(), ['console.workspace.home', 'console.workspace.todos'])
   assert.deepEqual(await resolveNavigationAccess(leaves, { ...options, available: false }), [])
   assert.deepEqual(await resolveNavigationAccess(leaves, { ...options, authenticatedSelf: false }), [])
   assert.deepEqual(await resolveNavigationAccess(leaves, { available: true }), [])

@@ -1,7 +1,7 @@
-import { productFeedbackRuntimeError } from './productFeedbackRuntimeError'
+import { productFeedbackRuntimeError } from './productFeedbackRuntimeError.ts'
 import { createError, getHeader, getQuery, getRequestURL, readBody, setHeader, type H3Event } from 'h3'
 import { hashServiceCommandPayload, maybeCallTenantRuntime, verifyServiceCommandRuntimeHeaders } from '@hzy/foundation/server/utils/tenantRuntimeClient'
-import { requireProductFeedbackStatusAuth } from './productFeedbackStatusAuth'
+import { requireProductFeedbackStatusAuth } from './productFeedbackStatusAuth.ts'
 
 export async function handleProductFeedbackStatusService(event: H3Event) {
   setHeader(event, 'Cache-Control', 'no-store')

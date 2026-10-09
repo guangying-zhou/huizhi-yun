@@ -4,12 +4,14 @@ import type { NuxtError } from '#app'
 const props = defineProps<{ error: NuxtError }>()
 const config = useRuntimeConfig()
 const appLogo = computed(() => String(config.public.appLogo || '/enterprise/logo.svg'))
+const forbidden = computed(() => Number(props.error.statusCode || 500) === 403)
+const retired = computed(() => Number(props.error.statusCode || 500) === 410)
 const notFound = computed(() => Number(props.error.statusCode || 500) === 404)
 // Served through the Gateway's Host asset path; bound (not a literal src) so Vite does not try to bundle it.
 const notFoundIllustration = '/enterprise/illustrations/404.svg'
 
 useHead({
-  title: () => notFound.value ? '页面不存在 · 汇智云' : '页面暂时无法打开 · 汇智云',
+  title: () => retired.value ? '此入口已下线' : notFound.value ? '页面不存在' : forbidden.value ? '无权限访问此页面' : '页面暂时无法打开',
   htmlAttrs: { lang: 'zh-CN' }
 })
 
@@ -55,10 +57,10 @@ function returnToWorkbench() {
             id="error-title"
             class="text-xl font-semibold text-highlighted"
           >
-            {{ notFound ? '页面不存在' : '页面暂时无法打开' }}
+            {{ retired ? '此入口已下线' : notFound ? '页面不存在' : forbidden ? '无权限访问此页面' : '页面暂时无法打开' }}
           </h1>
           <p class="text-sm text-muted">
-            {{ notFound ? '您访问的页面不存在或已被移除，请检查网址是否正确。' : '请稍后重试，或先回到工作台。' }}
+            {{ retired ? '此旧入口已停止使用，请回到工作台打开现有文档或项目功能。' : notFound ? '您访问的页面不存在或已被移除，请检查网址是否正确。' : forbidden ? '当前账号没有此页面的访问权限，请联系管理员。' : '请稍后重试，或先回到工作台。' }}
           </p>
         </div>
         <UButton

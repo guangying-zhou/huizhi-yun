@@ -15,21 +15,23 @@ import (
 	"github.com/huizhi-yun/data-runtime/internal/config"
 	"github.com/huizhi-yun/data-runtime/internal/db"
 	"github.com/huizhi-yun/data-runtime/internal/httperror"
+	"github.com/huizhi-yun/data-runtime/internal/policyenvelope"
 )
 
 var requiredTables = schemaRequiredTables()
 
 type Adapter struct {
-	db                            *sql.DB
-	dbName                        string
-	tenant                        string
-	vaultMasterKey                string
-	vaultKeyMu                    sync.RWMutex
-	ownsDB                        bool
-	oidcSigningIssuerMu           sync.RWMutex
-	oidcSigningIssuerSource       func() string
-	oidcSigningRuntimeDeployment  string
-	oidcSigningDeploymentBindings map[string]string
+	serviceTokenExchangePolicySource func(string, string) (policyenvelope.Store, error)
+	db                               *sql.DB
+	dbName                           string
+	tenant                           string
+	vaultMasterKey                   string
+	vaultKeyMu                       sync.RWMutex
+	ownsDB                           bool
+	oidcSigningIssuerMu              sync.RWMutex
+	oidcSigningIssuerSource          func() string
+	oidcSigningRuntimeDeployment     string
+	oidcSigningDeploymentBindings    map[string]string
 }
 
 func normalizeVaultMasterKey(value string) []byte {

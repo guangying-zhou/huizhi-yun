@@ -285,8 +285,8 @@ export async function replaceSystemRoleScopes(
     const manifestAction = await resolveManifestAction(executor, scope)
     await executor.execute<ResultSetHeader>(
       `INSERT INTO platform_app_role_scopes
-        (app_role_id, app_code, resource_code, action, manifest_action_id, scope_type, scope_value, status, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())`,
+        (app_role_id, app_code, resource_code, action, manifest_action_id, scope_type, scope_value, source_type, status, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, 'manual', ?, NOW(), NOW())`,
       [
         systemRoleId,
         manifestAction.app_code,

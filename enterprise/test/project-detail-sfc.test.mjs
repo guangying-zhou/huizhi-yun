@@ -29,7 +29,7 @@ const output = (await build({
   external: ['vue']
 })).outputFiles[0].text
 const module = { exports: {} }
-new Function('require', 'module', 'exports', output)(createRequire(import.meta.url), module, module.exports)
+new Function('require', 'module', 'exports', 'definePageMeta', output)(createRequire(import.meta.url), module, module.exports, () => {})
 const DetailPage = module.exports.default
 const sidebarFile = resolve(repoRoot, 'enterprise/app/components/HostObjectNav.vue')
 const sidebarScript = compileScript(parse(readFileSync(sidebarFile, 'utf8'), { filename: sidebarFile }).descriptor, { id: 'host-object-nav', inlineTemplate: true }).content

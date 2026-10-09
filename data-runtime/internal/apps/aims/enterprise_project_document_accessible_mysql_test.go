@@ -106,6 +106,33 @@ func TestEnterpriseAccessibleProjectDocumentsMySQL(t *testing.T) {
 			}
 		}
 	})
+	t.Run("RepositoryDocumentAccessContext", func(t *testing.T) {
+		_, err := a.EnterpriseProjectDocumentContext(ctx, "1", "3", "", "U1", false, nil)
+		var denied httperror.Error
+		if !errors.As(err, &denied) || denied.Code != "project_repository_mismatch" {
+			t.Fatalf("unbound repository must fail: %v", err)
+		}
+		exec(db, "INSERT INTO aims_project_repos(project_id,repo_project_code) VALUES(1,'R1')")
+		out, err := a.EnterpriseProjectDocumentContext(ctx, "1", "3", "", "U1", false, nil)
+		if err != nil || out["repositoryReference"] != true || out["documentRefType"] != "cabinet_file" {
+			t.Fatalf("bound repository document: %v %v", out, err)
+		}
+		document, _ := out["document"].(map[string]any)
+		if document["repo_project_code"] != "R1" || document["repo_file_path"] != "docs/spec.md" {
+			t.Fatal("actual owning document column contract", document)
+		}
+		_, err = a.EnterpriseProjectDocumentContext(ctx, "2", "3", "", "U4", false, nil)
+		if !errors.As(err, &denied) || denied.Code != "project_document_not_found" {
+			t.Fatalf("wrong project must fail: %v", err)
+		}
+		exec(db, "UPDATE project_documents SET repo_project_code='r1' WHERE id=3")
+		_, err = a.EnterpriseProjectDocumentContext(ctx, "1", "3", "", "U1", false, nil)
+		if !errors.As(err, &denied) || denied.Code != "project_repository_mismatch" {
+			t.Fatalf("case mismatch must fail: %v", err)
+		}
+		exec(db, "UPDATE project_documents SET repo_project_code='R1' WHERE id=3")
+	})
+
 	t.Run("HostContentUUIDAssociation", func(t *testing.T) {
 		title, e := a.EnterpriseProjectDocumentUUIDTitle(ctx, "1", "22222222-2222-4222-8222-222222222222")
 		if e != nil || title != "spec" {
@@ -119,6 +146,34 @@ func TestEnterpriseAccessibleProjectDocumentsMySQL(t *testing.T) {
 		title, e = a.EnterpriseProjectDocumentUUIDTitle(ctx, "1", "00000001-4444-4444-8444-444444444444")
 		if e != nil || title != "fixture" {
 			t.Fatalf("deliverable title=%q err=%v", title, e)
+		}
+	})
+	t.Run("HostContentUUIDStaleOtherProject", func(t *testing.T) {
+		t.Cleanup(func() { exec(db, "DELETE FROM project_documents WHERE id IN (2001,2002)") })
+		// Reproduce a legacy dangling index without changing the canonical schema.
+		conn, e := db.Conn(ctx)
+		if e != nil {
+			t.Fatal(e)
+		}
+		defer conn.Close()
+		if _, e = conn.ExecContext(ctx, "SET FOREIGN_KEY_CHECKS=0"); e != nil {
+			t.Fatal(e)
+		}
+		_, insertErr := conn.ExecContext(ctx, "INSERT INTO project_documents(id,uuid,codocs_uuid,project_id,project_code,title,created_by) VALUES (2001,'20010000-1111-4111-8111-111111111111','20000000-2222-4222-8222-222222222222',999999,'missing','stale','U1'),(2002,'20020000-1111-4111-8111-111111111111','20000000-2222-4222-8222-222222222222',1,'P1','valid','U1')")
+		if _, e = conn.ExecContext(ctx, "SET FOREIGN_KEY_CHECKS=1"); e != nil {
+			t.Fatal(e)
+		}
+		if insertErr != nil {
+			t.Fatal(insertErr)
+		}
+		title, e := a.EnterpriseProjectDocumentUUIDTitle(ctx, "1", "20000000-2222-4222-8222-222222222222")
+		if e != nil || title != "valid" {
+			t.Fatalf("stale unrelated index masked valid association: %q %v", title, e)
+		}
+		_, e = a.EnterpriseProjectDocumentUUIDTitle(ctx, "2", "20000000-2222-4222-8222-222222222222")
+		var failure httperror.Error
+		if !errors.As(e, &failure) || failure.Status != 403 {
+			t.Fatalf("unlinked target must remain denied: %v", e)
 		}
 	})
 	t.Run("R2cReferenceOnlyAndFrozenVersion", func(t *testing.T) {

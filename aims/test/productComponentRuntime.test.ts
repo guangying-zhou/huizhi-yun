@@ -66,7 +66,6 @@ test('invalid or unauthorized requests never reach runtime; unavailable runtime 
   await assert.rejects(harness({ response: { handled: true, data: { code: 1 } } }).run('move'), { statusCode: 409 })
 })
 
-
 test('component list BFF forwards only the requested parent and pagination under view permission', async () => {
   const h = harness({ query: { parentId: '7', page: '2', pageSize: '10' }, key: null })
   await h.run('list')

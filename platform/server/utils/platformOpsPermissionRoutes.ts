@@ -18,6 +18,9 @@ export function resolveOpsPermission(path: string, method: string): { resourceCo
 
   switch (segment) {
     case 'tenants':
+      if (/^\/api\/platform\/ops\/tenants\/[^/]+\/app-releases(?:\/preview)?\/?$/.test(normalizedPath)) {
+        return { resourceCode: 'ops.deployments', requiredAction: READ_METHODS.has(normalizedMethod) || (normalizedMethod === 'POST' && /\/preview\/?$/.test(normalizedPath)) ? 'view' : 'deploy' }
+      }
       if (
         normalizedMethod === 'POST'
         && /^\/api\/platform\/ops\/tenants\/[^/]+\/bundles$/.test(normalizedPath)

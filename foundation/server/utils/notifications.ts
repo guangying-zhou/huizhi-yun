@@ -8,7 +8,7 @@ import {
 } from './serviceOidc'
 import { consoleServiceFetch } from './consoleServiceBinding'
 
-export type IntegrationOperationDeadLetterSourceApp = 'aims' | 'altoc' | 'assets' | 'finance' | 'people'
+export type IntegrationOperationDeadLetterSourceApp = 'enterprise' | 'aims' | 'altoc' | 'assets' | 'finance' | 'people'
 
 type ConsoleApiResponse<T> = {
   code?: number
@@ -17,6 +17,9 @@ type ConsoleApiResponse<T> = {
 }
 
 export interface PublishNotificationInput {
+  /** Receipt-only recovery for an Enterprise-owned due event; never creates a notification. */
+  resolveExternalChannel?: 'wecom' | 'dingtalk'
+  probeOnly?: true
   sourceAppCode?: string
   eventType?: string
   category?: string
@@ -47,6 +50,7 @@ export interface IntegrationOperationDeadLetterNotificationInput {
   tenantCode: string
   deploymentCode: string
   sourceApp: IntegrationOperationDeadLetterSourceApp
+  moduleAppCode?: 'altoc' | 'finance' | 'people'
   targetApp: string
   operationId: string
   operationCode: string
@@ -335,6 +339,7 @@ export async function publishNotification(input: PublishNotificationInput) {
       sourceAppCode: string
       recipients: string[]
       channels: string[]
+      externalIdentityResolution?: unknown
     }>>(event, `${baseUrl}/api/v1/console/notifications/publish`, {
       method: 'POST',
       headers: {
@@ -342,6 +347,8 @@ export async function publishNotification(input: PublishNotificationInput) {
         Authorization: `Bearer ${token}`
       },
       body: {
+        ...(input.probeOnly === true ? { probeOnly: true } : {}),
+        ...(input.resolveExternalChannel ? { resolveExternalChannel: input.resolveExternalChannel } : {}),
         sourceAppCode: input.sourceAppCode,
         eventType: input.eventType,
         category: input.category,
@@ -431,6 +438,7 @@ export async function publishIntegrationOperationDeadLetter(
         tenantCode: input.tenantCode,
         deploymentCode: input.deploymentCode,
         sourceApp: input.sourceApp,
+        ...(input.sourceApp === 'enterprise' ? { moduleAppCode: input.moduleAppCode } : {}),
         targetApp: input.targetApp,
         operationId: input.operationId,
         operationCode: input.operationCode,

@@ -2,6 +2,8 @@ package workflow
 
 import (
 	"context"
+	"errors"
+	"github.com/huizhi-yun/data-runtime/internal/httperror"
 	"net/url"
 	"testing"
 
@@ -51,5 +53,47 @@ func TestReconcileAimsMilestoneProjectDirectorRejectsPartialTrustedBinding(t *te
 	})
 	if err == nil {
 		t.Fatal("expected partial project director binding to fail closed")
+	}
+}
+
+func TestProjectDirectorMissingNeverUsesFrozenAssignee(t *testing.T) {
+	director := map[string]any{"app_code": "aims", "resource_code": "milestones", "action_code": "milestone_completion", "form_data": `{"projectDirectorRoleCode":"project_director"}`}
+	task := map[string]any{"status": "pending", "assignee_uid": "old-director"}
+	ctx := withProjectDirectorFacts(context.Background(), nil)
+	if projectDirectorTaskAllowed(ctx, director, task) || requireProjectDirectorTask(ctx, director, task) == nil {
+		t.Fatal("missing role used frozen assignee")
+	}
+	ordinary := map[string]any{"app_code": "aims", "resource_code": "tasks", "action_code": "complete"}
+	if !projectDirectorTaskAllowed(ctx, ordinary, task) || requireProjectDirectorTask(ctx, ordinary, task) != nil {
+		t.Fatal("ordinary task blocked")
+	}
+	ctx = withProjectDirectorFacts(context.Background(), url.Values{"current_project_director_uid": {"new-director"}})
+	if projectDirectorTaskAllowed(ctx, director, task) {
+		t.Fatal("old director retained role")
+	}
+	task["assignee_uid"] = "new-director"
+	if !projectDirectorTaskAllowed(ctx, director, task) {
+		t.Fatal("resolved director denied")
+	}
+}
+
+func TestProjectDirectorMissingDecisionFailsBeforeMutation(t *testing.T) {
+	for _, action := range []string{"approve", "reject", "delegate"} {
+		t.Run(action, func(t *testing.T) {
+			adapter, mock, closeDB := newWorkflowRuntimeSQLMockAdapter(t)
+			defer closeDB()
+			mock.ExpectBegin()
+			mock.ExpectQuery(`SELECT \* FROM flow_tasks WHERE id = \? FOR UPDATE`).WithArgs("31").WillReturnRows(sqlmock.NewRows([]string{"id", "instance_id", "assignee_uid", "status"}).AddRow(31, 17, "old-director", "pending"))
+			mock.ExpectQuery(`SELECT .* FROM flow_instances WHERE id = \? FOR UPDATE`).WithArgs(int64(17)).WillReturnRows(sqlmock.NewRows([]string{"id", "status", "app_code", "resource_code", "action_code", "form_data"}).AddRow(17, "running", "aims", "milestones", "milestone_completion", `{"projectDirectorRoleCode":"project_director"}`))
+			mock.ExpectRollback()
+			_, _, err := adapter.HandleRuntime(context.Background(), "POST", "/v1/workflow/tasks/31/"+action, url.Values{"current_user": {"old-director"}}, map[string]any{"comment": "reason", "delegate_to": "another", "current_project_director_uid": "forged"})
+			var failure httperror.Error
+			if !errors.As(err, &failure) || failure.Status != 409 || failure.Code != "role_holder_missing" {
+				t.Fatalf("expected missing role before mutation: %v", err)
+			}
+			if err := mock.ExpectationsWereMet(); err != nil {
+				t.Fatal(err)
+			}
+		})
 	}
 }

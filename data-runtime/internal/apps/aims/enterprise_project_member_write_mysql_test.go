@@ -108,6 +108,10 @@ func TestEnterpriseProjectMembersMySQL(t *testing.T) {
 	t.Run("R1c requirement Workflow", func(t *testing.T) { testEnterpriseRequirementsR1cMySQL(t, a, db) })
 	t.Run("R1b requirement preparation", func(t *testing.T) { testEnterpriseRequirementsR1bMySQL(t, a, db) })
 	t.Run("R3 lifecycle request Workflow binding and callbacks", func(t *testing.T) { testProjectLifecycleWorkflowMySQL(t, a, db) })
+	t.Run("DOC-05a portfolio members", func(t *testing.T) { testPortfolioMembersMySQL(t, a, db) })
+	t.Run("DOC-07 document catalog source", func(t *testing.T) { testDocumentCatalogSourceMySQL(t, a, db) })
+	t.Run("DOC-05 5b-1 portfolio documents", func(t *testing.T) { testPortfolioDocumentsMySQL(t, a, db) })
+	t.Run("DOC-05 5b-2 portfolio document writes", func(t *testing.T) { testPortfolioDocumentWritesMySQL(t, a, db) })
 	t.Run("PA04 deliverable receipts", func(t *testing.T) { testEnterpriseDeliverableReceiptsMySQL(t, a, db) })
 	t.Run("Host timesheet reviews", func(t *testing.T) { testEnterpriseTimeEntryReviewsMySQL(t, a, db) })
 	t.Run("PA04 project time receipts", func(t *testing.T) { testEnterpriseProjectTimeReceiptsMySQL(t, a, db) })
@@ -454,6 +458,7 @@ func TestEnterpriseProjectMembersMySQL(t *testing.T) {
 			t.Fatal("stale version accepted")
 		}
 	})
+	t.Run("Host administrator project management receipt and read extensions", func(t *testing.T) { testEnterpriseAdminManagementMySQL(t, a, db) })
 	identity := EnterpriseProjectMemberIdentity{Tenant: "T1", SourceDeployment: "enterprise-test", TargetDeployment: "aims-test", ActorUID: "U1", ServiceClientID: "enterprise.runtime", RequestID: "r1", IdempotencyKey: "add-key"}
 	personnel := func(field, uid, resource, object, action string) []EnterprisePersonnelPermit {
 		status := "active"

@@ -98,3 +98,44 @@ func (a *Adapter) reconcileAimsMilestoneProjectDirector(ctx context.Context, que
 	}
 	return tx.Commit()
 }
+
+// Role facts come exclusively from the authenticated BFF query, never a body.
+type projectDirectorContextKey struct{}
+
+func withProjectDirectorFacts(ctx context.Context, query url.Values) context.Context {
+	return context.WithValue(ctx, projectDirectorContextKey{}, strings.TrimSpace(query.Get("current_project_director_uid")))
+}
+
+func isProjectDirectorInstance(instance map[string]any) bool {
+	if cleanAnyString(instance["app_code"]) != "aims" || cleanAnyString(instance["resource_code"]) != "milestones" || cleanAnyString(instance["action_code"]) != "milestone_completion" {
+		return false
+	}
+	form, err := parseAnyJSON(instance["form_data"])
+	if err != nil {
+		return true
+	} // A malformed role form must not grant access.
+	return cleanAnyString(asStringMap(form)["projectDirectorRoleCode"]) == "project_director"
+}
+
+func projectDirectorTaskAllowed(ctx context.Context, instance, task map[string]any) bool {
+	if !isProjectDirectorInstance(instance) || cleanAnyString(task["status"]) != "pending" {
+		return true
+	}
+	uid, _ := ctx.Value(projectDirectorContextKey{}).(string)
+	return uid != "" && uid == cleanAnyString(task["assignee_uid"])
+}
+
+func requireProjectDirectorTask(ctx context.Context, instance, task map[string]any) error {
+	if projectDirectorTaskAllowed(ctx, instance, task) {
+		return nil
+	}
+	return httperror.New(http.StatusConflict, "role_holder_missing", "Project director role is unresolved")
+}
+
+// Applied before both COUNT and pagination; NULL/missing form fields are not
+// accidentally filtered by SQL three-valued logic.
+const pendingNonDirectorPredicate = `NOT (
+ i.app_code = 'aims' AND i.resource_code = 'milestones'
+ AND i.action_code = 'milestone_completion'
+ AND COALESCE(JSON_UNQUOTE(JSON_EXTRACT(i.form_data, '$.projectDirectorRoleCode')), '') = 'project_director'
+)`

@@ -20,7 +20,7 @@ test('local worker probe requires pinned local process and direct loopback reque
     assert.equal(isLocalWorkerHealthRequest(fixture()), false)
   } finally {
     for (const [key, value] of Object.entries({ NODE_ENV: prior.nodeEnv, HZY0_PROFILE_PATH: prior.profile, HZY0_GATEWAY_INTERNAL_TOKEN: prior.token })) {
-      if (value === undefined) delete process.env[key]
+      if (value === undefined) Reflect.deleteProperty(process.env, key)
       else process.env[key] = value
     }
   }

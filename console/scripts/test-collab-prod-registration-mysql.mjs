@@ -54,10 +54,10 @@ await withTemporaryMySql(plan, async (context) => {
     // review hash, drift and non-target guards; every failure leaves the database untouched
     await assert.rejects(applyCollab(db, bindings, '0'.repeat(64)), /COLLAB_REVIEW_HASH_CHANGED/)
     await assert.rejects(applyCollab(db, bindings, review.reviewHash, async (connection) => {
-      await connection.query("UPDATE service_client_grants SET action='admin' WHERE service_client_id=2")
+      await connection.query('UPDATE service_client_grants SET action=\'admin\' WHERE service_client_id=2')
     }), /COLLAB_NON_TARGET_CHANGED/)
     await assert.rejects(applyCollab(db, bindings, review.reviewHash, async (connection) => {
-      await connection.query("UPDATE service_clients SET client_name='tampered' WHERE client_code='codocs.runtime'")
+      await connection.query('UPDATE service_clients SET client_name=\'tampered\' WHERE client_code=\'codocs.runtime\'')
     }), /COLLAB_OTHER_CLIENT_CHANGED/)
     assert.deepEqual(await readCollabState(db), original)
 
@@ -80,16 +80,16 @@ await withTemporaryMySql(plan, async (context) => {
     assert.deepEqual(replay.inserted, { grants: [], serviceClient: null })
 
     // verify fails closed on widening, drift and revocation; plan refuses to adopt or resurrect
-    await db.query("INSERT INTO service_client_grants VALUES(NULL,?,'data-runtime:codocs:enterprise-host','execute','{}','active',UTC_TIMESTAMP(),UTC_TIMESTAMP())", [client.id])
+    await db.query('INSERT INTO service_client_grants VALUES(NULL,?,\'data-runtime:codocs:enterprise-host\',\'execute\',\'{}\',\'active\',UTC_TIMESTAMP(),UTC_TIMESTAMP())', [client.id])
     const widened = await readCollabState(db)
     assert.throws(() => verifyCollab(widened, bindings), /COLLAB_VERIFY_FAILED/)
     assert.throws(() => planCollab(widened, bindings), /COLLAB_UNEXPECTED_ACTIVE_GRANT/)
-    await db.query("DELETE FROM service_client_grants WHERE resource_code='data-runtime:codocs:enterprise-host' AND service_client_id=?", [client.id])
+    await db.query('DELETE FROM service_client_grants WHERE resource_code=\'data-runtime:codocs:enterprise-host\' AND service_client_id=?', [client.id])
     const target = rows.find(row => row.action === 'publish')
-    await db.query("UPDATE service_client_grants SET scope_json=JSON_SET(scope_json,'$.deploymentCode','C000001-other') WHERE id=?", [target.id])
+    await db.query('UPDATE service_client_grants SET scope_json=JSON_SET(scope_json,\'$.deploymentCode\',\'C000001-other\') WHERE id=?', [target.id])
     const drifted = await readCollabState(db)
     assert.throws(() => verifyCollab(drifted, bindings), /COLLAB_VERIFY_FAILED/)
-    await db.query("UPDATE service_client_grants SET scope_json=JSON_SET(scope_json,'$.audience','tenant-runtime') WHERE id=?", [target.id])
+    await db.query('UPDATE service_client_grants SET scope_json=JSON_SET(scope_json,\'$.audience\',\'tenant-runtime\') WHERE id=?', [target.id])
     const foreign = await readCollabState(db)
     assert.throws(() => planCollab(foreign, bindings), /COLLAB_AUDIENCE_CONFLICT|COLLAB_FOREIGN_BINDING/)
     await db.query('UPDATE service_client_grants SET scope_json=?,status=? WHERE id=?', [JSON.stringify(scopeJson(target)), 'revoked', target.id])
@@ -99,7 +99,7 @@ await withTemporaryMySql(plan, async (context) => {
     await db.query('UPDATE service_client_grants SET status=? WHERE id=?', ['active', target.id])
 
     // repair path: an unbound (audience-less) but otherwise exact row is bound, not duplicated
-    await db.query("UPDATE service_client_grants SET scope_json=JSON_OBJECT('source','legacy') WHERE id=?", [target.id])
+    await db.query('UPDATE service_client_grants SET scope_json=JSON_OBJECT(\'source\',\'legacy\') WHERE id=?', [target.id])
     const repair = planCollab(await readCollabState(db), bindings)
     assert.deepEqual(repair.operations.map(op => [op.kind, op.id]), [['bind', Number(target.id)]])
 
@@ -113,7 +113,7 @@ await withTemporaryMySql(plan, async (context) => {
     assert.deepEqual(await readCollabState(db), original)
 
     // a same-named client owned by another app is never adopted
-    await db.query("INSERT INTO service_clients VALUES(9,'collab.runtime','Other','app','aims',NULL,NULL,'active',UTC_TIMESTAMP(),UTC_TIMESTAMP())")
+    await db.query('INSERT INTO service_clients VALUES(9,\'collab.runtime\',\'Other\',\'app\',\'aims\',NULL,NULL,\'active\',UTC_TIMESTAMP(),UTC_TIMESTAMP())')
     const conflict = await readCollabState(db)
     assert.throws(() => planCollab(conflict, bindings), /COLLAB_CLIENT_CONFLICT/)
     console.log(JSON.stringify({ fixture: '/tmp disposable MySQL', plan: 'PASS', reviewHash: 'PASS', apply: 'PASS', verify: 'PASS', idempotent: 'PASS', failClosed: 'PASS', rollback: 'PASS' }))

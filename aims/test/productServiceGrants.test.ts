@@ -7,7 +7,7 @@ test('product service grant artifacts match their generator and declared capabil
   execFileSync(process.execPath, [new URL('../scripts/generate-product-center-grants.mjs', import.meta.url).pathname, '--check'])
   const seed = readFileSync(new URL('../../console/docs/sql/Console-SQL-Seed-product-center-20260907.sql', import.meta.url), 'utf8')
   const verify = readFileSync(new URL('../../console/docs/sql/Console-SQL-Verify-product-center-20260907.sql', import.meta.url), 'utf8')
-  assert.ok(seed.includes("'assets' app_code, 'codocs' audience, 'codocs:product-document' resource_code, 'read' action"))
+  assert.ok(seed.includes('\'assets\' app_code, \'codocs\' audience, \'codocs:product-document\' resource_code, \'read\' action'))
   for (const audience of ['data-runtime', 'tenant-runtime']) {
     for (const action of ['authorization-object', 'view', 'edit', 'onboard', 'archive', 'restore', 'admin']) {
       const fragment = `'${audience}:aims:products' resource_code, '${action}' action`
@@ -77,9 +77,9 @@ test('product creation worker installs exact execution scope for both runtime au
 test('feedback grants cover Altoc to AIMS and both target runtime audiences', () => {
   for (const file of ['Seed', 'Verify']) {
     const sql = readFileSync(new URL(`../../console/docs/sql/Console-SQL-${file}-product-center-20260907.sql`, import.meta.url), 'utf8')
-    assert.ok(sql.includes("'altoc' app_code, 'aims' audience, 'aims:product-request' resource_code, 'create-from-feedback' action, 1 install_grant"))
+    assert.ok(sql.includes('\'altoc\' app_code, \'aims\' audience, \'aims:product-request\' resource_code, \'create-from-feedback\' action, 1 install_grant'))
     for (const audience of ['data-runtime', 'tenant-runtime']) assert.ok(sql.includes(`'aims' app_code, '${audience}' audience, '${audience}:aims:product-request' resource_code, 'create-from-feedback' action, 1 install_grant`))
-    assert.ok(sql.includes("COALESCE(@pc_altoc_client_code, 'altoc.runtime')"))
+    assert.ok(sql.includes('COALESCE(@pc_altoc_client_code, \'altoc.runtime\')'))
   }
 })
 
@@ -104,11 +104,10 @@ test('product decision return scopes stay service-only across both boundaries', 
   assert.ok(!JSON.stringify(manifest.recommendedRoles).includes('altoc:product-feedback:update-status'))
   for (const file of ['Seed', 'Verify']) {
     const sql = readFileSync(new URL(`../../console/docs/sql/Console-SQL-${file}-product-center-20260907.sql`, import.meta.url), 'utf8')
-    assert.ok(sql.includes("'aims' app_code, 'altoc' audience, 'altoc:product-feedback' resource_code, 'update-status' action, 1 install_grant"))
+    assert.ok(sql.includes('\'aims\' app_code, \'altoc\' audience, \'altoc:product-feedback\' resource_code, \'update-status\' action, 1 install_grant'))
     for (const audience of ['data-runtime', 'tenant-runtime']) assert.ok(sql.includes(`'altoc' app_code, '${audience}' audience, '${audience}:altoc:product-feedback' resource_code, 'update-status' action, 1 install_grant`))
   }
 })
-
 
 test('product adoption grants cover Assets and both runtime audiences without user roles', () => {
   const manifest = JSON.parse(readFileSync(new URL('../../assets/app.manifest.json', import.meta.url), 'utf8'))
@@ -116,11 +115,10 @@ test('product adoption grants cover Assets and both runtime audiences without us
   assert.ok(!JSON.stringify(manifest.recommendedRoles).includes('assets:product-adoption:read'))
   for (const file of ['Seed', 'Verify']) {
     const sql = readFileSync(new URL(`../../console/docs/sql/Console-SQL-${file}-product-center-20260907.sql`, import.meta.url), 'utf8')
-    assert.ok(sql.includes("'aims' app_code, 'assets' audience, 'assets:product-adoption' resource_code, 'read' action, 1 install_grant"))
+    assert.ok(sql.includes('\'aims\' app_code, \'assets\' audience, \'assets:product-adoption\' resource_code, \'read\' action, 1 install_grant'))
     for (const audience of ['data-runtime', 'tenant-runtime']) assert.ok(sql.includes(`'assets' app_code, '${audience}' audience, '${audience}:assets:product-adoption' resource_code, 'read' action, 1 install_grant`))
   }
 })
-
 
 test('delegated subject authorization grants are exact for AIMS and Assets', () => {
   const manifest = JSON.parse(readFileSync(new URL('../../console/app.manifest.json', import.meta.url), 'utf8'))
@@ -138,7 +136,7 @@ test('product cost rule writes require exact Finance capability on both runtime 
   assert.ok(!JSON.stringify(manifest.recommendedRoles).includes('finance:product-cost:replace-rules'))
   for (const file of ['Seed', 'Verify']) {
     const sql = readFileSync(new URL(`../../console/docs/sql/Console-SQL-${file}-product-center-20260907.sql`, import.meta.url), 'utf8')
-    assert.ok(sql.includes("'finance' audience, 'finance:product-cost' resource_code, 'replace-rules' action, 1 install_grant"))
+    assert.ok(sql.includes('\'finance\' audience, \'finance:product-cost\' resource_code, \'replace-rules\' action, 1 install_grant'))
     for (const audience of ['data-runtime', 'tenant-runtime']) {
       assert.ok(sql.includes(`'${audience}:finance:product-cost' resource_code, 'replace-rules' action, 1 install_grant`))
       assert.ok(sql.includes(`'${audience}:finance' resource_code, 'write' action, 0 install_grant`))

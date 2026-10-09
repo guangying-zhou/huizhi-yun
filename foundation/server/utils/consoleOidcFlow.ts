@@ -68,3 +68,19 @@ export function isConsoleOidcReauthenticationRequired(error: unknown) {
 
   return /\binvalid_grant\b|missing refresh token/i.test(diagnostic)
 }
+
+/** Retain one earlier login for two-tab use; never retain an unbounded history. */
+export function consoleOidcTransientCookiesToPrune(scope: string, cookieNames: string[], retainPrevious = true) {
+  const prefix = `hzy_${cookieScope(scope)}_oidc_`
+  const pattern = /^(?:state|nonce|code_verifier|redirect)(?:_([A-Za-z0-9_-]{32,128}))?$/
+  const owned = cookieNames.filter(name => name.startsWith(prefix) && pattern.test(name.slice(prefix.length)))
+  const states = [...new Set(owned.map(name => pattern.exec(name.slice(prefix.length))?.[1]).filter(Boolean))]
+  const retained = retainPrevious ? states.slice(-1) : []
+  return owned.filter(name => !retained.includes(pattern.exec(name.slice(prefix.length))?.[1]))
+}
+
+export function consoleOidcTransientPath(redirectUri: string) {
+  const path = new URL(redirectUri).pathname
+  const first = path.split('/').filter(Boolean)[0]
+  return first && first !== 'api' ? `/${first}` : '/'
+}

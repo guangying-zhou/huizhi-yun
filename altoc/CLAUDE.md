@@ -142,3 +142,9 @@ Altoc 应用自身不得直连 MySQL，也不再配置 `DB_*` / `runtimeConfig.d
 ## 产品反馈接入（PC17，开发中）
 
 `GET/POST /api/v1/service-tickets/{ticketCode}/product-request` 由本地 BFF 处理，按当前用户工单 edit 和对象范围读取预览／冻结首次提交；POST 仅收 expectedSourceSha256。046 迁移的 service_ticket_product_feedback 与 caller operation 同事务创建，后续工单编辑不重建已提交需求。AIMS 接收 capability 固定 aims:product-request:create-from-feedback；服务工单 priority 不转为产品优先级。当前尚缺反馈 executor／checkpoint／页面，202 仅表示源侧受理，不能作为 AIMS 已创建的证据。正式启用仍依赖完整跨应用验收。
+
+APF-16a Enterprise 投标使用 `opportunity:view/edit` 与既有 U 能力，不新增 tender 资源/grant；手工投标 edit 范围仍核对 owner/dept。10个固定操作、expectedVersion、原键回执及四表安装候选见 [Host-Tender-API](docs/Host-Tender-API.md)。统一域四表 canonical DDL 为 `docs/altoc_enterprise_tenders_schema.sql`，与根 APF design SQL/嵌入安装规格保持一致；不修改 standalone tender 模型或执行真实安装。团队分工不赋予 Directory/应用权限。
+
+APF-16b 服务协议 Host 候选已接14个固定U操作，人员contract:view/edit；协议所属合同/客户范围、Aims项目资格与Assets正式身份由Runtime caller-Tx重验。新写只用service_agreement/coverage/project_rel；旧维保/权益只读、不开放confirm-legacy；固定六表安装制品未执行。详细锁序/回放/分页见根MODULE_CONTRACTS及API_SPEC。
+
+APF-16c Host 工单候选使用9个固定U操作与service_ticket:view/edit/close/reopen独立门槛；重开action不默认授予角色。新模型派发由Aims typed caller-Tx owning核心承接，同库回写通过Runtime构造注入窄端口、Altoc先锁后Aims，批量全回滚。仅正式服务协议，超额度失败关闭；安装只交altoc-tickets单表子集候选，不代表旧owner退役或环境启用。详见MODULE_CONTRACTS/API_SPEC。

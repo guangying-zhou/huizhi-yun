@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { financeBankAccountLabel } from '../utils/hostFinanceObjectChoices'
 import InvoiceEditPage from './invoices/[code]/edit.vue'
 import BankAccountBalanceSlideover from '~/components/bank-accounts/BankAccountBalanceSlideover.vue'
 import BalanceChangesOverview from '~/components/bank-accounts/BalanceChangesOverview.vue'
@@ -892,11 +893,7 @@ function getCreateFieldOptions(field: CreateField) {
 }
 
 function formatBankAccountOptionLabel(account: Record<string, unknown>) {
-  const name = String(account.account_name || account.code || '')
-  const bankName = String(account.bank_name || '').trim()
-  const code = String(account.code || '').trim()
-  const suffix = [bankName, code].filter(Boolean).join('，')
-  return suffix ? `${name}（${suffix}）` : name
+  return financeBankAccountLabel(account)
 }
 
 function yesterdayDate() {

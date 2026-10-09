@@ -39,7 +39,7 @@ export default defineEventHandler(async (event) => {
 
   const release = await withTransaction(async (tx) => {
     const existing = await tx.queryRow<RowDataPacket & { id: number, app_code: string }>(
-      `SELECT id, app_code
+      `SELECT id, app_code, status
        FROM platform_app_releases
        WHERE id = ?
          AND app_code = ?
@@ -55,6 +55,8 @@ export default defineEventHandler(async (event) => {
         message: `release not found: appCode=${appCode}, releaseId=${releaseId}`
       })
     }
+
+    if (existing.status === 'baseline') throw createError({ statusCode: 409, message: '迁移基线不可发布或改状态' })
 
     await tx.execute<ResultSetHeader>(
       `UPDATE platform_app_releases

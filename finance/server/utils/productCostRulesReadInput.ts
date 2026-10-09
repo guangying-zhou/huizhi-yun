@@ -1,4 +1,4 @@
-import { parseProductCostRulesInput } from './productCostRulesInput'
+import { parseProductCostRulesInput } from './productCostRulesInput.ts'
 
 export function parseProductCostRulesReadInput(value: unknown) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null

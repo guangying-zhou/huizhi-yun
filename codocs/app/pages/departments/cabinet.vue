@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import ContentPageHeader from '../../../../foundation/app/components/ContentPageHeader.vue'
 import { useCodocsModule } from '../../../layer/useCodocsModule'
 
 const { hosted, moduleUrl, cacheKey } = useCodocsModule()
@@ -1117,6 +1118,12 @@ const handleDrop = async (e: DragEvent) => {
 
 <template>
   <UDashboardPanel grow>
+    <ContentPageHeader
+      :hosted="hosted"
+      title="部门文件柜"
+      description="管理部门附件与文件目录"
+      class="shrink-0 px-4 py-3"
+    />
     <!-- Hidden file input -->
     <input
       ref="fileInput"

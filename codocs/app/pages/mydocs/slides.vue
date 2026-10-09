@@ -178,7 +178,7 @@ const isDeleting = ref(false)
 // 获取演示文稿目录
 const fetchSlideFolders = async () => {
   if (!user.value) return []
-    const res = await apiFetch<FolderListResponse>(moduleUrl('/api/folders'), {
+  const res = await apiFetch<FolderListResponse>(moduleUrl('/api/folders'), {
     query: { folder_type: 'slide', owner_uid: uid.value }
   })
   return res?.data?.items || []
@@ -187,7 +187,7 @@ const fetchSlideFolders = async () => {
 // 获取所有演示文稿文档
 const fetchSlides = async () => {
   if (!user.value) return []
-    const response = await apiFetch<DocListResponse>(moduleUrl('/api/documents'), {
+  const response = await apiFetch<DocListResponse>(moduleUrl('/api/documents'), {
     query: { type: 'slide', owner: uid.value }
   })
   return response?.data?.items || []

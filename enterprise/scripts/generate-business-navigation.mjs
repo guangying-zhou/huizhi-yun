@@ -1,4 +1,6 @@
-import { writeFileSync } from 'node:fs'
+import { readFileSync, writeFileSync } from 'node:fs'
+import assert from 'node:assert/strict'
+import { inspect } from 'node:util'
 import { fileURLToPath } from 'node:url'
 import { buildBusinessNavigation, buildObjectWorkspaces, businessModules, navigationContributors, hostNativePages, navigationSources, registerBusinessPages } from '../composition/registry.mjs'
 import { auxiliaryAreas, businessAreas } from '../composition/business-areas.mjs'
@@ -16,4 +18,7 @@ const navigation = {
   registeredPages: [...registered.flatMap(page => flattenPages(page)), ...hostNativePages.map(({ path, name }) => ({ path, name }))],
   navigationSources
 }
-writeFileSync(output, `// Generated from the composition registry; do not edit by hand.\nexport const enterpriseNavigation = ${JSON.stringify(navigation, null, 2)} as const\n`)
+const value = inspect(JSON.parse(JSON.stringify(navigation)), { depth: null, compact: false, maxArrayLength: null, maxStringLength: null })
+const content = `// Generated from the composition registry; do not edit by hand.\nexport const enterpriseNavigation = ${value} as const\n`
+if (process.argv.includes('--check')) assert.equal(readFileSync(output, 'utf8'), content, 'navigation artifact drift')
+else writeFileSync(output, content)

@@ -471,6 +471,7 @@ const {
   readonlyCodeBlocks,
   readonlyLinks,
   readonlyWatermarkText,
+  readonlyWatermarkCount,
   scheduleReadonlyCodeBlockRefresh,
   setupReadonlyCodeBlockObserver,
   syncReadonlyCodeBlockObserver,
@@ -1575,6 +1576,7 @@ const switchToTab = (tab: 'outline' | 'history' | 'share' | 'annotations' | 'ai'
 }
 
 defineExpose({
+  refreshShares: () => sidebarRef.value?.refreshShares(),
   getMarkdown,
   setMarkdown,
   appendMarkdown,
@@ -1609,7 +1611,7 @@ defineExpose({
       <!-- DOM overlay instead of a data: SVG background, which the page CSP (img-src) blocks -->
       <div v-if="readonlyWatermarkText" class="readonly-watermark" aria-hidden="true">
         <div class="readonly-watermark-grid">
-          <span v-for="n in 96" :key="n">{{ readonlyWatermarkText }}</span>
+          <span v-for="n in readonlyWatermarkCount" :key="n">{{ readonlyWatermarkText }}</span>
         </div>
       </div>
 
@@ -1778,6 +1780,34 @@ defineExpose({
 </template>
 
 <style>
+/* y-prosemirror supplies cursor/name DOM and selection colors; its stylesheet is not bundled by Milkdown. */
+.crepe-editor .ProseMirror-yjs-cursor {
+  position: relative;
+  margin-left: -1px;
+  margin-right: -1px;
+  border-left: 2px solid;
+  border-right: 0;
+  word-break: normal;
+  pointer-events: none;
+}
+.crepe-editor .ProseMirror-yjs-cursor > div {
+  position: absolute;
+  bottom: 100%;
+  left: -2px;
+  z-index: 10;
+  max-width: 12rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  border-radius: 3px 3px 3px 0;
+  padding: 1px 4px;
+  color: #111827;
+  font-size: 11px;
+  line-height: 1.4;
+  font-weight: 600;
+}
+.crepe-editor .ProseMirror-yjs-selection { border-radius: 2px; }
+
 .readonly-watermark {
   position: absolute;
   inset: 0;
@@ -1788,20 +1818,17 @@ defineExpose({
 }
 .readonly-watermark-grid {
   position: absolute;
-  top: -50%;
-  left: -50%;
-  width: 200%;
-  height: 200%;
-  display: flex;
-  flex-wrap: wrap;
-  align-content: flex-start;
-  transform: rotate(-24deg);
+  inset: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  grid-auto-rows: 180px;
+  align-content: start;
 }
 .readonly-watermark-grid > span {
   box-sizing: border-box;
-  flex: 0 0 280px;
   height: 180px;
   padding: 80px 24px 0;
+  transform: rotate(-24deg);
   overflow: hidden;
   white-space: nowrap;
   font-size: 20px;

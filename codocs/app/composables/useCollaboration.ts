@@ -7,6 +7,7 @@
 import { ref, computed, onUnmounted, toValue } from 'vue'
 import * as Y from 'yjs'
 import type { MaybeRefOrGetter } from 'vue'
+import { attachPresence, presenceMembers, updatePresenceRoster, type PresenceMember } from '../utils/collaborationPresence'
 import { HocuspocusCollaborationProvider } from '../utils/hocuspocus-provider'
 import { collaborationCloseKind } from '../../layer/departmentCollaboration.mjs'
 
@@ -95,6 +96,7 @@ export function useCollaboration(options: UseCollaborationOptions) {
   const scope = ref<'read-write' | 'readonly' | null>(null)
   const error = ref<Error | null>(null)
   const collaborators = ref<CollaborationUser[]>([])
+  const members = ref<PresenceMember[]>([])
   // 4403 close: this user was removed from the session, or the room was closed.
   const closeKind = ref<CollaborationCloseKind | null>(null)
 
@@ -208,6 +210,9 @@ export function useCollaboration(options: UseCollaborationOptions) {
       provider.on('status', (event: { status: string }) => {
         isConnected.value = event.status === 'connected'
         isConnecting.value = event.status === 'connecting'
+        if (!isConnected.value) members.value = members.value.map(member => ({ ...member, status: 'offline' }))
+        else members.value = updatePresenceRoster(members.value, presenceMembers(provider!.awareness), true)
+        collaborators.value = [...provider!.awareness.getStates()].filter(([clientId]) => clientId !== provider!.awareness.clientID).map(([, state]) => state.user).filter(Boolean)
         if (event.status === 'connected') {
           error.value = null
         }
@@ -253,21 +258,16 @@ export function useCollaboration(options: UseCollaborationOptions) {
       })
 
       const awareness = provider.awareness
+      const releasePresence = attachPresence(awareness, document, window)
       const handleAwarenessChange = () => {
-        const states = awareness.getStates() as Map<number, { user?: CollaborationUser }>
-        const users: CollaborationUser[] = []
-
-        states.forEach((state, clientId) => {
-          if (state.user && clientId !== awareness.clientID) {
-            users.push(state.user)
-          }
-        })
-
-        collaborators.value = users
+        members.value = updatePresenceRoster(members.value, presenceMembers(awareness), isConnected.value)
+        // Keep the existing client-level semantics for editor/session consumers; only the toolbar deduplicates users.
+        collaborators.value = [...awareness.getStates()].filter(([clientId]) => clientId !== awareness.clientID).map(([, state]) => state.user).filter(Boolean)
       }
-
       awareness.on('change', handleAwarenessChange)
+      handleAwarenessChange()
       awarenessCleanup = () => {
+        releasePresence()
         awareness.off('change', handleAwarenessChange)
         awarenessCleanup = null
       }
@@ -294,6 +294,7 @@ export function useCollaboration(options: UseCollaborationOptions) {
     synced.value = false
     scope.value = null
     collaborators.value = []
+    members.value = []
   }
 
   // 获取 Y.js 文档
@@ -337,6 +338,7 @@ export function useCollaboration(options: UseCollaborationOptions) {
     scope,
     error,
     collaborators,
+    members,
     closeKind,
     currentUser,
     documentName,

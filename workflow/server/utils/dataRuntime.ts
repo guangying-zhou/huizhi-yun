@@ -209,7 +209,7 @@ async function sendRuntimeCallbacks(event: H3Event, callbacks: RuntimeCallback[]
       continue
     }
 
-    const target = workflowCallbackTarget(appCode)
+    const target = workflowCallbackTarget(appCode, String(payload.resource_code || ''), String(payload.action_code || ''), url)
     const localOnly = process.env.HZY0_WORKFLOW_LOCAL_ONLY === 'true'
     // Self-hosted single site: dial the target process on loopback with the
     // verified Gateway context (never the public ingress, which strips it).
@@ -228,7 +228,8 @@ async function sendRuntimeCallbacks(event: H3Event, callbacks: RuntimeCallback[]
       if (callback.effectId) await checkpointWorkflowCallback(event, callback.effectId, callback.versionNo, 'fail', 'callback_app_url_unavailable')
       continue
     }
-    const callbackUrl = `${baseUrl.replace(/\/+$/, '')}/${url.replace(/^\/+/, '')}`
+    const deliveryPath = 'deliveryPath' in target && target.deliveryPath ? target.deliveryPath : url
+    const callbackUrl = `${baseUrl.replace(/\/+$/, '')}/${deliveryPath.replace(/^\/+/, '')}`
 
     try {
       const accessToken = await requestServiceAccessToken({

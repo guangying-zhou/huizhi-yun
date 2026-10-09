@@ -2,6 +2,8 @@
 const { isNotificationsSlideoverOpen } = useDashboard()
 const { summary, loadSummary } = useNotifications()
 
+const manualRefresh = useRuntimeConfig().public.manualRefresh === true
+
 const REFRESH_INTERVAL_MS = 120_000
 
 let refreshTimer: ReturnType<typeof setInterval> | null = null
@@ -13,6 +15,7 @@ const unreadLabel = computed(() => {
 })
 
 function openNotifications() {
+  void loadSummary()
   isNotificationsSlideoverOpen.value = true
 }
 
@@ -24,6 +27,7 @@ function stopRefreshTimer() {
 }
 
 function startRefreshTimer() {
+  if (manualRefresh) return
   stopRefreshTimer()
   refreshTimer = setInterval(() => {
     if (!document.hidden) {
@@ -47,7 +51,7 @@ onMounted(() => {
     void loadSummary()
     startRefreshTimer()
   }
-  document.addEventListener('visibilitychange', handleVisibilityChange)
+  if (!manualRefresh) document.addEventListener('visibilitychange', handleVisibilityChange)
 })
 
 onBeforeUnmount(() => {
@@ -57,7 +61,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="relative">
+  <div class="relative" data-feedback-private>
     <UButton
       icon="i-lucide-bell"
       color="neutral"

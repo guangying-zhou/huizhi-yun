@@ -67,9 +67,9 @@ test('Host project create rejects a name the edit command would later refuse', a
 
 test('project create and edit pages use the shared rule and report it instead of disabling save', () => {
   const create = read('aims/layer/pages/enterprise-project-new.vue')
-  assert.match(create, /import\{projectNameError\}from'\.\.\/\.\.\/shared\/projectName'/)
-  assert.match(create, /async function submit\(\)\{nameTouched\.value=true;if\(nameError\.value\)return;/)
-  assert.match(create, /label="项目名称" required :error="nameFieldError"/)
+  assert.match(create, /import\s*\{\s*projectNameError\s*\}\s*from\s*'\.\.\/\.\.\/shared\/projectName'/)
+  assert.match(create, /async function submit\(\)[\s\S]*?nameTouched\.value = true[\s\S]*?nameError\.value/)
+  assert.match(create, /label="项目名称"[\s\S]*?required[\s\S]*?:error="nameFieldError"/)
   const edit = read('aims/layer/pages/enterprise-project-edit.vue')
   assert.match(edit, /import \{ projectNameError \} from '\.\.\/\.\.\/shared\/projectName'/)
   assert.doesNotMatch(edit, /\\u4e00-\\u9fa5/)
@@ -114,7 +114,7 @@ test('composed USelect items never use an empty-string value', () => {
   }
   assert.deepEqual(failures, [])
   const admin = read('aims/layer/pages/enterprise-admin-projects.vue')
-  assert.match(admin, /category: filterValue\(category\.value\), lifecycleStatus: filterValue\(lifecycleStatus\.value\)/)
-  assert.ok(admin.indexOf('}, { flush: \'sync\' })') < admin.indexOf('watch([page, debounced, category, lifecycleStatus, portfolioId]'), 'filter changes reset page before the reload')
+  assert.match(admin, /category\.value !== 'all'\s*\?\s*\{\s*category: category\.value\s*\}\s*:\s*\{\}/)
+  assert.ok(admin.indexOf('watch([category, lifecycleStatus, portfolioId, sort, pageSize]') < admin.indexOf('watch([page, debounced, category, lifecycleStatus, portfolioId,'), 'filter changes reset page before the reload')
   assert.match(read('aims/app/pages/projects/[id]/plan.vue'), /\$event === 'none' \? null/)
 })

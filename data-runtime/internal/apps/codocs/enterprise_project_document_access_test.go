@@ -46,6 +46,10 @@ func TestEnterpriseProjectDocumentUsesSamePolicyCore(t *testing.T) {
 				grants.AddRow(1, 1, tc.grant, subject, "view", nil, "owner", "time")
 			}
 			m.ExpectQuery("(?s)SELECT id, policy_id.*FROM document_access_grants").WillReturnRows(grants)
+			if tc.member {
+				// Only a policy owned by a project admits its project's members.
+				m.ExpectQuery("SELECT source_owner_type FROM document_access_policies").WithArgs(int64(1)).WillReturnRows(sqlmock.NewRows([]string{"source_owner_type"}).AddRow("project"))
+			}
 			m.ExpectExec("INSERT INTO document_access_audit_logs").WillReturnResult(sqlmock.NewResult(1, 1))
 			projects := []string{"P2"}
 			if tc.member {

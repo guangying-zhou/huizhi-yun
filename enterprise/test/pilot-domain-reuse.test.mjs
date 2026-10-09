@@ -61,8 +61,8 @@ test('Enterprise utility routes have explicit old-entry and Runtime-domain evide
     ['enterpriseProductDocumentLink', 1, 'aims/server/api/v1/products/[productCode]/roadmaps/[...roadmapPath].ts', 'data-runtime/internal/apps/aims/productcenter/product_document_create.go'],
     ['enterpriseAssetsProducts', 6, 'assets/server/api/v1/products/index.get.ts', 'data-runtime/internal/apps/assets/product_master_commands.go'],
     ['enterpriseAssetsRead', 3, 'assets/server/api/v1/assets/index.get.ts', 'data-runtime/internal/apps/assets/adapter.go'],
-	['enterpriseDigitalAssetsRead', 2, 'assets/server/api/v1/digital-assets/index.get.ts', 'data-runtime/internal/apps/assets/runtime_catalog.go'],
-	['enterpriseDigitalAssetsWrite', 2, 'assets/server/api/v1/digital-assets/index.post.ts', 'data-runtime/internal/apps/assets/digital_asset_commands.go'],
+    ['enterpriseDigitalAssetsRead', 2, 'assets/server/api/v1/digital-assets/index.get.ts', 'data-runtime/internal/apps/assets/runtime_catalog.go'],
+    ['enterpriseDigitalAssetsWrite', 2, 'assets/server/api/v1/digital-assets/index.post.ts', 'data-runtime/internal/apps/assets/digital_asset_commands.go'],
     ['enterpriseAssetsCategories', 3, 'assets/server/api/v1/admin/asset-categories/index.get.ts', 'data-runtime/internal/apps/assets/product_master_commands.go'],
     ['enterpriseAssetsLinks', 5, 'assets/server/api/v1/products/[id]/assets.post.ts', 'data-runtime/internal/apps/assets/product_link_commands.go'],
     ['enterpriseIPAssetsRead', 3, 'assets/server/api/v1/ip-assets/index.get.ts', 'data-runtime/internal/apps/assets/ip_asset_commands.go'],
@@ -83,7 +83,7 @@ test('Enterprise utility routes have explicit old-entry and Runtime-domain evide
     for (const operation of operations) assert.ok(foundation.includes(`'${operation}'`), `${utility}: undeclared ${operation}`)
     covered += usedBy.length
   }
-	assert.equal(covered, 43)
+  assert.equal(covered, 43)
 })
 
 test('Assets product create and edit converge on one owning receipt command', () => {

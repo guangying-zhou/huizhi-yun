@@ -2,7 +2,7 @@
 import { validReleaseDiff, type Diff } from '~/utils/productReleaseDiff'
 import type { ProductReleaseSummary } from '~/types/productRelease'
 
-definePageMeta({ layoutHeader: true, layoutHeaderTitle: '发布范围对比', layoutHeaderProjectSwitcher: false })
+definePageMeta({ hostContentWidth: 'full', layoutHeader: true, layoutHeaderTitle: '发布范围对比', layoutHeaderProjectSwitcher: false })
 const route = useRoute()
 const code = computed(() => String(route.params.productCode || ''))
 type Version = { id: number, product_code: string, version_code: string, name: string | null, status: string, revision: number }

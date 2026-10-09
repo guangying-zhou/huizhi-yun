@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { projectPageFailure } from '../../app/utils/projectPageFailure'
 import CommonEmptyState from '../../../foundation/app/components/common/EmptyState.vue'
 import ProjectNavbar from '../../app/components/project/ProjectNavbar.vue'
 import { useAimsModule } from '../useAimsModule'
@@ -39,7 +40,7 @@ async function refresh() {
       throw Error('周报详情暂不可用')
     payload.value = response.data
   } catch (cause) {
-    error.value = cause instanceof Error ? cause.message : '周报详情暂不可用'
+    error.value = projectPageFailure(cause, '周报详情暂不可用')
   } finally {
     loading.value = false
   }

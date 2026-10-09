@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { useRecycleBin } from '../composables/useRecycleBin'
+
 interface RestoreDocRecord {
   uuid: string
   title: string

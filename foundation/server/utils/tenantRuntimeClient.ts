@@ -1,3 +1,6 @@
+import { announcementPermitCanonical, announcementPermitPath } from './announcementPermit'
+import { feedbackPermitCanonical, feedbackPermitPath } from './feedbackPermit'
+import { enterpriseAPFPermitCanonical, isAPFPermitPath } from './enterpriseAPFPermit'
 import { resolveRuntimeDialEndpoint } from './localTestRuntimeTransport'
 import { createError, getHeader, getQuery, getRequestURL, type H3Event } from 'h3'
 import { readRequestBodyCompat } from './requestBody'
@@ -15,7 +18,23 @@ export type TenantRuntimeMethod = 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE'
 // Closed table of unified scheduler routes. Each route is reachable only from a
 // signed wake for its own app, with that route's exact capability; nothing else
 // may select a scheduler generation.
-const UNIFIED_SCHEDULER_ROUTES: readonly { pattern: RegExp, appCode: string, scope: string }[] = [
+const UNIFIED_SCHEDULER_ROUTES: readonly { pattern: RegExp, appCode: string, scope: string, wakePath?: string }[] = [
+  { pattern: /^\/v1\/enterprise\/finance\/invoice-approval:(pending|bind-system)$/, appCode: 'enterprise', scope: 'finance:scheduler:execute', wakePath: '/enterprise/api/internal/apf/scheduler-inspect' },
+  { pattern: /^\/v1\/enterprise\/people\/assignment-approval:(pending|bind)$/, appCode: 'enterprise', scope: 'people:scheduler:execute', wakePath: '/enterprise/api/internal/apf/scheduler-inspect' },
+  { pattern: /^\/v1\/enterprise\/people\/directory-lifecycle:(prepare-due|claim|ack|fail)$/, appCode: 'enterprise', scope: 'people:scheduler:execute', wakePath: '/enterprise/api/internal/apf/scheduler-inspect' },
+  { pattern: /^\/v1\/enterprise\/altoc\/approval:(pending|bind)$/, appCode: 'enterprise', scope: 'altoc:scheduler:execute', wakePath: '/enterprise/api/internal/apf/scheduler-inspect' },
+  { pattern: /^\/v1\/enterprise\/altoc\/(pending-dead-letter-actionables|dead-letter-actionable-published|pending-dead-letter-closures|dead-letter-closure-acknowledged)$/, appCode: 'enterprise', scope: 'altoc:scheduler:execute', wakePath: '/enterprise/api/internal/apf/scheduler-inspect' },
+  { pattern: /^\/v1\/enterprise\/finance\/(pending-dead-letter-actionables|dead-letter-actionable-published|pending-dead-letter-closures|dead-letter-closure-acknowledged)$/, appCode: 'enterprise', scope: 'finance:scheduler:execute', wakePath: '/enterprise/api/internal/apf/scheduler-inspect' },
+  { pattern: /^\/v1\/enterprise\/people\/(pending-dead-letter-actionables|dead-letter-actionable-published|pending-dead-letter-closures|dead-letter-closure-acknowledged)$/, appCode: 'enterprise', scope: 'people:scheduler:execute', wakePath: '/enterprise/api/internal/apf/scheduler-inspect' },
+  { pattern: /^\/v1\/enterprise\/altoc\/(sales-due|billing-due):(scan-due|published|closure-ack)$/, appCode: 'enterprise', scope: 'altoc:scheduler:execute', wakePath: '/enterprise/api/internal/apf/scheduler-inspect' },
+  { pattern: /^\/v1\/enterprise\/finance\/(issuance-due|reconciliation-due):(scan-due|published|closure-ack)$/, appCode: 'enterprise', scope: 'finance:scheduler:execute', wakePath: '/enterprise/api/internal/apf/scheduler-inspect' },
+  { pattern: /^\/v1\/enterprise\/people\/(handover-due|asset-recovery-due):(scan-due|published|closure-ack)$/, appCode: 'enterprise', scope: 'people:scheduler:execute', wakePath: '/enterprise/api/internal/apf/scheduler-inspect' },
+  { pattern: /^\/v1\/enterprise\/altoc\/scheduler:inspect$/, appCode: 'enterprise', scope: 'altoc:scheduler:execute', wakePath: '/enterprise/api/internal/apf/scheduler-inspect' },
+  { pattern: /^\/v1\/enterprise\/finance\/scheduler:inspect$/, appCode: 'enterprise', scope: 'finance:scheduler:execute', wakePath: '/enterprise/api/internal/apf/scheduler-inspect' },
+  { pattern: /^\/v1\/enterprise\/people\/scheduler:inspect$/, appCode: 'enterprise', scope: 'people:scheduler:execute', wakePath: '/enterprise/api/internal/apf/scheduler-inspect' },
+  { pattern: /^\/v1\/enterprise\/aims\/integration-operations:(claim|succeed|fail|company-weekly-summary-publish-content|pending-failure-notifications|pending-dead-letter-actionables|pending-dead-letter-closures|failure-notified|dead-letter-actionable-published|dead-letter-closure-acknowledged)$/, appCode: 'enterprise', scope: 'aims:integration_operation:execute', wakePath: '/enterprise/api/internal/aims/drain' },
+  { pattern: /^\/v1\/enterprise\/aims\/milestones:rollover-due$/, appCode: 'enterprise', scope: 'aims:milestone-rollover:execute', wakePath: '/enterprise/api/internal/aims/drain' },
+  { pattern: /^\/v1\/enterprise\/aims\/notifications:(scan-due|acknowledge|acknowledge-closure)$/, appCode: 'enterprise', scope: 'aims:notifications-due:execute', wakePath: '/enterprise/api/internal/aims/drain' },
   { pattern: /^\/v1\/enterprise\/aims\/integration-operations:(claim|succeed|fail|company-weekly-summary-publish-content|pending-failure-notifications|pending-dead-letter-actionables|pending-dead-letter-closures|failure-notified|dead-letter-actionable-published|dead-letter-closure-acknowledged)$/, appCode: 'aims', scope: 'aims:integration_operation:execute' },
   { pattern: /^\/v1\/enterprise\/aims\/milestones:rollover-due$/, appCode: 'aims', scope: 'aims:milestone-rollover:execute' },
   { pattern: /^\/v1\/enterprise\/aims\/notifications:(scan-due|acknowledge|acknowledge-closure)$/, appCode: 'aims', scope: 'aims:notifications-due:execute' },
@@ -55,7 +74,7 @@ export type TenantRuntimeCallOptions = {
   method?: string
   query?: Record<string, unknown>
   body?: unknown
-  notificationDetailDomain?: 'aims' | 'assets'
+  notificationDetailDomain?: 'aims' | 'assets' | 'altoc' | 'finance' | 'people'
   notificationDetailActor?: {
     uid: string
     tenantId: string
@@ -246,7 +265,7 @@ export function trustedNotificationDetailActor(input: {
     || auth.subjectType !== 'service'
     || auth.tokenUse !== 'service'
     || sourceApp !== 'console'
-    || (composed && (auth.clientCode !== 'console.runtime' || input.options.appCode !== 'enterprise' || !['aims', 'assets'].includes(domain) || input.options.scope !== `${domain}:notification-detail:authorize`))
+    || (composed && (auth.clientCode !== 'console.runtime' || input.options.appCode !== 'enterprise' || !['aims', 'assets', 'altoc', 'finance', 'people'].includes(domain) || input.options.scope !== `${domain}:notification-detail:authorize`))
     || !serviceAuthScopes(auth).has(expectedScope)
     || String(input.options.method || 'GET').toUpperCase() !== 'POST'
     || input.path !== expectedPath
@@ -997,14 +1016,18 @@ export function enterpriseDocumentPermitCanonical(method: string, target: string
 
 // Same token-bound HMAC mechanism as project documents; a separate domain tag
 // prevents reuse across permit types. Explicit order covers every read field.
-export function enterpriseAltocReadPermitCanonical(method: string, target: string, permit: Record<string, unknown>) {
+export function enterpriseAltocReadPermitCanonical(method: string, target: string, permit: Record<string, unknown>): string {
   const scope = permit.scope as { access?: unknown, departmentCodes?: unknown } | undefined
   const query = permit.query as Record<string, unknown> | undefined
+  // Appended only when set, so permits signed before this field keep their bytes.
+  const descendants = query?.includeDescendants === true ? [true] : []
+  const filters = ['parentId', 'rootsOnly', 'ownerUnassigned', 'origin', 'category', 'parentContractId', 'customerIds', 'signedDateFrom', 'signedDateTo', 'ownerUid', 'amountMin', 'amountMax', 'direction', 'contractType', 'workspace', 'industryCode', 'regionCode', 'updatedDateFrom', 'updatedDateTo', 'customerSort', 'contactsOnly', 'decisionRole', 'primaryOnly', 'starredOnly'].filter(key => query?.[key] === true || (typeof query?.[key] === 'string' && query[key] !== '')).map(key => [key, query![key]])
   return JSON.stringify([
     'hzy-enterprise-altoc-read-permit.v1', method, target,
     ...['actorUid', 'tenant', 'deployment', 'resource', 'action', 'operation', 'objectId', 'allowed', 'expiresAt', 'bundleVersion', 'bundleHash', 'policyRevision'].map(key => permit[key]),
     scope?.access, scope?.departmentCodes || [],
-    query?.page || 0, query?.pageSize || 0, ...['search', 'status', 'customerId', /\/(?:leads|opportunities|quotations):(?:list|view)$/.test(target) ? 'opportunityId' : 'contractId'].map(key => query?.[key] || '')
+    query?.page || 0, query?.pageSize || 0, ...['search', 'status', 'customerId', /\/(?:leads|opportunities|quotations):(?:list|view)$/.test(target) ? 'opportunityId' : 'contractId'].map(key => query?.[key] || ''),
+    ...descendants, ...filters, ...(permit.customerRead ? [['customerRead', enterpriseAltocReadPermitCanonical(method, target, permit.customerRead as Record<string, unknown>)]] : [])
   ]).replace(/\u2028/gu, '\\u2028').replace(/\u2029/gu, '\\u2029')
 }
 
@@ -1289,7 +1312,8 @@ export async function maybeCallTenantRuntime<T>(
   options: TenantRuntimeCallOptions
 ): Promise<TenantRuntimeSkipped | TenantRuntimeHandled<T>> {
   const config = useRuntimeConfig() as unknown as Record<string, unknown>
-  const unifiedSchedulerRoute = UNIFIED_SCHEDULER_ROUTES.find(route => route.pattern.test(path))
+  const unifiedSchedulerRoute = (UNIFIED_SCHEDULER_ROUTES.find(route => route.pattern.test(path) && route.appCode === options.appCode)
+    || UNIFIED_SCHEDULER_ROUTES.find(route => route.pattern.test(path)))
   let scheduler: Awaited<ReturnType<typeof requireTenantGatewaySchedulerRequest>> | undefined
   if (options.enterpriseScheduler || unifiedSchedulerRoute) {
     if (!options.enterpriseScheduler || !unifiedSchedulerRoute || options.appCode !== unifiedSchedulerRoute.appCode
@@ -1298,7 +1322,7 @@ export async function maybeCallTenantRuntime<T>(
       || (options.query && Object.keys(options.query).length)) {
       throw createError({ statusCode: 403, message: 'Unified scheduler transport contract is invalid.' })
     }
-    scheduler = await requireTenantGatewaySchedulerRequest(event, unifiedSchedulerRoute.appCode)
+    scheduler = await requireTenantGatewaySchedulerRequest(event, unifiedSchedulerRoute.appCode, unifiedSchedulerRoute.wakePath)
     if (!['unified', 'recovered'].includes(scheduler.schedulerStorage) || scheduler.schedulerGeneration !== options.enterpriseScheduler.generation) {
       throw createError({ statusCode: 403, message: 'Unified scheduler generation is not selected by the signed wake.' })
     }
@@ -1328,9 +1352,9 @@ export async function maybeCallTenantRuntime<T>(
     throw error
   }
   const tokenMetadata = safeJwtMetadata(token) as Record<string, unknown>
-  if (scheduler && (tokenMetadata.tokenUse !== 'service' || tokenMetadata.serviceClientId !== 'aims.runtime'
-    || tokenMetadata.appCode !== 'aims' || tokenMetadata.tenant !== scheduler.tenant || tokenMetadata.deployment !== scheduler.deployment)) {
-    throw createError({ statusCode: 403, message: 'Unified scheduler requires the real bound aims.runtime service identity.' })
+  if (scheduler && (tokenMetadata.tokenUse !== 'service' || tokenMetadata.serviceClientId !== `${unifiedSchedulerRoute!.appCode}.runtime`
+    || tokenMetadata.appCode !== unifiedSchedulerRoute!.appCode || tokenMetadata.tenant !== scheduler.tenant || tokenMetadata.deployment !== scheduler.deployment)) {
+    throw createError({ statusCode: 403, message: 'Unified scheduler requires the exact route-bound service identity.' })
   }
   const envelope = serviceCommandEnvelope(options.body)
   const requestId = stringValue(getHeader(event, 'x-request-id') || getHeader(event, 'x-correlation-id'))
@@ -1364,21 +1388,25 @@ export async function maybeCallTenantRuntime<T>(
     })
   }
   const systemChannel = options.channel === 'system'
-  const delegatedSubjectUid = systemChannel ? '' : trustedNotificationDetailActor({
-    event,
-    path,
-    options,
-    tenant
-  })
+  const delegatedSubjectUid = systemChannel
+    ? ''
+    : trustedNotificationDetailActor({
+        event,
+        path,
+        options,
+        tenant
+      })
   const verifiedActor = systemChannel ? undefined : verifiedServiceCommandActor(event, options.appCode)
   const serviceCommandSubjectUid = systemChannel ? '' : verifiedActor?.uid || trustedServiceCommandActor({ event, options, envelope })
-  const workflowProxySubjectUid = systemChannel ? '' : trustedWorkflowProxyActor({
-    event,
-    path,
-    options,
-    tenant,
-    deployment
-  })
+  const workflowProxySubjectUid = systemChannel
+    ? ''
+    : trustedWorkflowProxyActor({
+        event,
+        path,
+        options,
+        tenant,
+        deployment
+      })
   const subjectUid = systemChannel ? '' : delegatedSubjectUid || serviceCommandSubjectUid || workflowProxySubjectUid || currentSubjectUid(event)
   const subjectDeptCodes = systemChannel || delegatedSubjectUid ? [] : verifiedActor?.deptCodes || currentSubjectDeptCodes(event)
   const actorSignedAt = subjectUid ? String(Date.now()) : ''
@@ -1394,10 +1422,27 @@ export async function maybeCallTenantRuntime<T>(
       })
     : ''
   let enterpriseDocumentPermitSignature = ''
+  const feedbackSignature = feedbackPermitPath(url.pathname) && options.body
+    ? await signHmac(token, feedbackPermitCanonical(method, `${url.pathname}${url.search}`, options.body as Record<string, unknown>, idempotencyKey))
+    : ''
   if (options.appCode === 'enterprise' && method === 'POST' && path === '/v1/enterprise/aims/project-documents:accessible') {
     const permit = (options.body as { authorization?: Record<string, unknown> })?.authorization
     if (!permit || permit.actorUid !== subjectUid || permit.tenant !== tenant || permit.deployment !== deployment || typeof permit.projectAdmin !== 'boolean') throw createError({ statusCode: 403, message: 'Project document permit binding is invalid.' })
     enterpriseDocumentPermitSignature = await signHmac(token, enterpriseDocumentPermitCanonical(method, `${url.pathname}${url.search}`, permit))
+  }
+  let announcementSignature = ''
+  if (['console', 'enterprise'].includes(options.appCode) && method === 'POST' && announcementPermitPath(path)) {
+    const body = options.body as Record<string, unknown>
+    const permit = body?.authorization as Record<string, unknown> | undefined
+    if (!permit || permit.actorUid !== subjectUid || permit.tenant !== tenant || permit.deployment !== deployment) throw createError({ statusCode: 403, message: 'Announcement permit binding is invalid.' })
+    announcementSignature = await signHmac(token, announcementPermitCanonical(method, `${url.pathname}${url.search}`, body, idempotencyKey))
+  }
+  let enterpriseAPFPermitSignature = ''
+  if (options.appCode === 'enterprise' && method === 'POST' && isAPFPermitPath(path)) {
+    const body = options.body as Record<string, unknown>
+    const permit = body?.authorization as Record<string, unknown> | undefined
+    if (!permit || permit.actorUid !== subjectUid || permit.tenant !== tenant || permit.deployment !== deployment) throw createError({ statusCode: 403, message: 'APF permit binding is invalid.' })
+    enterpriseAPFPermitSignature = await signHmac(token, enterpriseAPFPermitCanonical(method, `${url.pathname}${url.search}`, body))
   }
   let enterpriseAltocPermitSignature = ''
   if (options.appCode === 'enterprise' && method === 'POST' && /^\/v1\/enterprise\/altoc\/(?:customers|contracts|receivable-plans|leads|opportunities|quotations):(?:list|view)$/.test(path)) {
@@ -1458,6 +1503,14 @@ export async function maybeCallTenantRuntime<T>(
     })
   }
 
+  let knowledgeAuthorizationSignature = ''
+  if (options.appCode === 'assets' && method === 'POST' && path === '/v1/assets/service/enterprise-knowledge-links') {
+    const body = options.body as Record<string, unknown>
+    const envelope = body.serviceCommand as Record<string, unknown>
+    if (typeof body.knowledgeAuthorization !== 'string') throw createError({ statusCode: 403 })
+    knowledgeAuthorizationSignature = await signHmac(token, JSON.stringify(['hzy-knowledge-authorization.v1', method, `${url.pathname}${url.search}`, tenant, deployment, subjectUid, envelope.commandSha256, body.knowledgeAuthorization]))
+  }
+
   const httpStartedAt = Date.now()
   try {
     const data = await measureRequestStage(event, 'runtime_http', () => fetchExternal<T>(url.toString(), {
@@ -1477,11 +1530,15 @@ export async function maybeCallTenantRuntime<T>(
         ...(delegatedSubjectUid ? { 'x-hzy-actor-purpose': 'notification-detail-authorization' } : serviceCommandSubjectUid ? { 'x-hzy-actor-purpose': 'service-command' } : {}),
         ...(tenant ? { 'x-hzy-tenant': tenant } : {}),
         ...(deployment ? { 'x-hzy-deployment': deployment } : {}),
+        ...(announcementSignature ? { 'x-hzy-announcement-permit-signature': announcementSignature } : {}),
+        ...(feedbackSignature ? { 'x-hzy-feedback-permit-signature': feedbackSignature } : {}),
         ...(enterpriseDocumentPermitSignature ? { 'x-hzy-enterprise-document-permit-signature': enterpriseDocumentPermitSignature } : {}),
+        ...(enterpriseAPFPermitSignature ? { 'x-hzy-enterprise-apf-permit-signature': enterpriseAPFPermitSignature } : {}),
         ...(enterpriseAltocPermitSignature ? { 'x-hzy-enterprise-altoc-permit-signature': enterpriseAltocPermitSignature } : {}),
         ...(enterpriseTimesheetReviewPermitSignature ? { 'x-hzy-enterprise-timesheet-review-permit-signature': enterpriseTimesheetReviewPermitSignature } : {}),
         ...(enterpriseTimesheetReviewWriteSignature ? { 'x-hzy-enterprise-timesheet-review-write-signature': enterpriseTimesheetReviewWriteSignature } : {}),
         ...(enterpriseWeeklyReportSubmitPermitSignature ? { 'x-hzy-enterprise-weekly-report-submit-permit-signature': enterpriseWeeklyReportSubmitPermitSignature } : {}),
+        ...(knowledgeAuthorizationSignature ? { 'x-hzy-knowledge-authorization-signature': knowledgeAuthorizationSignature } : {}),
         ...serviceCommandHeaders
       },
       ...(method === 'GET' ? {} : { body: options.body ?? {} }),

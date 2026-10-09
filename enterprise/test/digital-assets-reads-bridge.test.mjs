@@ -15,25 +15,38 @@ test('Digital Assets BFF binds exact digital_assets:view scope before its separa
   globalThis.useRuntimeConfig = () => ({ public: { appCode: 'enterprise' } })
   globalThis.__digitalAssetsReadSession = session
   globalThis.__digitalAssetsReadPrepared = []
-  globalThis.__digitalAssetsReadTransport = async (_event, path, options) => { calls.push({ path, options }); return { handled: true, data: { code: 0, data: { items: [] } } } }
+  globalThis.__digitalAssetsReadTransport = async (_event, path, options) => {
+    calls.push({ path, options })
+    return { handled: true, data: { code: 0, data: { items: [] } } }
+  }
   globalThis.__digitalAssetsReadAuthorization = async (_event, uid, app, required) => {
     checks.push({ uid, app, ...required })
     return { grants: denied ? [] : [{ permissions: [{ appCode: app, resourceCode: required.resourceCode, action: required.action }], scopes: [{ dimension: 'asset', predicate: 'owner' }] }] }
   }
   const hooks = registerHooks({ resolve(specifier, context, next) {
     let source
-    if (specifier.endsWith('/consoleSessionBridge') || specifier === './consoleSessionBridge') source = `export async function requireConsoleSession(){return globalThis.__digitalAssetsReadSession}`
-    if (specifier.endsWith('/enterpriseRuntimeClient') || specifier === '@hzy/foundation/server/utils/enterpriseRuntimeClient') source = `export async function requireEnterpriseUser(){return globalThis.__digitalAssetsReadSession}; export async function prepareEnterpriseRuntime(event,operation){globalThis.__digitalAssetsReadPrepared.push(operation)}; export function enterpriseRuntimePermitExpiresAt(){return Date.now()+10000}; export async function callEnterpriseRuntime(event,path,options){return globalThis.__digitalAssetsReadTransport(event,path,options)}`
-    if (specifier.endsWith('/platformBundleAuthorization') || specifier === '@hzy/foundation/server/utils/platformBundleAuthorization') source = `export async function loadScopedAuthorizationFromConsoleRuntime(event,uid,app,required){return globalThis.__digitalAssetsReadAuthorization(event,uid,app,required)}`
-    if (source) return { shortCircuit: true, url: `data:text/javascript,${encodeURIComponent(source)}` }
+    if (specifier.endsWith('/consoleSessionBridge') || specifier === './consoleSessionBridge')
+      source = `export async function requireConsoleSession(){return globalThis.__digitalAssetsReadSession}`
+    if (specifier.endsWith('/enterpriseRuntimeClient') || specifier === '@hzy/foundation/server/utils/enterpriseRuntimeClient')
+      source = `export async function requireEnterpriseUser(){return globalThis.__digitalAssetsReadSession}; export async function prepareEnterpriseRuntime(event,operation){globalThis.__digitalAssetsReadPrepared.push(operation)}; export function enterpriseRuntimePermitExpiresAt(){return Date.now()+10000}; export async function callEnterpriseRuntime(event,path,options){return globalThis.__digitalAssetsReadTransport(event,path,options)}`
+    if (specifier.endsWith('/platformBundleAuthorization') || specifier === '@hzy/foundation/server/utils/platformBundleAuthorization')
+      source = `export async function loadScopedAuthorizationFromConsoleRuntime(event,uid,app,required){return globalThis.__digitalAssetsReadAuthorization(event,uid,app,required)}`
+    if (source)
+      return { shortCircuit: true, url: `data:text/javascript,${encodeURIComponent(source)}` }
     let candidate
-    if (specifier.startsWith('@hzy/foundation/')) candidate = resolve(root, 'foundation', specifier.slice('@hzy/foundation/'.length))
-    else if (specifier.startsWith('~~/')) candidate = resolve(root, 'enterprise', specifier.slice(3))
-    else if (specifier.startsWith('.') && context.parentURL?.startsWith('file:')) candidate = resolve(dirname(fileURLToPath(context.parentURL)), specifier)
-    if (candidate && !existsSync(candidate) && existsSync(candidate + '.ts')) return { shortCircuit: true, url: pathToFileURL(candidate + '.ts').href }
+    if (specifier.startsWith('@hzy/foundation/'))
+      candidate = resolve(root, 'foundation', specifier.slice('@hzy/foundation/'.length))
+    else
+      if (specifier.startsWith('~~/'))
+        candidate = resolve(root, 'enterprise', specifier.slice(3))
+      else
+        if (specifier.startsWith('.') && context.parentURL?.startsWith('file:'))
+          candidate = resolve(dirname(fileURLToPath(context.parentURL)), specifier)
+    if (candidate && !existsSync(candidate) && existsSync(candidate + '.ts'))
+      return { shortCircuit: true, url: pathToFileURL(candidate + '.ts').href }
     return next(specifier, context)
   } })
-  const importModule = async relative => {
+  const importModule = async (relative) => {
     const pathname = resolve(root, relative)
     assert.ok(existsSync(pathname), `missing ${relative}`)
     return import(`${pathToFileURL(pathname).href}?digital-assets-read-test=${Date.now()}`)
@@ -50,7 +63,7 @@ test('Digital Assets BFF binds exact digital_assets:view scope before its separa
     app.use(router)
     server = createServer(toNodeListener(app))
     await new Promise(done => server.listen(0, done))
-    const request = async path => {
+    const request = async (path) => {
       const response = await fetch(`http://127.0.0.1:${server.address().port}${path}`)
       return { status: response.status, body: await response.json() }
     }
@@ -76,8 +89,15 @@ test('Digital Assets BFF binds exact digital_assets:view scope before its separa
     assert.equal(globalThis.__digitalAssetsReadPrepared.at(-1), 'assets.digital-assets-view')
     assert.ok(checks.every(check => check.uid === session.uid && check.app === 'assets' && check.resourceCode === 'digital_assets' && check.action === 'view'))
   } finally {
-    if (server) { server.closeAllConnections(); await new Promise(done => server.close(done)) }
-    hooks.deregister(); globalThis.useRuntimeConfig = oldConfig
-    delete globalThis.__digitalAssetsReadSession; delete globalThis.__digitalAssetsReadTransport; delete globalThis.__digitalAssetsReadAuthorization; delete globalThis.__digitalAssetsReadPrepared
+    if (server) {
+      server.closeAllConnections()
+      await new Promise(done => server.close(done))
+    }
+    hooks.deregister()
+    globalThis.useRuntimeConfig = oldConfig
+    delete globalThis.__digitalAssetsReadSession
+    delete globalThis.__digitalAssetsReadTransport
+    delete globalThis.__digitalAssetsReadAuthorization
+    delete globalThis.__digitalAssetsReadPrepared
   }
 })

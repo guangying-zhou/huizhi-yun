@@ -1,7 +1,9 @@
 export function validatedSessionScope(session) {
-  if (!session || session.authenticated !== true || session.provider !== 'console_oidc') return ''
+  if (!session || session.authenticated !== true || session.provider !== 'console_oidc')
+    return ''
   const fields = [session.tenant, session.uid || session.subjectCode, session.policyVersion]
-  if (fields.some(value => typeof value !== 'string' || !value.trim())) return ''
+  if (fields.some(value => typeof value !== 'string' || !value.trim()))
+    return ''
   return JSON.stringify([session.tenant, session.uid || '', session.subjectCode || '', session.policyVersion, session.deployment || ''])
 }
 
@@ -19,11 +21,14 @@ export function watchSessionLoss(fetchSession, onLost) {
   let authenticated = false
   return async () => {
     const session = await fetchSession()
-    if (session?.authenticated === true) authenticated = true
-    else if (session?.refreshable !== true) {
-      if (authenticated) onLost()
-      authenticated = false
-    }
+    if (session?.authenticated === true)
+      authenticated = true
+    else
+      if (session?.refreshable !== true) {
+        if (authenticated)
+          onLost()
+        authenticated = false
+      }
     return session
   }
 }
@@ -34,7 +39,8 @@ export function createSessionCacheCoordinator({ fetchSession, onChange, onVerifi
   let generation = 0
   let pending = null
   function change(next) {
-    if (scope === next) return
+    if (scope === next)
+      return
     const previous = scope
     scope = next
     onChange(next, previous)
@@ -44,38 +50,54 @@ export function createSessionCacheCoordinator({ fetchSession, onChange, onVerifi
   // rotation remounts each keyed page twice.
   function verified(next) {
     change(next)
-    if (verifiedScope === next) return
+    if (verifiedScope === next)
+      return
     verifiedScope = next
     onVerified?.(next)
   }
-  function invalidate() { generation++; pending = null; change('') }
+  function invalidate() {
+    generation++
+    pending = null
+    change('')
+  }
   function refresh() {
-    if (pending) return pending
+    if (pending)
+      return pending
     const requestGeneration = generation
-    const request = Promise.resolve().then(fetchSession).then(session => {
+    const request = Promise.resolve().then(fetchSession).then((session) => {
       // A token refresh can invalidate an in-flight route check. Follow the
       // replacement verification instead of treating cancellation as logout.
       // With no replacement, only the current verified scope is usable.
-      if (requestGeneration !== generation) return pending || scope
+      if (requestGeneration !== generation)
+        return pending || scope
       const next = validatedSessionScope(session)
       verified(next)
       return next
-    }).catch(error => {
-      if (requestGeneration === generation) verified('')
+    }).catch((error) => {
+      if (requestGeneration === generation)
+        verified('')
       throw error
-    }).finally(() => { if (pending === request) pending = null })
+    }).finally(() => {
+      if (pending === request)
+        pending = null
+    })
     pending = request
     return request
   }
   return { refresh, invalidate, getScope: () => scope }
 }
 export function safeLoginRedirect(value) {
-  if (typeof value !== 'string' || !value.startsWith('/') || /[\\\u0000-\u0020]/.test(value)) return '/'
+  if (typeof value !== 'string' || !value.startsWith('/') || Array.from(value).some(char => char.charCodeAt(0) <= 0x1f || char === ' ' || char === '\\'))
+    return '/'
   try {
     const decoded = decodeURIComponent(value)
-    if (decoded.startsWith('//') || /[\\\u0000-\u0020]/.test(decoded)) return '/'
+    if (decoded.startsWith('//') || Array.from(decoded).some(char => char.charCodeAt(0) <= 0x1f || char === ' ' || char === '\\'))
+      return '/'
     const target = new URL(value, 'https://enterprise.invalid')
-    if (target.origin !== 'https://enterprise.invalid' || ['/login', '/aims/login', '/assets/login', '/enterprise/login'].includes(target.pathname)) return '/'
+    if (target.origin !== 'https://enterprise.invalid' || ['/login', '/aims/login', '/assets/login', '/enterprise/login'].includes(target.pathname))
+      return '/'
     return target.pathname + target.search + target.hash
-  } catch { return '/' }
+  } catch {
+    return '/'
+  }
 }

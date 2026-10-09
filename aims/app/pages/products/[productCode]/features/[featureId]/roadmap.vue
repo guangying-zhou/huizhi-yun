@@ -4,7 +4,7 @@ import type { ProductPlanningCycle } from '../../../../../types/productPlanningC
 
 const { moduleUrl, cacheKey, hosted } = useAimsModule()
 
-definePageMeta({ layoutHeader: true, layoutHeaderTitle: '功能路线', layoutHeaderProjectSwitcher: false })
+definePageMeta({ hostContentWidth: 'full', layoutHeader: true, layoutHeaderTitle: '功能路线', layoutHeaderProjectSwitcher: false })
 const route = useRoute()
 const code = computed(() => String(route.params.productCode || ''))
 const id = computed(() => String(route.params.featureId || ''))

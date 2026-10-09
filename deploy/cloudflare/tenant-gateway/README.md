@@ -476,3 +476,19 @@ Two optional variables are set only by the self-hosted Node host
 
 `runScheduledIntegrationDrains` also accepts `dependencies.loadPage` so a single-site
 host can supply its own scheduler page instead of the Platform-wide shard.
+
+## APF-18A Enterprise background owner (candidate, default off)
+
+The existing `*/5 * * * *` scheduler invokes `runScheduledIntegrationDrains`. Platform scheduler registry now includes Enterprise-only tenants. APF is **not** enabled by that registry entry: protected `HZY_ENTERPRISE_APF_SCHEDULER_BINDINGS_JSON` must separately register one matching host/tenant/environment/Enterprise deployment/generation and the chosen domains. Example shape (operator replaces all fixture values):
+
+```json
+[{"host":"fixture.example.test","tenantCode":"FIXTURE","environment":"test","deploymentCode":"FIXTURE-test-enterprise","generation":"1","owner":"gateway","domains":["altoc","finance","people"]}]
+```
+
+Each enabled domain consumes one wake from the existing CPU/concurrency/wall-clock gate. Gateway POSTs `{domain}` to `/enterprise/api/internal/apf/scheduler-inspect` using `HZY_ENTERPRISE_SERVICE` (Cloudflare) or the pinned `HZY_ENTERPRISE_ORIGIN` (self-hosted). The signature binds method, path, tenant, environment, deployment, Runtime endpoint, host, unified generation **and domain**; changing body/domain cannot select another domain. No user token or actor is forwarded to Runtime machine operations. Host additionally requires protected `HZY_ENTERPRISE_APF_SCHEDULER_ENABLED=true`; absent/false returns 503. Malformed/duplicate protected owner bindings fail closed. No second timer is registered.
+
+For self-hosted deployment, `gateway.json` has optional `scheduler.apf={enabled:false,domains:[],generation:""}`. To enable, existing `scheduler.drain.enabled` and the exact Enterprise app/deployment must already be configured; `scheduler.apf.enabled=true` generates the same binding. Leave both sides disabled until grants and Registry scheduler authority/generation are verified. Rollback disables Gateway APF owner first, then Host; committed frozen commands remain for later original-key recovery.
+
+The A batch owns Altoc/Finance frozen approval creation+binding and People due Directory delivery+frozen assignment approval creation+binding. User onboarding stage actions are not automated. Each approval family reads a bounded pending page (20 People / 40 Altoc or Finance), processes at most 3 intents with a 15-second loop budget and 3-second Workflow/Runtime request deadlines. People Directory prepares at most one page and delivers at most one claimed command per wake; independent People queues run concurrently; a dependency failure returns 503 with only fixed unavailable flags instead of raw errors. Gateway retains its 45-second wall gate, default 30-second request deadline and max-wakes gate; issuance/bootstrap dependencies have their own existing deadlines. Reaching a bound defers work to the next cron, never drops it. APF-enabled worst-case registry sizing reserves 10 wakes per tenant (7 legacy apps + 3 APF domains); disabled sizing remains 7. Operators must recalculate shards/wakes against tenant count before enabling; no claim of live five-minute delivery is made by this candidate.
+
+SQL candidates `Console-SQL-Seed/Verify-apf18-enterprise-scheduler.sql` install **six** qualified grants: enterprise.runtime × altoc/finance/people:scheduler:execute × data-runtime/tenant-runtime. Both audiences are required for this scheduled channel; U grants do not substitute. Existing revoked/conflicting rows are not resurrected or widened. No SQL/config/cron was applied by APF-18A. Legacy owners and their ledgers are unchanged: B/C must inventory in-flight work before retirement. New handlers only consume their Enterprise-owned frozen queues, not legacy source-client commands.

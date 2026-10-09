@@ -10,7 +10,7 @@ test('Workflow callback delivery uses the tenant gateway route and event-bound s
   assert.match(sender, /!url\.startsWith\('\/'\)/)
   assert.match(sender, /url\.startsWith\('\/\/'\)/)
   assert.match(sender, /baseUrl\.replace\(\/\\\/\+\$\/, ''\)/)
-  assert.match(sender, /url\.replace\(\/\^\\\/\+\/, ''\)/)
+  assert.match(sender, /deliveryPath\.replace\(\/\^\\\/\+\/, ''\)/)
   assert.match(sender, /requestServiceAccessToken\(\{[\s\S]*audience: target\.audience,[\s\S]*scope: target\.scope,[\s\S]*event[\s\S]*\}\)/)
   assert.match(sender, /tenantGatewayServiceBinding\(event\)/)
   assert.match(sender, /gatewayBinding\.fetch\(callbackUrl/)

@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs'
 import vm from 'node:vm'
 import ts from 'typescript'
 import { parse, compileScript, compileTemplate } from '@vue/compiler-sfc'
+import { projectPageFailure } from '../app/utils/projectPageFailure'
 import { createProjectDocumentReader, loadProjectDocumentCounts } from '../app/utils/projectDocumentOverview'
 
 const read = (file: string) => readFileSync(new URL(file, import.meta.url), 'utf8')
@@ -89,7 +90,7 @@ function setup(fetch: (path: string, options?: Record<string, unknown>) => Promi
     useProjectStore: () => ({ normalizeProject }), usePortfolioStore: () => ({ portfolios: [], normalizePortfolio: (raw: unknown) => raw }),
     ref, computed: (get: () => unknown) => ({ get value() { return get() } }), onMounted: () => {}, onBeforeUnmount: () => {}, watch: (_ref: unknown, fn: () => void) => watchers.push(fn),
     useRoute: () => ({ query: { projectId: '257' } }), useRouter: () => ({ replace: async () => {} }), useToast: () => ({ add: () => {} }), useRuntimeConfig: () => ({ app: { baseURL: '/' } }), $fetch: fetch,
-    createProjectDocumentReader, loadProjectDocumentCounts
+    createProjectDocumentReader, loadProjectDocumentCounts, projectPageFailure
   })
   vm.runInContext(ts.transpileModule(`${source}\nglobalThis.state={ loadDocuments, selectedProjectId, projects, documents, documentTotal, documentError, projectDocumentCount, downloadUrl, loadProjectPage, projectPage };`, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText, context)
   return context.state

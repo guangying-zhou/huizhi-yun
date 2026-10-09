@@ -1,5 +1,6 @@
 const fs = require('node:fs')
 const path = require('node:path')
+const { localApplications } = require('./application-set.cjs')
 
 function required(name) {
   const value = String(process.env[name] || '').trim()
@@ -18,9 +19,7 @@ if (!['dev', 'node'].includes(mode)) throw new Error('HZY0_MODE must be dev or n
 const configuration = JSON.parse(fs.readFileSync(profile, 'utf8'))
 
 module.exports = {
-  apps: ['gateway', 'enterprise', 'codocs-editor', ...(configuration.identity.consoleFacadeMode === 'local-canonical-facade' ? ['console'] : []),
-    ...(configuration.features?.codocsCollaborationV2 === true ? ['collab'] : []),
-    ...(configuration.features?.workflowLocal === true ? ['workflow', 'aims'] : [])].map(app => ({
+  apps: localApplications(configuration).map(app => ({
     name: `hzy0-${app}`,
     cwd: root,
     script: path.join(root, 'deploy/test-env/local-enterprise/run-process.mjs'),

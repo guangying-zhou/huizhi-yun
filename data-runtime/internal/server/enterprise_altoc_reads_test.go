@@ -191,3 +191,110 @@ func TestEnterpriseAltocReadPermitIndependentSignatureCoversEveryField(t *testin
 		})
 	}
 }
+
+// includeDescendants widens a contract list to a whole customer subtree, so it
+// must be part of the signed query; older permits keep their exact bytes.
+func TestEnterpriseAltocReadPermitSignsIncludeDescendants(t *testing.T) {
+	raw, err := os.ReadFile("testdata/enterprise-altoc-contract-descendants-read-permit.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var fixture struct {
+		Method, Target, Token, Canonical, Signature string
+		Authorization                               enterpriseAltocReadPermit
+	}
+	if err = json.Unmarshal(raw, &fixture); err != nil {
+		t.Fatal(err)
+	}
+	request := func() *http.Request {
+		r := httptest.NewRequest(fixture.Method, fixture.Target, nil)
+		r.Header.Set("Authorization", "Bearer "+fixture.Token)
+		r.Header.Set("X-HZY-Enterprise-Altoc-Permit-Signature", fixture.Signature)
+		return r
+	}
+	if !fixture.Authorization.Query.IncludeDescendants {
+		t.Fatal("fixture does not set includeDescendants")
+	}
+	if got := enterpriseAltocReadPermitCanonical(request(), fixture.Authorization); got != fixture.Canonical {
+		t.Fatalf("cross-language canonical mismatch\n%s\n%s", got, fixture.Canonical)
+	}
+	if err = verifyEnterpriseAltocReadPermitSignature(request(), fixture.Authorization); err != nil {
+		t.Fatal(err)
+	}
+	p := fixture.Authorization
+	p.Query.IncludeDescendants = false
+	if verifyEnterpriseAltocReadPermitSignature(request(), p) == nil {
+		t.Fatal("permit accepted after dropping includeDescendants")
+	}
+	// A permit signed for one customer only must not be widened by the request body.
+	p = fixture.Authorization
+	input := enterpriseAltocReadInput{Query: p.Query, Authorization: p}
+	input.Authorization.Query.IncludeDescendants = false
+	if input.Authorization.Query == input.Query {
+		t.Fatal("query equality ignores includeDescendants")
+	}
+}
+
+func TestEnterpriseAltocReadPermitW3FiltersSharedVectors(t *testing.T) {
+	raw, e := os.ReadFile("testdata/enterprise-altoc-w3-read-permits.json")
+	if e != nil {
+		t.Fatal(e)
+	}
+	var fixtures []struct {
+		Method, Target, Token, Canonical, Signature string
+		Authorization                               enterpriseAltocReadPermit
+	}
+	if e = json.Unmarshal(raw, &fixtures); e != nil {
+		t.Fatal(e)
+	}
+	for _, f := range fixtures {
+		t.Run(f.Canonical, func(t *testing.T) {
+			r := httptest.NewRequest(f.Method, f.Target, nil)
+			r.Header.Set("Authorization", "Bearer "+f.Token)
+			r.Header.Set("X-HZY-Enterprise-Altoc-Permit-Signature", f.Signature)
+			if got := enterpriseAltocReadPermitCanonical(r, f.Authorization); got != f.Canonical {
+				t.Fatalf("canonical mismatch %s != %s", got, f.Canonical)
+			}
+			if e := verifyEnterpriseAltocReadPermitSignature(r, f.Authorization); e != nil {
+				t.Fatal(e)
+			}
+			changes := []func(*enterpriseAltocReadPermit){func(p *enterpriseAltocReadPermit) { p.Query.SignedDateFrom = "2027-01-01" }, func(p *enterpriseAltocReadPermit) { p.Query.SignedDateTo = "2028-01-01" }, func(p *enterpriseAltocReadPermit) { p.Query.ParentContractID = "99" }, func(p *enterpriseAltocReadPermit) { p.Query.CustomerIDs = "8,9" }, func(p *enterpriseAltocReadPermit) { p.Query.ParentID = "9" }, func(p *enterpriseAltocReadPermit) { p.Query.RootsOnly = !p.Query.RootsOnly }, func(p *enterpriseAltocReadPermit) { p.Query.OwnerUnassigned = !p.Query.OwnerUnassigned }, func(p *enterpriseAltocReadPermit) { p.Query.Origin = "native" }, func(p *enterpriseAltocReadPermit) { p.Query.Category = "other" }}
+			for _, change := range changes {
+				p := f.Authorization
+				change(&p)
+				if verifyEnterpriseAltocReadPermitSignature(r, p) == nil {
+					t.Fatal("tampered filter accepted")
+				}
+				if p.Query == f.Authorization.Query {
+					t.Fatal("query equality omits W3 filter")
+				}
+			}
+		})
+	}
+}
+
+func TestEnterpriseContractCustomerProjectionPermit(t *testing.T) {
+	now := time.Now()
+	revision := int64(3)
+	verified := delegatedVerified()
+	valid := func() enterpriseAltocReadInput {
+		p := enterpriseAltocReadPermit{ActorUID: verified.ActorUID, Tenant: verified.Route.Binding.Tenant, Deployment: verified.Route.HostDeployment, Resource: "contract", Action: "view", Operation: "list", Allowed: true, Scope: altoc.BasicReadScope{Access: "self"}, Query: altoc.BasicReadQuery{Page: 1, PageSize: 20}, BundleVersion: "v1", BundleHash: "hash", PolicyRevision: &revision, ExpiresAt: now.Add(10 * time.Second).UnixMilli()}
+		c := p
+		c.Resource = "customer"
+		c.Scope = altoc.BasicReadScope{Access: "dept", DepartmentCodes: []string{"D1"}}
+		p.CustomerRead = &c
+		return enterpriseAltocReadInput{Query: p.Query, Authorization: p}
+	}
+	if e := validateEnterpriseAltocReadPermit(valid(), enterpriseAltocReadSpec{"contract", "list"}, verified, now); e != nil {
+		t.Fatal(e)
+	}
+	for name, change := range map[string]func(*enterpriseAltocReadPermit){"actor": func(c *enterpriseAltocReadPermit) { c.ActorUID = "other" }, "tenant": func(c *enterpriseAltocReadPermit) { c.Tenant = "other" }, "deployment": func(c *enterpriseAltocReadPermit) { c.Deployment = "other" }, "resource": func(c *enterpriseAltocReadPermit) { c.Resource = "contract" }, "action": func(c *enterpriseAltocReadPermit) { c.Action = "edit" }, "object": func(c *enterpriseAltocReadPermit) { c.ObjectID = "1" }, "bundle": func(c *enterpriseAltocReadPermit) { c.BundleHash = "other" }, "version": func(c *enterpriseAltocReadPermit) { c.BundleVersion = "other" }, "expired": func(c *enterpriseAltocReadPermit) { c.ExpiresAt = now.UnixMilli() }, "query": func(c *enterpriseAltocReadPermit) { c.Query.Search = "other" }, "nested": func(c *enterpriseAltocReadPermit) { copy := *c; c.CustomerRead = &copy }} {
+		t.Run(name, func(t *testing.T) {
+			i := valid()
+			change(i.Authorization.CustomerRead)
+			if validateEnterpriseAltocReadPermit(i, enterpriseAltocReadSpec{"contract", "list"}, verified, now) == nil {
+				t.Fatal("invalid secondary permit accepted")
+			}
+		})
+	}
+}

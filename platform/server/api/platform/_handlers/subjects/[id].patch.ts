@@ -1,3 +1,4 @@
+import { isDirectoryProjectedUser } from '~~/server/utils/directorySubjectStatus'
 import type { H3Event } from 'h3'
 import type { ResultSetHeader, RowDataPacket } from 'mysql2/promise'
 import { execute, queryRow } from '~~/server/utils/db'
@@ -70,6 +71,12 @@ export default defineEventHandler(async (event) => {
     })
   }
 
+  const directoryManaged = existing.subject_type === 'user' && isDirectoryProjectedUser(existing.subject_code, existing.external_ref)
+  if (directoryManaged && ((body.status !== undefined && body.status !== existing.status)
+    || (body.externalRef !== undefined && normalizeNullableString(body.externalRef) !== existing.external_ref))) {
+    throw createError({ statusCode: 409, message: '账号状态由 Console Directory 管理，请在目录中修改', data: { code: 'directory_subject_managed' } })
+  }
+
   const updates: string[] = []
   const params: Array<string | number | null> = []
 
@@ -86,12 +93,12 @@ export default defineEventHandler(async (event) => {
     params.push(displayName)
   }
 
-  if (body.externalRef !== undefined) {
+  if (body.externalRef !== undefined && !directoryManaged) {
     updates.push('external_ref = ?')
     params.push(normalizeNullableString(body.externalRef))
   }
 
-  if (body.status !== undefined) {
+  if (body.status !== undefined && !directoryManaged) {
     updates.push('status = ?')
     params.push(requireAllowed(String(body.status), 'status', ALLOWED_STATUSES))
   }

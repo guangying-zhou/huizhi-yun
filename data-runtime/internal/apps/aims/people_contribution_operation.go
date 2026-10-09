@@ -22,6 +22,9 @@ const aimsPeopleContributionOperation = "aims.people-contributions.replace-scope
 var contributionDatePattern = regexp.MustCompile(`^\d{4}-\d{2}-\d{2}$`)
 
 func (a *Adapter) freezePeopleContributionSnapshot(ctx context.Context, rawProjectID string, query url.Values, body map[string]any) (map[string]any, error) {
+	if a.retireAPFCommands {
+		return nil, httperror.New(http.StatusGone, "aims_operation_retired", "旧跨域可靠命令已停用")
+	}
 	projectID, err := parseID(rawProjectID, "project_id")
 	if err != nil {
 		return nil, err

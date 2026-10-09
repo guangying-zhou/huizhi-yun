@@ -1,7 +1,7 @@
 import { createError, type H3Event } from 'h3'
 import { requireConsoleAuthContext } from '@hzy/foundation/server/utils/consoleOidc'
 import { resolveTrustedTenantGatewayContext } from '@hzy/foundation/server/utils/tenantGatewayTrust'
-import { requireAltocServiceAuth } from './serviceAuthGuard'
+import { requireAltocServiceAuth } from './serviceAuthGuard.ts'
 
 export async function requireProductFeedbackStatusAuth(event: H3Event) {
   const auth = await requireConsoleAuthContext(event)

@@ -1,0 +1,202 @@
+{
+  "w1-migration-ledger": [
+    {
+      "Logical": "mig_batch",
+      "Physical": "mig_batch",
+      "Columns": [
+        "id",
+        "batch_code",
+        "source_system",
+        "source_snapshot",
+        "scope_json",
+        "plan_sha256",
+        "status",
+        "started_at",
+        "finished_at",
+        "operator",
+        "created_at"
+      ],
+      "DDL": "CREATE TABLE mig_batch (\n  id               BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,\n  batch_code       VARCHAR(64)  NOT NULL,              \n  source_system    VARCHAR(32)  NOT NULL,              \n  source_snapshot  VARCHAR(128) NOT NULL,              \n  scope_json       JSON NOT NULL,                      \n  plan_sha256      CHAR(64) NOT NULL,                  \n  status           VARCHAR(20) NOT NULL,               \n  started_at       DATETIME(3) NULL, finished_at DATETIME(3) NULL,\n  operator         VARCHAR(64) NOT NULL,               \n  created_at       DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),\n  UNIQUE KEY uk_mig_batch_code (batch_code)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;"
+    },
+    {
+      "Logical": "mig_batch_step",
+      "Physical": "mig_batch_step",
+      "Columns": [
+        "batch_id",
+        "step",
+        "status",
+        "planned_rows",
+        "done_rows",
+        "result_sha256",
+        "started_at",
+        "finished_at"
+      ],
+      "DDL": "CREATE TABLE mig_batch_step (\n  batch_id      BIGINT UNSIGNED NOT NULL,\n  step          VARCHAR(40) NOT NULL,             \n  status        VARCHAR(20) NOT NULL,             \n  planned_rows  INT NOT NULL, done_rows INT NOT NULL DEFAULT 0,\n  result_sha256 CHAR(64) DEFAULT NULL,            \n  started_at DATETIME(3) NULL, finished_at DATETIME(3) NULL,\n  PRIMARY KEY (batch_id, step),\n  CONSTRAINT fk_mig_batch_step_batch FOREIGN KEY (batch_id) REFERENCES mig_batch(id)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;"
+    },
+    {
+      "Logical": "mig_source_row",
+      "Physical": "mig_source_row",
+      "Columns": [
+        "id",
+        "source_system",
+        "source_table",
+        "source_pk",
+        "source_snapshot",
+        "first_batch_id",
+        "row_json",
+        "row_sha256",
+        "redacted_fields",
+        "captured_at"
+      ],
+      "DDL": "CREATE TABLE mig_source_row (\n  id               BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,\n  source_system    VARCHAR(32)  NOT NULL,\n  source_table     VARCHAR(64)  NOT NULL,\n  source_pk        VARCHAR(128) NOT NULL,              \n  source_snapshot  VARCHAR(128) NOT NULL,\n  first_batch_id   BIGINT UNSIGNED NOT NULL,\n  row_json         JSON NOT NULL,                      \n  row_sha256       CHAR(64) NOT NULL,                  \n  redacted_fields  JSON NULL,                          \n  captured_at      DATETIME(3) NOT NULL,\n  UNIQUE KEY uk_mig_source_row (source_system, source_table, source_pk, source_snapshot),\n  KEY idx_mig_source_row_table (source_system, source_table, source_pk),\n  CONSTRAINT fk_mig_source_row_batch FOREIGN KEY (first_batch_id) REFERENCES mig_batch(id)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;"
+    },
+    {
+      "Logical": "mig_object_map",
+      "Physical": "mig_object_map",
+      "Columns": [
+        "id",
+        "source_system",
+        "source_table",
+        "source_pk",
+        "target_domain",
+        "target_table",
+        "target_key",
+        "map_role",
+        "disposition",
+        "batch_id",
+        "created_at"
+      ],
+      "DDL": "CREATE TABLE mig_object_map (\n  id               BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,\n  source_system    VARCHAR(32)  NOT NULL,\n  source_table     VARCHAR(64)  NOT NULL,\n  source_pk        VARCHAR(128) NOT NULL,\n  target_domain    VARCHAR(32)  NOT NULL,              \n  target_table     VARCHAR(64)  NOT NULL,              \n  target_key       VARCHAR(128) NOT NULL,              \n  map_role         VARCHAR(32)  NOT NULL DEFAULT 'primary', \n  disposition      VARCHAR(20)  NOT NULL,              \n  batch_id         BIGINT UNSIGNED NOT NULL,\n  created_at       DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),\n  UNIQUE KEY uk_mig_object_map (source_system, source_table, source_pk, target_domain, target_table, map_role),\n  KEY idx_mig_object_map_target (target_domain, target_table, target_key),\n  CONSTRAINT fk_mig_object_map_batch FOREIGN KEY (batch_id) REFERENCES mig_batch(id)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;"
+    },
+    {
+      "Logical": "mig_identity_map",
+      "Physical": "mig_identity_map",
+      "Columns": [
+        "id",
+        "source_system",
+        "source_user_id",
+        "display_name",
+        "source_status",
+        "directory_uid",
+        "match_status",
+        "match_basis",
+        "directory_status",
+        "matched_by",
+        "matched_at"
+      ],
+      "DDL": "CREATE TABLE mig_identity_map (\n  id                BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,\n  source_system     VARCHAR(32) NOT NULL,\n  source_user_id    VARCHAR(64) NOT NULL,\n  display_name      VARCHAR(100) NOT NULL,              \n  source_status     VARCHAR(20) DEFAULT NULL,           \n  directory_uid     VARCHAR(64) DEFAULT NULL,\n  match_status      VARCHAR(20) NOT NULL,               \n  match_basis       VARCHAR(50) DEFAULT NULL,           \n  directory_status  VARCHAR(20) DEFAULT NULL,           \n  matched_by        VARCHAR(64) DEFAULT NULL, matched_at DATETIME(3) DEFAULT NULL,\n  UNIQUE KEY uk_mig_identity (source_system, source_user_id),\n  KEY idx_mig_identity_status (match_status)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;"
+    },
+    {
+      "Logical": "mig_exception",
+      "Physical": "mig_exception",
+      "Columns": [
+        "id",
+        "batch_id",
+        "owning_domain",
+        "kind",
+        "source_table",
+        "source_pk",
+        "target_table",
+        "target_key",
+        "detail_json",
+        "status",
+        "resolution_json",
+        "resolved_by",
+        "resolved_at",
+        "row_version",
+        "created_at"
+      ],
+      "DDL": "CREATE TABLE mig_exception (\n  id                BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,\n  batch_id          BIGINT UNSIGNED NOT NULL,\n  owning_domain     VARCHAR(32) NOT NULL,               \n  kind              VARCHAR(50) NOT NULL,               \n                                                        \n                                                        \n  source_table      VARCHAR(64) NOT NULL, source_pk VARCHAR(128) NOT NULL,\n  target_table      VARCHAR(64) DEFAULT NULL, target_key VARCHAR(128) DEFAULT NULL,\n  detail_json       JSON NOT NULL,                      \n  status            VARCHAR(20) NOT NULL DEFAULT 'open',\n  resolution_json   JSON DEFAULT NULL,\n  resolved_by       VARCHAR(64) DEFAULT NULL, resolved_at DATETIME(3) DEFAULT NULL,\n  row_version       INT UNSIGNED NOT NULL DEFAULT 1,\n  created_at        DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),\n  UNIQUE KEY uk_mig_exception (batch_id, kind, source_table, source_pk),\n  KEY idx_mig_exception_queue (owning_domain, status, kind, id),\n  CONSTRAINT fk_mig_exception_batch FOREIGN KEY (batch_id) REFERENCES mig_batch(id)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;"
+    }
+  ],
+  "w1-finance-legal-entity": [
+    {
+      "Logical": "finance_legal_entity",
+      "Physical": "finance_legal_entity",
+      "Columns": [
+        "id",
+        "code",
+        "name",
+        "short_name",
+        "unified_social_credit_code",
+        "entity_type",
+        "registered_address",
+        "invoice_title",
+        "invoice_tax_no",
+        "status",
+        "sort_no",
+        "remark",
+        "row_version",
+        "created_by",
+        "updated_by",
+        "created_at",
+        "updated_at"
+      ],
+      "DDL": "CREATE TABLE finance_legal_entity (\n  id                         BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,\n  code                       VARCHAR(64)  NOT NULL,          \n  name                       VARCHAR(200) NOT NULL,          \n  short_name                 VARCHAR(100) DEFAULT NULL,\n  unified_social_credit_code VARCHAR(50)  DEFAULT NULL,\n  entity_type                VARCHAR(30)  NOT NULL DEFAULT 'company', \n  registered_address         VARCHAR(500) DEFAULT NULL,\n  invoice_title              VARCHAR(200) DEFAULT NULL,      \n  invoice_tax_no             VARCHAR(50)  DEFAULT NULL,\n  status                     VARCHAR(20)  NOT NULL DEFAULT 'active', \n  sort_no                    INT NOT NULL DEFAULT 0,\n  remark                     VARCHAR(500) DEFAULT NULL,\n  row_version                INT UNSIGNED NOT NULL DEFAULT 1,\n  created_by VARCHAR(64) NULL, updated_by VARCHAR(64) NULL,\n  created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),\n  updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),\n  UNIQUE KEY uk_finance_legal_entity_code (code),\n  UNIQUE KEY uk_finance_legal_entity_name (name),\n  KEY idx_finance_legal_entity_status (status, sort_no)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;"
+    }
+  ],
+  "w1-finance-balance-entry": [
+    {
+      "Logical": "finance_account_balance_entry",
+      "Physical": "finance_account_balance_entry",
+      "Columns": [
+        "id",
+        "bank_account_id",
+        "balance_date",
+        "balance_amount",
+        "currency_code",
+        "entry_source",
+        "recorded_at",
+        "recorded_by",
+        "recorded_by_name",
+        "note",
+        "entry_ref",
+        "is_day_latest",
+        "created_at"
+      ],
+      "DDL": "CREATE TABLE finance_account_balance_entry (\n  id                 BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,\n  bank_account_id    BIGINT UNSIGNED NOT NULL,\n  balance_date       DATE NOT NULL,                       \n  balance_amount     DECIMAL(18,2) NOT NULL,\n  currency_code      CHAR(3) NOT NULL DEFAULT 'CNY',\n  entry_source       VARCHAR(30) NOT NULL,                \n  recorded_at        DATETIME(3) NOT NULL,                \n  recorded_by        VARCHAR(64) DEFAULT NULL,            \n  recorded_by_name   VARCHAR(100) DEFAULT NULL,           \n  note               VARCHAR(500) DEFAULT NULL,\n  entry_ref          BIGINT UNSIGNED NOT NULL,            \n  is_day_latest      TINYINT(1) NOT NULL DEFAULT 0,       \n  created_at         DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),\n  UNIQUE KEY uk_finance_balance_entry_ref (bank_account_id, balance_date, entry_source, entry_ref),\n  KEY idx_finance_balance_entry_account_date (bank_account_id, balance_date, recorded_at),\n  KEY idx_finance_balance_entry_latest (bank_account_id, balance_date, is_day_latest),\n  CONSTRAINT fk_finance_balance_entry_account FOREIGN KEY (bank_account_id) REFERENCES finance_bank_account(id)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;"
+    }
+  ],
+  "w1-altoc-contract-snapshot": [
+    {
+      "Logical": "altoc_contract_migration_snapshot",
+      "Physical": "altoc_contract_migration_snapshot",
+      "Columns": [
+        "contract_id",
+        "snapshot_at",
+        "remaining_uninvoiced_amount",
+        "remaining_settlement_amount",
+        "settlement_direction",
+        "source_note",
+        "batch_code"
+      ],
+      "DDL": "CREATE TABLE altoc_contract_migration_snapshot (\n  contract_id                  BIGINT UNSIGNED PRIMARY KEY,\n  snapshot_at                  DATETIME(3) NOT NULL,        \n  remaining_uninvoiced_amount  DECIMAL(18,2) DEFAULT NULL,  \n  remaining_settlement_amount  DECIMAL(18,2) DEFAULT NULL,  \n  settlement_direction         VARCHAR(20) NOT NULL,        \n  source_note                  VARCHAR(200) DEFAULT NULL,   \n  batch_code                   VARCHAR(64) NOT NULL,\n  CONSTRAINT fk_altoc_contract_migration_snapshot FOREIGN KEY (contract_id) REFERENCES altoc_contract(id)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;"
+    }
+  ],
+  "w1-altoc-customer-snapshot": [
+    {
+      "Logical": "altoc_customer_migration_snapshot",
+      "Physical": "altoc_customer_migration_snapshot",
+      "Columns": [
+        "customer_id",
+        "snapshot_at",
+        "contract_count_subtree",
+        "contract_amount_subtree",
+        "contract_count_direct",
+        "contract_amount_direct",
+        "contract_count_3y",
+        "contract_amount_3y",
+        "contract_count_1y",
+        "contract_amount_1y",
+        "contract_count_ytd",
+        "contract_amount_ytd",
+        "receivable_contract_count",
+        "receivable_amount_subtree",
+        "receivable_amount_direct",
+        "source_note",
+        "batch_code"
+      ],
+      "DDL": "CREATE TABLE altoc_customer_migration_snapshot (\n  customer_id                 BIGINT UNSIGNED PRIMARY KEY,\n  snapshot_at                 DATETIME(3) NOT NULL,\n  contract_count_subtree      INT DEFAULT NULL,  contract_amount_subtree     DECIMAL(18,2) DEFAULT NULL, \n  contract_count_direct       INT DEFAULT NULL,  contract_amount_direct      DECIMAL(18,2) DEFAULT NULL, \n  contract_count_3y           INT DEFAULT NULL,  contract_amount_3y          DECIMAL(18,2) DEFAULT NULL,\n  contract_count_1y           INT DEFAULT NULL,  contract_amount_1y          DECIMAL(18,2) DEFAULT NULL,\n  contract_count_ytd          INT DEFAULT NULL,  contract_amount_ytd         DECIMAL(18,2) DEFAULT NULL,\n  receivable_contract_count   INT DEFAULT NULL,                                                          \n  receivable_amount_subtree   DECIMAL(18,2) DEFAULT NULL,                                                \n  receivable_amount_direct    DECIMAL(18,2) DEFAULT NULL,                                                \n  source_note                 VARCHAR(300) DEFAULT NULL,\n  batch_code                  VARCHAR(64) NOT NULL,\n  CONSTRAINT fk_altoc_customer_migration_snapshot FOREIGN KEY (customer_id) REFERENCES altoc_customer(id)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;"
+    }
+  ]
+}

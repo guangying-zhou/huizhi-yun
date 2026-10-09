@@ -10,7 +10,6 @@ import { createApp, createRouter, defineEventHandler, toNodeListener } from 'h3'
 test('Enterprise Codocs cabinet delete uses the exact Runtime delete capability and no OSS', async () => {
   const root = resolve(import.meta.dirname, '../..')
   const calls = []
-  const preparations = []
   const session = { authenticated: true, tokenUse: 'access', subjectType: 'user', uid: 'person-a', tenant: 'tenant-a', deployment: 'enterprise-test' }
   let authorization = { resources: { documents: ['delete'] }, actionPolicies: {} }
   let transportMode = 'ok'
@@ -29,16 +28,26 @@ test('Enterprise Codocs cabinet delete uses the exact Runtime delete capability 
   const hooks = registerHooks({
     resolve(specifier, context, next) {
       let source
-      if (specifier.endsWith('/consoleSessionBridge')) source = `export const resolveConsoleAuthWithSessionBridge=async()=>globalThis.__codocsCabinetDeleteSession`
-      if (specifier.endsWith('/tenantGatewayTrust')) source = 'export const resolveTrustedTenantGatewayContext=()=>undefined'
-      if (specifier.endsWith('/tenantRuntimeClient')) source = `export const prepareTenantRuntime=async(...args)=>{const next=globalThis.__codocsCabinetDeletePrepareCount()+1;globalThis.__codocsCabinetDeletePrepareCount=()=>next;globalThis.__codocsCabinetDeleteCalls.push({kind:'prepare',args});return true};export const maybeCallTenantRuntime=async(...args)=>{const [event,path,options]=args;globalThis.__codocsCabinetDeleteCalls.push({kind:'runtime',event,path,options});if(globalThis.__codocsCabinetDeleteMode()!=='ok'&&globalThis.__codocsCabinetDeleteMode()!=='malformed'){const e=new Error('runtime secret');e.statusCode=Number(globalThis.__codocsCabinetDeleteMode());throw e}return {handled:true,data:globalThis.__codocsCabinetDeleteMode()==='malformed'?{success:true,data:{uuid:'other',deleted:false}}:{success:true,data:{uuid:options.body.code,deleted:true}}}}`
-      if (specifier.endsWith('/platformBundleAuthorization')) source = `export const loadAuthorizationSnapshotFromConsoleRuntime=async()=>globalThis.__codocsCabinetDeleteRevokeAfterPrepareCount()===globalThis.__codocsCabinetDeletePrepareCount()?{resources:{},actionPolicies:{}}:globalThis.__codocsCabinetDeleteAuthorization()`
-      if (specifier.endsWith('/objectStorage') || specifier.endsWith('/oss')) source = "export const createRuntimeOSSClient=()=>{throw Error('OSS must not be called')}"
-      if (source) return { url: `data:text/javascript,${encodeURIComponent(source)}`, shortCircuit: true }
+      if (specifier.endsWith('/consoleSessionBridge'))
+        source = `export const resolveConsoleAuthWithSessionBridge=async()=>globalThis.__codocsCabinetDeleteSession`
+      if (specifier.endsWith('/tenantGatewayTrust'))
+        source = 'export const resolveTrustedTenantGatewayContext=()=>undefined'
+      if (specifier.endsWith('/tenantRuntimeClient'))
+        source = `export const prepareTenantRuntime=async(...args)=>{const next=globalThis.__codocsCabinetDeletePrepareCount()+1;globalThis.__codocsCabinetDeletePrepareCount=()=>next;globalThis.__codocsCabinetDeleteCalls.push({kind:'prepare',args});return true};export const maybeCallTenantRuntime=async(...args)=>{const [event,path,options]=args;globalThis.__codocsCabinetDeleteCalls.push({kind:'runtime',event,path,options});if(globalThis.__codocsCabinetDeleteMode()!=='ok'&&globalThis.__codocsCabinetDeleteMode()!=='malformed'){const e=new Error('runtime secret');e.statusCode=Number(globalThis.__codocsCabinetDeleteMode());throw e}return {handled:true,data:globalThis.__codocsCabinetDeleteMode()==='malformed'?{success:true,data:{uuid:'other',deleted:false}}:{success:true,data:{uuid:options.body.code,deleted:true}}}}`
+      if (specifier.endsWith('/platformBundleAuthorization'))
+        source = `export const loadAuthorizationSnapshotFromConsoleRuntime=async()=>globalThis.__codocsCabinetDeleteRevokeAfterPrepareCount()===globalThis.__codocsCabinetDeletePrepareCount()?{resources:{},actionPolicies:{}}:globalThis.__codocsCabinetDeleteAuthorization()`
+      if (specifier.endsWith('/objectStorage') || specifier.endsWith('/oss'))
+        source = 'export const createRuntimeOSSClient=()=>{throw Error(\'OSS must not be called\')}'
+      if (source)
+        return { url: `data:text/javascript,${encodeURIComponent(source)}`, shortCircuit: true }
       let candidate
-      if (specifier.startsWith('@hzy/foundation/')) candidate = resolve(root, 'foundation', specifier.slice('@hzy/foundation/'.length))
-      else if (specifier.startsWith('.') && context.parentURL?.startsWith('file:')) candidate = resolve(dirname(fileURLToPath(context.parentURL)), specifier)
-      if (candidate && !existsSync(candidate) && existsSync(`${candidate}.ts`)) return { url: pathToFileURL(`${candidate}.ts`).href, shortCircuit: true }
+      if (specifier.startsWith('@hzy/foundation/'))
+        candidate = resolve(root, 'foundation', specifier.slice('@hzy/foundation/'.length))
+      else
+        if (specifier.startsWith('.') && context.parentURL?.startsWith('file:'))
+          candidate = resolve(dirname(fileURLToPath(context.parentURL)), specifier)
+      if (candidate && !existsSync(candidate) && existsSync(`${candidate}.ts`))
+        return { url: pathToFileURL(`${candidate}.ts`).href, shortCircuit: true }
       return next(specifier, context)
     }
   })
@@ -48,7 +57,9 @@ test('Enterprise Codocs cabinet delete uses the exact Runtime delete capability 
     const app = createApp()
     const router = createRouter()
     router.delete('/codocs/api/cabinet/:uuid', (await import('../server/routes/codocs/api/cabinet/[uuid].delete.ts')).default)
-    app.use(defineEventHandler(event => { event.context.consoleAuth = globalThis.__codocsCabinetDeleteSession }))
+    app.use(defineEventHandler((event) => {
+      event.context.consoleAuth = globalThis.__codocsCabinetDeleteSession
+    }))
     app.use(router)
     server = createServer(toNodeListener(app))
     await new Promise(done => server.listen(0, '127.0.0.1', done))
@@ -84,7 +95,8 @@ test('Enterprise Codocs cabinet delete uses the exact Runtime delete capability 
       ['/codocs/api/cabinet/file-1', {}],
       ['/codocs/api/cabinet/file-1', { 'Idempotency-Key': 'short' }],
       ['/codocs/api/cabinet/file-1', { 'Idempotency-Key': key }, { injected: true }]
-    ]) assert.equal((await request(url, headers, body)).status, 400)
+    ])
+      assert.equal((await request(url, headers, body)).status, 400)
     assert.equal(calls.length, beforeInvalid)
 
     for (const granted of ['view', 'edit']) {
@@ -115,11 +127,14 @@ test('Enterprise Codocs cabinet delete uses the exact Runtime delete capability 
     assert.equal((await request()).status, 401)
     assert.equal(calls.length, beforeUnauthenticated)
   } finally {
-    if (server) await new Promise(done => server.close(done))
+    if (server)
+      await new Promise(done => server.close(done))
     hooks.deregister()
     for (const [key, value] of Object.entries(old)) {
-      if (value === undefined) delete globalThis[key]
-      else globalThis[key] = value
+      if (value === undefined)
+        delete globalThis[key]
+      else
+        globalThis[key] = value
     }
   }
 })

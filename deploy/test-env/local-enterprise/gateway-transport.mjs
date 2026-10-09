@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url'
 import { buildForwardHeaders } from '../../cloudflare/tenant-gateway/src/index.js'
 import { resolveEnterprisePilotPath } from '../enterprise-topology.mjs'
 import { safeError, safeErrorHeaders, safeCorrelationId, wantsNavigationHtml, navigationErrorHtml } from './error-contract.mjs'
-import { consoleFacadeRoute, consoleAvatarFacadePath, allowedPublicFacadeToken } from './console-facade.mjs'
+import { consoleFacadeRoute, consoleAvatarFacadePath, allowedPublicFacadeToken, allowedConsoleSyncOrigin } from './console-facade.mjs'
 import { runtimeDialEndpoint } from './runtime-transport.mjs'
 import { readCollabClientSecret } from './collab-credentials.mjs'
 
@@ -46,6 +46,7 @@ export function createLocalEnterpriseGateway(profile, secret, facade, { collabTo
   const workflowLocal = profile.features?.workflowLocal === true
   const env = {
     HZY_CLOUDFLARE_INTERNAL_TOKEN: String(secret || '').trim(),
+    HZY_ENTERPRISE_ORIGIN: `http://${enterprise.host}:${enterprise.port}`,
     ...(workflowLocal ? {
       HZY_AIMS_ORIGIN: `http://127.0.0.1:${listeners.aims.port}`,
       HZY_WORKFLOW_ORIGIN: `http://127.0.0.1:${listeners.workflow.port}`
@@ -110,6 +111,7 @@ export function createLocalEnterpriseGateway(profile, secret, facade, { collabTo
         response.end()
         return
       }
+      if (!allowedConsoleSyncOrigin(requestUrl.pathname, request.method, new Headers(sanitizedRequestHeaders(request.headers)))) return reply(response, 403)
       let facadeTokenBody
       if (facade && requestUrl.pathname === '/console/oauth/token') {
         facadeTokenBody = ''
@@ -195,7 +197,7 @@ export function createLocalEnterpriseGateway(profile, secret, facade, { collabTo
 
   async function proxyCollabServiceToken(request, response) {
     const noStore = { 'content-type': 'application/json', 'cache-control': 'no-store' }
-    const fail = status => { response.writeHead(status, noStore); response.end(JSON.stringify({ statusCode: status })) }
+    const fail = (status, code) => { response.writeHead(status, noStore); response.end(JSON.stringify({ statusCode: status, ...(code ? { code } : {}) })) }
     const address = request.socket.remoteAddress
     const port = server.address()?.port
     if (request.url !== '/__hzy0/collab-token' || request.method !== 'POST'
@@ -235,7 +237,19 @@ export function createLocalEnterpriseGateway(profile, secret, facade, { collabTo
       const upstream = await collabTokenFetch('http://127.0.0.1:23100/console/oauth/token', {
         method: 'POST', headers, body, redirect: 'error', signal: AbortSignal.timeout(15_000)
       })
-      if (!upstream.ok) return fail([400, 401, 403, 429, 503].includes(upstream.status) ? upstream.status : 503)
+      if (!upstream.ok) {
+        // Preserve only a constrained machine code, never messages, paths or tokens.
+        const raw = await upstream.text()
+        let code
+        if (raw.length <= 32_768) {
+          try {
+            const error = JSON.parse(raw)
+            const candidate = error?.data?.error?.code || error?.error?.code || error?.code || error?.statusMessage
+            if (typeof candidate === 'string' && /^(?:(?:oidc|console|service|hzy0)_[a-z_]{1,80}|invalid_client|insufficient_scope)$/.test(candidate)) code = candidate
+          } catch { /* Invalid dependency responses remain status-only. */ }
+        }
+        return fail([400, 401, 403, 429, 503].includes(upstream.status) ? upstream.status : 503, code)
+      }
       const raw = await upstream.text()
       if (raw.length > 32_768) return fail(502)
       const token = JSON.parse(raw)

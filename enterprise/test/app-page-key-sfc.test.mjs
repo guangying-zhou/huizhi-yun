@@ -23,6 +23,7 @@ test('compiled Host keeps pageKey callback stable while route and verified scope
   const scope = ref('verified-a')
   const route = ref({ path: '/aims/projects', query: {} })
   globalThis.useState = () => scope
+  globalThis.useRouter = () => ({ currentRoute: route })
   globalThis.useRoute = () => route.value
   globalThis.computed = computed
   globalThis.inject = inject
@@ -75,6 +76,7 @@ test('compiled Host keeps pageKey callback stable while route and verified scope
   } finally {
     app.unmount()
     delete globalThis.useState
+    delete globalThis.useRouter
     delete globalThis.useRoute
     delete globalThis.computed
     delete globalThis.inject

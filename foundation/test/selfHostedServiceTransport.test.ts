@@ -213,8 +213,8 @@ describe('self-hosted loopback service transport', () => {
       globals.$fetch = originalFetch
       await new Promise<void>(resolve => tokenServer.close(() => resolve()))
     }
-    const call = seen.find(item => item.url === '/oauth/token')
-    assert.ok(call, 'token request dialed the local Console /oauth/token')
+    const call = seen.find(item => item.url === '/console/oauth/token')
+    assert.ok(call, 'token request dialed the local Console /console/oauth/token')
     assert.equal(call.headers['x-hzy-gateway-token'], 'gateway-fixture')
     assert.equal(call.headers['x-hzy-app-code'], 'enterprise', 'source_app identity is the caller')
     assert.equal(call.headers['x-hzy-deployment'], 'T1-enterprise')

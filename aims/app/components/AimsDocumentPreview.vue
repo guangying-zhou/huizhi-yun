@@ -15,6 +15,7 @@ const props = defineProps<{
   source: DocumentSource
   codocsUuid?: string | null
   projectId?: number | null
+  projectDocumentId?: number | null
   repoProjectCode?: string | null
   repoFilePath?: string | null
   repoCommitId?: string | null
@@ -90,6 +91,7 @@ async function loadRepo() {
   try {
     const data = await fetchRepoDocContent(props.repoProjectCode, props.repoFilePath, {
       commitId: props.repoCommitId || undefined,
+      documentId: props.projectDocumentId || undefined,
       aimsProjectId: props.projectId
     }, moduleUrl)
     if (data) {

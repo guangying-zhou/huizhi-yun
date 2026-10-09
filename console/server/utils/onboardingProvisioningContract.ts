@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto'
 import { createError } from 'h3'
+import type { DirectoryCommandSource } from './directoryLifecycleReliable'
 
 type Row = Record<string, unknown>
 type OnboardingKind = 'identity-reserve' | 'identity-release' | 'user-provision' | 'operation-status' | 'activation-link'
@@ -54,7 +55,7 @@ export function onboardingContractFor(kind: OnboardingKind) {
 // parseOnboardingProvisioningCommand 校验命令身份与哈希。任何一项不符都返回 409：
 // 调用方送来的信封与它自己声明的哈希不一致时，重放语义已经不可信，
 // 继续执行会让同一个幂等键对应两份不同的业务意图。
-export function parseOnboardingProvisioningCommand(raw: unknown, kind: OnboardingKind) {
+export function parseOnboardingProvisioningCommand(raw: unknown, kind: OnboardingKind, source: DirectoryCommandSource = 'people') {
   const envelope = record(record(raw).serviceCommand)
   const command = record(envelope.command)
   const contract = contracts[kind]
@@ -62,7 +63,7 @@ export function parseOnboardingProvisioningCommand(raw: unknown, kind: Onboardin
     || kind === 'user-provision'
     || kind === 'activation-link'
 
-  const invalid = text(envelope.sourceApp) !== 'people'
+  const invalid = text(envelope.sourceApp) !== source
     || text(envelope.targetApp) !== 'console'
     || !text(envelope.sourceDeployment)
     || !text(envelope.targetDeployment)
@@ -72,7 +73,7 @@ export function parseOnboardingProvisioningCommand(raw: unknown, kind: Onboardin
     || !text(envelope.operationId)
     || !text(envelope.idempotencyKey)
     || !text(command.onboardingCode)
-    || text(command.sourceApp) !== 'people'
+    || text(command.sourceApp) !== source
     || text(command.sourceBizCode) !== text(command.onboardingCode)
     || !text(command.uid)
     || !text(command.actorUid)

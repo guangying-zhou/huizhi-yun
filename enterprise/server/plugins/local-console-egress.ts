@@ -1,10 +1,10 @@
 import { resolveTrustedTenantGatewayContext } from '@hzy/foundation/server/utils/tenantGatewayTrust'
 
-export default defineNitroPlugin(nitro => {
+export default defineNitroPlugin((nitro) => {
   if (process.env.HZY0_LOCAL_ENTERPRISE !== 'true' || !process.env.HZY0_CONSOLE_EGRESS_URL) return
   const endpoint = new URL(process.env.HZY0_CONSOLE_EGRESS_URL)
   if (endpoint.origin !== 'http://127.0.0.1:23121' || endpoint.username || endpoint.password || endpoint.pathname !== '/' || endpoint.search || endpoint.hash) throw Error('Invalid local Console egress')
-  nitro.hooks.hook('request', event => {
+  nitro.hooks.hook('request', (event) => {
     const context = resolveTrustedTenantGatewayContext(event)
     if (!context || context.tenant !== 'C000001' || context.environment !== 'test'
       || context.appCode !== 'enterprise' || context.deployment !== 'C000001-test-enterprise') return

@@ -5,6 +5,7 @@ package enterprisescheduler
 import (
 	"context"
 	"github.com/huizhi-yun/data-runtime/internal/enterprise"
+	"github.com/huizhi-yun/data-runtime/internal/httperror"
 	"github.com/huizhi-yun/data-runtime/internal/integrationoperation"
 	"time"
 )
@@ -69,6 +70,15 @@ func (s *Service) Claim(ctx context.Context, identity enterprise.SchedulerIdenti
 	}
 	if err != nil {
 		return nil, err
+	}
+	if out != nil && s.source.WorkerClient() == "enterprise.runtime" {
+		switch out.Identity.OperationCode {
+		case "aims.work-item.completion.workflow-submit.v1", "aims.codocs.product-document.create.v1", "aims.company-weekly-summary.codocs-publish.v1":
+		default:
+			// Roll back both claim and attempt. Retired backlog must close under the old
+			// original-key executor before the physical owner changes.
+			return nil, httperror.New(409, "aims_retired_operation_requires_closeout", "旧命令须先按原键收尾")
+		}
 	}
 	if err = tx.Commit(); err != nil {
 		return nil, err

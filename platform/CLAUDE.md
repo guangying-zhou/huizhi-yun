@@ -22,6 +22,8 @@ Does not own:
 
 Do not add `extends: ['../foundation']` here. The direction is business apps/Foundation consuming platform SDK or adapter capabilities, not Platform consuming Foundation.
 
+Audit-address exception: `server/utils/trustedClientAddress.ts` re-exports only Foundation's independent trusted-client-address utility, as required by the audit IP hardening task. It adds no Nuxt Layer, business client or runtime configuration dependency.
+
 ## Commands
 
 People 生命周期授权只经 Console-owned `console.platform.employment-sync.v1` / `console.platform.offboarding-revoke.v1` 进入 internal API。Platform 必须验证固定 Console principal、tenant/deployment 绑定与完整 HMAC envelope，并在 authorization mutation 同一事务推进 employee revision watermark、写 succeeded receipt；不得信任 body tenant 或 actor，低 revision 必须零 mutation stale-skip。

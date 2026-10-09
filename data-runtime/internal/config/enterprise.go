@@ -8,11 +8,18 @@ import (
 	"time"
 
 	"github.com/huizhi-yun/data-runtime/internal/enterprise"
+	"github.com/huizhi-yun/data-runtime/internal/enterprise/domaininstall/migrationnamespace"
 )
 
 // EnterpriseConfig is read only from the local Runtime configuration. There is
 // deliberately no HTTP, environment DSN, or control-plane credential overlay.
+type EnterpriseDueOwner struct {
+	Enabled             bool `json:"enabled"`
+	LegacyOwnerDisabled bool `json:"legacyOwnerDisabled"`
+}
 type EnterpriseConfig struct {
+	DeadLetterNotifications map[string]EnterpriseDueOwner `json:"deadLetterNotifications"`
+	DueNotifications        map[string]EnterpriseDueOwner `json:"dueNotifications"`
 	// Legacy windows default true in Load; only source mismatch may select the legacy lane.
 	AllowLegacyNotificationDetails bool                               `json:"allowLegacyNotificationDetails"`
 	AllowLegacyAimsCallbacks       bool                               `json:"allowLegacyAimsCallbacks"`
@@ -53,9 +60,22 @@ func (c Config) EnterpriseBinding() (enterprise.Binding, error) {
 	b := enterprise.Binding{Key: enterprise.BindingKey{Tenant: c.Tenant, Environment: e.Environment, RuntimeDeployment: c.Deployment}, Storage: enterprise.Storage{InstanceID: e.InstanceID, Address: net.JoinHostPort(e.DB.Host, strconv.Itoa(e.DB.Port)), Database: e.DB.Database}, SchemaVersion: e.SchemaVersion, Generation: e.Generation, Domains: make(map[string]enterprise.DomainBinding)}
 	for domain, d := range e.Domains {
 		switch domain {
-		case "aims", "assets", "altoc", "finance", "people", "align", "insights", "workflow":
+		case "aims", "assets", "altoc", "finance", "people", "align", "insights", "workflow", "migration":
 		default:
 			return enterprise.Binding{}, ErrEnterpriseConfig
+		}
+		if domain == "migration" {
+			// W1 ledger is a closed, tool-only namespace. It cannot become a
+			// business write/scheduler domain through runtime configuration.
+			names := migrationnamespace.Tables()
+			if d.OwnerDeployment != c.DeploymentBindings["enterprise"] || d.Read != enterprise.PathUnified || d.Write != enterprise.PathDisabled || d.Scheduler != enterprise.PathDisabled || len(d.Tables) != len(names) {
+				return enterprise.Binding{}, ErrEnterpriseConfig
+			}
+			for _, name := range names {
+				if d.Tables[name] != name {
+					return enterprise.Binding{}, ErrEnterpriseConfig
+				}
+			}
 		}
 		if domain == "workflow" {
 			if _, old := d.Tables["system_parameters"]; old {
@@ -96,7 +116,7 @@ func (c Config) EnterpriseAimsOutboundSource(registry *enterprise.Registry, bind
 	if worker == nil {
 		return nil, nil
 	}
-	if binding.Key != (enterprise.BindingKey{Tenant: c.Tenant, Environment: c.Enterprise.Environment, RuntimeDeployment: c.Deployment}) || binding.SchemaVersion != c.Enterprise.SchemaVersion || binding.Generation != c.Enterprise.Generation || !c.Enterprise.Enabled || registry == nil || worker.Deployment == "" || strings.TrimSpace(worker.Deployment) != worker.Deployment || worker.Deployment != c.DeploymentBindings["aims"] || worker.ServiceClientID != "aims.runtime" {
+	if binding.Key != (enterprise.BindingKey{Tenant: c.Tenant, Environment: c.Enterprise.Environment, RuntimeDeployment: c.Deployment}) || binding.SchemaVersion != c.Enterprise.SchemaVersion || binding.Generation != c.Enterprise.Generation || !c.Enterprise.Enabled || registry == nil || worker.Deployment == "" || strings.TrimSpace(worker.Deployment) != worker.Deployment || !((worker.ServiceClientID == "aims.runtime" && worker.Deployment == c.DeploymentBindings["aims"]) || (worker.ServiceClientID == "enterprise.runtime" && worker.Deployment == c.DeploymentBindings["enterprise"])) {
 		return nil, ErrEnterpriseConfig
 	}
 	d, ok := binding.Domains["aims"]

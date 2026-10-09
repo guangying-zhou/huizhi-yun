@@ -163,3 +163,19 @@ func TestWorkflowCannotCancelConfirmedPerformanceCycle(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+// Routing an unknown People tuple back to People is not a successful callback:
+// the owning receiver must reject it before any database write or receipt.
+func TestUnknownPeopleWorkflowCallbackFailsClosed(t *testing.T) {
+	adapter, mock, closeDB := newPeopleSQLMockAdapter(t)
+	defer closeDB()
+	result, err := adapter.workflowCallback(context.Background(), map[string]any{"biz_type": "unknown", "biz_id": "UNKNOWN-1", "status": "approved", "workflow_instance_id": "WF-1"})
+	var httpErr httperror.Error
+	if !errors.As(err, &httpErr) || httpErr.Status != http.StatusBadRequest || httpErr.Code != "unsupported_workflow_biz_type" || result != nil {
+		t.Fatalf("unknown callback must fail closed: result=%#v error=%#v", result, err)
+	}
+	// No SQL expectation: any transaction/query/write would be unexpected.
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}

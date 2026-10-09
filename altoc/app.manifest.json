@@ -57,14 +57,14 @@
       "code": "contract",
       "name": "合同管理",
       "description": "合同主数据、里程碑、履约状态和合同文档",
-      "actions": ["view", "edit", "approve", "activate-delivery", "finance-summary:sync", "admin"],
+      "actions": ["view", "edit", "approve", "close", "activate-delivery", "finance-summary:sync", "admin"],
       "sortOrder": 50
     },
     {
       "code": "receivable",
       "name": "回款管理",
       "description": "回款计划、回款确认、逾期扫描与发票登记",
-      "actions": ["view", "edit", "confirm", "mark-billable", "admin"],
+      "actions": ["view", "edit", "confirm", "mark-billable", "assign", "set-due-date", "followup", "admin"],
       "sortOrder": 60
     },
     {
@@ -85,7 +85,7 @@
       "code": "service_ticket",
       "name": "服务工单",
       "description": "报障、咨询、需求、变更工单入口和跨模块处理引用",
-      "actions": ["view", "edit", "close", "delivery-result:sync", "admin"],
+      "actions": ["view", "edit", "close", "reopen", "delivery-result:sync", "admin"],
       "sortOrder": 72
     },
     {
@@ -129,6 +129,13 @@
       "description": "经营模块系统管理、团队和字段配置",
       "actions": ["view", "edit", "admin"],
       "sortOrder": 100
+    },
+    {
+      "code": "migration_exceptions",
+      "name": "迁移事项",
+      "description": "历史数据迁移后需要人工处理的遗留事项与人员匹配",
+      "actions": ["view", "resolve"],
+      "sortOrder": 110
     }
   ],
   "recommendedRoles": [
@@ -181,7 +188,8 @@
         "altoc:service_entitlement:edit",
         "altoc:service_ticket:edit",
         "altoc:service_ticket:close",
-        "altoc:renewal_opportunity:edit"
+        "altoc:renewal_opportunity:edit",
+        "altoc:service_ticket:reopen"
       ]
     },
     {
@@ -195,7 +203,11 @@
         "altoc:receivable:confirm",
         "altoc:maintenance_contract:edit",
         "altoc:renewal_opportunity:view",
-        "altoc:dashboard:export"
+        "altoc:dashboard:export",
+        "altoc:contract:activate-delivery",
+        "altoc:receivable:assign",
+        "altoc:receivable:set-due-date",
+        "altoc:receivable:followup"
       ]
     },
     {
@@ -219,12 +231,11 @@
     {
       "code": "altoc:admin",
       "name": "经营管理员",
-      "description": "管理经营模块全部配置与历史数据",
+      "description": "维护经营配置和业务数据，显式执行经营动作；审批由独立审批角色承接，不授予服务回写动作",
       "suggestedPermissions": [
         "altoc:dashboard:view",
         "altoc:dashboard:export",
         "altoc:customer:admin",
-        "altoc:customer:approve",
         "altoc:lead:admin",
         "altoc:lead:assign",
         "altoc:lead:disqualify",
@@ -235,32 +246,27 @@
         "altoc:opportunity:transition",
         "altoc:opportunity:activity",
         "altoc:quotation:admin",
-        "altoc:quotation:approve",
-        "altoc:contract:admin",
-        "altoc:contract:approve",
-        "altoc:contract:finance-summary:sync",
+        "altoc:contract:admin", "altoc:contract:close", "altoc:migration_exceptions:view", "altoc:migration_exceptions:resolve",
         "altoc:receivable:admin",
         "altoc:receivable:confirm",
-        "altoc:receivable:mark-billable",
         "altoc:maintenance_contract:admin",
         "altoc:service_entitlement:admin",
         "altoc:service_ticket:admin",
         "altoc:service_ticket:close",
-        "altoc:service_ticket:delivery-result:sync",
         "altoc:renewal_opportunity:admin",
         "altoc:settings:admin",
         "altoc:integration_operations:view",
         "altoc:integration_operations:replay",
-        "altoc:admin:admin"
+        "altoc:admin:admin",
+        "altoc:contract:activate-delivery",
+        "altoc:service_ticket:reopen",
+        "altoc:receivable:assign",
+        "altoc:receivable:set-due-date",
+        "altoc:receivable:followup"
       ]
     }
   ],
-  "supportedScopes": [
-    "tenant:global",
-    "department:tree",
-    "subject:self",
-    "subject:owner"
-  ],
+  "supportedScopes": ["tenant:global", "department:tree", "subject:self", "subject:owner"],
   "capabilitiesRequired": [
     "platform:app-registry"
   ],
@@ -279,9 +285,31 @@
       "/altoc/opportunities",
       "/altoc/opportunities/:opportunityId",
       "/altoc/quotes",
-      "/altoc/quotes/:quotationId"
+      "/altoc/quotes/:quotationId",
+      "/altoc/tenders",
+      "/altoc/tenders/new",
+      "/altoc/tenders/:tenderId",
+      "/altoc/service-agreements",
+      "/altoc/service-agreements/new",
+      "/altoc/service-agreements/:agreementId",
+      "/altoc/service-tickets",
+      "/altoc/service-tickets/new",
+      "/altoc/service-tickets/:ticketId",
+      "/altoc/renewals",
+      "/altoc/renewals/new",
+      "/altoc/renewals/:renewalId",
+      "/altoc/migration"
     ],
     "entries": [
+      {
+        "id": "altoc.sales.migration",
+        "label": "迁移事项",
+        "to": "/altoc/migration",
+        "area": "sales",
+        "group": "customer",
+        "order": 90,
+        "access": { "kind": "permission", "resource": "migration_exceptions", "action": "view" }
+      },
       {
         "id": "altoc.sales.customers",
         "label": "客户",
@@ -310,7 +338,7 @@
       },
       {
         "id": "altoc.sales.payments",
-        "label": "回款计划",
+        "label": "收款与结算",
         "to": "/altoc/payments",
         "area": "sales",
         "group": "settlement",
@@ -357,6 +385,58 @@
         "access": {
           "kind": "permission",
           "resource": "quotation",
+          "action": "view"
+        }
+      },
+      {
+        "id": "altoc.sales.tenders",
+        "label": "投标",
+        "to": "/altoc/tenders",
+        "area": "sales",
+        "group": "opportunity",
+        "order": 30,
+        "access": {
+          "kind": "permission",
+          "resource": "opportunity",
+          "action": "view"
+        }
+      },
+      {
+        "id": "altoc.service.tickets",
+        "label": "服务工单",
+        "to": "/altoc/service-tickets",
+        "area": "delivery",
+        "group": "service",
+        "order": 20,
+        "access": {
+          "kind": "permission",
+          "resource": "service_ticket",
+          "action": "view"
+        }
+      },
+      {
+        "id": "altoc.service.agreements",
+        "label": "服务协议",
+        "to": "/altoc/service-agreements",
+        "area": "delivery",
+        "group": "service",
+        "order": 10,
+        "access": {
+          "kind": "permission",
+          "resource": "contract",
+          "action": "view"
+        }
+      },
+      {
+        "id": "altoc.service.renewals",
+        "label": "续约记录",
+        "to": "/altoc/renewals",
+        "area": "delivery",
+        "group": "service",
+        "order": 30,
+        "access": {
+          "kind": "permission",
+          "resource": "renewal_opportunity",
           "action": "view"
         }
       }

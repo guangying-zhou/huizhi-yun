@@ -43,27 +43,33 @@ test('Enterprise Codocs cabinet conversion uses real DOCX conversion and fresh a
   globalThis.__convertOss = async (options) => {
     ossCalls.push({ method: 'client', options })
     return {
-      get: async path => {
+      get: async (path) => {
         ossCalls.push({ method: 'get', path })
         timeline.push({ kind: 'get', path })
-        if (mode === 'storage404') throw Object.assign(new Error('NoSuchKey'), { code: 'NoSuchKey', statusCode: 404 })
-        if (mode === 'storage503') throw Object.assign(new Error('secret storage'), { statusCode: 503 })
-        if (mode === 'invalid-docx') return { content: Buffer.from('not a docx') }
+        if (mode === 'storage404')
+          throw Object.assign(new Error('NoSuchKey'), { code: 'NoSuchKey', statusCode: 404 })
+        if (mode === 'storage503')
+          throw Object.assign(new Error('secret storage'), { statusCode: 503 })
+        if (mode === 'invalid-docx')
+          return { content: Buffer.from('not a docx') }
         return { content: docx }
       },
-      head: async path => {
+      head: async (path) => {
         ossCalls.push({ method: 'head', path })
         timeline.push({ kind: 'head', path })
-        if (!objects.has(path)) throw Object.assign(new Error('NoSuchKey'), { code: 'NoSuchKey', statusCode: 404 })
+        if (!objects.has(path))
+          throw Object.assign(new Error('NoSuchKey'), { code: 'NoSuchKey', statusCode: 404 })
         const object = objects.get(path)
         return { meta: { 'hzy-content-sha256': object.sha }, res: { headers: { 'content-length': String(object.bytes.length) } } }
       },
       put: async (path, bytes, putOptions) => {
         ossCalls.push({ method: 'put', path, bytes, options: putOptions })
         timeline.push({ kind: 'put', path, bytes, options: putOptions })
-        if (mode === 'put-fails') throw Object.assign(new Error('secret storage'), { statusCode: 503 })
+        if (mode === 'put-fails')
+          throw Object.assign(new Error('secret storage'), { statusCode: 503 })
         if (mode === 'put-409' || mode === 'put-412') {
-          if (conditionalWinner) objects.set(path, { bytes: conditionalWinner === 'bad-size' ? Buffer.from('wrong length') : Buffer.from(bytes), sha: conditionalWinner === 'bad-hash' ? 'f'.repeat(64) : putOptions.meta['hzy-content-sha256'] })
+          if (conditionalWinner)
+            objects.set(path, { bytes: conditionalWinner === 'bad-size' ? Buffer.from('wrong length') : Buffer.from(bytes), sha: conditionalWinner === 'bad-hash' ? 'f'.repeat(64) : putOptions.meta['hzy-content-sha256'] })
           const error = new Error('already exists')
           error.statusCode = Number(mode.slice(4))
           throw error
@@ -77,16 +83,26 @@ test('Enterprise Codocs cabinet conversion uses real DOCX conversion and fresh a
   const hooks = registerHooks({
     resolve(specifier, context, next) {
       let source
-      if (specifier.endsWith('/consoleSessionBridge')) source = 'export const resolveConsoleAuthWithSessionBridge=async()=>globalThis.__convertSession'
-      if (specifier.endsWith('/tenantGatewayTrust')) source = 'export const resolveTrustedTenantGatewayContext=()=>undefined'
-      if (specifier.endsWith('/platformBundleAuthorization')) source = 'export const loadAuthorizationSnapshotFromConsoleRuntime=async()=>globalThis.__convertRevokeAfter===globalThis.__convertPrepareCount?{resources:{},actionPolicies:{}}:globalThis.__convertAuth()'
-      if (specifier.endsWith('/tenantRuntimeClient')) source = `export const prepareTenantRuntime=async(...args)=>{globalThis.__convertPrepareCount++;globalThis.__convertCalls.push({kind:'prepare',event:args[0],options:args[1]});globalThis.__convertTimeline.push({kind:'prepare'});return true};export const maybeCallTenantRuntime=async(...args)=>{const [event,path,options]=args;globalThis.__convertCalls.push({kind:'runtime',event,path,options});globalThis.__convertTimeline.push({kind:'runtime',path});const current=globalThis.__convertMode();if(['401','403'].includes(current)||(current==='commit-fail'&&path.endsWith('personal-cabinet:convert'))){const e=new Error('runtime failure');e.statusCode=Number(current==='commit-fail'?503:current);throw e}const payload=options.body.payload||{};const plan={uuid:'11111111-1111-4111-8111-111111111111',owner_uid:'person-a',title:options.body.payload?.title||'Converted',folder_id:options.body.payload?.folder_id??null,source_uuid:options.body.code,source_path:'codocs/users/person-a/cabinet/source.docx',source_ext:'docx',source_size:globalThis.__convertSourceSize(),source_state:'a'.repeat(64),target_prefix:'codocs/cabinet-conversions/11111111-1111-4111-8111-111111111111/'+'a'.repeat(64)+'/',replayed:false};if(current==='replay')return {handled:true,data:{success:true,data:{...plan,replayed:true,oss_path:plan.target_prefix+plan.source_state+'/'+ 'b'.repeat(64)+'.md'}}};if(current==='bad-owner')plan.owner_uid='person-b';if(current==='bad-state')plan.source_state='bad';if(current==='bad-prefix')plan.target_prefix='codocs/unsafe/';if(current==='bad-plan')plan.source_path='codocs/../unsafe';if(path.endsWith('conversion-plan')){if(current==='revoke-after-plan')globalThis.__convertRevokeAfter=globalThis.__convertPrepareCount+1;return {handled:true,data:{success:true,data:plan}}}const committed={...plan,oss_path:plan.target_prefix+plan.source_state+'/'+(payload.content_sha256||'b'.repeat(64))+'.md'};if(current==='bad-commit-path')committed.oss_path='codocs/../unsafe';return {handled:true,data:{success:true,data:committed}}}`
-      if (specifier.endsWith('/oss')) source = 'export const createRuntimeOSSClient=async options=>globalThis.__convertOss(options)'
-      if (source) return { url: `data:text/javascript,${encodeURIComponent(source)}`, shortCircuit: true }
+      if (specifier.endsWith('/consoleSessionBridge'))
+        source = 'export const resolveConsoleAuthWithSessionBridge=async()=>globalThis.__convertSession'
+      if (specifier.endsWith('/tenantGatewayTrust'))
+        source = 'export const resolveTrustedTenantGatewayContext=()=>undefined'
+      if (specifier.endsWith('/platformBundleAuthorization'))
+        source = 'export const loadAuthorizationSnapshotFromConsoleRuntime=async()=>globalThis.__convertRevokeAfter===globalThis.__convertPrepareCount?{resources:{},actionPolicies:{}}:globalThis.__convertAuth()'
+      if (specifier.endsWith('/tenantRuntimeClient'))
+        source = `export const prepareTenantRuntime=async(...args)=>{globalThis.__convertPrepareCount++;globalThis.__convertCalls.push({kind:'prepare',event:args[0],options:args[1]});globalThis.__convertTimeline.push({kind:'prepare'});return true};export const maybeCallTenantRuntime=async(...args)=>{const [event,path,options]=args;globalThis.__convertCalls.push({kind:'runtime',event,path,options});globalThis.__convertTimeline.push({kind:'runtime',path});const current=globalThis.__convertMode();if(['401','403'].includes(current)||(current==='commit-fail'&&path.endsWith('personal-cabinet:convert'))){const e=new Error('runtime failure');e.statusCode=Number(current==='commit-fail'?503:current);throw e}const payload=options.body.payload||{};const plan={uuid:'11111111-1111-4111-8111-111111111111',owner_uid:'person-a',title:options.body.payload?.title||'Converted',folder_id:options.body.payload?.folder_id??null,source_uuid:options.body.code,source_path:'codocs/users/person-a/cabinet/source.docx',source_ext:'docx',source_size:globalThis.__convertSourceSize(),source_state:'a'.repeat(64),target_prefix:'codocs/cabinet-conversions/11111111-1111-4111-8111-111111111111/'+'a'.repeat(64)+'/',replayed:false};if(current==='replay')return {handled:true,data:{success:true,data:{...plan,replayed:true,oss_path:plan.target_prefix+plan.source_state+'/'+ 'b'.repeat(64)+'.md'}}};if(current==='bad-owner')plan.owner_uid='person-b';if(current==='bad-state')plan.source_state='bad';if(current==='bad-prefix')plan.target_prefix='codocs/unsafe/';if(current==='bad-plan')plan.source_path='codocs/../unsafe';if(path.endsWith('conversion-plan')){if(current==='revoke-after-plan')globalThis.__convertRevokeAfter=globalThis.__convertPrepareCount+1;return {handled:true,data:{success:true,data:plan}}}const committed={...plan,oss_path:plan.target_prefix+plan.source_state+'/'+(payload.content_sha256||'b'.repeat(64))+'.md'};if(current==='bad-commit-path')committed.oss_path='codocs/../unsafe';return {handled:true,data:{success:true,data:committed}}}`
+      if (specifier.endsWith('/oss'))
+        source = 'export const createRuntimeOSSClient=async options=>globalThis.__convertOss(options)'
+      if (source)
+        return { url: `data:text/javascript,${encodeURIComponent(source)}`, shortCircuit: true }
       let candidate
-      if (specifier.startsWith('@hzy/foundation/')) candidate = resolve(root, 'foundation', specifier.slice('@hzy/foundation/'.length))
-      else if (specifier.startsWith('.') && context.parentURL?.startsWith('file:')) candidate = resolve(dirname(fileURLToPath(context.parentURL)), specifier)
-      if (candidate && !existsSync(candidate) && existsSync(`${candidate}.ts`)) return { url: pathToFileURL(`${candidate}.ts`).href, shortCircuit: true }
+      if (specifier.startsWith('@hzy/foundation/'))
+        candidate = resolve(root, 'foundation', specifier.slice('@hzy/foundation/'.length))
+      else
+        if (specifier.startsWith('.') && context.parentURL?.startsWith('file:'))
+          candidate = resolve(dirname(fileURLToPath(context.parentURL)), specifier)
+      if (candidate && !existsSync(candidate) && existsSync(`${candidate}.ts`))
+        return { url: pathToFileURL(`${candidate}.ts`).href, shortCircuit: true }
       return next(specifier, context)
     }
   })
@@ -96,7 +112,9 @@ test('Enterprise Codocs cabinet conversion uses real DOCX conversion and fresh a
     const app = createApp()
     const router = createRouter()
     router.post('/codocs/api/cabinet/:uuid/to-document', (await import('../server/routes/codocs/api/cabinet/[uuid]/to-document.post.ts')).default)
-    app.use(defineEventHandler(event => { event.context.consoleAuth = globalThis.__convertSession }))
+    app.use(defineEventHandler((event) => {
+      event.context.consoleAuth = globalThis.__convertSession
+    }))
     app.use(router)
     server = createServer(toNodeListener(app))
     await new Promise(done => server.listen(0, '127.0.0.1', done))
@@ -253,7 +271,10 @@ test('Enterprise Codocs cabinet conversion uses real DOCX conversion and fresh a
     assert.equal(calls.filter(call => call.kind === 'runtime' && call.path.endsWith('personal-cabinet:convert')).length, beforeRevokeCommit)
     mode = 'ok'
     globalThis.__convertRevokeAfter = null
-    for (const code of [401, 403]) { mode = String(code); assert.equal((await request('/codocs/api/cabinet/source-1/to-document', `status-${code}-key`)).status, code) }
+    for (const code of [401, 403]) {
+      mode = String(code)
+      assert.equal((await request('/codocs/api/cabinet/source-1/to-document', `status-${code}-key`)).status, code)
+    }
     mode = 'ok'
     assert.equal((await request('/codocs/api/cabinet/source-1/to-document?x=1', 'query-key')).status, 400)
     assert.equal((await request('/codocs/api/cabinet/source-1/to-document', 'short')).status, 400)
@@ -261,11 +282,14 @@ test('Enterprise Codocs cabinet conversion uses real DOCX conversion and fresh a
     globalThis.__convertSession = { ...session, authenticated: false }
     assert.equal((await request('/codocs/api/cabinet/source-1/to-document', 'unauth-key')).status, 401)
   } finally {
-    if (server) await new Promise(done => server.close(done))
+    if (server)
+      await new Promise(done => server.close(done))
     hooks.deregister()
     for (const [key, value] of Object.entries(old)) {
-      if (value === undefined) delete globalThis[key]
-      else globalThis[key] = value
+      if (value === undefined)
+        delete globalThis[key]
+      else
+        globalThis[key] = value
     }
   }
 })

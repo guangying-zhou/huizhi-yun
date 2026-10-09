@@ -165,3 +165,12 @@
 - 已读：本仓库代码与文档（见各引用）；`LOCAL_RUNTIME.md` 的 2026-09-24 记录；Runtime 配置结构与开关（`data-runtime/internal/config/config.go`）；hzy0 运行器（`config.mjs`、`run-process.mjs`、`gateway-transport.mjs`）。
 - 未做：任何数据库、Console、Platform、Runtime、进程或网络动作；未核实 §0.1 所列现场状态是否仍成立；未运行浏览器验收。
 - 不在本计划内：云端 Collab Durable Object（仍只接受旧 HMAC）、自托管生产启用（见 `deploy/self-hosted/README.md`，模板默认全关）、快照桶“版本 ID 与写一次条件”生产实测（hzy0 的测试桶开启版本控制，不能防覆盖，仅测试可接受，见写入协调合同“剩余风险”）。
+
+
+## hzy0 本机 Collab 显式绑定（2026-10-05）
+
+hzy0 的 Platform 持久化部署 overlay 当前没有 Collab；静态 `config.json` 中的绑定不会自动补回，签名因 `oidc_signing_service_deployment_invalid` 失败关闭。经用户授权处理本机启用，Runtime 提供显式 `HZY_LOCAL_COLLAB_DEPLOYMENT=C000001-test-collab`，仅用于本机试验：tenant=C000001、Runtime=c000001-test-tenant-runtime、监听127.0.0.1:18084、Codocs enabled/snapshotV2Enabled/collaborationV2Enabled均为true，且静态配置已有同一精确绑定。Platform overlay中若已有不同Collab绑定则报错，不覆盖；其他绑定保持不变。生产、云端、其它租户或关闭协作时均拒绝此开关。未设置时保持原overlay权威行为，不修改任何grant或签名校验。正式部署仍由Platform登记。
+
+启用前加密备份Runtime plist；仅在hzy0 LaunchAgent环境加入上述精确开关，回滚时恢复原plist。Console external不内嵌监听，独立hzy0-collab绑定profile.listeners.collab=127.0.0.1:23131。
+
+令牌探测使用`node deploy/test-env/local-enterprise/probe-collab-token.mjs <profile> 23120 <0700证据目录>`，两项scope逐项断言先以0600落盘，不记录token/密钥/响应正文。解码只用于诊断，不能代替Runtime验签。失败后最多10分钟只读采集Console审计错误码或预定义错误原因布尔、精确grant verify、Collab日志机器码、监听表与实际绑定，再恢复已备份配置/进程并撤销无部门会话时的获批DDL。同步验收仅使用CLAUDE-FIXTURE合成文档，不使用WizBiz迁移文档。

@@ -13,6 +13,7 @@ test('status source requires exact service scope and distinct trusted deployment
     const exports: Record<string, (event: unknown) => Promise<Record<string, string>>> = {}
     const auth = { authenticated: true, tokenUse: 'service', subjectType: mode === 'user' ? 'user' : 'service', appCode: 'aims', clientCode: mode === 'client' ? 'other' : 'aims.runtime', tenant: 'TENANT', deployment: 'AIMS', scopes: [mode === 'wide' ? 'altoc:*' : 'altoc:product-feedback:update-progress'] }
     runInNewContext(code, { exports, require: (name: string) => {
+      name = name.replace(/\.ts$/, '')
       if (name === 'h3') return { createError }
       if (name === './serviceAuthGuard') return { requireAltocServiceAuth }
       if (name.endsWith('/consoleOidc')) return { requireConsoleAuthContext: async () => auth }

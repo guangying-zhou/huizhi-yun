@@ -1,3 +1,4 @@
+import { hzy0ConsoleDirectorySyncReads, hzy0ConsoleDirectorySyncWrite, hzy0ConsoleDirectorySyncReadDetail, hzy0ConsoleFeedbackRoute } from '../enterprise-topology.mjs'
 import { buildForwardHeaders, resolveRuntimeBootstrapToken } from '../../cloudflare/tenant-gateway/src/index.js'
 import { allowedConsoleRequest } from './console-egress.mjs'
 import { matchConsoleUserApiRoute } from '../../../foundation/shared/utils/consoleUserApiRoutes.ts'
@@ -37,7 +38,9 @@ export function consoleAvatarFacadePath(path, method) {
 export function consoleFacadeRoute(path, method) {
   if (['GET', 'HEAD'].includes(method) && consoleDevVirtualModule(path)) return true
   if (/%|\\/.test(path)) return false
-  if (['GET', 'HEAD'].includes(method)) return [
+  if (hzy0ConsoleFeedbackRoute(path, method)) return true
+  if (['GET', 'HEAD'].includes(method)) return hzy0ConsoleDirectorySyncReadDetail(path) || [
+    ...hzy0ConsoleDirectorySyncReads,
     '/console/login', '/console/oauth/authorize', '/console/oauth/logout', '/console/oauth/userinfo',
     '/console/.well-known/openid-configuration', '/console/.well-known/jwks.json',
     '/console/api/auth/login-config', '/console/api/auth/oidc-login', '/console/api/auth/oidc-callback',
@@ -45,7 +48,16 @@ export function consoleFacadeRoute(path, method) {
     '/console/brand/hzy-logo.png', '/console/api/oss/avatar'
   ].includes(path) || path.startsWith('/console/_nuxt/')
     || /^\/console\/api\/_nuxt_icon\/[a-z0-9-]+(?:\.json)?$/.test(path)
-  return method === 'POST' && path === '/console/oauth/token'
+  return method === 'POST' && ['/console/oauth/token', hzy0ConsoleDirectorySyncWrite].includes(path)
+}
+
+// Public sync writes retain the Console session; this is an additional CSRF
+// origin gate, never a source of actor identity. No other write API is opened.
+export function allowedConsoleSyncOrigin(path, method, headers) {
+  if (!(path === hzy0ConsoleDirectorySyncWrite && method === 'POST')
+    && !(hzy0ConsoleFeedbackRoute(path, method) && !['GET', 'HEAD'].includes(method))) return true
+  return headers.get('origin') === origin
+    && !['cross-site', 'none'].includes(headers.get('sec-fetch-site') || '')
 }
 
 // A bootstrap failure that means Platform is unreachable (transport error,
@@ -164,16 +176,19 @@ export function createConsoleFacade({ localSecret, credentials, registryVars, te
       const userWrite = matchConsoleUserApiRoute(method, target.pathname)?.write === true
       if ((method === 'POST' || userWrite) && /^[A-Za-z0-9:._-]{1,191}$/.test(idempotencyKey)) incoming.set('idempotency-key', idempotencyKey)
       const publish = target.pathname === '/api/v1/console/notifications/publish' && init.method === 'POST'
-      const publisher = publish ? bearerSourceClaims(supplied.get('authorization')) : null
+      const lifecycle = target.pathname === '/api/v1/console/notifications/actionable-lifecycle' && init.method === 'POST'
+      const publisher = (publish || lifecycle) ? bearerSourceClaims(supplied.get('authorization')) : null
       // The Console derives its runtime binding from this forwarded context.
       // A local Workflow publish gets the Console's own context, exactly like
       // its actionable-lifecycle calls; the Console then selects the local
       // Workflow publisher binding. Every other publish stays Enterprise.
       const workflowPublish = workflowLocal && publisher?.source_app === 'workflow'
         && publisher?.deployment === 'C000001-test-workflow-local'
+      const hostLifecycle = lifecycle && publisher?.source_app === 'enterprise'
+        && publisher?.client_id === 'enterprise.runtime' && publisher?.deployment === 'C000001-test-enterprise'
       const headers = await this.headers(new Request(url, { method: init.method || 'GET', headers: incoming,
         ...(init.signal ? { signal: init.signal } : {}) }),
-        { enterpriseSource: target.pathname === '/oauth/token' || (publish && !workflowPublish) })
+        { enterpriseSource: target.pathname === '/oauth/token' || (publish && !workflowPublish) || hostLifecycle })
       if (workflowLocal && target.pathname === '/oauth/token' && init.method === 'POST') {
         let tokenRequest
         try { tokenRequest = JSON.parse(String(init.body || '')) } catch { tokenRequest = null }

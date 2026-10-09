@@ -2261,3 +2261,8 @@ export async function revealConsoleVaultSecret(
     { scope: 'console:vault-secret:reveal', method: 'POST', body }
   )
 }
+
+export async function readConsoleLifecycleCommandStatus(event: H3Event, input: { uid: string, kind: 'employment' | 'offboarding', revision: number, hash: string }) {
+  const query = new URLSearchParams({ uid: input.uid, kind: input.kind, revision: String(input.revision), hash: input.hash })
+  return await callConsoleTenantRuntime<ConsoleTenantRuntimeEnvelope<Record<string, unknown>>>(event, `/v1/console/directory/lifecycle-command-status?${query}`, { scope: 'console:directory-connector:execute', method: 'GET' })
+}

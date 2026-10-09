@@ -42,7 +42,7 @@ test('both apps render the same Foundation notification and todo components with
   const state = { error: '', loading: false, items: [] }
   const mocks = {
     ref, computed, watch, onMounted, onScopeDispose, definePageMeta: () => {},
-    usePageTitle: () => {},
+    usePageTitle: () => {}, useHead: () => {},
     useRoute: () => ({ params: { notificationId: 'notice-1' }, query: {} }),
     useRouter: () => ({ push: async () => {}, replace: async () => {} }),
     useListPage: () => ({ page: ref(1), pageSize: 20 }),

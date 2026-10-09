@@ -82,13 +82,17 @@ function pendingWorkflowKey(kind: string, target: string) {
   } catch { /* Storage may be unavailable. */ }
   const key = volatileWorkflowKeys.get(storageKey) || crypto.randomUUID()
   volatileWorkflowKeys.set(storageKey, key)
-  try { sessionStorage.setItem(storageKey, key) } catch { /* Current attempt still has its key. */ }
+  try {
+    sessionStorage.setItem(storageKey, key)
+  } catch { /* Current attempt still has its key. */ }
   return { key, storageKey }
 }
 
 function clearWorkflowKey(storageKey: string) {
   volatileWorkflowKeys.delete(storageKey)
-  try { sessionStorage.removeItem(storageKey) } catch { /* No persisted key to clear. */ }
+  try {
+    sessionStorage.removeItem(storageKey)
+  } catch { /* No persisted key to clear. */ }
 }
 
 interface WorkflowCreateResultData {
@@ -267,7 +271,8 @@ async function loadData() {
 }
 
 async function handleLaunchSubmit() {
-  if (!props.launchPayload || props.canSubmit === false) return
+  if (!props.launchPayload || props.canSubmit === false)
+    return
   submitting.value = true
   try {
     // 1. 执行 beforeSubmit 钩子
@@ -366,14 +371,16 @@ async function handleApprove() {
     }
   } catch (err: unknown) {
     emit('error', { message: extractErrorMessage(err, '审批失败') })
-    if ((err as { statusCode?: number })?.statusCode === 409) await loadData()
+    if ((err as { statusCode?: number })?.statusCode === 409)
+      await loadData()
   } finally {
     submitting.value = false
   }
 }
 
 async function handleReject() {
-  if (!task.value || !decisionComment.value.trim()) return
+  if (!task.value || !decisionComment.value.trim())
+    return
   submitting.value = true
   try {
     const retry = pendingWorkflowKey('reject', String(task.value.id))
@@ -388,7 +395,8 @@ async function handleReject() {
     }
   } catch (err: unknown) {
     emit('error', { message: extractErrorMessage(err, '驳回失败') })
-    if ((err as { statusCode?: number })?.statusCode === 409) await loadData()
+    if ((err as { statusCode?: number })?.statusCode === 409)
+      await loadData()
   } finally {
     submitting.value = false
   }
@@ -396,7 +404,8 @@ async function handleReject() {
 
 /** 加载审批历史（launch 模式下调用） */
 async function loadHistory() {
-  if (!props.launchPayload) return
+  if (!props.launchPayload)
+    return
   historyLoading.value = true
   try {
     const res = await fetchInstanceHistoryByBiz({
@@ -446,7 +455,8 @@ function formatHistoryStatus(status: string) {
 }
 
 function formatHistoryTime(dateStr: string) {
-  if (!dateStr) return ''
+  if (!dateStr)
+    return ''
   const d = new Date(dateStr)
   const month = String(d.getMonth() + 1).padStart(2, '0')
   const day = String(d.getDate()).padStart(2, '0')
@@ -695,11 +705,9 @@ defineExpose({ refresh: loadData })
                 class="size-3.5 shrink-0"
                 :class="item.status === 'approved' ? 'text-success' : item.status === 'rejected' ? 'text-error' : 'text-muted'"
               />
-              <span class="flex-1 truncate text-default">
-                {{ item.action_name || item.action_code }}
+              <span class="flex-1 truncate text-default"> {{ item.action_name || item.action_code }}
               </span>
-              <span class="text-dimmed shrink-0">
-                {{ formatHistoryTime(item.completed_at || item.created_at) }}
+              <span class="text-dimmed shrink-0"> {{ formatHistoryTime(item.completed_at || item.created_at) }}
               </span>
               <UIcon
                 name="i-lucide-chevron-down"
@@ -721,14 +729,11 @@ defineExpose({ refresh: loadData })
                 :key="idx"
                 class="flex items-start gap-1.5 text-xs"
               >
-                <span class="text-dimmed shrink-0 w-12">
-                  {{ formatHistoryTime(act.created_at) }}
+                <span class="text-dimmed shrink-0 w-12"> {{ formatHistoryTime(act.created_at) }}
                 </span>
-                <span class="text-muted">
-                  {{ act.node_name ? `${act.node_name}:` : '' }}{{ formatHistoryAction(act.action) }}
+                <span class="text-muted"> {{ act.node_name ? `${act.node_name}:` : '' }}{{ formatHistoryAction(act.action) }}
                 </span>
-                <span v-if="act.comment" class="text-dimmed truncate flex-1" :title="act.comment">
-                  {{ act.comment }}
+                <span v-if="act.comment" class="text-dimmed truncate flex-1" :title="act.comment"> {{ act.comment }}
                 </span>
               </div>
             </div>

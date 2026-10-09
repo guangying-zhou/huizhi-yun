@@ -68,7 +68,7 @@ func TestOnboardingActivationBindsTheSuccessfulOperationToItsCase(t *testing.T) 
 
 	mock.ExpectBegin()
 	mock.ExpectQuery(`(?s)SELECT status FROM integration_operation.*JSON_EXTRACT\(command_json,'\$\.sourceApp'\).*JSON_EXTRACT\(command_json,'\$\.sourceBizCode'\)`).
-		WithArgs(operationID, "liukai", "ONB-LIUKAI").
+		WithArgs(operationID, "liukai", "people", "ONB-LIUKAI").
 		WillReturnRows(sqlmock.NewRows([]string{"status"}).AddRow("succeeded"))
 	mock.ExpectQuery(`SELECT COUNT\(\*\) FROM directory_identities`).
 		WithArgs("liukai").

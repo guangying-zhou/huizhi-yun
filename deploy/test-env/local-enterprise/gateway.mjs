@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { startFeedbackWake } from './feedback-wake.mjs'
 import { parseArgs } from 'node:util'
 import { localServiceTenant, readProfile, validateProfile } from './config.mjs'
 import { createLocalEnterpriseGateway } from './gateway-transport.mjs'
@@ -23,7 +24,7 @@ await verifyRuntimeTransport(profile)
 const secret = String(process.env.HZY0_GATEWAY_INTERNAL_TOKEN || '').trim()
 if (!secret) throw Error('HZY0_GATEWAY_INTERNAL_TOKEN must be supplied by the approved credential provider.')
 
-let egress, facade, stopPolicySync
+let egress, facade, stopPolicySync, stopFeedbackWake
 if (profile.identity.credentialProviderRef === 'protected-file:test-gateway') {
   const path = resolve(import.meta.dirname, '../.cloudflare-workers/gateway/secrets.json')
   const info = await stat(path)
@@ -88,8 +89,12 @@ const listener = profile.listeners.gatewayIngress
 const server = createLocalEnterpriseGateway(profile, secret, facade)
 server.listen(listener.port, listener.host, () => {
   console.log('hzy0 gateway listening on ' + listener.host + ':' + listener.port)
+  if (profile.features?.feedbackDeliveryEnabled === true) {
+    stopFeedbackWake = startFeedbackWake({ profile, tenant: { tenantCode: 'C000001', environment: 'test', apps: { console: { deploymentCode: 'wiztek-test-console' } }, dataRuntime: { endpoint: profile.runtime.canonicalEndpoint, runtimeCode: profile.runtime.expectedRuntimeCode, audience: 'data-runtime' } }, secret, facade, report: value => console.log(JSON.stringify(value)) })
+  }
 })
 for (const signal of ['SIGINT', 'SIGTERM']) process.once(signal, () => {
+  stopFeedbackWake?.()
   stopPolicySync?.()
   egress?.close()
   server.close(() => process.exit(0))

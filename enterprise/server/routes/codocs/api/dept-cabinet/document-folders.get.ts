@@ -2,7 +2,7 @@ import { createError, setHeader } from 'h3'
 import { callEnterpriseRuntime, enterpriseRuntimePermitExpiresAt, prepareEnterpriseRuntime } from '@hzy/foundation/server/utils/enterpriseRuntimeClient'
 import { departmentCabinetAuthorize, departmentCabinetQuery } from '~~/server/utils/enterpriseCodocsDepartmentCabinet'
 
-export default defineEventHandler(async event => {
+export default defineEventHandler(async (event) => {
   setHeader(event, 'Cache-Control', 'no-store')
   const query = departmentCabinetQuery(event, ['dept_code', 'page', 'pageSize'])
   const department = query.dept_code || ''

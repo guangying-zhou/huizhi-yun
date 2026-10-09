@@ -1,0 +1,44 @@
+{
+  "method": "POST",
+  "target": "/v1/enterprise/people/hr-source:hr-mappings-prepare",
+  "body": {
+    "authorization": {
+      "actorUid": "HR-A",
+      "tenant": "C000001",
+      "deployment": "Host",
+      "resource": "hr_source_sync",
+      "action": "admin",
+      "operation": "hr-mappings-prepare",
+      "objectId": "dingtalk|",
+      "allowed": true,
+      "expiresAt": 2000,
+      "bundleVersion": "v1",
+      "bundleHash": "hash",
+      "policyRevision": 1,
+      "scope": {
+        "access": "all",
+        "departmentCodes": []
+      }
+    },
+    "peopleFacts": {
+      "id": "dingtalk",
+      "employeeUid": "",
+      "page": 0,
+      "pageSize": 0,
+      "search": "",
+      "payload": {
+        "expectedVersion": 1,
+        "command": {
+          "mappings": [
+            {
+              "externalDepartmentId": "123",
+              "canonicalDeptCode": "D-A"
+            }
+          ]
+        }
+      },
+      "sensitiveAllowed": false
+    }
+  },
+  "canonical": "[\"hzy-enterprise-apf-permit.v1\",\"POST\",\"/v1/enterprise/people/hr-source:hr-mappings-prepare\",\"HR-A\",\"C000001\",\"Host\",\"hr_source_sync\",\"admin\",\"hr-mappings-prepare\",\"dingtalk|\",true,2000,\"v1\",\"hash\",1,\"all\",[],\"\",\"\",\"\",0,0,0,\"\",[\"dingtalk\",\"\",0,0,\"\",[[\"command\",{\"mappings\":[{\"canonicalDeptCode\":\"D-A\",\"externalDepartmentId\":\"123\"}]}],[\"expectedVersion\",1]],false]]"
+}

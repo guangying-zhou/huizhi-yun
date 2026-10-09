@@ -184,22 +184,6 @@ export interface ResolveConflictsResponse {
   docs: ResolvedDoc[]
 }
 
-// GitLab 提交文档
-export interface GitlabSubmitDoc {
-  oss_path: string
-  gitlab_path: string
-}
-
-export interface GitlabSubmitRequest {
-  uid: string
-  docs: GitlabSubmitDoc[]
-}
-
-export interface GitlabSubmitResponse {
-  revision: string
-  commitId: string
-}
-
 export interface LegacySuccessApiResponse<T> {
   success: boolean
   message: string

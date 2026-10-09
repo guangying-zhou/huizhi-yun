@@ -118,7 +118,7 @@ const viewFields = ['id', 'uuid', 'title', 'doc_type', 'owner_uid', 'dept_code',
 // Department document detail for the full document page: whitelisted metadata
 // plus the exact body (published snapshot once converted, never a stale
 // mirror). `department_collaboration.can_edit` is a UI hint only: Runtime
-// re-derives the relation and the owner / write-share / manager rule when a
+// re-derives the relation and the current member / manager rule when a
 // session is requested.
 export async function viewEnterpriseDepartmentDocument(event: H3Event) {
   setHeader(event, 'Cache-Control', 'no-store')
@@ -148,7 +148,8 @@ async function viewDepartmentDocumentFor(event: H3Event, user: Identity, uuid: s
       throw createError({ statusCode: 503, message: '部门访问响应无效' })
     }
     const editable = Number(doc.status) === 1 && !doc.readonly_flag && !doc.project_code
-    result.department_collaboration = { can_edit: editable && access.data.canWrite && (access.data.canManage || doc.readonly === false) }
+      && !String(doc.oss_path || '').includes('/weekly-reports/')
+    result.department_collaboration = { can_edit: editable && access.data.canWrite }
   }
   return { success: true, data: result }
 }

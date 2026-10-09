@@ -1,5 +1,10 @@
-import test from'node:test';import assert from'node:assert/strict';import{readFileSync}from'node:fs';const read=p=>readFileSync(new URL(p,import.meta.url),'utf8')
 import { assertMigratedPage } from './helpers/migrated-page.mjs'
+import test from 'node:test'
+import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
+
+const read = p => readFileSync(new URL(p, import.meta.url), 'utf8')
+
 test('hosted legacy target creation and breakdown send the enterprise write contract', () => {
   const target = read('../../aims/app/pages/projects/[id]/work-items.vue')
   const breakdown = read('../../aims/app/pages/projects/[id]/work-items/[workItemId]/breakdown.vue')
@@ -13,17 +18,38 @@ test('hosted legacy target creation and breakdown send the enterprise write cont
   assert.match(breakdown, /projectId: projectId\.value, expectedVersion: breakdownVersion\.value, subtasks/)
   assert.match(breakdown, /'Idempotency-Key': breakdownRetry!\.key/)
 })
-test('basic edits do not mount status structural or version writes',()=>{const bff=read('../server/utils/enterpriseAimsWorkItemWrite.ts'),page=read('../../aims/layer/pages/enterprise-work-item-form.vue');assert.match(bff,/Idempotency-Key/);assert.match(bff,/expectedVersion/);assert.match(page,/状态流转、类型层级调整、父子结构与里程碑移动/);assert.doesNotMatch(page,/v-model="form\.(?:status|versionId|featureId|parentId)"/)})
-test('version associations use an exact capability and project-scoped choices',()=>{const page=read('../../aims/layer/pages/enterprise-work-item-association.vue'),domain=read('../../data-runtime/internal/apps/aims/enterprise_work_item_association.go');assert.match(page,/associationOptions/);assert.match(page,/Idempotency-Key/);assert.match(page,/expectedVersion/);assert.match(domain,/prepareWorkItemVersionFieldsUpdate/);assert.match(domain,/FOR UPDATE/);assert.match(domain,/app\.project_id=wi\.project_id/);assert.doesNotMatch(page,/UInput.*versionId/)})
-test('work item deletion keeps its own permission, frozen version evidence and thin route',()=>{const bff=read('../server/utils/enterpriseAimsWorkItemWrite.ts'),route=read('../server/routes/aims/api/v1/work-items/[id].delete.ts'),foundation=read('../../foundation/server/utils/enterpriseRuntimeClient.ts'),domain=read('../../data-runtime/internal/apps/aims/enterprise_work_item_delete.go'),dispatch=read('../../data-runtime/internal/server/enterprise_work_item_write.go')
-assert.match(route,/enterpriseAimsWorkItemWrite\(event, 'delete'\)/);assert.ok(route.split('\n').filter(line=>line.trim()).length<=2)
-assert.match(bff,/action === 'delete' \? 'delete'/)
-assert.match(bff,/\['complete', 'matter-complete', 'delete', 'plan-ready'/)
-assert.match(bff,/new Set\(\['expectedVersion'\]\)/)
-assert.match(foundation,/'aims\.work-item-delete': \{ path: '\/v1\/enterprise\/aims\/work-items:delete'/)
-assert.match(dispatch,/"\/v1\/enterprise\/aims\/work-items:delete": "delete"/);assert.match(dispatch,/DeleteEnterpriseWorkItem\(r\.Context\(\), identity, input\.ProjectID, input\.WorkItemID, input\.Input\)/)
-assert.match(dispatch,/LogicalTarget: "aims"/);assert.match(dispatch,/validateEnterpriseWorkItemWritePermit/)
-assert.match(domain,/work_item_deletion_evidence/);assert.match(domain,/EnterpriseWorkItemDeleteCapability = "aims:work-item-delete:execute"/)})
+test('basic edits do not mount status structural or version writes', () => {
+  const bff = read('../server/utils/enterpriseAimsWorkItemWrite.ts'), page = read('../../aims/layer/pages/enterprise-work-item-form.vue')
+  assert.match(bff, /Idempotency-Key/)
+  assert.match(bff, /expectedVersion/)
+  assert.match(page, /状态流转、类型层级调整、父子结构与里程碑移动/)
+  assert.doesNotMatch(page, /v-model="form\.(?:status|versionId|featureId|parentId)"/)
+})
+test('version associations use an exact capability and project-scoped choices', () => {
+  const page = read('../../aims/layer/pages/enterprise-work-item-association.vue'), domain = read('../../data-runtime/internal/apps/aims/enterprise_work_item_association.go')
+  assert.match(page, /associationOptions/)
+  assert.match(page, /Idempotency-Key/)
+  assert.match(page, /expectedVersion/)
+  assert.match(domain, /prepareWorkItemVersionFieldsUpdate/)
+  assert.match(domain, /FOR UPDATE/)
+  assert.match(domain, /app\.project_id=wi\.project_id/)
+  assert.doesNotMatch(page, /UInput.*versionId/)
+})
+test('work item deletion keeps its own permission, frozen version evidence and thin route', () => {
+  const bff = read('../server/utils/enterpriseAimsWorkItemWrite.ts'), route = read('../server/routes/aims/api/v1/work-items/[id].delete.ts'), foundation = read('../../foundation/server/utils/enterpriseRuntimeClient.ts'), domain = read('../../data-runtime/internal/apps/aims/enterprise_work_item_delete.go'), dispatch = read('../../data-runtime/internal/server/enterprise_work_item_write.go')
+  assert.match(route, /enterpriseAimsWorkItemWrite\(event, 'delete'\)/)
+  assert.ok(route.split('\n').filter(line => line.trim()).length <= 2)
+  assert.match(bff, /action === 'delete' \? 'delete'/)
+  assert.match(bff, /\['complete', 'matter-complete', 'delete', 'plan-ready'/)
+  assert.match(bff, /new Set\(\['expectedVersion'\]\)/)
+  assert.match(foundation, /'aims\.work-item-delete': \{ path: '\/v1\/enterprise\/aims\/work-items:delete'/)
+  assert.match(dispatch, /"\/v1\/enterprise\/aims\/work-items:delete": "delete"/)
+  assert.match(dispatch, /DeleteEnterpriseWorkItem\(r\.Context\(\), identity, input\.ProjectID, input\.WorkItemID, input\.Input\)/)
+  assert.match(dispatch, /LogicalTarget: "aims"/)
+  assert.match(dispatch, /validateEnterpriseWorkItemWritePermit/)
+  assert.match(domain, /work_item_deletion_evidence/)
+  assert.match(domain, /EnterpriseWorkItemDeleteCapability = "aims:work-item-delete:execute"/)
+})
 test('plan-ready has a distinct exact capability and only appears for eligible V2 targets', () => {
   const route = read('../server/routes/aims/api/v1/work-items/[id]/plan-ready.post.ts')
   const foundation = read('../../foundation/server/utils/enterpriseRuntimeClient.ts')
@@ -94,7 +120,7 @@ test('saving a breakdown uses its own capability, a PUT route, an edit permit an
   assert.match(domain, /requireEnterpriseProjectManagerTx/)
   assert.match(domain, /requireEnterpriseProjectAssigneesTx/)
 })
-test('task distribution serves the original Aims page at the project-scoped path',()=>{
+test('task distribution serves the original Aims page at the project-scoped path', () => {
   // 原断言锁的是薄改写页（/work-items/:id/breakdown）。该路径与原页面不一致，
   // append.vue 与工作项列表都跳 /projects/:id/work-items/:workItemId/breakdown，
   // 回归实测 404 —— 现改为注册原页面到同一路径形状。
@@ -103,12 +129,12 @@ test('task distribution serves the original Aims page at the project-scoped path
     name: 'project-work-item-breakdown',
     source: 'projects/[id]/work-items/[workItemId]/breakdown'
   })
-  const entry=read('../../aims/layer/entry.mjs')
-  assert.doesNotMatch(entry,/layerPage\('\/work-items\/:id\/breakdown'/)
+  const entry = read('../../aims/layer/entry.mjs')
+  assert.doesNotMatch(entry, /layerPage\('\/work-items\/:id\/breakdown'/)
 
   // 写动作仍走宿主 BFF 的精确 capability，而不是页面层限制
-  const helper=read('../server/utils/enterpriseAimsWorkItems.ts')
-  const foundation=read('../../foundation/server/utils/enterpriseRuntimeClient.ts')
-  assert.match(helper,/'aims\.work-item-breakdown-context'/)
-  assert.match(foundation,/'aims\.work-item-breakdown': \{ path: '\/v1\/enterprise\/aims\/work-items:breakdown'/)
+  const helper = read('../server/utils/enterpriseAimsWorkItems.ts')
+  const foundation = read('../../foundation/server/utils/enterpriseRuntimeClient.ts')
+  assert.match(helper, /'aims\.work-item-breakdown-context'/)
+  assert.match(foundation, /'aims\.work-item-breakdown': \{ path: '\/v1\/enterprise\/aims\/work-items:breakdown'/)
 })

@@ -60,19 +60,35 @@ describe('controlled application Shell migration projection', () => {
   })
 
   test('concurrent checks coalesce; success and failures are not cached across navigation', async () => {
-    const calls: Array<{ resolve: (value: any) => void, reject: (error: Error) => void }> = []
+    const calls: Array<{ resolve: (value: { migrated?: boolean, target?: string }) => void, reject: (error: Error) => void }> = []
     const check = createShellMigrationResolver(() => new Promise((resolve, reject) => calls.push({ resolve, reject })))
     const first = check('aims', '/aims/')
     assert.equal(check('aims', '/aims/'), first)
     await Promise.resolve()
     calls[0]!.resolve({ migrated: true, target: '/aims/projects' })
     assert.equal(await first, '/aims/projects')
-    const rollback = check('aims', '/aims/'); await Promise.resolve()
-    calls[1]!.resolve({ migrated: false }); assert.equal(await rollback, '')
-    const failed = check('aims', '/aims/'); await Promise.resolve()
-    calls[2]!.reject(Error('unavailable')); await assert.rejects(failed, /unavailable/)
-    const retry = check('aims', '/aims/'); await Promise.resolve()
-    calls[3]!.resolve({ migrated: true, target: '//attacker.example' }); await assert.rejects(retry, /Invalid/)
+    const rollback = check('aims', '/aims/')
+    await Promise.resolve()
+    calls[1]!.resolve({ migrated: false })
+    assert.equal(await rollback, '')
+    const failed = check('aims', '/aims/')
+    await Promise.resolve()
+    calls[2]!.reject(Error('unavailable'))
+    await assert.rejects(failed, /unavailable/)
+    const retry = check('aims', '/aims/')
+    await Promise.resolve()
+    calls[3]!.resolve({ migrated: true, target: '//attacker.example' })
+    await assert.rejects(retry, /Invalid/)
     assert.equal(calls.length, 4)
   })
+})
+
+test('Shell migration retains the control, space and backslash rejection boundary', () => {
+  for (let code = 0; code <= 0x7f; code++) {
+    const target = `/aims/projects/item${String.fromCharCode(code)}id`
+    const result = resolveApplicationShellMigrationTarget({
+      metadata, consoleDeployment: 'console-r4', appCode: 'aims', requested: target, origin: 'https://tenant.example'
+    })
+    if (code <= 0x20 || code === 0x5c) assert.equal(result, null)
+  }
 })

@@ -15,7 +15,7 @@ export function createCreationAttempt(newKey = () => crypto.randomUUID()) {
 }
 
 export async function fingerprintUploadFiles(files) {
-  return Promise.all(files.map(async file => {
+  return Promise.all(files.map(async (file) => {
     const digest = await crypto.subtle.digest('SHA-256', await file.arrayBuffer())
     const hash = Array.from(new Uint8Array(digest), value => value.toString(16).padStart(2, '0')).join('')
     return [file.name, file.size, hash]

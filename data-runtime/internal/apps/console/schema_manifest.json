@@ -1,5 +1,5 @@
 {
-  "schemaRevision": "sha256:fdbb6e38338e1cf5cdeafe33e36407947b6ee2e54c2abbf98579613c9fa8dd3f",
+  "schemaRevision": "sha256:c3dfa45098b411ae094f28226ccf59efe304581711251f2d558b64e2976f956d",
   "source": "console/docs/hzy_console_schema.sql",
   "excludedTables": [
     "console_runtime_cache",
@@ -295,6 +295,85 @@
         "ck_connector_runtime_status"
       ]
     },
+    "console_announcement_departments": {
+      "columns": [
+        "announcement_id",
+        "dept_code",
+        "tenant_code"
+      ],
+      "indexes": [
+        "PRIMARY"
+      ],
+      "constraints": []
+    },
+    "console_announcement_outbox": {
+      "columns": [
+        "announcement_id",
+        "attempts",
+        "channel",
+        "delivered_at",
+        "lease_token",
+        "lease_until",
+        "next_attempt_at",
+        "revision",
+        "state",
+        "tenant_code",
+        "uid"
+      ],
+      "indexes": [
+        "PRIMARY",
+        "idx_announcement_outbox_due"
+      ],
+      "constraints": [
+        "chk_announcement_channel",
+        "chk_announcement_delivery"
+      ]
+    },
+    "console_announcement_reads": {
+      "columns": [
+        "announcement_id",
+        "read_at",
+        "tenant_code",
+        "uid"
+      ],
+      "indexes": [
+        "PRIMARY"
+      ],
+      "constraints": []
+    },
+    "console_announcements": {
+      "columns": [
+        "announcement_id",
+        "audience",
+        "body_markdown",
+        "created_at",
+        "created_by",
+        "delivery_prepared",
+        "ends_at",
+        "level",
+        "push_bell",
+        "push_wecom",
+        "revision",
+        "show_banner",
+        "show_popup",
+        "starts_at",
+        "status",
+        "tenant_code",
+        "title",
+        "updated_at",
+        "updated_by"
+      ],
+      "indexes": [
+        "PRIMARY",
+        "idx_announcement_due"
+      ],
+      "constraints": [
+        "chk_announcement_audience",
+        "chk_announcement_dates",
+        "chk_announcement_level",
+        "chk_announcement_status"
+      ]
+    },
     "console_cutover_dispositions": {
       "columns": [
         "active_subject_key",
@@ -328,6 +407,107 @@
         "ck_console_cutover_disposition_reason",
         "ck_console_cutover_disposition_status"
       ]
+    },
+    "console_feedback": {
+      "columns": [
+        "attempt",
+        "created_at",
+        "feedback_id",
+        "generation",
+        "issue_iid",
+        "issue_url",
+        "lease_until",
+        "next_attempt_at",
+        "reporter_name",
+        "reporter_uid",
+        "settings_json",
+        "status",
+        "tenant_code",
+        "text_json",
+        "updated_at"
+      ],
+      "indexes": [
+        "PRIMARY",
+        "idx_feedback_owner",
+        "idx_feedback_pending"
+      ],
+      "constraints": [
+        "ck_feedback_status"
+      ]
+    },
+    "console_feedback_attachments": {
+      "columns": [
+        "attachment_id",
+        "byte_size",
+        "created_at",
+        "feedback_id",
+        "image_bytes",
+        "input_sha256",
+        "request_key",
+        "sha256",
+        "status",
+        "tenant_code",
+        "updated_at",
+        "upload_id",
+        "upload_path"
+      ],
+      "indexes": [
+        "PRIMARY",
+        "idx_feedback_media_retention",
+        "uq_feedback_media_request"
+      ],
+      "constraints": [
+        "ck_feedback_media_state"
+      ]
+    },
+    "console_feedback_delivery": {
+      "columns": [
+        "attempt",
+        "channel",
+        "event_id",
+        "lease_until",
+        "recipient_uid",
+        "status",
+        "tenant_code",
+        "updated_at"
+      ],
+      "indexes": [
+        "PRIMARY",
+        "idx_feedback_delivery"
+      ],
+      "constraints": [
+        "ck_feedback_channel",
+        "ck_feedback_delivery_status"
+      ]
+    },
+    "console_feedback_events": {
+      "columns": [
+        "created_at",
+        "event_id",
+        "event_type",
+        "feedback_id",
+        "recipient_policy_json",
+        "recipient_uids_json",
+        "resolve_after",
+        "tenant_code"
+      ],
+      "indexes": [
+        "PRIMARY",
+        "idx_feedback_event"
+      ],
+      "constraints": []
+    },
+    "console_feedback_settings": {
+      "columns": [
+        "revision",
+        "settings_json",
+        "tenant_code",
+        "updated_at"
+      ],
+      "indexes": [
+        "PRIMARY"
+      ],
+      "constraints": []
     },
     "console_mutation_receipts": {
       "columns": [

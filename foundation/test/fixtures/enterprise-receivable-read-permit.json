@@ -1,0 +1,47 @@
+{
+  "method": "POST",
+  "target": "/v1/enterprise/altoc/receivables:page",
+  "body": {
+    "id": "",
+    "code": "",
+    "name": "",
+    "rowVersion": 0,
+    "page": 0,
+    "pageSize": 0,
+    "search": "",
+    "authorization": {
+      "actorUid": "Person",
+      "tenant": "C000001",
+      "deployment": "Host",
+      "resource": "receivable",
+      "action": "view",
+      "operation": "receivables-page",
+      "objectId": "",
+      "allowed": true,
+      "expiresAt": 123,
+      "bundleVersion": "1",
+      "bundleHash": "hash",
+      "policyRevision": 38,
+      "scope": {
+        "access": "self",
+        "departmentCodes": []
+      }
+    },
+    "sales": {
+      "id": "",
+      "payload": {
+        "page": 2,
+        "pageSize": 20,
+        "search": "中文应收",
+        "customerId": "1",
+        "contractId": "2",
+        "collectionResponsibleUid": "Owner",
+        "currencyCode": "CNY",
+        "agingBucket": "31_60",
+        "legalEntityCode": "LE-1",
+        "legalEntityRead": true
+      }
+    }
+  },
+  "canonical": "[\"hzy-enterprise-apf-permit.v1\",\"POST\",\"/v1/enterprise/altoc/receivables:page\",\"Person\",\"C000001\",\"Host\",\"receivable\",\"view\",\"receivables-page\",\"\",true,123,\"1\",\"hash\",38,\"self\",[],\"\",\"\",\"\",0,0,0,\"\",[\"\",[[\"agingBucket\",\"31_60\"],[\"collectionResponsibleUid\",\"Owner\"],[\"contractId\",\"2\"],[\"currencyCode\",\"CNY\"],[\"customerId\",\"1\"],[\"legalEntityCode\",\"LE-1\"],[\"legalEntityRead\",true],[\"page\",2],[\"pageSize\",20],[\"search\",\"中文应收\"]]]]"
+}

@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { isActiveDirectoryUser } from '../../shared/utils/directoryUserStatus'
+import { isReservedDirectorySubject, UNASSIGNED_OWNER_LABEL, UNASSIGNED_OWNER_UID } from '../../shared/utils/reservedDirectorySubject'
 /**
  * 员工树形下拉选择器（按部门组织）
  *
@@ -183,7 +185,7 @@ async function loadData() {
           console.warn('[UserTreeSelector] 部门目录不可用，改用员工列表', err?.message || err)
           return null
         }),
-        $fetch<UsersResp>(sharedApiPath('/api/directory/users'), { params: { pageSize: 1000 } }),
+        $fetch<UsersResp>(sharedApiPath('/api/directory/users'), { params: { pageSize: 1000, status: 'all' } }),
         shouldLoadMemberships
           ? $fetch<UserDeptsResp>(sharedApiPath('/api/directory/user-departments')).catch((err) => {
               console.warn('[UserTreeSelector] /api/directory/user-departments 不可用，将回退按委员会逐个拉取', err?.message || err)
@@ -226,7 +228,9 @@ const availableUserMap = computed<Map<string, SelectableUser>>(() => {
   const m = new Map<string, SelectableUser>()
   for (const u of allUsers.value) {
     if (excluded.has(u.uid)) continue
-    if (u.status !== undefined && u.status === 0) continue
+    // Reserved subjects (system, system:*, client:*) are never selectable people.
+    if (isReservedDirectorySubject(u.uid)) continue
+    if (!isActiveDirectoryUser(u.status)) continue
     m.set(u.uid, {
       uid: u.uid,
       realName: u.realName || u.uid,
@@ -451,9 +455,11 @@ function uidsSignature(uids: Iterable<string>) {
 }
 
 function emitByUids(uids: string[]) {
+  // A reserved subject can be shown as the current value, never submitted.
+  const selectable = uids.filter(uid => !isReservedDirectorySubject(uid) && availableUserMap.value.has(uid))
   const uniqueUids = props.selectionMode === 'single'
-    ? [...new Set(uids)].slice(-1)
-    : [...new Set(uids)]
+    ? [...new Set(selectable)].slice(-1)
+    : [...new Set(selectable)]
   const picked: SelectableUser[] = []
   for (const uid of uniqueUids) {
     const u = availableUserMap.value.get(uid)
@@ -604,7 +610,10 @@ const summary = computed(() => {
   const users = selectedUserObjects.value
   if (users.length === 0) return props.placeholder
 
-  const names = users.map(u => u.realName || u.uid)
+  const names = users.map((u) => {
+    const inactive = allUsers.value.some(item => item.uid === u.uid && !isActiveDirectoryUser(item.status))
+    return `${u.realName || u.uid}${inactive ? '（账号已停用、授权不生效）' : ''}`
+  })
   if (props.selectionMode === 'single') return names[0] || props.placeholder
   if (names.length <= 3) return names.join('、')
   return `已选${names.slice(0, 2).join('、')}等${names.length}人`
@@ -616,7 +625,7 @@ const selectedUserObjects = computed<SelectableUser[]>(() => {
   const fromProps = new Map(props.users.map(u => [u.uid, u]))
   return uids.map(uid => fromProps.get(uid) || availableUserMap.value.get(uid) || {
     uid,
-    realName: uid,
+    realName: uid === UNASSIGNED_OWNER_UID ? UNASSIGNED_OWNER_LABEL : uid,
     deptCode: null,
     deptName: null,
     avatar: null

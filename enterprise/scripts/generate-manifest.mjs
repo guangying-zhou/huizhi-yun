@@ -1,6 +1,7 @@
 import { readFileSync, writeFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { composeManifest } from './manifest-artifacts.mjs'
+
 const read = path => JSON.parse(readFileSync(fileURLToPath(new URL(path, import.meta.url)), 'utf8'))
 const manifest = composeManifest([read('../../aims/app.manifest.json'), read('../../assets/app.manifest.json'), read('../../codocs/app.manifest.json')])
 const output = fileURLToPath(new URL('../app.manifest.json', import.meta.url))

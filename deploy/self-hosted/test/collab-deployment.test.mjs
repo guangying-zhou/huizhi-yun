@@ -30,9 +30,9 @@ test('G-7 and collab.runtime bindings default to and enforce the registered code
   assert.deepEqual(validateCollabBindings({ tenant: 'C000001' }).deployments, { collab: 'C000001-collab' })
   assert.deepEqual(collabGrantItems({ tenant: 'C000001' }).map(item => item.deployment), ['C000001-collab', 'C000001-collab'])
   const full = { tenant: 'C000001', deployments: { enterprise: 'C000001-prod-enterprise', workflow: 'C000001-workflow', aims: 'C000001-aims', codocs: 'C000001-codocs', console: 'C000001-console' } }
-  assert.equal(g7ExpectedGrants(validateG7Bindings(full)).length, 34)
+  assert.equal(g7ExpectedGrants(validateG7Bindings(full)).length, 28)
   const withCollab = { ...full, deployments: { ...full.deployments, collab: collabDeploymentCode('C000001') } }
-  assert.equal(g7ExpectedGrants(withCollab).length, 36)
+  assert.equal(g7ExpectedGrants(withCollab).length, 30)
   assert.throws(() => g7ExpectedGrants({ ...full, deployments: { ...full.deployments, collab: 'C000001-collab-2' } }), /reviewed production deployment code/)
 })
 

@@ -71,7 +71,7 @@ async function compileAimsPermit(event: H3Event, input: { actorUid: string, tena
 export async function activateEnterpriseAltocContractDelivery(event: H3Event) {
   setHeader(event, 'Cache-Control', 'no-store')
   const user = await requireEnterpriseUser(event)
-  const contractCode = String(getRouterParam(event, 'contractCode') || '').trim()
+  const contractCode = String(getRouterParam(event, 'contractId') || '').trim()
   const idempotencyKey = String(getHeader(event, 'Idempotency-Key') || '').trim()
   if (Object.keys(getQuery(event)).length || !contractCode || contractCode.length > 30 || !idempotencyKey || idempotencyKey.length > 191) {
     throw createError({ statusCode: 400, message: '合同编号、操作标识或请求参数无效' })

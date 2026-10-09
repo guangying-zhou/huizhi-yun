@@ -126,7 +126,7 @@ test('Console signature binds trusted source actor context and target deployment
     'x-hzy-service-command-timestamp': timestamp,
     'x-hzy-service-command-signature': signature
   }
-  const event = (currentPath: string, currentHeaders: Record<string, string>) => ({ path: currentPath, node: { req: { headers: currentHeaders } } }) as H3Event
+  const event = (currentPath: string, currentHeaders: Record<string, string>) => ({ context: { consoleAuth: { authenticated: true, subjectType: 'service', tokenUse: 'service', clientCode: 'people.runtime', appCode: 'people', tenant: 'tenant-1', deployment: 'people-prod' } }, path: currentPath, node: { req: { headers: currentHeaders } } }) as H3Event
   const binding = { tenantId: 'tenant-1', deploymentId: 'console-prod' }
   assert.doesNotThrow(() => verifyPeopleDirectorySignature(event(path, headers), { serviceCommand }, binding))
 
@@ -151,4 +151,13 @@ test('Console signature binds trusted source actor context and target deployment
     }, (error: unknown) => Number((error as { statusCode?: unknown }).statusCode) === 403, item.name)
   }
   assert.equal(transactionExecuteCount, 0)
+})
+
+test('Directory source is selected only from verified exact app/client identity', async () => {
+  const { directoryCommandSource } = await import('../server/utils/directoryLifecycleReliable.ts')
+  for (const app of ['people', 'enterprise']) {
+    const base = { actorType: 'service', actorId: app + '.runtime', appCode: app, tenantCode: 'C000001', deploymentCode: 'C000001-' + app }
+    assert.equal(directoryCommandSource(base), app)
+    for (const bad of [{ actorType: 'user' }, { actorId: 'foreign.runtime' }, { appCode: 'altoc' }, { tenantCode: '' }, { deploymentCode: '' }]) assert.throws(() => directoryCommandSource({ ...base, ...bad }), { statusCode: 403 })
+  }
 })

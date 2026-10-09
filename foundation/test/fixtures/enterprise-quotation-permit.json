@@ -1,0 +1,53 @@
+{
+  "method": "POST",
+  "target": "/v1/enterprise/altoc/quotation-items:replace",
+  "body": {
+    "id": "",
+    "code": "",
+    "name": "",
+    "rowVersion": 0,
+    "page": 0,
+    "pageSize": 0,
+    "search": "",
+    "authorization": {
+      "actorUid": "Person",
+      "tenant": "C000001",
+      "deployment": "Host",
+      "resource": "quotation",
+      "action": "edit",
+      "operation": "quotation-items-replace",
+      "objectId": "1||0",
+      "allowed": true,
+      "expiresAt": 123,
+      "bundleVersion": "1",
+      "bundleHash": "hash",
+      "policyRevision": 38,
+      "scope": {
+        "access": "self",
+        "departmentCodes": []
+      }
+    },
+    "quotation": {
+      "id": "1",
+      "customerId": "",
+      "page": 0,
+      "pageSize": 0,
+      "version": 0,
+      "payload": {
+        "expectedVersion": 2
+      },
+      "items": [
+        {
+          "item_name": "中文<& 后",
+          "specification": null,
+          "unit": "件",
+          "quantity": "1.2500",
+          "unit_price": "100.00",
+          "discount_rate": "5.00",
+          "tax_rate": "6.00"
+        }
+      ]
+    }
+  },
+  "canonical": "[\"hzy-enterprise-apf-permit.v1\",\"POST\",\"/v1/enterprise/altoc/quotation-items:replace\",\"Person\",\"C000001\",\"Host\",\"quotation\",\"edit\",\"quotation-items-replace\",\"1||0\",true,123,\"1\",\"hash\",38,\"self\",[],\"\",\"\",\"\",0,0,0,\"\",[\"1\",\"\",0,0,0,[[\"expectedVersion\",2]],[[\"中文<&\\u2028后\",null,\"件\",\"1.2500\",\"100.00\",\"5.00\",\"6.00\"]]]]"
+}

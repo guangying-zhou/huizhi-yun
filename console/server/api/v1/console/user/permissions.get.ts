@@ -72,7 +72,7 @@ export default defineEventHandler(async (event) => {
       uid,
       sessionHash: typeof payload.sid === 'string' ? payload.sid : null,
       result: 'success'
-    }).catch(error => {
+    }).catch((error) => {
       logAuthDependencyFailure(event, 'console-permissions-audit', error, Date.now() - auditStartedAt)
     })
     const auditDurationMs = Date.now() - auditStartedAt

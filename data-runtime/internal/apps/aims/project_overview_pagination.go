@@ -126,6 +126,13 @@ func projectPortfolioProjection(ctx context.Context, db weeklyReportReadDB, q ur
 	manage, _ := ctx.Value(enterprisePortfolioManagementKey{}).(bool)
 	for _, root := range roots {
 		root.ProjectCount = counts[fmt.Sprint(root.ID)]
+		if manage {
+			_, version, err := enterprisePortfolioSnapshot(ctx, db, root.ID, false)
+			if err != nil {
+				return nil, err
+			}
+			root.EditVersion = version
+		}
 		canDelete := false
 		if manage && !root.IsSystem {
 			var empty bool

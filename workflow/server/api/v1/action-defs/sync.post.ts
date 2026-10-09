@@ -35,6 +35,7 @@ type ConsoleServiceAuthContext = {
   tokenUse?: string
   subjectType?: string
   appCode?: string
+  clientCode?: string
   scopes?: string[]
   claims?: {
     scope?: unknown
@@ -73,7 +74,8 @@ export default defineEventHandler(async (event): Promise<SyncActionDefsResponse>
   if (!appCode || !Array.isArray(actions)) {
     throw createError({ statusCode: 400, message: 'appCode 和 actions 必填' })
   }
-  if (serviceAuth.appCode && serviceAuth.appCode !== appCode) {
+  if (serviceAuth.appCode && serviceAuth.appCode !== appCode
+    && !(appCode === 'aims' && serviceAuth.appCode === 'enterprise' && serviceAuth.clientCode === 'enterprise.runtime')) {
     throw createError({ statusCode: 403, message: `服务令牌不能同步其他应用: ${appCode}` })
   }
 

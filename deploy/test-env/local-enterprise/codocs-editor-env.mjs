@@ -42,7 +42,8 @@ export function writeLocalCodocsEditorEnvFile({ profile, profilePath, root, gate
     `HZY0_GATEWAY_INTERNAL_TOKEN=${gatewaySecret}`,
     `HZY_CLOUDFLARE_INTERNAL_TOKEN=${gatewaySecret}`,
     `HZY_CODOCS_SERVICE_CLIENT_SECRET=${serviceSecret}`,
-    'HZY_CODOCS_OSS_TIMEOUT_MS=30000'
+    'HZY_CODOCS_OSS_TIMEOUT_MS=30000',
+    ...(profile.features?.codocsLegacyAimsServiceEnabled === false ? ['HZY_CODOCS_LEGACY_AIMS_SERVICE_ENABLED=false'] : [])
   ].join('\n') + '\n', { mode: 0o600, flag: 'wx' })
   return { directory, path }
 }

@@ -1,3 +1,4 @@
+import { handleEnterpriseKnowledgeLink } from '../utils/enterpriseKnowledgeLinkService'
 import { authorizeProductDocumentLink } from '~~/server/utils/productDocumentLinkAuthorization'
 import { createError, getRequestURL, type H3Event } from 'h3'
 import { maybeProxyCurrentApiToTenantRuntime, type TenantRuntimeProxyContext } from '@hzy/foundation/server/utils/tenantRuntimeProxy'
@@ -13,6 +14,7 @@ const API_PREFIX = '/api/v1'
 
 export default defineEventHandler(async (event) => {
   const pathname = getRequestURL(event).pathname
+  if (pathname.endsWith('/api/v1/service/enterprise-knowledge-links')) return handleEnterpriseKnowledgeLink(event)
   // Gateway 与 Service Binding 请求都保留 /assets base path，按 /api/v1 后缀匹配。
   if (apiV1Suffix(pathname) === '/service/product-adoption/read') return handleProductAdoptionService(event)
   if (isPublicLocalApiV1Path(pathname)) return

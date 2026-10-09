@@ -1,5 +1,9 @@
 <script setup lang="ts">
-import AltocBasicReadPage from '../../../components/AltocBasicReadPage.vue'
+import AltocQuotationsPage from '../../../components/AltocQuotationsPage.vue'
+
 definePageMeta({ name: 'altoc-host-quotes-detail', layout: 'enterprise', navigationOwner: 'altoc', logicalModule: 'altoc' })
 </script>
-<template><AltocBasicReadPage resource="quotation" title="报价详情" detail /></template>
+
+<template>
+  <AltocQuotationsPage detail />
+</template>

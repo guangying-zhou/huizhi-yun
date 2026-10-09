@@ -1,5 +1,36 @@
 # 统一企业应用实施计划与 TODO
 
+> **2026-10-02 专项规划**：根据用户提出的“尽快把 Altoc、People、Finance 整合进 Enterprise”及“Finance 页面可以重新设计”，新增[三模块整合方案与实施计划](./Enterprise-Altoc-People-Finance-Integration-Plan.md)，细化 INT-601～605 的功能范围、Finance 页面承接、数据迁移、任务依赖和分批验收。2026-10-03 已形成多批实现及 hzy0 部分启用，当前四类交付材料见下表；下方旧排期按各自日期阅读，不能用于覆盖当前验收缺口。
+
+## 2026-10-03 APF 实际状态
+
+源码基线 `4a5fa619`。按专项计划 §12.1 分列已有源码、新实现、seed 候选和环境待验；不以提交替代业务验收。hzy0 三域已启用，Finance 范围待 Platform 发布，Workflow/Console seed 仅部分执行；机器 owner 开关仍关闭。最新记录候选 `8ee33d32` / Runtime `0.3.295-test.apf-enable.5`，不代表后续提交已切换。三域历史数据不迁移；APF-17/18B 等用户裁定。未完成全岗位/两租户/故障与退役验收，**INT-601～605 保持未勾选**。
+
+| APF | 已有源码 | 新实现（主要提交） | seed 候选 / 安装制品 | 环境待验 / 实际证据 |
+| --- | --- | --- | --- | --- |
+| APF-01 | 旧页面/链路盘点 | M0 b638282b；冷存档核查6c574d4f | — | 历史数据不迁移；冷存档不是本轮环境回读 |
+| APF-02 | 统一库/Registry/旧表事实 | 新 schema 0f6d5c02/49df34d3；历史不迁移113110d0/7d202993 | — | 旧数据冷存档；统一库新模型按05安装，生产不作启用声明 |
+| APF-03 | 原三模块层/Host组合 | M1 9146cf23；Finance前端ea49496a；Altoc UX1363a4d6；People/Altoc修复bf93771e | 复用04候选 | hzy0菜单/基础页面已启用；全页面/角色组合仍待验 |
+| APF-04 | 原人员权限与跨应用合同 | U/P/S样例9146cf23；域回调58685d12；18A075db5f0；People收窄4a5fa619 | v2.34；09c2；18 scheduler；16e窄目标 | hzy0仅部分Console/Workflow seed已执行；新回调、purpose全族和撤权矩阵待验 |
+| APF-05 | 统一库只建工具 | 基础53表9146cf23；安装CLI c04b323c；增量框架3dc87ed9；tenders子集32244c98 | 安装/verify/rollback规格，无grant | hzy0 base+七增量已装；B5/新成本投影等没有完整启用证据 |
+| APF-06 | 原Finance导航/人员资源 | 新IA ea49496a；权限加载127f872e；范围8ee33d32；SOD/角色审计48f286dc | 默认scope迁移/策略发布候选 | Finance范围待Platform发布/同步；不能据代码标生效 |
+| APF-07 | 原客户/销售页面 | WP4a d057d697；WP4b1f92cd36；07a5c0ffc5f；07b6176fa7f；UX/目录1363a4d6/40f2587a | 复用域grant；B2安装候选 | hzy0客户新建/详情与线索有抽验；全链及其它角色待验 |
+| APF-08 | 原合同/项目关联 | WP4c4ad04d97；审批58685d12；服务链95c8ff35 | D-06/schema与对应seed候选 | 基础合同栈已启用；多项目/审批/服务端到端及旧owner收尾待验 |
+| APF-09 | 原People人员/任职 | 09ab/d ff4f8452；c1 58685d12；c2 635acaed；死锁953c0fe1；列表bf93771e | 09c2 Directory精确seed/verify；private/facts安装 | hzy0主数据可写；真实钉钉开通恢复待验；manual自动开通关闭 |
+| APF-10 | 原Finance账户/参数 | WP3 9de74eff；UI ea49496a；许可加载127f872e | 复用U域grant | hzy0已启用；正式Finance范围待发布，代表样例非完整验收 |
+| APF-11 | 原开票/到账/核销 | 11a79afbe43；11b635acaed | finance-B3安装；相关Workflow定义候选 | hzy0表/路由已启用；完整金额对账、审批恢复与岗位验收待验 |
+| APF-12 | 原Altoc/Finance调用与Workflow | 12a58685d12；11b635acaed（开票/回写/文件/回调） | Workflow精确合同/定义，仅部分hzy0执行 | 源码闭集可用；旧实例/在途/消费者退役未验完 |
+| APF-13 | 原支出/报销/付款/字典 | 13a5c0ffc5f；13b6176fa7f | finance-13a/13b安装；审批定义候选 | hzy0已装与启用；Finance范围与确认/退回/对账待验 |
+| APF-14 | Aims审核工时/日历；People费率 | 14a075db5f0；14b6aed7346；14c2271f417 | finance-cost及后续输入/投影安装候选 | 首批成本表已装；后续完整输入/投影与重算闭环待验；范围待发布 |
+| APF-15 | 独立People绩效/贡献/成本与Finance报表 | 尚无本计划全量承接交付；不得用14公共核算替代 | 未形成完整新增候选 | 环境待验；绩效回调仍原People，不转Enterprise |
+| APF-16 | 原投标/服务/反馈/摘要 | a fc725e44；b32244c98；c95c8ff35；d d3cd53ce；e2271f417；f930c5ede；g c7488ea8 | B5各子集；16e Assets/Codocs窄grant候选 | a–g源码已交付；B5安装/目标seed/新f,g候选与业务待验；Aims反馈owner保留 |
+| APF-17 | 原HR事实源/部门/离职资产协调 | 09c2仅覆盖钉钉入职部分；APF-17规则仍待用户裁定 | 不把09c2候选视为17完整seed | 未完成；manual身份绑定、HR/离职跨边界待裁定 |
+| APF-18 | 原各应用scheduler/drain/通知/purpose | 18A075db5f0；People回调收窄4a5fa619；18B只读盘点 | 三域scheduler双audience seed/verify候选 | hzy0 scheduler disabled；B/C语义/在途核查/legacy退役待裁定 |
+| APF-19 | 既有候选/smoke/浏览器验收记录 | hzy0安装8996585a；启用474b942c；后续cdf570e1/47ca7358 | 只引用获批部分写入回执 | 本机已启用；岗位/两租户/故障/长窗口和全动作验收不完整 |
+| APF-20 | 既有闭集/readiness/对外合同 | 本轮新增全动作矩阵（文档，尚未提交） | 旧grant撤销/owner退役不自动获批 | 旧精确scope零签发、旧源零使用、在途窗口与撤销反例未收口 |
+
+证据定义及依赖以 [专项计划 §12.1](./Enterprise-Altoc-People-Finance-Integration-Plan.md#121-每个动作的完成记录) 为准；逐入口证据见 [APF 全动作对照表](./Enterprise-APF-Action-Matrix.md)。本节只同步文档，不授权任何 seed、安装、策略发布或退役。
+
 > 以下 2026-09-15～09-24 的“当前状态/当前摘要”段落按写入日期保留为**历史进度**。2026-09-25 的运行制品、开关和近期顺序集中见[当前运行组合](./Current-Running-Combination-20260925.md)与 [NEXT](../NEXT.md)。
 
 日期：2026-09-13。最近安排核对：2026-09-20（文档与本地证据，未重新回读环境）。原始基线：`801b402e`。

@@ -4,7 +4,7 @@ import type { VersionAcceptancePage } from '../../../../../../types/productVersi
 
 const { moduleUrl, cacheKey } = useAimsModule()
 
-definePageMeta({ layoutHeader: true, layoutHeaderTitle: '版本验收记录', layoutHeaderProjectSwitcher: false })
+definePageMeta({ hostContentWidth: 'full', layoutHeader: true, layoutHeaderTitle: '版本验收记录', layoutHeaderProjectSwitcher: false })
 const route = useRoute()
 const versionPerspectiveQuery = computed(() => route.query.view === 'gtm' ? { view: 'gtm' } : {})
 const code = computed(() => String(route.params.productCode || ''))

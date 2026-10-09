@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"github.com/huizhi-yun/data-runtime/internal/documentcatalog"
 	"github.com/huizhi-yun/data-runtime/internal/httperror"
 	"net/url"
 	"time"
@@ -128,8 +129,8 @@ func (a *Adapter) WriteEnterpriseProjectDocument(ctx context.Context, identity E
 	if err = requireEnterpriseProjectCommandScopeTx(ctx, tx, identity, projectID, "", "project-document"); err != nil {
 		return nil, err
 	}
-	var leader, creator, role string
-	err = tx.QueryRowContext(ctx, "SELECT COALESCE(leader_uid,''),COALESCE(created_by,'') FROM aims_projects WHERE id=? FOR UPDATE", projectID).Scan(&leader, &creator)
+	var leader, creator, role, projectCode string
+	err = tx.QueryRowContext(ctx, "SELECT COALESCE(leader_uid,''),COALESCE(created_by,''),project_code FROM aims_projects WHERE id=? FOR UPDATE", projectID).Scan(&leader, &creator, &projectCode)
 	if err != nil {
 		return nil, err
 	}
@@ -200,6 +201,9 @@ func (a *Adapter) WriteEnterpriseProjectDocument(ctx context.Context, identity E
 	if err = tx.Commit(); err != nil {
 		return nil, err
 	}
+	// Reconcile this project's repository documents, so that a deleted folder
+	// subtree is reflected as well.
+	a.syncDocumentCatalog(catalogKindRepoDocument, documentcatalog.Filter{OwnerType: "project", OwnerCode: projectCode})
 	return out, nil
 }
 

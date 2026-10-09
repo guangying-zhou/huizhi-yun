@@ -18,22 +18,6 @@ export interface GitCommitQuery extends GitProjectRef {
   perPage?: number
 }
 
-export interface GitCommitAction {
-  action: 'create' | 'update' | 'delete' | 'move' | 'chmod'
-  file_path: string
-  content?: string
-  previous_path?: string
-  encoding?: 'text' | 'base64'
-}
-
-export interface CreateGitCommitInput extends GitProjectRef {
-  branch?: string
-  commitMessage: string
-  actions: GitCommitAction[]
-  authorName?: string
-  authorEmail?: string
-}
-
 export interface UpsertGitIssueInput extends GitProjectRef {
   externalKey: string
   title: string
@@ -66,9 +50,7 @@ type GitLabFixedOperation
     | 'commit-diff'
     | 'markdown-tree'
     | 'file'
-    | 'commit'
     | 'issue-upsert'
-    | 'resolve-actions'
 
 function stringValue(value: unknown) {
   return String(value || '').trim()
@@ -294,39 +276,5 @@ export async function getGitRepositoryFile(
     path: stringValue(input.path),
     ref: input.ref,
     commitId: input.commitId
-  })
-}
-
-export async function createGitCommit(input: CreateGitCommitInput) {
-  const repoPath = await resolveRepoPath(input)
-  return await callGitLabFixedOperation<{
-    revision: string
-    commitId: string
-    webUrl: string
-    repoPath: string
-    branch: string
-  }>(input.integrationCode, 'commit', {
-    repoPath,
-    branch: input.branch,
-    commitMessage: input.commitMessage,
-    actions: input.actions,
-    authorName: input.authorName,
-    authorEmail: input.authorEmail
-  })
-}
-
-export async function resolveGitCommitActions(input: GitProjectRef & {
-  branch?: string
-  docs: { gitlabPath: string, content: string }[]
-}) {
-  const repoPath = await resolveRepoPath(input)
-  return await callGitLabFixedOperation<{
-    repoPath: string
-    branch: string
-    actions: GitCommitAction[]
-  }>(input.integrationCode, 'resolve-actions', {
-    repoPath,
-    branch: input.branch,
-    docs: input.docs
   })
 }

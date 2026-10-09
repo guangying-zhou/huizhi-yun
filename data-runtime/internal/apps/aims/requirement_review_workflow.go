@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/huizhi-yun/data-runtime/internal/documentcatalog"
 	"net/url"
 	"strconv"
 	"strings"
@@ -321,5 +322,7 @@ func (a *Adapter) applyRequirementReviewWorkflowCallback(ctx context.Context, q 
 	if err = tx.Commit(); err != nil {
 		return nil, err
 	}
+	// A new baseline changes the registered requirement specification.
+	a.syncDocumentCatalog(catalogKindRequirementSpec, documentcatalog.Filter{ObjectIDs: []string{strconv.FormatInt(pid, 10)}})
 	return out, nil
 }

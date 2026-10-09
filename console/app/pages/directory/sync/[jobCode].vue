@@ -19,7 +19,7 @@ const { data: jobData, pending: jobPending, error: jobError, refresh: refreshJob
 const { data: eventData, pending: eventsPending, error: eventsError, refresh: refreshEvents } = await useFetch<ApiResponse<DirectorySyncEvent[]>>(
   () => `/api/v1/console/directory/sync-jobs/${jobCode.value}/events`,
   {
-    query: { limit: 200 },
+    query: { limit: 100 },
     default: () => ({ code: 0, data: [] }),
     watch: [jobCode]
   }

@@ -78,3 +78,44 @@ func TestEnterpriseAdminProjectPermitsAreRouteBound(t *testing.T) {
 		t.Fatal("admin permit crossed into project edit")
 	}
 }
+
+func TestEnterpriseRoutineBatchUsesTheSameClosedAdminPermit(t *testing.T) {
+	if enterpriseAdminRoutineBatchPath != "/v1/enterprise/aims/admin-projects:routine-batch" {
+		t.Fatal("route drift")
+	}
+	// The same validator is called by list and batch. None of these claims may
+	// be substituted by a project relation or a different service identity.
+	now := time.Now()
+	verified := enterpriseRequestContext{ActorUID: "U1", Route: enterpriseRouteContext{Binding: enterprise.BindingKey{Tenant: "T1"}, HostDeployment: "host"}}
+	permit := enterpriseAdminProjectPermit{ActorUID: "U1", Tenant: "T1", Deployment: "host", Resource: "admin", Action: "admin", Mode: "admin-static", Allowed: true, ExpiresAt: now.Add(time.Second).UnixMilli()}
+	for _, field := range []string{"tenant", "deployment", "actor", "mode", "resource", "action", "allowed", "expires"} {
+		p := permit
+		switch field {
+		case "tenant":
+			p.Tenant = "other"
+		case "deployment":
+			p.Deployment = "other"
+		case "actor":
+			p.ActorUID = "other"
+		case "mode":
+			p.Mode = "project-manager"
+		case "resource":
+			p.Resource = "projects"
+		case "action":
+			p.Action = "edit"
+		case "allowed":
+			p.Allowed = false
+		case "expires":
+			p.ExpiresAt = now.UnixMilli()
+		}
+		if err := validateEnterpriseAdminProjectPermit("T1", "host", p, verified, now); err == nil {
+			t.Fatal("accepted", field)
+		}
+	}
+	if !enterpriseDelegatedRequiresIdempotencyKey("project-portfolios", "create") {
+		t.Fatal("portfolio intent key optional")
+	}
+	if enterpriseDelegatedRequiresIdempotencyKey("project-portfolios", "list") {
+		t.Fatal("read contract changed")
+	}
+}

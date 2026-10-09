@@ -8,18 +8,29 @@ import { registerHooks } from 'node:module'
 import { statSync, existsSync } from 'node:fs'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { buildSealedArtifacts } from '../../deploy/self-hosted/cutover/sealed.mjs'
-import { INPUT_SCHEMA, OBSERVATION_SCHEMA } from '../../deploy/self-hosted/cutover/evidence.mjs'
-import { canonicalJson } from '../../deploy/self-hosted/cutover/evidence.mjs'
+import { INPUT_SCHEMA, OBSERVATION_SCHEMA, canonicalJson } from '../../deploy/self-hosted/cutover/evidence.mjs'
 import { runProviderReportCli } from '../../deploy/self-hosted/cutover/provider-report-cli.mjs'
 import mysql from 'mysql2/promise'
 import { buildTemporaryMySqlPlan, withTemporaryMySql } from '../../scripts/test/support/temporary-mysql-harness.mjs'
 import { registerEnterpriseNuxtTestHost } from './support/enterprise-nuxt-test-host.mjs'
+
 const rootDir = resolve(import.meta.dirname, '../..')
 const plan = await buildTemporaryMySqlPlan({ rootDir })
-await withTemporaryMySql(plan, async context => {
+await withTemporaryMySql(plan, async (context) => {
   const pool = mysql.createPool({ ...context.connection('console'), multipleStatements: true })
   const hooks = registerEnterpriseNuxtTestHost(rootDir)
-  const directoryHook = registerHooks({ resolve(specifier, context, nextResolve) { const result = nextResolve(specifier, context); if (result.url.startsWith('file:')) { const path = fileURLToPath(result.url); if (statSync(path).isDirectory()) { const entry = ['index.ts', 'index.js'].map(name => resolve(path, name)).find(existsSync); if (entry) return { ...result, url: pathToFileURL(entry).href } } } return result } })
+  const directoryHook = registerHooks({ resolve(specifier, context, nextResolve) {
+    const result = nextResolve(specifier, context)
+    if (result.url.startsWith('file:')) {
+      const path = fileURLToPath(result.url)
+      if (statSync(path).isDirectory()) {
+        const entry = ['index.ts', 'index.js'].map(name => resolve(path, name)).find(existsSync)
+        if (entry)
+          return { ...result, url: pathToFileURL(entry).href }
+      }
+    }
+    return result
+  } })
   const original = { config: globalThis.useRuntimeConfig, fetch: globalThis.fetch, key: process.env.CUTOVER_TEST_KEY, drain: process.env.HZY_DRAIN_CONTROL_TOKEN }
   const key = generateKeyPairSync('ed25519')
   process.env.CUTOVER_TEST_KEY = key.privateKey.export({ type: 'pkcs8', format: 'pem' })
@@ -27,108 +38,134 @@ await withTemporaryMySql(plan, async context => {
   globalThis.useRuntimeConfig = () => ({ db: { ...context.connection('console'), name: context.connection('console').database } })
   let appPool
   try {
-    await pool.query("CREATE TABLE tenants(tenant_code VARCHAR(64) PRIMARY KEY,status VARCHAR(32));INSERT INTO tenants VALUES('C000001','active');CREATE TABLE tenant_runtime_instances(tenant_code VARCHAR(64),environment VARCHAR(32),runtime_code VARCHAR(128),status VARCHAR(32));INSERT INTO tenant_runtime_instances VALUES('C000001','test','fixture-runtime','ready');CREATE TABLE deployments(tenant_code VARCHAR(64),environment VARCHAR(32),app_code VARCHAR(32),deployment_code VARCHAR(128),status VARCHAR(32));INSERT INTO deployments VALUES('C000001','test','aims','C000001-test-aims','active'),('C000001','test','assets','C000001-test-assets','active'),('C000001','test','finance','C000001-test-finance','active'),('C000001','test','console','wiztek-test-console','active');CREATE TABLE platform_signing_keys(id BIGINT PRIMARY KEY,kid VARCHAR(128),alg VARCHAR(32),public_key TEXT,private_key_ref VARCHAR(255),status VARCHAR(32),activated_at DATETIME,rotated_at DATETIME NULL,revoked_at DATETIME NULL)")
-    await pool.query(await readFile(resolve(rootDir,'platform/docs/sql/migrations/20260913-enterprise-external-drain-approval.sql'),'utf8'))
-    await pool.query(await readFile(resolve(rootDir,'platform/docs/sql/migrations/20260929-enterprise-external-drain-generation.sql'),'utf8'))
-    for(const [schema,kind,table] of [['hzy_aims','source','integration_operation'],['hzy_altoc','source','integration_operation'],['hzy_people','receipt','service_command_receipt'],['hzy_console','notification','portal_notification_deliveries']]) await pool.query(`CREATE TABLE ${schema}.${table}(${probeColumns[kind].map(name=>`\`${name}\` VARCHAR(191) NULL`).join(',')})`)
+    await pool.query('CREATE TABLE tenants(tenant_code VARCHAR(64) PRIMARY KEY,status VARCHAR(32));INSERT INTO tenants VALUES(\'C000001\',\'active\');CREATE TABLE tenant_runtime_instances(tenant_code VARCHAR(64),environment VARCHAR(32),runtime_code VARCHAR(128),status VARCHAR(32));INSERT INTO tenant_runtime_instances VALUES(\'C000001\',\'test\',\'fixture-runtime\',\'ready\');CREATE TABLE deployments(tenant_code VARCHAR(64),environment VARCHAR(32),app_code VARCHAR(32),deployment_code VARCHAR(128),status VARCHAR(32));INSERT INTO deployments VALUES(\'C000001\',\'test\',\'aims\',\'C000001-test-aims\',\'active\'),(\'C000001\',\'test\',\'assets\',\'C000001-test-assets\',\'active\'),(\'C000001\',\'test\',\'finance\',\'C000001-test-finance\',\'active\'),(\'C000001\',\'test\',\'console\',\'wiztek-test-console\',\'active\');CREATE TABLE platform_signing_keys(id BIGINT PRIMARY KEY,kid VARCHAR(128),alg VARCHAR(32),public_key TEXT,private_key_ref VARCHAR(255),status VARCHAR(32),activated_at DATETIME,rotated_at DATETIME NULL,revoked_at DATETIME NULL)')
+    await pool.query(await readFile(resolve(rootDir, 'platform/docs/sql/migrations/20260913-enterprise-external-drain-approval.sql'), 'utf8'))
+    await pool.query(await readFile(resolve(rootDir, 'platform/docs/sql/migrations/20260929-enterprise-external-drain-generation.sql'), 'utf8'))
+    for (const [schema, kind, table] of [['hzy_aims', 'source', 'integration_operation'], ['hzy_altoc', 'source', 'integration_operation'], ['hzy_people', 'receipt', 'service_command_receipt'], ['hzy_console', 'notification', 'portal_notification_deliveries']])
+      await pool.query(`CREATE TABLE ${schema}.${table}(${probeColumns[kind].map(name => `\`${name}\` VARCHAR(191) NULL`).join(',')})`)
     await pool.query('CREATE TABLE portal_notifications(notification_id VARCHAR(64),source_app_code VARCHAR(64))')
-    const operation = {operation_id:'operation-1',operation_key:'key-1',tenant_code:'C000001',deployment_code:'C000001-test-aims',source_app:'aims',target_app:'finance',operation_code:'aims.finance.example.v1',required_capability:'finance:example',idempotency_key:'key-1',command_schema_version:'v1',command_sha256:'a'.repeat(64),status:'succeeded',attempt_count:'1',locked_by:null,locked_until:null,target_receipt_id:'receipt-1',target_biz_type:'example',target_biz_code:'B1',response_summary_sha256:'b'.repeat(64)}
-    const receipt = {...operation,receipt_id:'receipt-1',source_deployment_code:operation.deployment_code,deployment_code:'C000001-test-finance'}
-    for(const [table,kind,row] of [['hzy_aims.integration_operation','source',operation],['hzy_people.service_command_receipt','receipt',receipt]]) await pool.execute(`INSERT INTO ${table} VALUES(${probeColumns[kind].map(()=>'?').join(',')})`,probeColumns[kind].map(column=>row[column]??null))
-    await pool.execute("INSERT INTO platform_signing_keys VALUES(1,'cutover-fixture','Ed25519',?,'env:CUTOVER_TEST_KEY','active',UTC_TIMESTAMP(),NULL,NULL)", [key.publicKey.export({ type: 'spki', format: 'pem' })])
+    const operation = { operation_id: 'operation-1', operation_key: 'key-1', tenant_code: 'C000001', deployment_code: 'C000001-test-aims', source_app: 'aims', target_app: 'finance', operation_code: 'aims.finance.example.v1', required_capability: 'finance:example', idempotency_key: 'key-1', command_schema_version: 'v1', command_sha256: 'a'.repeat(64), status: 'succeeded', attempt_count: '1', locked_by: null, locked_until: null, target_receipt_id: 'receipt-1', target_biz_type: 'example', target_biz_code: 'B1', response_summary_sha256: 'b'.repeat(64) }
+    const receipt = { ...operation, receipt_id: 'receipt-1', source_deployment_code: operation.deployment_code, deployment_code: 'C000001-test-finance' }
+    for (const [table, kind, row] of [['hzy_aims.integration_operation', 'source', operation], ['hzy_people.service_command_receipt', 'receipt', receipt]])
+      await pool.execute(`INSERT INTO ${table} VALUES(${probeColumns[kind].map(() => '?').join(',')})`, probeColumns[kind].map(column => row[column] ?? null))
+    await pool.execute('INSERT INTO platform_signing_keys VALUES(1,\'cutover-fixture\',\'Ed25519\',?,\'env:CUTOVER_TEST_KEY\',\'active\',UTC_TIMESTAMP(),NULL,NULL)', [key.publicKey.export({ type: 'spki', format: 'pem' })])
     const actors = ['aims', 'assets'].map(app => ({ app, deployment: `C000001-test-${app}`, artifactSha256: 'a'.repeat(64) }))
-    const [[instance]]=await pool.query('SELECT @@server_uuid instanceId')
-    const binding={tenant:'C000001',environment:'test',runtimeDeployment:'fixture-runtime',instanceId:instance.instanceId,sources:[{app:'aims',schema:'hzy_aims',deployment:'C000001-test-aims'},{app:'assets',schema:'hzy_altoc',deployment:'C000001-test-assets'}],unconfiguredProviders:['altoc','codocs','people'],providers:[{app:'aims',schema:'hzy_aims',deployment:'C000001-test-aims'},{app:'assets',schema:'hzy_altoc',deployment:'C000001-test-assets'},{app:'finance',schema:'hzy_people',deployment:'C000001-test-finance'},{app:'console',schema:'hzy_console',deployment:'wiztek-test-console'}]}
-    const report=await collectProviderReceipts(pool,binding)
-    assert.equal(report.automaticCount,1);assert.equal(report.manualCount,10);assert.equal(report.ready,false)
-    const providerDir=await mkdtemp('/tmp/k2e-provider-cli-')
+    const [[instance]] = await pool.query('SELECT @@server_uuid instanceId')
+    const binding = { tenant: 'C000001', environment: 'test', runtimeDeployment: 'fixture-runtime', instanceId: instance.instanceId, sources: [{ app: 'aims', schema: 'hzy_aims', deployment: 'C000001-test-aims' }, { app: 'assets', schema: 'hzy_altoc', deployment: 'C000001-test-assets' }], unconfiguredProviders: ['altoc', 'codocs', 'people'], providers: [{ app: 'aims', schema: 'hzy_aims', deployment: 'C000001-test-aims' }, { app: 'assets', schema: 'hzy_altoc', deployment: 'C000001-test-assets' }, { app: 'finance', schema: 'hzy_people', deployment: 'C000001-test-finance' }, { app: 'console', schema: 'hzy_console', deployment: 'wiztek-test-console' }] }
+    const report = await collectProviderReceipts(pool, binding)
+    assert.equal(report.automaticCount, 1)
+    assert.equal(report.manualCount, 10)
+    assert.equal(report.ready, false)
+    const providerDir = await mkdtemp('/tmp/k2e-provider-cli-')
     try {
-      const configPath=resolve(providerDir,'collect.json')
-      await writeFile(configPath,canonicalJson({schemaVersion:'enterprise-offline-provider-collection.v1',db:context.connection('console'),binding}),{mode:0o600})
-      const collected=await runProviderReportCli(['collect','--config',configPath,'--out','provider-report.json'])
-      assert.equal(collected.status,'collected')
-      assert.equal(collected.sha256,createHash('sha256').update(await readFile(resolve(providerDir,'provider-report.json'))).digest('hex'))
-      assert.deepEqual(JSON.parse(await readFile(resolve(providerDir,'provider-report.json'),'utf8')).probes,report.probes)
-    } finally { await rm(providerDir,{recursive:true,force:true}) }
+      const configPath = resolve(providerDir, 'collect.json')
+      await writeFile(configPath, canonicalJson({ schemaVersion: 'enterprise-offline-provider-collection.v1', db: context.connection('console'), binding }), { mode: 0o600 })
+      const collected = await runProviderReportCli(['collect', '--config', configPath, '--out', 'provider-report.json'])
+      assert.equal(collected.status, 'collected')
+      assert.equal(collected.sha256, createHash('sha256').update(await readFile(resolve(providerDir, 'provider-report.json'))).digest('hex'))
+      assert.deepEqual(JSON.parse(await readFile(resolve(providerDir, 'provider-report.json'), 'utf8')).probes, report.probes)
+    } finally {
+      await rm(providerDir, { recursive: true, force: true })
+    }
     const makeApprovalInput = (providerReport, actorRows, cutoverKey, generation, requestId, approvalReference) => {
       const b = providerReport.binding
-      const binding = {tenant:b.tenant,environment:b.environment,cutoverKey,targetGeneration:generation,instanceId:b.instanceId,runtimeDeployment:b.runtimeDeployment}
+      const binding = { tenant: b.tenant, environment: b.environment, cutoverKey, targetGeneration: generation, instanceId: b.instanceId, runtimeDeployment: b.runtimeDeployment }
       const now = Date.now(), at = minutes => new Date(now + minutes * 60_000).toISOString()
-      const source = {tables:[{schema:'hzy_aims',table:'integration_operation',count:'1',checksum:'123'}]}
-      const observation = (kind,minute,result) => ({schemaVersion:OBSERVATION_SCHEMA,binding,kind,observedStart:at(minute),observedEnd:at(minute),collector:'isolated-mysql-fixture',result})
-      const observations=[observation('c2-source-first',-12,source),observation('c2-source-second',-7,source),
-        observation('dump-link',-6,{sha256:'a'.repeat(64)}),observation('provider-report',-5,{sha256:createHash('sha256').update(canonicalJson(providerReport)).digest('hex')}),
-        observation('p-gateway',-2,{routeDisabled:true,workerDisabled:true,routeId:'fixture-route',workerVersion:'fixture-version'}),
-        observation('p-runtime',-2,{serviceInactive:true,timerInactive:true,unit:'fixture.service',timer:'fixture.timer'}),
-        observation('p-source',-2,source),observation('p-nginx',-2,{maintenanceConfig:true,maintenanceResponse:true,serverName:'fixture.invalid'})]
-      const manifest={schemaVersion:INPUT_SCHEMA,phase:'p',binding,files:observations.map(value=>({kind:value.kind,name:`${value.kind}.json`})),approval:null}
-      const publicKey=key.publicKey.export({type:'spki',format:'der'}).subarray(-32).toString('base64url')
-      const profile={version:'enterprise-cutover-profile.v1',tenant:b.tenant,environment:b.environment,cutoverKey,generation:Number(generation),instanceId:b.instanceId,runtimeDeployment:b.runtimeDeployment,
-        sourceDeployments:Object.fromEntries(actorRows.map(row=>[row.app,row.deployment])),platform:{keyId:'cutover-fixture',publicKey}}
-      const coldArchive=['altoc','finance','people','webdev'].map(app=>({app,mode:'manual',name:`${app}-manual.json`,evidenceSha256:'e'.repeat(64),reference:`fixture-evidence://${app}`}))
-      const artifacts=buildSealedArtifacts({input:manifest,observations,report:providerReport,actors:actorRows,profile,coldArchive,credential:Buffer.from(process.env.HZY_DRAIN_CONTROL_TOKEN),nowMs:now})
-      const decisions=providerReport.entries.filter(entry=>entry.classification==='manual-required').map(entry=>({entryId:entry.id,entrySha256:createHash('sha256').update(JSON.stringify(entry)).digest('hex'),outcome:['coverage:pre-wrapper-inflight-history','coverage:external-notification-providers'].includes(entry.id)?'verified-terminal':'verified-consumer-coverage',evidenceKind:'activity-ledger',reference:'fixture-ledger://isolated/observed-consumer-completion',evidenceSha256:'c'.repeat(64),explanation:'Isolated fixture contains an explicit inspected consumer ledger; no elapsed-time assumption.'}))
-      return {...artifacts.request,decisions,coldArchiveReviews:coldArchive.map(item=>({app:item.app,outcome:'verified-manual',evidenceSha256:item.evidenceSha256,reference:item.reference,explanation:'Operator inspected this cold archive and its provider inventory.'})),requestId,approvalReference}
+      const source = { tables: [{ schema: 'hzy_aims', table: 'integration_operation', count: '1', checksum: '123' }] }
+      const observation = (kind, minute, result) => ({ schemaVersion: OBSERVATION_SCHEMA, binding, kind, observedStart: at(minute), observedEnd: at(minute), collector: 'isolated-mysql-fixture', result })
+      const observations = [observation('c2-source-first', -12, source), observation('c2-source-second', -7, source),
+        observation('dump-link', -6, { sha256: 'a'.repeat(64) }), observation('provider-report', -5, { sha256: createHash('sha256').update(canonicalJson(providerReport)).digest('hex') }),
+        observation('p-gateway', -2, { routeDisabled: true, workerDisabled: true, routeId: 'fixture-route', workerVersion: 'fixture-version' }),
+        observation('p-runtime', -2, { serviceInactive: true, timerInactive: true, unit: 'fixture.service', timer: 'fixture.timer' }),
+        observation('p-source', -2, source), observation('p-nginx', -2, { maintenanceConfig: true, maintenanceResponse: true, serverName: 'fixture.invalid' })]
+      const manifest = { schemaVersion: INPUT_SCHEMA, phase: 'p', binding, files: observations.map(value => ({ kind: value.kind, name: `${value.kind}.json` })), approval: null }
+      const publicKey = key.publicKey.export({ type: 'spki', format: 'der' }).subarray(-32).toString('base64url')
+      const profile = { version: 'enterprise-cutover-profile.v1', tenant: b.tenant, environment: b.environment, cutoverKey, generation: Number(generation), instanceId: b.instanceId, runtimeDeployment: b.runtimeDeployment,
+        sourceDeployments: Object.fromEntries(actorRows.map(row => [row.app, row.deployment])), platform: { keyId: 'cutover-fixture', publicKey } }
+      const coldArchive = ['altoc', 'finance', 'people', 'webdev'].map(app => ({ app, mode: 'manual', name: `${app}-manual.json`, evidenceSha256: 'e'.repeat(64), reference: `fixture-evidence://${app}` }))
+      const artifacts = buildSealedArtifacts({ input: manifest, observations, report: providerReport, actors: actorRows, profile, coldArchive, credential: Buffer.from(process.env.HZY_DRAIN_CONTROL_TOKEN), nowMs: now })
+      const decisions = providerReport.entries.filter(entry => entry.classification === 'manual-required').map(entry => ({ entryId: entry.id, entrySha256: createHash('sha256').update(JSON.stringify(entry)).digest('hex'), outcome: ['coverage:pre-wrapper-inflight-history', 'coverage:external-notification-providers'].includes(entry.id) ? 'verified-terminal' : 'verified-consumer-coverage', evidenceKind: 'activity-ledger', reference: 'fixture-ledger://isolated/observed-consumer-completion', evidenceSha256: 'c'.repeat(64), explanation: 'Isolated fixture contains an explicit inspected consumer ledger; no elapsed-time assumption.' }))
+      return { ...artifacts.request, decisions, coldArchiveReviews: coldArchive.map(item => ({ app: item.app, outcome: 'verified-manual', evidenceSha256: item.evidenceSha256, reference: item.reference, explanation: 'Operator inspected this cold archive and its provider inventory.' })), requestId, approvalReference }
     }
-    const input=makeApprovalInput(report,actors,'cutover-1','7','review-1','fixture-reviewed-provider-ledger')
-    const { useDbPool } = await import('../server/utils/db.ts'); appPool = useDbPool()
+    const input = makeApprovalInput(report, actors, 'cutover-1', '7', 'review-1', 'fixture-reviewed-provider-ledger')
+    const { useDbPool } = await import('../server/utils/db.ts')
+    appPool = useDbPool()
     const { approveExternalDrain } = await import('../server/utils/enterpriseExternalDrainApproval.ts')
-    await assert.rejects(()=>approveExternalDrain({...input,decisions:[]},'operator',true),/manual_evidence_incomplete/)
-    await assert.rejects(()=>approveExternalDrain(input,'',true),/approval_audit_required/)
-    const dry=await approveExternalDrain(input,'operator',false);assert.equal(dry.applied,false)
-    assert.equal((await pool.query('SELECT COUNT(*) count FROM enterprise_external_drain_approvals'))[0][0].count,0)
-    const signed=await approveExternalDrain(input,'operator',true)
-    assert.equal(verify(null,Buffer.from(signed.payload),key.publicKey,Buffer.from(signed.signature,'base64url')),true)
-    assert.equal(signed.publicKey,key.publicKey.export({type:'spki',format:'der'}).subarray(-32).toString('base64url'))
-    const replayed=await approveExternalDrain(input,'operator',true)
-    assert.equal(replayed.replayed,true)
-    assert.deepEqual({payload:replayed.payload,signature:replayed.signature,kid:replayed.kid},
-      {payload:signed.payload,signature:signed.signature,kid:signed.kid})
-    await assert.rejects(()=>approveExternalDrain({...input,approvalReference:'changed reference'},'operator',true),/immutable_approval_conflict/)
-    const revisedPayload=JSON.stringify({...JSON.parse(input.seal.payload),revision:2})
-    const revisedSeal={...input.seal,payload:revisedPayload,signature:createHmac('sha256',process.env.HZY_DRAIN_CONTROL_TOKEN).update(revisedPayload).digest('hex')}
-    await assert.rejects(()=>approveExternalDrain({...input,seal:revisedSeal,requestId:'review-2'},'operator',true),/immutable_approval_conflict/)
-    await assert.rejects(()=>approveExternalDrain({...input,evidenceSha256:'0'.repeat(64)},'operator',false),/evidence_file_changed/)
-    await assert.rejects(()=>approveExternalDrain({...input,evidenceBase64:Buffer.from('replaced').toString('base64')},'operator',false),/evidence_file_changed/)
-    await assert.rejects(()=>approveExternalDrain({...input,profileKey:{...input.profileKey,publicKeySha256:'0'.repeat(64)}},'operator',false),/evidence_file_invalid|profile_signing_key_mismatch/)
-    await assert.rejects(()=>approveExternalDrain({...input,coldArchiveReviews:[]},'operator',false),/cold_archive_manual_missing/)
-    await assert.rejects(()=>approveExternalDrain({...input,report:{...report,binding:{...binding,runtimeDeployment:'unregistered-runtime'}}},'operator',false),/evidence_file_invalid/)
-    await assert.rejects(()=>approveExternalDrain({...input,report:{...report,binding:{...binding,sources:[{...binding.sources[0],deployment:'other-aims'},binding.sources[1]]}}},'operator',false),/evidence_file_invalid/)
-    await assert.rejects(()=>approveExternalDrain({...input,report:{...report,binding:{...binding,environment:'prod'}}},'operator',false),/evidence_file_invalid/)
-    await assert.rejects(()=>approveExternalDrain({...input,report:{...report,binding:{...binding,tenant:'T900001'}}},'operator',false),/evidence_file_invalid/)
-    await pool.query("UPDATE deployments SET status='inactive' WHERE tenant_code='C000001' AND environment='test' AND app_code='finance'")
-    await assert.rejects(()=>approveExternalDrain(input,'operator',false),/provider_deployment_unregistered/)
-    await pool.query("UPDATE deployments SET status='active' WHERE tenant_code='C000001' AND environment='test' AND app_code='finance'")
-    await pool.query("UPDATE tenant_runtime_instances SET status='unhealthy' WHERE tenant_code='C000001' AND environment='test'")
-    await assert.rejects(()=>approveExternalDrain(input,'operator',false),/runtime_binding_invalid/)
-    await pool.query("UPDATE tenant_runtime_instances SET status='ready' WHERE tenant_code='C000001' AND environment='test'")
-    for (const [tenant, environment, expected] of [['C000001','prod','runtime_binding_invalid'],['T900001','test','blocked_evidence|tenant_missing_or_inactive']]) {
-      const otherBinding={...binding,tenant,environment}
-      await assert.rejects(()=>approveExternalDrain({...input,report:{...report,binding:otherBinding}},'operator',false),/evidence_file_invalid/)
+    await assert.rejects(() => approveExternalDrain({ ...input, decisions: [] }, 'operator', true), /manual_evidence_incomplete/)
+    await assert.rejects(() => approveExternalDrain(input, '', true), /approval_audit_required/)
+    const dry = await approveExternalDrain(input, 'operator', false)
+    assert.equal(dry.applied, false)
+    assert.equal((await pool.query('SELECT COUNT(*) count FROM enterprise_external_drain_approvals'))[0][0].count, 0)
+    const signed = await approveExternalDrain(input, 'operator', true)
+    assert.equal(verify(null, Buffer.from(signed.payload), key.publicKey, Buffer.from(signed.signature, 'base64url')), true)
+    assert.equal(signed.publicKey, key.publicKey.export({ type: 'spki', format: 'der' }).subarray(-32).toString('base64url'))
+    const replayed = await approveExternalDrain(input, 'operator', true)
+    assert.equal(replayed.replayed, true)
+    assert.deepEqual({ payload: replayed.payload, signature: replayed.signature, kid: replayed.kid },
+      { payload: signed.payload, signature: signed.signature, kid: signed.kid })
+    await assert.rejects(() => approveExternalDrain({ ...input, approvalReference: 'changed reference' }, 'operator', true), /immutable_approval_conflict/)
+    const revisedPayload = JSON.stringify({ ...JSON.parse(input.seal.payload), revision: 2 })
+    const revisedSeal = { ...input.seal, payload: revisedPayload, signature: createHmac('sha256', process.env.HZY_DRAIN_CONTROL_TOKEN).update(revisedPayload).digest('hex') }
+    await assert.rejects(() => approveExternalDrain({ ...input, seal: revisedSeal, requestId: 'review-2' }, 'operator', true), /immutable_approval_conflict/)
+    await assert.rejects(() => approveExternalDrain({ ...input, evidenceSha256: '0'.repeat(64) }, 'operator', false), /evidence_file_changed/)
+    await assert.rejects(() => approveExternalDrain({ ...input, evidenceBase64: Buffer.from('replaced').toString('base64') }, 'operator', false), /evidence_file_changed/)
+    await assert.rejects(() => approveExternalDrain({ ...input, profileKey: { ...input.profileKey, publicKeySha256: '0'.repeat(64) } }, 'operator', false), /evidence_file_invalid|profile_signing_key_mismatch/)
+    await assert.rejects(() => approveExternalDrain({ ...input, coldArchiveReviews: [] }, 'operator', false), /cold_archive_manual_missing/)
+    await assert.rejects(() => approveExternalDrain({ ...input, report: { ...report, binding: { ...binding, runtimeDeployment: 'unregistered-runtime' } } }, 'operator', false), /evidence_file_invalid/)
+    await assert.rejects(() => approveExternalDrain({ ...input, report: { ...report, binding: { ...binding, sources: [{ ...binding.sources[0], deployment: 'other-aims' }, binding.sources[1]] } } }, 'operator', false), /evidence_file_invalid/)
+    await assert.rejects(() => approveExternalDrain({ ...input, report: { ...report, binding: { ...binding, environment: 'prod' } } }, 'operator', false), /evidence_file_invalid/)
+    await assert.rejects(() => approveExternalDrain({ ...input, report: { ...report, binding: { ...binding, tenant: 'T900001' } } }, 'operator', false), /evidence_file_invalid/)
+    await pool.query('UPDATE deployments SET status=\'inactive\' WHERE tenant_code=\'C000001\' AND environment=\'test\' AND app_code=\'finance\'')
+    await assert.rejects(() => approveExternalDrain(input, 'operator', false), /provider_deployment_unregistered/)
+    await pool.query('UPDATE deployments SET status=\'active\' WHERE tenant_code=\'C000001\' AND environment=\'test\' AND app_code=\'finance\'')
+    await pool.query('UPDATE tenant_runtime_instances SET status=\'unhealthy\' WHERE tenant_code=\'C000001\' AND environment=\'test\'')
+    await assert.rejects(() => approveExternalDrain(input, 'operator', false), /runtime_binding_invalid/)
+    await pool.query('UPDATE tenant_runtime_instances SET status=\'ready\' WHERE tenant_code=\'C000001\' AND environment=\'test\'')
+    for (const [tenant, environment] of [['C000001', 'prod', 'runtime_binding_invalid'], ['T900001', 'test', 'blocked_evidence|tenant_missing_or_inactive']]) {
+      const otherBinding = { ...binding, tenant, environment }
+      await assert.rejects(() => approveExternalDrain({ ...input, report: { ...report, binding: otherBinding } }, 'operator', false), /evidence_file_invalid/)
     }
-    await pool.query("UPDATE hzy_aims.integration_operation SET deployment_code='C000001-aims';UPDATE hzy_people.service_command_receipt SET source_deployment_code='C000001-aims',deployment_code='C000001-finance';INSERT INTO tenant_runtime_instances VALUES('C000001','prod','c000001-prod-tenant-runtime','ready');INSERT INTO deployments VALUES('C000001','prod','aims','C000001-aims','active'),('C000001','prod','assets','C000001-assets','active'),('C000001','prod','finance','C000001-finance','active'),('C000001','prod','console','C000001-console','active')")
-    const prodBinding={...binding,environment:'prod',runtimeDeployment:'c000001-prod-tenant-runtime',sources:binding.sources.map(source=>({...source,deployment:`C000001-${source.app}`})),providers:binding.providers.map(provider=>({...provider,deployment:`C000001-${provider.app}`}))}
-    const prodReport=await collectProviderReceipts(pool,prodBinding)
-    assert.equal(prodReport.blockedCount,0)
-    const prodActors=actors.map(actor=>({...actor,deployment:`C000001-${actor.app}`}))
-    const prodInput=makeApprovalInput(prodReport,prodActors,'prod-cutover-1','8','prod-review-1','fixture-reviewed-production-evidence')
-    const prodSigned=await approveExternalDrain(prodInput,'operator',true)
-    assert.equal(JSON.parse(prodSigned.payload).report.binding.runtimeDeployment,'c000001-prod-tenant-runtime')
-    await pool.query("UPDATE hzy_aims.integration_operation SET deployment_code='C000001-test-aims';UPDATE hzy_people.service_command_receipt SET source_deployment_code='C000001-test-aims',deployment_code='C000001-test-finance'")
-    const dir=await mkdtemp('/tmp/hzy-external-report-')
+    await pool.query('UPDATE hzy_aims.integration_operation SET deployment_code=\'C000001-aims\';UPDATE hzy_people.service_command_receipt SET source_deployment_code=\'C000001-aims\',deployment_code=\'C000001-finance\';INSERT INTO tenant_runtime_instances VALUES(\'C000001\',\'prod\',\'c000001-prod-tenant-runtime\',\'ready\');INSERT INTO deployments VALUES(\'C000001\',\'prod\',\'aims\',\'C000001-aims\',\'active\'),(\'C000001\',\'prod\',\'assets\',\'C000001-assets\',\'active\'),(\'C000001\',\'prod\',\'finance\',\'C000001-finance\',\'active\'),(\'C000001\',\'prod\',\'console\',\'C000001-console\',\'active\')')
+    const prodBinding = { ...binding, environment: 'prod', runtimeDeployment: 'c000001-prod-tenant-runtime', sources: binding.sources.map(source => ({ ...source, deployment: `C000001-${source.app}` })), providers: binding.providers.map(provider => ({ ...provider, deployment: `C000001-${provider.app}` })) }
+    const prodReport = await collectProviderReceipts(pool, prodBinding)
+    assert.equal(prodReport.blockedCount, 0)
+    const prodActors = actors.map(actor => ({ ...actor, deployment: `C000001-${actor.app}` }))
+    const prodInput = makeApprovalInput(prodReport, prodActors, 'prod-cutover-1', '8', 'prod-review-1', 'fixture-reviewed-production-evidence')
+    const prodSigned = await approveExternalDrain(prodInput, 'operator', true)
+    assert.equal(JSON.parse(prodSigned.payload).report.binding.runtimeDeployment, 'c000001-prod-tenant-runtime')
+    await pool.query('UPDATE hzy_aims.integration_operation SET deployment_code=\'C000001-test-aims\';UPDATE hzy_people.service_command_receipt SET source_deployment_code=\'C000001-test-aims\',deployment_code=\'C000001-test-finance\'')
+    const dir = await mkdtemp('/tmp/hzy-external-report-')
     try {
-      const file=resolve(dir,'approval.json')
-      await writeFile(file,JSON.stringify({payload:signed.payload,signature:signed.signature,publicKey:signed.publicKey}),{mode:0o600})
-      await new Promise((done,reject)=>{const child=spawn('go',['test','./internal/migrations/unified','-run','^TestApprovedExternalEvidenceMySQL$','-count=1','-v'],{cwd:resolve(rootDir,'data-runtime'),stdio:'inherit',env:{...process.env,HZY_EXTERNAL_EVIDENCE_SOCKET:context.socketPath,HZY_EXTERNAL_EVIDENCE_FILE:file}});child.on('error',reject);child.on('exit',code=>code===0?done():reject(Error('Go evidence verification failed')))})
-      const crossFile=resolve(dir,'platform-signed-prod-approval.json')
-      await writeFile(crossFile,JSON.stringify({envelope:{payload:prodSigned.payload,signature:prodSigned.signature,alg:prodSigned.alg,kid:prodSigned.kid,publicKey:prodSigned.publicKey},profile:{tenant:'C000001',environment:'prod',runtimeDeployment:'c000001-prod-tenant-runtime',instanceId:instance.instanceId,cutoverKey:'prod-cutover-1',generation:'8',keyId:prodSigned.kid,publicKey:prodSigned.publicKey}}),{mode:0o600})
-      await new Promise((done,reject)=>{const child=spawn('go',['test','./internal/migrations/cutoverprofile','-run','^TestPlatformSignedDrainApprovalFixture$','-count=1','-v'],{cwd:resolve(rootDir,'data-runtime'),stdio:'inherit',env:{...process.env,HZY_K2P_DRAIN_FIXTURE:crossFile}});child.on('error',reject);child.on('exit',code=>code===0?done():reject(Error('Go profile verification of Platform signature failed')))})
-    } finally {await rm(dir,{recursive:true,force:true})}
+      const file = resolve(dir, 'approval.json')
+      await writeFile(file, JSON.stringify({ payload: signed.payload, signature: signed.signature, publicKey: signed.publicKey }), { mode: 0o600 })
+      await new Promise((done, reject) => {
+        const child = spawn('go', ['test', './internal/migrations/unified', '-run', '^TestApprovedExternalEvidenceMySQL$', '-count=1', '-v'], { cwd: resolve(rootDir, 'data-runtime'), stdio: 'inherit', env: { ...process.env, HZY_EXTERNAL_EVIDENCE_SOCKET: context.socketPath, HZY_EXTERNAL_EVIDENCE_FILE: file } })
+        child.on('error', reject)
+        child.on('exit', code => code === 0 ? done() : reject(Error('Go evidence verification failed')))
+      })
+      const crossFile = resolve(dir, 'platform-signed-prod-approval.json')
+      await writeFile(crossFile, JSON.stringify({ envelope: { payload: prodSigned.payload, signature: prodSigned.signature, alg: prodSigned.alg, kid: prodSigned.kid, publicKey: prodSigned.publicKey }, profile: { tenant: 'C000001', environment: 'prod', runtimeDeployment: 'c000001-prod-tenant-runtime', instanceId: instance.instanceId, cutoverKey: 'prod-cutover-1', generation: '8', keyId: prodSigned.kid, publicKey: prodSigned.publicKey } }), { mode: 0o600 })
+      await new Promise((done, reject) => {
+        const child = spawn('go', ['test', './internal/migrations/cutoverprofile', '-run', '^TestPlatformSignedDrainApprovalFixture$', '-count=1', '-v'], { cwd: resolve(rootDir, 'data-runtime'), stdio: 'inherit', env: { ...process.env, HZY_K2P_DRAIN_FIXTURE: crossFile } })
+        child.on('error', reject)
+        child.on('exit', code => code === 0 ? done() : reject(Error('Go profile verification of Platform signature failed')))
+      })
+    } finally {
+      await rm(dir, { recursive: true, force: true })
+    }
     console.log('Actual source/provider collection → Platform immutable manual approval/signature → Go transaction recheck passed')
   } finally {
-    if (appPool) await appPool.end()
-    await pool.end(); directoryHook.deregister(); hooks.deregister()
-    globalThis.useRuntimeConfig = original.config; globalThis.fetch = original.fetch
-    for (const [name, value] of [['CUTOVER_TEST_KEY', original.key], ['HZY_DRAIN_CONTROL_TOKEN', original.drain]]) { if (value === undefined) delete process.env[name]; else process.env[name] = value }
+    if (appPool)
+      await appPool.end()
+    await pool.end()
+    directoryHook.deregister()
+    hooks.deregister()
+    globalThis.useRuntimeConfig = original.config
+    globalThis.fetch = original.fetch
+    for (const [name, value] of [['CUTOVER_TEST_KEY', original.key], ['HZY_DRAIN_CONTROL_TOKEN', original.drain]]) {
+      if (value === undefined)
+        delete process.env[name]; else
+        process.env[name] = value
+    }
   }
-}, { execute: true, confirm: plan.confirmationSha256, temporaryParent:'/tmp' })
+}, { execute: true, confirm: plan.confirmationSha256, temporaryParent: '/tmp' })

@@ -168,6 +168,9 @@ test('optional features accept only known boolean switches', () => {
   for (const [features, ok] of [
     [{ codocsSnapshotV2: true }, true],
     [{ codocsSnapshotV2: false }, true],
+    [{ feedbackDeliveryEnabled: true }, true],
+    [{ feedbackDeliveryEnabled: false }, true],
+    [{ feedbackDeliveryEnabled: 'true' }, false],
     [{ codocsSnapshotV2: true, codocsCollaborationV2: true }, true],
     [{ codocsSnapshotV2: true, codocsCollaborationV2: true, codocsDepartmentCollaborationV2: true }, true],
     [{ codocsSnapshotV2: true, codocsCollaborationV2: true, codocsDepartmentCollaborationV2: 'true' }, false],
@@ -193,4 +196,20 @@ test('in-app-only notifications require the local Console egress binding', () =>
   profile.identity.consoleFacadeMode = 'local-canonical-facade'
   profile.identity.credentialProviderRef = 'protected-file:test-gateway'
   assert.deepEqual(validateProfile(profile), [])
+})
+
+// Executor selection does not enable business cron or an additional owner.
+test('R1 permits only the two explicit physical Aims executor identities', () => {
+  for (const executor of ['aims', 'enterprise']) {
+    const profile = approvedProfile()
+    profile.scheduler.aimsExecutor = executor
+    assert.deepEqual(validateProfile(profile), [])
+    profile.scheduler.consumeBusinessOutbox = true
+    assert.ok(validateProfile(profile).some(issue => issue.includes('consumeBusinessOutbox')))
+  }
+  for (const executor of ['', 'runtime', '*', null]) {
+    const profile = approvedProfile()
+    profile.scheduler.aimsExecutor = executor
+    assert.ok(validateProfile(profile).some(issue => issue.includes('scheduler.aimsExecutor')))
+  }
 })

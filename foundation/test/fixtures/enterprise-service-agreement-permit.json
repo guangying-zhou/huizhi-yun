@@ -1,0 +1,41 @@
+{
+  "method": "POST",
+  "target": "/v1/enterprise/altoc/service-agreements:create",
+  "body": {
+    "id": "",
+    "code": "",
+    "name": "",
+    "rowVersion": 0,
+    "page": 0,
+    "pageSize": 0,
+    "search": "",
+    "authorization": {
+      "actorUid": "Person",
+      "tenant": "C000001",
+      "deployment": "Host",
+      "resource": "contract",
+      "action": "edit",
+      "operation": "service-agreements-create",
+      "objectId": "",
+      "allowed": true,
+      "expiresAt": 123,
+      "bundleVersion": "1",
+      "bundleHash": "hash",
+      "policyRevision": 38,
+      "scope": {
+        "access": "self",
+        "departmentCodes": []
+      }
+    },
+    "sales": {
+      "id": "",
+      "payload": {
+        "name": "中文服务协议",
+        "contract_id": "12",
+        "contract_line_id": null,
+        "included_quota": "12.30"
+      }
+    }
+  },
+  "canonical": "[\"hzy-enterprise-apf-permit.v1\",\"POST\",\"/v1/enterprise/altoc/service-agreements:create\",\"Person\",\"C000001\",\"Host\",\"contract\",\"edit\",\"service-agreements-create\",\"\",true,123,\"1\",\"hash\",38,\"self\",[],\"\",\"\",\"\",0,0,0,\"\",[\"\",[[\"contract_id\",\"12\"],[\"contract_line_id\",null],[\"included_quota\",\"12.30\"],[\"name\",\"中文服务协议\"]]]]"
+}

@@ -8,16 +8,21 @@ const minimumSamples = 20
 // Input contains measurements, never browser storage, request headers or bodies.
 // Each artifact/role/data/cache combination is summarized separately.
 export function summarizePerformance(samples) {
-  if (!Array.isArray(samples) || samples.length === 0) throw new Error('PERFORMANCE_SAMPLES_REQUIRED')
+  if (!Array.isArray(samples) || samples.length === 0)
+    throw new Error('PERFORMANCE_SAMPLES_REQUIRED')
   const groups = new Map()
   for (const sample of samples) {
-    if (!sample || typeof sample !== 'object' || Object.keys(sample).some(key => ![...dimensions, 'value'].includes(key))) throw new Error('PERFORMANCE_SAMPLE_SHAPE_INVALID')
-    if (dimensions.some(key => typeof sample[key] !== 'string' || !/^[A-Za-z0-9._:-]{1,128}$/.test(sample[key]))) throw new Error('PERFORMANCE_DIMENSION_INVALID')
+    if (!sample || typeof sample !== 'object' || Object.keys(sample).some(key => ![...dimensions, 'value'].includes(key)))
+      throw new Error('PERFORMANCE_SAMPLE_SHAPE_INVALID')
+    if (dimensions.some(key => typeof sample[key] !== 'string' || !/^[A-Za-z0-9._:-]{1,128}$/.test(sample[key])))
+      throw new Error('PERFORMANCE_DIMENSION_INVALID')
     if (!['legacy', 'enterprise'].includes(sample.variant) || !['cold', 'warm'].includes(sample.cache)
-      || !['ms', 'bytes', 'count'].includes(sample.unit) || !Number.isFinite(sample.value) || sample.value < 0) throw new Error('PERFORMANCE_VALUE_INVALID')
+      || !['ms', 'bytes', 'count'].includes(sample.unit) || !Number.isFinite(sample.value) || sample.value < 0)
+      throw new Error('PERFORMANCE_VALUE_INVALID')
     const identity = Object.fromEntries(dimensions.map(key => [key, sample[key]]))
     const key = JSON.stringify(identity)
-    if (!groups.has(key)) groups.set(key, { ...identity, values: [] })
+    if (!groups.has(key))
+      groups.set(key, { ...identity, values: [] })
     groups.get(key).values.push(sample.value)
   }
   return {
@@ -37,7 +42,11 @@ export function summarizePerformance(samples) {
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {
-    if (process.argv.length !== 3) throw new Error('PERFORMANCE_INPUT_REQUIRED')
+    if (process.argv.length !== 3)
+      throw new Error('PERFORMANCE_INPUT_REQUIRED')
     console.log(JSON.stringify(summarizePerformance(JSON.parse(readFileSync(process.argv[2], 'utf8'))), null, 2))
-  } catch { console.error('PERFORMANCE_INPUT_INVALID'); process.exitCode = 1 }
+  } catch {
+    console.error('PERFORMANCE_INPUT_INVALID')
+    process.exitCode = 1
+  }
 }

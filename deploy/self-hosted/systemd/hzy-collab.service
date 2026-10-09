@@ -3,6 +3,7 @@ Description=HZY self-hosted standalone collab (Codocs v2 realtime, loopback only
 After=network-online.target mysqld.service hzy-data-runtime.service hzy-console.service
 Wants=network-online.target
 Requires=hzy-data-runtime.service
+PartOf=hzy-data-runtime.service
 StartLimitIntervalSec=120
 StartLimitBurst=6
 
@@ -16,7 +17,7 @@ EnvironmentFile=/etc/hzy/collab.env
 # working directory. All configuration comes from /etc/hzy/collab.env.
 Environment=DOTENV_CONFIG_PATH=/dev/null
 ExecStartPre=/usr/local/bin/node /home/hzy/tools/verify.mjs --dir /home/hzy/apps/collab/current --app collab
-ExecStart=/usr/local/bin/node /home/hzy/apps/collab/current/.output/server/index.mjs
+ExecStart=/usr/local/bin/node --max-http-header-size=65536 /home/hzy/apps/collab/current/.output/server/index.mjs
 # Fails the start when /healthz is not healthy or the listener answers beyond 127.0.0.1.
 ExecStartPost=/usr/local/bin/node /home/hzy/tools/health.mjs --app collab
 Restart=on-failure
@@ -35,7 +36,9 @@ ProtectHome=read-only
 ProtectKernelTunables=true
 ProtectKernelModules=true
 ProtectControlGroups=true
-RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+# Node/libuv enumerates interfaces using a local AF_NETLINK socket on Linux.
+# The listener remains explicitly bound to 127.0.0.1.
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX AF_NETLINK
 RestrictSUIDSGID=true
 LockPersonality=true
 CapabilityBoundingSet=

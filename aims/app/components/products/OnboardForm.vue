@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { useAimsModule } from '../../../layer/useAimsModule'
+
 const { moduleUrl } = useAimsModule()
 interface Candidate { product_code: string, product_name: string, product_line_label: string | null, onboardable: boolean, source_status: string }
 interface Catalog { items: Candidate[], total: number, watermark: string, nextPage: number | null }

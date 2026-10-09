@@ -1,5 +1,9 @@
 <script setup lang="ts">
-import AltocBasicReadPage from '../../../components/AltocBasicReadPage.vue'
+import AltocReceivablesPage from '../../../components/AltocReceivablesPage.vue'
+
 definePageMeta({ name: 'altoc-host-payments-detail', navigationOwner: 'altoc', logicalModule: 'altoc', layout: 'enterprise' })
 </script>
-<template><AltocBasicReadPage resource="receivable" title="回款计划详情" detail /></template>
+
+<template>
+  <AltocReceivablesPage detail />
+</template>

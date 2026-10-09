@@ -84,7 +84,38 @@ describe('Console prefix handling depends on the transport type only', () => {
     assert.equal(normalizeConsoleServiceBindingUrl(new URL(`${PUBLIC}/oauth/token`), cloudflare), 'https://site.example.test/oauth/token')
     assert.equal(normalizeConsoleServiceBindingUrl(`${PUBLIC}/api/x?a=1`, loopback), `${PUBLIC}/api/x?a=1`)
     assert.equal(normalizeConsoleServiceBindingUrl(PUBLIC, loopback), PUBLIC)
-    assert.equal(normalizeConsoleServiceBindingUrl('https://site.example.test/api/x', loopback), 'https://site.example.test/api/x')
+    assert.equal(normalizeConsoleServiceBindingUrl('https://site.example.test/api/x', loopback), 'https://site.example.test/console/api/x')
+  })
+
+  test('unprefixed notifications/token/introspection are prefixed once only on self-hosted transport', async () => {
+    selfHosted()
+    const root = 'https://site.example.test'
+    for (const path of ['/api/v1/console/notifications/publish', '/oauth/token', '/oauth/introspect']) {
+      await fetchConsoleServiceJson(event(), `${root}${path}?probe=1`, { method: 'POST', body: {} })
+      await fetchConsoleServiceJson(event(), `${PUBLIC}${path}?probe=1`, { method: 'POST', body: {} })
+    }
+    assert.deepEqual(hits.map(hit => hit.url), [
+      '/console/api/v1/console/notifications/publish?probe=1', '/console/api/v1/console/notifications/publish?probe=1',
+      '/console/oauth/token?probe=1', '/console/oauth/token?probe=1', '/console/oauth/introspect?probe=1', '/console/oauth/introspect?probe=1'
+    ])
+    const calls: string[] = []
+    const cf = cloudflareBinding(calls)
+    for (const path of ['/api/v1/console/notifications/publish', '/oauth/token', '/oauth/introspect']) {
+      assert.equal(normalizeConsoleServiceBindingUrl(`${root}${path}`, cf), `${root}${path}`)
+      assert.equal(normalizeConsoleServiceBindingUrl(`${PUBLIC}${path}`, cf), `${root}${path}`)
+    }
+    const previous = process.env.HZY0_LOCAL_ENTERPRISE
+    try {
+      process.env.HZY0_LOCAL_ENTERPRISE = 'true'
+      const local = { fetch: cf.fetch }
+      const localEvent = { context: { hzyConsoleTransport: local }, node: { req: { headers: { 'x-hzy-self-hosted': 'true' } } } } as never
+      assert.equal(consoleServiceBinding(localEvent), local)
+      assert.equal(normalizeConsoleServiceBindingUrl(`${root}/oauth/token`, local), `${root}/oauth/token`)
+      assert.equal(normalizeConsoleServiceBindingUrl(`${PUBLIC}/oauth/token`, local), `${root}/oauth/token`)
+    } finally {
+      if (previous === undefined) Reflect.deleteProperty(process.env, 'HZY0_LOCAL_ENTERPRISE')
+      else process.env.HZY0_LOCAL_ENTERPRISE = previous
+    }
   })
 
   test('the loopback marker cannot be forged from request-controlled input or by copying a binding', () => {

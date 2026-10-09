@@ -14,7 +14,11 @@ import { withTrustedCodocsDocumentReadContext } from '~~/server/utils/documentRe
 export default defineEventHandler(async (event) => {
   try {
     const query = getQuery(event)
-    try { optionalReadPagination(query) } catch { throw createError({ statusCode: 400, message: '分页参数无效' }) }
+    try {
+      optionalReadPagination(query)
+    } catch {
+      throw createError({ statusCode: 400, message: '分页参数无效' })
+    }
     const { type, owner, dept_code, project_code } = query
     const actorUid = requireRequestUid(event)
     await requirePermission(event, 'documents', 'view', '缺少文档查看权限')

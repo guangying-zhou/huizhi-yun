@@ -27,7 +27,8 @@ for (const name of pages) {
     assert.equal(elements(body, 'ProjectNavbar').length, 1)
     assert.equal(elements(root, 'h1').length, 0)
     assert.doesNotMatch(descriptor.template.content, /返回项目|保留源系统|仅提供只读查看/)
-    for (const tag of ['UModal', 'USlideover']) assert.equal(elements(root, tag).length, elements(body, tag).length)
+    for (const tag of ['UModal', 'USlideover'])
+      assert.equal(elements(root, tag).length, elements(body, tag).length)
   })
 }
 
@@ -35,11 +36,11 @@ test('members retains manager-gated add and existing member actions, filters and
   const source = read('members')
   const root = baseParse(parse(source).descriptor.template.content)
   const actions = slot(elements(root, 'ProjectNavbar')[0], 'actions')
-  assert.match(actions.loc.source, /v-if="canManage"/)
+  assert.match(actions.loc.source, /v-if="canManage && !loading && !error"/)
   assert.match(actions.loc.source, /@click="showAdd=true"/)
   assert.match(source, /write\('role', row.original.uid/)
   assert.match(source, /write\('remove', row.original.uid/)
-  assert.match(source, /PROJECT_ROLE_LABELS/ )
+  assert.match(source, /PROJECT_ROLE_LABELS/)
   assert.match(source, /userNames.get\(row.original.uid\)/)
   assert.match(source, /tone: 'danger'/)
   assert.match(elements(root, 'UModal')[0].loc.source, /v-model:open="showAdd"/)
@@ -77,12 +78,17 @@ for (const accepted of [false, true]) {
     const handler = source.slice(source.indexOf('async function write('), source.indexOf('async function refresh('))
     const requests = []
     const state = {
-      confirm: async options => { assert.equal(options.tone, 'danger'); return accepted },
+      confirm: async (options) => {
+        assert.equal(options.tone, 'danger')
+        return accepted
+      },
       userNames: { value: new Map([['sample', '标记成员']]) },
       saving: { value: false }, operationKey: { value: '' }, showAdd: { value: false },
       uid: { value: '' }, error: { value: '' }, projectId: { value: '257' },
       crypto: { randomUUID: () => 'sample-key' }, moduleUrl: path => path,
-      $fetch: async (url, options) => { requests.push({ url, options }) }, refresh: async () => {}
+      $fetch: async (url, options) => {
+        requests.push({ url, options })
+      }, refresh: async () => {}
     }
     vm.createContext(state)
     vm.runInContext(ts.transpile(handler + '\nthis.handler = write', { target: ts.ScriptTarget.ES2022 }), state)

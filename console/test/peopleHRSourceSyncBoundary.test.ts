@@ -41,8 +41,12 @@ describe('Console People HR source service boundary', () => {
     assert.match(source, /verifyServiceCommandRuntimeHeaders/)
   })
 
-  test('only the canonical people.runtime service client may issue HR source commands', () => {
+  test('only the two canonical HR source app/client pairs may issue commands', () => {
     assert.equal(isCanonicalPeopleHRSourceClient({ appCode: 'people', actorId: 'people.runtime' }), true)
+    assert.equal(isCanonicalPeopleHRSourceClient({ appCode: 'enterprise', actorId: 'enterprise.runtime' }), true)
+    assert.equal(isCanonicalPeopleHRSourceClient({ appCode: 'enterprise', actorId: 'people.runtime' }), false)
+    assert.equal(isCanonicalPeopleHRSourceClient({ appCode: 'people', actorId: 'enterprise.runtime' }), false)
+    assert.equal(isCanonicalPeopleHRSourceClient({ appCode: 'enterprise', actorId: 'enterprise.migration' }), false)
     assert.equal(isCanonicalPeopleHRSourceClient({ appCode: 'people', actorId: 'people.migration' }), false)
     assert.equal(isCanonicalPeopleHRSourceClient({ appCode: 'aims', actorId: 'people.runtime' }), false)
     assert.equal(isCanonicalPeopleHRSourceClient({ appCode: 'people', actorId: 'client:people.runtime' }), false)
@@ -70,4 +74,21 @@ describe('Console People HR source service boundary', () => {
     assert.match(seed, /sc\.app_code='people'[\s\S]*sc\.client_code='people\.runtime'/)
     assert.match(seed, /'audience',grant_row\.audience/)
   })
+})
+
+test('APF17a candidate grants retain exact existing HR capabilities, bindings and revoked rows', () => {
+  const seed = read('docs/sql/Console-SQL-Seed-apf17a-enterprise-hr-source.sql')
+  const verify = read('docs/sql/Console-SQL-Verify-apf17a-enterprise-hr-source.sql')
+  for (const s of [seed, verify]) {
+    assert.match(s, /hr-source-sync/)
+    for (const action of ['view', 'admin', 'execute']) assert.ok(s.includes(`'${action}'`))
+    assert.match(s, /enterprise\.runtime/)
+    assert.match(s, /audience[\s\S]*console/)
+    assert.match(s, /semanticScope/)
+    assert.match(s, /tenantCode/)
+    assert.match(s, /deploymentCode/)
+  }
+  assert.match(seed, /NOT EXISTS/)
+  assert.doesNotMatch(seed, /UPDATE service_client_grants|DELETE FROM|ON DUPLICATE KEY UPDATE/)
+  assert.match(verify, /COUNT\(g\.id\)=1/)
 })

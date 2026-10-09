@@ -2,7 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 
-const source = (path) => readFileSync(new URL(`../../${path}`, import.meta.url), 'utf8')
+const source = path => readFileSync(new URL(`../../${path}`, import.meta.url), 'utf8')
 
 test('Assets product Layer uses the registered scoped base candidate BFF in Host mode', () => {
   const page = source('assets/app/components/assets/ProductAssetsListPage.vue')
@@ -43,9 +43,9 @@ test('Assets pages are registered only with their scoped Host BFFs and gate inco
   assert.match(physical, /moduleUrl\('\/api\/v1\/assets'\)/)
   assert.match(resources, /moduleUrl\('\/api\/v1\/assets'\)/)
   assert.match(detail, /moduleUrl\(`\/api\/v1\/assets\/\$\{assetIdentifier\.value\}`\)/)
-  assert.ok(digitalAssets.includes("moduleUrl('/api/v1/digital-assets')"))
+  assert.ok(digitalAssets.includes('moduleUrl(\'/api/v1/digital-assets\')'))
   assert.ok(digitalAssetDetail.includes('moduleUrl(`/api/v1/digital-assets/${assetId.value}`)'))
-  assert.ok(ipAssets.includes("moduleUrl('/api/v1/ip-assets')"))
+  assert.ok(ipAssets.includes('moduleUrl(\'/api/v1/ip-assets\')'))
   assert.ok(ipAssetDetail.includes('moduleUrl(`/api/v1/ip-assets/${assetId.value}`)'))
   assert.ok(ipAssetDetail.includes('moduleUrl(`/api/v1/ip-assets/${assetId.value}/products`)'))
   assert.match(ipAssets, /key: cacheKey\('ip-assets'\)/)

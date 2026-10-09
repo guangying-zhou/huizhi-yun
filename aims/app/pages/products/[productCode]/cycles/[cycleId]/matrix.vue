@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { productMatrixY, validProductMatrixPoint } from '~/utils/productMatrixPoint'
 
-definePageMeta({ layoutHeader: true, layoutHeaderTitle: '评分／投入矩阵', layoutHeaderProjectSwitcher: false })
+definePageMeta({ hostContentWidth: 'full', layoutHeader: true, layoutHeaderTitle: '评分／投入矩阵', layoutHeaderProjectSwitcher: false })
 interface MatrixItem {
   biz_id: string
   product_code: string

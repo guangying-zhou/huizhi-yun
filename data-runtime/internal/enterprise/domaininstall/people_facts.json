@@ -1,0 +1,61 @@
+[
+  {
+    "logical": "people_onboarding_cases",
+    "physical": "people_onboarding_cases",
+    "ddl": "CREATE TABLE `people_onboarding_cases` (\n  `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,\n  `onboarding_code` VARCHAR(64) NOT NULL COMMENT '入职单稳定业务键，例如 ONB-*',\n\n  -- 外部事实源\n  `provider_code` VARCHAR(32) NOT NULL DEFAULT 'dingtalk',\n  `provider_subject` VARCHAR(255) NOT NULL COMMENT '钉钉用户唯一标识；仅作外部 identity，不得作为员工 UID',\n  `source_revision` VARCHAR(128) DEFAULT NULL COMMENT '钉钉快照版本',\n  `source_hash` CHAR(64) DEFAULT NULL COMMENT '规范化候选事实摘要，用于识别真实变化',\n  `candidate_name` VARCHAR(100) NOT NULL COMMENT '钉钉权威姓名',\n  `source_onboard_date` DATE DEFAULT NULL COMMENT '钉钉下发的入职日期原值，只读',\n  `source_field_status` JSON DEFAULT NULL COMMENT '逐字段来源状态：provided / empty / absent / invalid',\n\n  -- HR 确认事实\n  `planned_onboard_date` DATE DEFAULT NULL,\n  `employee_no` VARCHAR(64) DEFAULT NULL COMMENT 'People 自动工号；资料首次保存时分配且完成前必须唯一',\n  `dept_code` VARCHAR(64) DEFAULT NULL COMMENT 'canonical Directory 部门编码',\n  `position_code` VARCHAR(64) DEFAULT NULL,\n  `rank_code` VARCHAR(32) DEFAULT NULL,\n  `employment_type` ENUM('full_time', 'part_time', 'outsourced', 'intern', 'agent') NOT NULL DEFAULT 'full_time',\n\n  -- 账号事实\n  `canonical_uid` VARCHAR(64) DEFAULT NULL COMMENT 'UID 预留成功后写入；此前为空',\n  `reservation_id` CHAR(36) DEFAULT NULL COMMENT 'Console 身份预留 ID',\n  `provision_operation_id` CHAR(36) DEFAULT NULL COMMENT 'Console LDAP 建号 operation ID；员工激活前据此验真',\n  `corporate_email` VARCHAR(255) DEFAULT NULL COMMENT 'Console/LDAP 企业邮箱；完成前必须唯一',\n  `mobile` VARCHAR(64) DEFAULT NULL COMMENT '钉钉下发手机号，用于开户与 Directory 落地，不作为 People 事实源',\n\n  -- 上级。经理未落地为 canonical 主体时只保留外部标识或候选单引用，禁止合成 UID。\n  `manager_uid` VARCHAR(64) DEFAULT NULL,\n  `manager_provider_subject` VARCHAR(255) DEFAULT NULL,\n  `manager_onboarding_code` VARCHAR(64) DEFAULT NULL,\n\n  `status` ENUM(\n    'awaiting_profile', 'ready_for_provisioning', 'reserving_identity',\n    'provisioning_account', 'activating_employee', 'projecting_authorization',\n    'completed',\n    'profile_conflict', 'identity_conflict', 'reservation_expired',\n    'provisioning_failed', 'authorization_failed',\n    'cancelled'\n  ) NOT NULL DEFAULT 'awaiting_profile',\n  `object_version` BIGINT UNSIGNED NOT NULL DEFAULT 1 COMMENT '用户动作 CAS 版本，API 表达为 vN',\n  `last_error_code` VARCHAR(100) DEFAULT NULL COMMENT '去敏、稳定错误码',\n\n  `completed_at` DATETIME DEFAULT NULL,\n  `completed_by` VARCHAR(64) DEFAULT NULL,\n  `cancelled_at` DATETIME DEFAULT NULL,\n  `cancelled_by` VARCHAR(64) DEFAULT NULL,\n  `cancellation_reason` VARCHAR(500) DEFAULT NULL,\n  `created_by` VARCHAR(64) NOT NULL,\n  `updated_by` VARCHAR(64) NOT NULL,\n  `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,\n  `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,\n\n  -- 未取消的入职单之间工号与邮箱必须唯一；已取消的不再占用。\n  `active_employee_no` VARCHAR(64) GENERATED ALWAYS AS (\n    CASE WHEN `status` <> 'cancelled' THEN `employee_no` ELSE NULL END\n  ) STORED,\n  `active_corporate_email` VARCHAR(255) GENERATED ALWAYS AS (\n    CASE WHEN `status` <> 'cancelled' THEN LOWER(`corporate_email`) ELSE NULL END\n  ) STORED,\n\n  PRIMARY KEY (`id`),\n  UNIQUE KEY `uk_people_onboarding_code` (`onboarding_code`),\n  -- 钉钉重放不重复建单。\n  UNIQUE KEY `uk_people_onboarding_provider_subject` (`provider_code`, `provider_subject`),\n  -- MySQL 的 UNIQUE 允许多个 NULL，因此未预留 UID 的候选互不冲突。\n  UNIQUE KEY `uk_people_onboarding_canonical_uid` (`canonical_uid`),\n  UNIQUE KEY `uk_people_onboarding_active_employee_no` (`active_employee_no`),\n  UNIQUE KEY `uk_people_onboarding_active_email` (`active_corporate_email`),\n  KEY `idx_people_onboarding_status` (`status`, `updated_at`, `id`),\n  KEY `idx_people_onboarding_dept` (`dept_code`, `status`),\n  KEY `idx_people_onboarding_manager_subject` (`manager_provider_subject`),\n  KEY `idx_people_onboarding_provision_operation` (`provision_operation_id`),\n\n  CONSTRAINT `ck_people_onboarding_identity` CHECK (\n    `onboarding_code` = TRIM(`onboarding_code`) AND `onboarding_code` <> ''\n    AND `provider_subject` = TRIM(`provider_subject`) AND `provider_subject` <> ''\n    AND `candidate_name` = TRIM(`candidate_name`) AND `candidate_name` <> ''\n    AND `object_version` > 0\n  ),\n  -- 候选阶段禁止出现 dt-* 合成主体：它正是本设计要消除的分叉来源。\n  CONSTRAINT `ck_people_onboarding_uid_not_synthetic` CHECK (\n    `canonical_uid` IS NULL OR (\n      `canonical_uid` = TRIM(`canonical_uid`) AND `canonical_uid` <> ''\n      AND LOWER(`canonical_uid`) NOT LIKE 'dt-%'\n    )\n  ),\n  CONSTRAINT `ck_people_onboarding_manager_uid_not_synthetic` CHECK (\n    `manager_uid` IS NULL OR (\n      `manager_uid` = TRIM(`manager_uid`) AND `manager_uid` <> ''\n      AND LOWER(`manager_uid`) NOT LIKE 'dt-%'\n    )\n  ),\n  CONSTRAINT `ck_people_onboarding_actor` CHECK (\n    `created_by` = TRIM(`created_by`) AND `created_by` <> ''\n    AND `updated_by` = TRIM(`updated_by`) AND `updated_by` <> ''\n  ),\n  -- 与离职单对称的终态审计：非对应终态不得伪造终态字段。\n  CONSTRAINT `ck_people_onboarding_terminal_audit` CHECK (\n    (`status` = 'completed'\n      AND `completed_at` IS NOT NULL AND `completed_by` IS NOT NULL AND `completed_by` <> ''\n      AND `cancelled_at` IS NULL AND `cancelled_by` IS NULL AND `cancellation_reason` IS NULL)\n    OR\n    (`status` = 'cancelled'\n      AND `cancelled_at` IS NOT NULL AND `cancelled_by` IS NOT NULL AND `cancelled_by` <> ''\n      AND `cancellation_reason` IS NOT NULL AND TRIM(`cancellation_reason`) <> ''\n      AND `completed_at` IS NULL AND `completed_by` IS NULL)\n    OR\n    (`status` NOT IN ('completed', 'cancelled')\n      AND `completed_at` IS NULL AND `completed_by` IS NULL\n      AND `cancelled_at` IS NULL AND `cancelled_by` IS NULL AND `cancellation_reason` IS NULL)\n  ),\n  -- completed 必须已经持有 canonical UID，否则等于把候选当成正式员工收口。\n  CONSTRAINT `ck_people_onboarding_completed_requires_uid` CHECK (\n    `status` <> 'completed' OR `canonical_uid` IS NOT NULL\n  )\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci\n  COMMENT='People 入职候选单；不是 employee，不参与任职、成本、绩效与权限范围计算';",
+    "columns": [
+      "id",
+      "onboarding_code",
+      "provider_code",
+      "provider_subject",
+      "source_revision",
+      "source_hash",
+      "candidate_name",
+      "source_onboard_date",
+      "source_field_status",
+      "planned_onboard_date",
+      "employee_no",
+      "dept_code",
+      "position_code",
+      "rank_code",
+      "employment_type",
+      "canonical_uid",
+      "reservation_id",
+      "provision_operation_id",
+      "corporate_email",
+      "mobile",
+      "manager_uid",
+      "manager_provider_subject",
+      "manager_onboarding_code",
+      "status",
+      "object_version",
+      "last_error_code",
+      "completed_at",
+      "completed_by",
+      "cancelled_at",
+      "cancelled_by",
+      "cancellation_reason",
+      "created_by",
+      "updated_by",
+      "created_at",
+      "updated_at",
+      "active_employee_no",
+      "active_corporate_email"
+    ]
+  },
+  {
+    "logical": "people_directory_lifecycle_versions",
+    "physical": "people_directory_lifecycle_versions",
+    "ddl": "CREATE TABLE `people_directory_lifecycle_versions` (\n  `employee_uid` VARCHAR(64) NOT NULL PRIMARY KEY, `revision_no` BIGINT UNSIGNED NOT NULL,\n  `snapshot_hash` CHAR(64) NOT NULL, `operation_key` VARCHAR(191) NOT NULL,\n  `lifecycle_type` VARCHAR(32) NOT NULL, `effective_date` DATE NULL,\n  `created_at` TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),\n  `updated_at` TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),\n  UNIQUE KEY `uk_people_directory_lifecycle_operation` (`operation_key`)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='People 到 Console Directory 生命周期单调版本';",
+    "columns": [
+      "employee_uid",
+      "revision_no",
+      "snapshot_hash",
+      "operation_key",
+      "lifecycle_type",
+      "effective_date",
+      "created_at",
+      "updated_at"
+    ]
+  }
+]

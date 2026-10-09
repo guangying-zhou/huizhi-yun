@@ -1,3 +1,6 @@
+import { feedbackRecipientEligible } from './feedbackDelivery'
+import { evaluateWithRevisionCheckedConsoleServicePolicy } from './revisionCheckedServicePolicy'
+import { feedbackNotificationDetailAuthorization } from './feedbackNotificationDetail'
 import { createError, type H3Event } from 'h3'
 import {
   requestWithServiceAccessToken,
@@ -190,6 +193,9 @@ export async function authorizeConsoleNotificationDetail(
   const isRecipientScopedAimsFeedback = source === 'aims'
     && input.request.descriptor.resource === 'webdev_issue'
   const verifier = registeredVerifiers.get(source)
+    || (source === 'console' && input.request.descriptor.resource === 'feedback'
+      ? async () => feedbackNotificationDetailAuthorization(input.event, trustedBinding.tenantId, input.request.subject.uid, input.request.descriptor.id, { revisionGate: evaluateWithRevisionCheckedConsoleServicePolicy, eligible: feedbackRecipientEligible })
+      : null)
     || (source === 'console'
       ? async () => await authorizeConsoleLifecycleNotificationDetail(
         input.event,
@@ -316,8 +322,8 @@ export async function getUserNotificationDetail(event: H3Event, uidInput: string
   // navigate to a business object without a current object verifier.
   if (normalizedAppCode(row.sourceAppCode) === 'enterprise') {
     const snapshot = enterpriseNotificationSnapshotDetail(row)
-    if (!snapshot) throw unavailableDetail()
-    return snapshot
+    if (snapshot) return snapshot
+    if (!notificationAuthorizationDescriptor(row)) throw unavailableDetail()
   }
 
   const descriptor = notificationAuthorizationDescriptor(row)

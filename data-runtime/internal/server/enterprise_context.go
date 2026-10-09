@@ -22,7 +22,7 @@ type enterpriseRouteContext struct {
 // cutover and standalone service routes keep their own precise scopes.
 func enterpriseHostDomainCapability(logicalTarget string) string {
 	switch logicalTarget {
-	case "aims", "assets", "codocs", "altoc", "console":
+	case "aims", "assets", "codocs", "altoc", "console", "people", "finance":
 		return logicalTarget + ":enterprise-host:execute"
 	default:
 		return ""

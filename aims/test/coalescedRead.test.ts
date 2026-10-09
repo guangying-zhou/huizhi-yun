@@ -7,7 +7,9 @@ test('identical pending product queries share one request, not a completed cache
   let release: ((value: number) => void) | undefined
   const read = createCoalescedRead(() => {
     calls++
-    return new Promise<number>(resolve => { release = resolve })
+    return new Promise<number>((resolve) => {
+      release = resolve
+    })
   }, () => 'tenant:user:policy')
   const first = read({ status: 'active', keyword: 'A' })
   const second = read({ keyword: 'A', status: 'active' })
@@ -40,7 +42,8 @@ test('failed reads clear pending state for a later recovery attempt', async () =
   let calls = 0
   const read = createCoalescedRead(async () => {
     calls++
-    if (calls === 1) throw Error('temporarily unavailable')
+    if (calls === 1)
+      throw Error('temporarily unavailable')
     return 'ready'
   }, () => 'tenant:test')
   const first = read({})

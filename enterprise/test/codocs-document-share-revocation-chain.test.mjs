@@ -59,17 +59,28 @@ test('Host share revocation blocks subsequent detail, content, and download read
   const hooks = registerHooks({
     resolve(specifier, context, next) {
       let source
-      if (specifier.endsWith('/consoleSessionBridge')) source = 'export const resolveConsoleAuthWithSessionBridge=async()=>globalThis.__chainSession'
-      if (specifier.endsWith('/tenantRuntimeClient')) source = 'export const prepareTenantRuntime=async(...args)=>globalThis.__chainPrepare(...args);export const maybeCallTenantRuntime=(...args)=>globalThis.__chainTransport(...args)'
-      if (specifier.endsWith('/platformBundleAuthorization')) source = 'export const loadAuthorizationSnapshotFromConsoleRuntime=async()=>globalThis.__chainAuth()'
-      if (specifier.endsWith('/tenantGatewayTrust')) source = 'export const resolveTrustedTenantGatewayContext=()=>undefined'
-      if (specifier.endsWith('/oss')) source = 'export const downloadDocument=async(...args)=>globalThis.__chainOss(...args);export const downloadDocumentBuffer=async(...args)=>globalThis.__chainOss(...args);export const createRuntimeOSSClient=async()=>({});export const resolveDocumentOssTimeoutMs=()=>8000'
-      if (specifier.endsWith('/yjsMarkdownRecovery')) source = 'export const hasMeaningfulMarkdownContent=value=>String(value??\'\').trim().length>0;export const recoverMarkdownFromYjsSnapshot=async(...args)=>globalThis.__chainRecovery(...args)'
-      if (source) return { url: `data:text/javascript,${encodeURIComponent(source)}`, shortCircuit: true }
+      if (specifier.endsWith('/consoleSessionBridge'))
+        source = 'export const resolveConsoleAuthWithSessionBridge=async()=>globalThis.__chainSession'
+      if (specifier.endsWith('/tenantRuntimeClient'))
+        source = 'export const prepareTenantRuntime=async(...args)=>globalThis.__chainPrepare(...args);export const maybeCallTenantRuntime=(...args)=>globalThis.__chainTransport(...args)'
+      if (specifier.endsWith('/platformBundleAuthorization'))
+        source = 'export const loadAuthorizationSnapshotFromConsoleRuntime=async()=>globalThis.__chainAuth()'
+      if (specifier.endsWith('/tenantGatewayTrust'))
+        source = 'export const resolveTrustedTenantGatewayContext=()=>undefined'
+      if (specifier.endsWith('/oss'))
+        source = 'export const downloadDocument=async(...args)=>globalThis.__chainOss(...args);export const downloadDocumentBuffer=async(...args)=>globalThis.__chainOss(...args);export const createRuntimeOSSClient=async()=>({});export const resolveDocumentOssTimeoutMs=()=>8000'
+      if (specifier.endsWith('/yjsMarkdownRecovery'))
+        source = 'export const hasMeaningfulMarkdownContent=value=>String(value??\'\').trim().length>0;export const recoverMarkdownFromYjsSnapshot=async(...args)=>globalThis.__chainRecovery(...args)'
+      if (source)
+        return { url: `data:text/javascript,${encodeURIComponent(source)}`, shortCircuit: true }
       let candidate
-      if (specifier.startsWith('@hzy/foundation/')) candidate = resolve(root, 'foundation', specifier.slice('@hzy/foundation/'.length))
-      else if (specifier.startsWith('.') && context.parentURL?.startsWith('file:')) candidate = resolve(dirname(fileURLToPath(context.parentURL)), specifier)
-      if (candidate && !existsSync(candidate) && existsSync(`${candidate}.ts`)) return { url: pathToFileURL(`${candidate}.ts`).href, shortCircuit: true }
+      if (specifier.startsWith('@hzy/foundation/'))
+        candidate = resolve(root, 'foundation', specifier.slice('@hzy/foundation/'.length))
+      else
+        if (specifier.startsWith('.') && context.parentURL?.startsWith('file:'))
+          candidate = resolve(dirname(fileURLToPath(context.parentURL)), specifier)
+      if (candidate && !existsSync(candidate) && existsSync(`${candidate}.ts`))
+        return { url: pathToFileURL(`${candidate}.ts`).href, shortCircuit: true }
       return next(specifier, context)
     }
   })
@@ -81,7 +92,9 @@ test('Host share revocation blocks subsequent detail, content, and download read
     router.get('/documents/:uuid', (await import('../server/routes/codocs/api/documents/[uuid].get.ts')).default)
     router.get('/documents/:uuid/download', (await import('../server/routes/codocs/api/documents/[uuid]/download.get.ts')).default)
     router.delete('/documents/:uuid/shares/:shareId', (await import('../server/routes/codocs/api/documents/[uuid]/shares/[shareId].delete.ts')).default)
-    app.use(defineEventHandler(event => { event.context.consoleAuth = globalThis.__chainSession }))
+    app.use(defineEventHandler((event) => {
+      event.context.consoleAuth = globalThis.__chainSession
+    }))
     app.use(router)
     server = createServer(toNodeListener(app))
     await new Promise(done => server.listen(0, '127.0.0.1', done))
@@ -122,8 +135,10 @@ test('Host share revocation blocks subsequent detail, content, and download read
     assert.equal(runtimeCalls.filter(call => call.path.endsWith('personal-documents:view')).length, 4)
     assert.equal(runtimeCalls.filter(call => call.path.endsWith('personal-documents:download')).length, 2)
   } finally {
-    if (server) await new Promise(done => server.close(done))
+    if (server)
+      await new Promise(done => server.close(done))
     hooks.deregister()
-    for (const [key, value] of Object.entries(old)) value === undefined ? delete globalThis[key] : globalThis[key] = value
+    for (const [key, value] of Object.entries(old))
+      value === undefined ? delete globalThis[key] : globalThis[key] = value
   }
 })

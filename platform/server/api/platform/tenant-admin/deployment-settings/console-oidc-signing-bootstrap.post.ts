@@ -1,6 +1,7 @@
+import { trustedClientAddress } from '~~/server/utils/trustedClientAddress'
 import { randomUUID } from 'node:crypto'
 import type { ResultSetHeader, RowDataPacket } from 'mysql2/promise'
-import { getHeader, getRequestIP } from 'h3'
+import { getHeader } from 'h3'
 import { ok } from '~~/server/utils/api'
 import { queryRow, withTransaction } from '~~/server/utils/db'
 import { sign } from '~~/server/utils/platformSigning'
@@ -190,7 +191,7 @@ export default defineEventHandler(async (event) => {
           jwtTrust: 'tenant_gateway',
           issuer
         }),
-        getRequestIP(event, { xForwardedFor: true }) || null,
+        trustedClientAddress(event) || null,
         String(getHeader(event, 'user-agent') || '').slice(0, 500) || null
       ]
     )

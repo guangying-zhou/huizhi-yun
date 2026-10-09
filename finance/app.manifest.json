@@ -17,96 +17,196 @@
     "minControlPlaneVersion": "0.1.0",
     "minSdkVersion": "0.1.0"
   },
-  "supportedScopes": ["tenant:global", "subject:self"],
+  "supportedScopes": [
+    "tenant:global",
+    "subject:self"
+  ],
   "resources": [
     {
       "code": "product-cost",
       "name": "产品成本服务",
       "description": "签名委托原用户读取产品期间成本和维护分摊规则",
-      "actions": ["read", "replace-rules", "read-rules"],
+      "actions": [
+        "read",
+        "replace-rules",
+        "read-rules"
+      ],
       "sortOrder": 95
     },
     {
       "code": "dashboard",
       "name": "财务工作台",
       "description": "现金流、应收应付、审批和经营财务摘要",
-      "actions": ["view", "export"],
+      "actions": [
+        "view",
+        "export"
+      ],
       "sortOrder": 1
     },
     {
       "code": "invoices",
       "name": "发票管理",
       "description": "开票申请、正式发票、发票状态和发票关联",
-      "actions": ["view", "edit", "approve", "issue", "admin"],
+      "actions": [
+        "view",
+        "edit",
+        "approve",
+        "issue",
+        "admin"
+      ],
       "sortOrder": 10
     },
     {
       "code": "receipts",
       "name": "收款管理",
       "description": "到账记录、银行流水、收款确认和收款核销",
-      "actions": ["view", "edit", "confirm", "admin"],
+      "actions": [
+        "view",
+        "edit",
+        "confirm",
+        "admin"
+      ],
       "sortOrder": 20
     },
     {
       "code": "expenses",
       "name": "费用支出",
       "description": "项目支出、费用报销、付款申请和支出台账",
-      "actions": ["view", "edit", "approve", "confirm", "admin"],
+      "actions": [
+        "view",
+        "edit",
+        "approve",
+        "confirm",
+        "admin"
+      ],
       "sortOrder": 30
     },
     {
       "code": "bank_accounts",
       "name": "银行账户",
       "description": "账户资料、余额快照和资金账户管理",
-      "actions": ["view", "edit", "admin"],
+      "actions": [
+        "view",
+        "edit",
+        "reveal-account-no",
+        "admin"
+      ],
       "sortOrder": 40
+    },
+    {
+      "code": "legal_entities",
+      "name": "法人主体",
+      "description": "本企业的签约与收款主体目录，供银行账户和合同引用",
+      "actions": [
+        "view",
+        "edit",
+        "admin"
+      ],
+      "sortOrder": 45
     },
     {
       "code": "reconciliation",
       "name": "核销管理",
       "description": "发票、收款、合同和回款计划核销",
-      "actions": ["view", "edit", "confirm", "admin"],
+      "actions": [
+        "view",
+        "edit",
+        "confirm",
+        "admin"
+      ],
       "sortOrder": 50
     },
     {
       "code": "project_accounting",
       "name": "项目核算",
       "description": "项目收入、支出、成本、毛利和费用分摊",
-      "actions": ["view", "edit", "admin"],
+      "actions": [
+        "view",
+        "edit",
+        "admin"
+      ],
       "sortOrder": 60
     },
     {
       "code": "performance",
       "name": "个人财务绩效",
       "description": "个人贡献、提成、绩效金额和财务结果归因",
-      "actions": ["view", "edit", "admin"],
+      "actions": [
+        "view",
+        "edit",
+        "admin"
+      ],
       "sortOrder": 70
     },
     {
       "code": "reports",
       "name": "财务报表",
       "description": "现金流、收支、利润和经营财务分析",
-      "actions": ["view", "export", "admin"],
+      "actions": [
+        "view",
+        "export",
+        "admin"
+      ],
       "sortOrder": 80
     },
     {
       "code": "integration_operations",
       "name": "跨应用操作",
       "description": "诊断并受控重放 Finance 发起的跨应用可靠操作",
-      "actions": ["view", "replay"],
+      "actions": [
+        "view",
+        "replay"
+      ],
       "sortOrder": 85
     },
     {
       "code": "settings",
       "name": "财务设置",
       "description": "科目、费用类型、人力成本参数、审批规则和集成配置",
-      "actions": ["view", "edit", "admin"],
+      "actions": [
+        "view",
+        "edit",
+        "admin"
+      ],
       "sortOrder": 90
+    },
+    {
+      "code": "migration_exceptions",
+      "name": "迁移事项",
+      "description": "历史数据迁移后需要人工处理的遗留事项与人员匹配",
+      "actions": [
+        "view",
+        "resolve"
+      ],
+      "sortOrder": 105
+    },
+    {
+      "code": "historical_finance",
+      "name": "历史财务接续",
+      "description": "只读净期初证据与历史保全，受审激活日常接续",
+      "actions": [
+        "view",
+        "activate"
+      ],
+      "sortOrder": 52
+    },
+    {
+      "code": "receivable_adjustments",
+      "name": "应收调整",
+      "description": "折让、尾差和坏账调整，录入与确认分离",
+      "actions": [
+        "view",
+        "edit",
+        "confirm",
+        "reverse"
+      ],
+      "sortOrder": 53
     }
   ],
   "recommendedRoles": [
     {
       "code": "finance:viewer",
+      "defaultScopes": [],
       "name": "财务只读",
       "description": "查看被授权范围内的发票、收款、支出、项目核算和报表",
       "suggestedPermissions": [
@@ -120,6 +220,12 @@
     },
     {
       "code": "finance:expense_submitter",
+      "defaultScopes": [
+        {
+          "scope": "subject:self",
+          "resourceCode": "expenses"
+        }
+      ],
       "name": "费用申请人",
       "description": "提交本人费用报销、项目支出和付款申请",
       "suggestedPermissions": [
@@ -131,13 +237,22 @@
     {
       "code": "finance:ar_accountant",
       "name": "应收会计",
-      "description": "维护开票、正式发票和收款台账，不执行审批或收款确认",
+      "description": "维护开票申请和收款台账，不执行开票、审批或收款确认",
       "suggestedPermissions": [
         "finance:dashboard:view",
         "finance:invoices:edit",
-        "finance:invoices:issue",
         "finance:receipts:edit",
         "finance:reports:view"
+      ]
+    },
+    {
+      "code": "finance:invoice_issuer",
+      "name": "开票经办",
+      "description": "对已批准的开票申请生成正式发票，不维护开票申请、不执行审批或收款确认",
+      "suggestedPermissions": [
+        "finance:dashboard:view",
+        "finance:invoices:view",
+        "finance:invoices:issue"
       ]
     },
     {
@@ -160,7 +275,9 @@
         "finance:receipts:confirm",
         "finance:expenses:view",
         "finance:expenses:confirm",
-        "finance:bank_accounts:view"
+        "finance:bank_accounts:view",
+        "finance:bank_accounts:edit",
+        "finance:legal_entities:view"
       ]
     },
     {
@@ -173,6 +290,7 @@
         "finance:receipts:edit",
         "finance:expenses:edit",
         "finance:bank_accounts:view",
+        "finance:legal_entities:view",
         "finance:reconciliation:edit",
         "finance:reports:view"
       ]
@@ -193,7 +311,7 @@
     {
       "code": "finance:invoice_approver",
       "name": "开票审批人",
-      "description": "审批开票申请并确认开票申请进入已审批/已开票状态",
+      "description": "审批开票申请，不创建申请或执行正式开票",
       "suggestedPermissions": [
         "finance:dashboard:view",
         "finance:invoices:view",
@@ -212,6 +330,9 @@
     },
     {
       "code": "finance:manager",
+      "defaultScopes": [
+        "tenant:global"
+      ],
       "name": "财务负责人",
       "description": "管理财务台账、核销、项目核算、个人绩效和财务报表，不默认执行审批或付款确认",
       "suggestedPermissions": [
@@ -221,11 +342,17 @@
         "finance:receipts:admin",
         "finance:expenses:admin",
         "finance:bank_accounts:admin",
+        "finance:legal_entities:admin",
         "finance:reconciliation:admin",
         "finance:project_accounting:admin",
         "finance:performance:admin",
         "finance:reports:export",
-        "finance:settings:edit"
+        "finance:settings:edit",
+        "finance:historical_finance:view",
+        "finance:historical_finance:activate",
+        "finance:receivable_adjustments:view",
+        "finance:receivable_adjustments:confirm",
+        "finance:receivable_adjustments:reverse"
       ]
     },
     {
@@ -243,29 +370,33 @@
     },
     {
       "code": "finance:admin",
+      "defaultScopes": [
+        "tenant:global"
+      ],
       "name": "财务管理员",
-      "description": "管理 Finance 模块全部配置、权限和集成参数",
+      "description": "维护财务配置、台账和集成；审批、开票、到账/付款确认及核销由独立角色承接",
       "suggestedPermissions": [
         "finance:dashboard:view",
         "finance:dashboard:export",
         "finance:invoices:admin",
-        "finance:invoices:approve",
-        "finance:invoices:issue",
         "finance:receipts:admin",
-        "finance:receipts:confirm",
         "finance:expenses:admin",
-        "finance:expenses:approve",
-        "finance:expenses:confirm",
         "finance:bank_accounts:admin",
+        "finance:bank_accounts:reveal-account-no",
+        "finance:migration_exceptions:view",
+        "finance:migration_exceptions:resolve",
+        "finance:legal_entities:admin",
         "finance:reconciliation:admin",
-        "finance:reconciliation:confirm",
         "finance:project_accounting:admin",
         "finance:performance:admin",
         "finance:reports:export",
         "finance:reports:admin",
         "finance:integration_operations:view",
         "finance:integration_operations:replay",
-        "finance:settings:admin"
+        "finance:settings:admin",
+        "finance:historical_finance:view",
+        "finance:receivable_adjustments:view",
+        "finance:receivable_adjustments:edit"
       ]
     }
   ]

@@ -7,6 +7,7 @@ import (
 	"net/http"
 
 	"github.com/huizhi-yun/data-runtime/internal/httperror"
+	"github.com/huizhi-yun/data-runtime/internal/workflowapproval"
 )
 
 func persistWorkflowCallbacks(ctx context.Context, tx *sql.Tx, instanceID any, effects *WorkflowEffects) error {
@@ -22,7 +23,7 @@ func persistWorkflowCallbacks(ctx context.Context, tx *sql.Tx, instanceID any, e
 		event := cleanAnyString(callback.Payload["event"])
 		status := cleanAnyString(callback.Payload["status"])
 		idempotencyKey := "workflow:callback:" + cleanAnyString(instanceID) + ":" + event + ":" + status
-		if callback.URL == aimsCompletionWorkflowCallback {
+		if callback.URL == aimsCompletionWorkflowCallback || workflowapproval.CallbackRegistered(cleanAnyString(callback.Payload["app_code"]), cleanAnyString(callback.Payload["resource_code"]), cleanAnyString(callback.Payload["action_code"])) {
 			callback.Payload["idempotencyKey"] = idempotencyKey
 		}
 		handled, err := applyCompletionLaneCallback(ctx, tx, *callback)

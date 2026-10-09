@@ -252,6 +252,7 @@ async function registerManifestInTransaction(tx: TransactionExecutor, input: Reg
 
   let resolvedReleaseId: number
   if (existingRelease) {
+    if (existingRelease.status === 'baseline') throw createError({ statusCode: 409, message: '迁移基线不可通过 Git 导入修改' })
     resolvedReleaseId = existingRelease.id
     if (existingRelease.status === 'released' && existingRelease.manifest_id !== resolvedManifestId) {
       throw createError({

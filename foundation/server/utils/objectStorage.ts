@@ -135,8 +135,14 @@ function normalizeEndpoint(endpoint: string) {
   return /^https?:\/\//i.test(endpoint) ? endpoint : `https://${endpoint}`
 }
 
-function normalizeAliyunS3Endpoint(endpoint: string) {
+function normalizeOssEndpoint(endpoint: string) {
   const url = new URL(normalizeEndpoint(endpoint))
+  url.protocol = 'https:'
+  return url.toString().replace(/\/$/, '')
+}
+
+function normalizeAliyunS3Endpoint(endpoint: string) {
+  const url = new URL(normalizeOssEndpoint(endpoint))
   if (!url.hostname.startsWith('s3.')) {
     url.hostname = `s3.${url.hostname}`
   }
@@ -438,7 +444,8 @@ function parseListV2Xml(xml: string): ObjectStorageListV2Result {
 function createNativeAliOssCompatibleClient(config: ObjectStorageConfig): AliOssCompatibleClient {
   const native = new OSS({
     bucket: config.bucket,
-    endpoint: config.endpoint,
+    endpoint: normalizeOssEndpoint(config.endpoint),
+    secure: true,
     accessKeyId: config.accessKeyId,
     accessKeySecret: config.accessKeySecret,
     region: config.region,

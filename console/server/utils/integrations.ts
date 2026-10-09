@@ -1,7 +1,7 @@
-import { createError, getHeader, getRequestURL, type H3Event } from 'h3'
+import { createError, type H3Event } from 'h3'
 import { requestServiceAccessToken } from '@hzy/foundation/server/utils/serviceOidc'
 import { fetchExternal } from '@hzy/foundation/server/utils/externalFetch'
-import { resolveTenantGatewayServiceAppBaseUrl } from '@hzy/foundation/server/utils/serviceAppUrl'
+import { resolveExternalNotificationActionUrl } from '@hzy/foundation/server/utils/notify'
 import {
   checkConsoleIntegration,
   createConsoleIntegration,
@@ -47,18 +47,8 @@ function stringValue(value: unknown) {
   return String(value || '').trim()
 }
 
-function notificationTestActionUrl(event: H3Event) {
-  const trustedTenantBaseUrl = resolveTenantGatewayServiceAppBaseUrl(event, 'console', { basePath: '/' })
-  if (trustedTenantBaseUrl) {
-    return new URL('/notifications', trustedTenantBaseUrl).toString()
-  }
-  if (stringValue(getHeader(event, 'x-hzy-gateway')) === 'tenant-gateway') {
-    throw createError({
-      statusCode: 503,
-      message: 'Trusted tenant gateway URL is required for notification links'
-    })
-  }
-  return new URL('/notifications', getRequestURL(event).origin).toString()
+async function notificationTestActionUrl(event: H3Event) {
+  return await resolveExternalNotificationActionUrl('/notifications', event)
 }
 
 function assertCode(value: unknown, field: string) {
@@ -420,7 +410,7 @@ async function sendIntegrationTestMessage(input: {
       `这是一条由汇智云 Console 发送的${providerTitle}测试消息。`,
       `集成：${code}`
     ].join('\n'),
-    url: notificationTestActionUrl(input.event),
+    url: await notificationTestActionUrl(input.event),
     btntxt: '查看'
   }
   const summary: Record<string, unknown> = {

@@ -3,6 +3,8 @@ import assert from 'node:assert/strict'
 import { buildBusinessNavigation, buildObjectWorkspaces, businessModules, navigationContributors, hostNativePages, navigationSources, registerBusinessPages } from '../composition/registry.mjs'
 import { auxiliaryAreas, businessAreas } from '../composition/business-areas.mjs'
 import { readFileSync } from 'node:fs'
+import { runInNewContext } from 'node:vm'
+import { execFileSync } from 'node:child_process'
 import { selectActiveLeaf } from '../app/utils/navigation-active.mjs'
 import { matchRegisteredPage } from '../shared/registered-page.mjs'
 
@@ -126,8 +128,8 @@ test('object workspaces resolve to registered pages of their own module', () => 
 test('client-safe navigation artifact is reproducibly generated from the registry', () => {
   const source = readFileSync(new URL('../app/utils/enterprise-navigation.ts', import.meta.url), 'utf8')
   const match = source.match(/export const enterpriseNavigation = (\{[\s\S]*\}) as const\s*$/)
-  assert.ok(match, 'generated navigation artifact must contain a JSON-compatible value')
-  const artifact = JSON.parse(match[1])
+  assert.ok(match, 'generated navigation artifact must contain a client-safe object value')
+  const artifact = JSON.parse(JSON.stringify(runInNewContext(`(${match[1]})`)))
   assert.deepEqual(artifact.businessNavigation, nav)
   assert.deepEqual(artifact.objectWorkspaces, objectWorkspaces)
   assert.ok(artifact.registeredPages.length > 0)
@@ -208,4 +210,8 @@ test('submit-only members discover the personal calendar', async () => {
     allows: (snapshot, ref) => authorizationResourcesAllow(snapshot, ref.resource, ref.action)
   })
   assert.deepEqual(ids, [calendar.id])
+})
+
+test('navigation regeneration retains its lint-clean deterministic format', () => {
+  execFileSync(process.execPath, [new URL('../scripts/generate-business-navigation.mjs', import.meta.url).pathname, '--check'])
 })

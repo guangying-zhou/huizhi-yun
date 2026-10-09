@@ -60,18 +60,18 @@ await withTemporaryMySql(plan, async (context) => {
     const review = planG7(original, bindings)
     assert.deepEqual(review.operations.filter(op => op.kind === 'bind' && ossRows.some(([id]) => id === op.id)).map(op => op.id).sort((a, b) => a - b),
       ossRows.map(([id]) => id).sort((a, b) => a - b))
-    await db.query("UPDATE service_client_grants SET status='revoked' WHERE id=439")
+    await db.query('UPDATE service_client_grants SET status=\'revoked\' WHERE id=439')
     const revokedOss = await readG7State(db)
     assert.throws(() => planG7(revokedOss, bindings), /G7_REVOKED_PHYSICAL_GRANT/)
-    await db.query("UPDATE service_client_grants SET status='active' WHERE id=439")
-    await db.query("UPDATE service_client_grants SET scope_json=JSON_SET(scope_json,'$.audience','console') WHERE id=439")
+    await db.query('UPDATE service_client_grants SET status=\'active\' WHERE id=439')
+    await db.query('UPDATE service_client_grants SET scope_json=JSON_SET(scope_json,\'$.audience\',\'console\') WHERE id=439')
     const conflictingOss = await readG7State(db)
     assert.throws(() => planG7(conflictingOss, bindings), /G7_AUDIENCE_CONFLICT/)
     await db.query('UPDATE service_client_grants SET scope_json=? WHERE id=439', [JSON.stringify(original.grants.find(row => Number(row.id) === 439).scope_json)])
-    await db.query("UPDATE service_client_grants SET resource_code='missing-fixture' WHERE id=440")
+    await db.query('UPDATE service_client_grants SET resource_code=\'missing-fixture\' WHERE id=440')
     const missingOss = await readG7State(db)
     assert.throws(() => planG7(missingOss, bindings), /G7_CODOCS_OSS_GRANT_MISSING/)
-    await db.query("UPDATE service_client_grants SET resource_code='credential_vault' WHERE id=440")
+    await db.query('UPDATE service_client_grants SET resource_code=\'credential_vault\' WHERE id=440')
     assert.equal(review.createServiceClient, true)
     assert.equal(review.createOidcClient, true)
     assert.ok(review.operations.some(op => op.kind === 'revoke' && op.before.resource_code === 'aims:integration_operation'))
@@ -102,7 +102,7 @@ await withTemporaryMySql(plan, async (context) => {
       assert.equal(row.status, prior.status)
     }
     for (const scope of ['integration_config:view', 'credential_vault:resolve']) {
-      assert.equal(boundOss.filter(row => {
+      assert.equal(boundOss.filter((row) => {
         const policy = typeof row.scope_json === 'string' ? JSON.parse(row.scope_json) : row.scope_json
         return policy.audience === 'data-runtime' && policy.semanticScope === scope
       }).length, 1, `${scope} signing mapping must be unambiguous`)
@@ -143,7 +143,7 @@ await withTemporaryMySql(plan, async (context) => {
     assert.equal(collabPlan.createCollabClient, true)
     assert.equal(collabPlan.operations.filter(op => op.client === 'collab.runtime' && op.kind === 'insert').length, 2)
     assert.equal(planG7(await readG7State(db), bindings).createCollabClient, undefined)
-    await db.query("INSERT INTO service_clients VALUES(9,'collab.runtime','Other','app','aims',NULL,NULL,'active',UTC_TIMESTAMP(),UTC_TIMESTAMP())")
+    await db.query('INSERT INTO service_clients VALUES(9,\'collab.runtime\',\'Other\',\'app\',\'aims\',NULL,NULL,\'active\',UTC_TIMESTAMP(),UTC_TIMESTAMP())')
     const conflictingCollab = await readG7State(db)
     assert.throws(() => planG7(conflictingCollab, withCollab), /G7_COLLAB_CLIENT_CONFLICT/)
     await db.query('DELETE FROM service_clients WHERE id=9')
@@ -209,7 +209,7 @@ await withTemporaryMySql(plan, async (context) => {
     assert.deepEqual(prodRestored.grants, prodBefore.grants, 'rollback restores the original semanticScope byte for byte')
     assert.deepEqual(prodRestored.clients, prodBefore.clients)
     // Narrow rule: only `<this row's audience>:<short scope>` is an alias; everything else still conflicts.
-    const mutate = (mutator) => ({ ...prodBefore, grants: prodBefore.grants.map((row) => {
+    const mutate = mutator => ({ ...prodBefore, grants: prodBefore.grants.map((row) => {
       if (Number(row.id) !== Number(prodRows.find(r => r.resource_code === 'tenant-runtime:aims:integration_operation').id)) return row
       return { ...row, scope_json: JSON.stringify(mutator(scopeJson(row))) }
     }) })

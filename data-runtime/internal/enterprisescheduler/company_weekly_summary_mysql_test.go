@@ -24,6 +24,12 @@ import (
 // exactly the project-manager duty time entries locked to included reviewed
 // report versions (review_route=company_summary, submitted).
 func TestSchedulerCompanyWeeklySummaryPublishConfirmsManagerTimeMySQL(t *testing.T) {
+	testSchedulerCompanyWeeklySummaryPublishConfirmsManagerTimeMySQL(t, "aims", "aims.runtime")
+}
+func TestHostSchedulerCompanyWeeklySummaryPublishConfirmsManagerTimeMySQL(t *testing.T) {
+	testSchedulerCompanyWeeklySummaryPublishConfirmsManagerTimeMySQL(t, "enterprise", "enterprise.runtime")
+}
+func testSchedulerCompanyWeeklySummaryPublishConfirmsManagerTimeMySQL(t *testing.T, executor, client string) {
 	socket := os.Getenv("HZY_ENTERPRISE_SCHEDULER_TEST_SOCKET")
 	if socket == "" {
 		t.Skip("requires dedicated temporary MySQL")
@@ -97,7 +103,7 @@ func TestSchedulerCompanyWeeklySummaryPublishConfirmsManagerTimeMySQL(t *testing
 	if err != nil {
 		t.Fatal(err)
 	}
-	source, err := e.NewOutboundSource(q, resolved, "real-aims-worker", "aims.runtime")
+	source, err := e.NewOutboundSource(q, resolved, "real-aims-worker", client)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -106,7 +112,7 @@ func TestSchedulerCompanyWeeklySummaryPublishConfirmsManagerTimeMySQL(t *testing
 	if err != nil {
 		t.Fatal(err)
 	}
-	identity := e.SchedulerIdentity{Tenant: "tenant-a", Deployment: "real-aims-worker", SourceApp: "aims", ClientID: "aims.runtime", Subject: "aims.runtime"}
+	identity := e.SchedulerIdentity{Tenant: "tenant-a", Deployment: "real-aims-worker", SourceApp: executor, ClientID: client, Subject: client}
 
 	markdown := "# 2026-W40 公司项目周报汇总\n"
 	sum := sha256.Sum256([]byte(markdown))

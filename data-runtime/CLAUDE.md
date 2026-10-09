@@ -82,6 +82,7 @@ Does not own:
   for other application deployments, with matching `<app>.runtime` client,
   subject and source app. An explicit map must not fall back to `<tenant>-<app>`
   for missing or mismatched bindings; that naming fallback is legacy-only.
+- hzy0 standalone Collab may opt into `HZY_LOCAL_COLLAB_DEPLOYMENT=C000001-test-collab` only for the exact local C000001/test Runtime, loopback listener and enabled Codocs v2 collaboration, with matching static binding and no conflicting Platform overlay. This does not merge other static bindings or alter signing/grants; without this opt-in the overlay remains authoritative. See the hzy0 Collab enablement plan.
 - Console's own service-token issuer uses its authenticated Console deployment
   in both source-binding modes; it must not invent `<tenant>-console` when the
   authenticated binding has a custom site/environment code.

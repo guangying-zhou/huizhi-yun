@@ -4,6 +4,7 @@
  *
  * 显示用户的所有文档，支持创建、搜索和分类筛选
  */
+import { REPOSITORY_COPY_DOC_TYPE } from '../../../shared/utils/documentStorage'
 
 definePageMeta({
   layout: 'default'
@@ -104,13 +105,13 @@ const openDocument = (doc: DocumentItem) => {
 // 获取文档类型标签颜色
 const getTypeColor = (type: string): 'primary' | 'secondary' | 'success' | 'info' | 'warning' | 'error' | 'neutral' => {
   const colors: Record<string, 'primary' | 'secondary' | 'success' | 'info' | 'warning' | 'error' | 'neutral'> = {
-    'private': 'primary',
-    'slide': 'secondary',
-    'department': 'info',
-    'project': 'success',
-    'git-project': 'success',
-    'knowledge': 'warning',
-    'company': 'error'
+    private: 'primary',
+    slide: 'secondary',
+    department: 'info',
+    project: 'success',
+    [REPOSITORY_COPY_DOC_TYPE]: 'success',
+    knowledge: 'warning',
+    company: 'error'
   }
   return colors[type] || 'neutral'
 }
@@ -118,13 +119,13 @@ const getTypeColor = (type: string): 'primary' | 'secondary' | 'success' | 'info
 // 获取文档类型标签文本
 const getTypeLabel = (type: string) => {
   const labels: Record<string, string> = {
-    'private': '个人',
-    'slide': '演示文稿',
-    'department': '部门',
-    'project': '项目',
-    'git-project': '代码库文档',
-    'knowledge': '知识库',
-    'company': '公司'
+    private: '个人',
+    slide: '演示文稿',
+    department: '部门',
+    project: '项目',
+    [REPOSITORY_COPY_DOC_TYPE]: '代码库文档',
+    knowledge: '知识库',
+    company: '公司'
   }
   return labels[type] || type
 }

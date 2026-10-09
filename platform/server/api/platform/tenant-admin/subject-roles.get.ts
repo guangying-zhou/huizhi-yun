@@ -9,6 +9,7 @@ interface SubjectRoleRow extends RowDataPacket {
   subject_type: string
   subject_code: string
   subject_display_name: string | null
+  subject_status: string
   role_id: number
   role_code: string
   role_name: string
@@ -92,6 +93,7 @@ export default defineEventHandler(async (event) => {
             ts.subject_type,
             ts.subject_code,
             ts.display_name AS subject_display_name,
+            ts.status AS subject_status,
             tsr.role_id,
             tr.role_code,
             tr.role_name,
@@ -108,7 +110,7 @@ export default defineEventHandler(async (event) => {
             tsr.expired_at,
             tsr.status,
             CASE
-              WHEN tsr.status = 'active'
+              WHEN ts.status = 'active' AND tsr.status = 'active'
                AND (tsr.starts_at IS NULL OR tsr.starts_at <= UTC_TIMESTAMP())
                AND (tsr.expired_at IS NULL OR tsr.expired_at > UTC_TIMESTAMP())
               THEN 1 ELSE 0
@@ -147,6 +149,7 @@ export default defineEventHandler(async (event) => {
       subjectType: row.subject_type,
       subjectCode: row.subject_code,
       subjectDisplayName: row.subject_display_name || row.subject_code,
+      subjectStatus: row.subject_status,
       roleId: row.role_id,
       roleCode: row.role_code,
       roleName: row.role_name,

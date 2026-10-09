@@ -377,6 +377,20 @@ func (a *Adapter) documentAccessCheckWithFacts(ctx context.Context, body map[str
 		}
 	}
 
+	if isSourceProjectMember && policy.ID != 0 {
+		// A policy explicitly owned by a portfolio or product line is not a
+		// project's policy, even when the two codes are equal (DOC-05, 5b-1).
+		// Before the owner column is installed every row is a project row.
+		var ownerType string
+		switch err = a.db.QueryRowContext(ctx, "SELECT source_owner_type FROM document_access_policies WHERE id = ?", policy.ID).Scan(&ownerType); {
+		case err == nil:
+			isSourceProjectMember = ownerType == "project"
+		case portfolioPolicyColumnMissing(err):
+		default:
+			return nil, err
+		}
+	}
+
 	if action == "edit" && policyReadonly(policy) {
 		result.Reason = "readonly"
 		a.recordDocumentAccessAudit(ctx, policy, actorUID, action, result, actorProjectCodes, actorDeptCodes, actorRoles)
@@ -527,6 +541,21 @@ func (a *Adapter) updateDocumentAccessPolicy(ctx context.Context, documentUUID s
 	}
 	policy, err := a.ensurePolicyDefault(ctx, documentRefType, strings.TrimSpace(documentUUID), firstTextValue(body, "sourceApp", "source_app"), firstTextValue(body, "sourceProjectCode", "source_project_code"), operatorUID)
 	if err != nil {
+		return nil, err
+	}
+
+	// The project path maintains project policies only. A row explicitly owned
+	// by a portfolio or product line is maintained by its owner's entry points;
+	// rewriting it here would change its owner code behind the owner's back
+	// (DOC-05). Before the owner column is installed every row is a project row.
+	var ownerType string
+	switch err = a.db.QueryRowContext(ctx, "SELECT source_owner_type FROM document_access_policies WHERE id = ?", policy.ID).Scan(&ownerType); {
+	case err == nil:
+		if ownerType != "project" {
+			return nil, httperror.New(http.StatusConflict, "document_policy_owned_elsewhere", "该文档的访问策略不属于项目，不能在此修改")
+		}
+	case portfolioPolicyColumnMissing(err):
+	default:
 		return nil, err
 	}
 

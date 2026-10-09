@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/huizhi-yun/data-runtime/internal/documentcatalog"
 	"io"
 	"log"
 	"net"
@@ -36,6 +37,8 @@ import (
 	"github.com/huizhi-yun/data-runtime/internal/auth"
 	"github.com/huizhi-yun/data-runtime/internal/config"
 	"github.com/huizhi-yun/data-runtime/internal/enterprise"
+	"github.com/huizhi-yun/data-runtime/internal/enterprise/domaininstall"
+	"github.com/huizhi-yun/data-runtime/internal/enterpriseapf"
 	"github.com/huizhi-yun/data-runtime/internal/enterpriseassets"
 	"github.com/huizhi-yun/data-runtime/internal/enterprisecontracts"
 	"github.com/huizhi-yun/data-runtime/internal/enterpriseplanning"
@@ -43,6 +46,7 @@ import (
 	"github.com/huizhi-yun/data-runtime/internal/gatewaykeys"
 	"github.com/huizhi-yun/data-runtime/internal/httperror"
 	"github.com/huizhi-yun/data-runtime/internal/integrationoperation"
+	"github.com/huizhi-yun/data-runtime/internal/policyenvelope"
 	"github.com/huizhi-yun/data-runtime/internal/updater"
 	"github.com/huizhi-yun/data-runtime/internal/version"
 )
@@ -54,6 +58,7 @@ type Server struct {
 	inProcessSchedulerDone    chan struct{}
 	inProcessSchedulerStarted bool
 
+	enterpriseAPF                 *enterpriseapf.Service
 	enterpriseAltocReads          *enterprisecontracts.BasicReadService
 	enterpriseAltocSalesReads     *enterprisecontracts.SalesReadService
 	enterpriseContractActivation  *enterprisecontracts.ActivationService
@@ -343,6 +348,8 @@ func New(cfg config.Config) (*Server, error) {
 			return nil, err
 		}
 		aimsAdapter = adapter
+		aimsAdapter.ConfigureRetainedAimsOperations(cfg.Enterprise.Enabled && cfg.Enterprise.AimsDeliveryWorker != nil && cfg.Enterprise.AimsDeliveryWorker.ServiceClientID == "enterprise.runtime")
+		aimsAdapter.ConfigureTicketResults(altocapp.PrepareEnterpriseTicketResultsTx)
 		if cfg.Enterprise.Enabled {
 			binding, err := cfg.EnterpriseBinding()
 			if err != nil {
@@ -350,7 +357,11 @@ func New(cfg config.Config) (*Server, error) {
 			}
 			if binding.Domains["aims"].Write == enterprise.PathUnified {
 				ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-				err = aimsAdapter.ConfigureEnterpriseWrites(ctx, registry, binding, cfg.DeploymentBindings["enterprise"], cfg.DeploymentBindings["aims"])
+				workerDeployment := cfg.DeploymentBindings["aims"]
+				if cfg.Enterprise.AimsDeliveryWorker != nil {
+					workerDeployment = cfg.Enterprise.AimsDeliveryWorker.Deployment
+				}
+				err = aimsAdapter.ConfigureEnterpriseWrites(ctx, registry, binding, cfg.DeploymentBindings["enterprise"], workerDeployment)
 				cancel()
 				if err != nil {
 					return nil, err
@@ -380,6 +391,29 @@ func New(cfg config.Config) (*Server, error) {
 			return nil, err
 		}
 		codocsAdapter = adapter
+	}
+
+	// Document catalog (DOC-07): after an Aims commit, register its external
+	// documents in the Codocs catalog. In-process typed call, no service token.
+	// Triggers are merged and run serially on one background worker and never
+	// block or fail the Aims request; a missing catalog, a Codocs outage or a
+	// full queue only leaves a gap that the reconcile command repairs.
+	if aimsAdapter != nil && codocsAdapter != nil {
+		store, tenant := codocsAdapter.DocumentCatalogStore(), cfg.Tenant
+		var syncer *documentcatalog.Syncer
+		var reportedDrops int64 // only touched by the single worker goroutine
+		syncer = documentcatalog.NewSyncer(1000, func(kind string, filter documentcatalog.Filter) {
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
+			if _, err := documentcatalog.Sync(ctx, store, tenant, "aims", aimsAdapter, kind, filter, true); err != nil && !errors.Is(err, documentcatalog.ErrUnavailable) {
+				log.Printf("document catalog sync failed kind=%s: %v", kind, err)
+			}
+			if dropped := syncer.Dropped(); dropped != reportedDrops {
+				reportedDrops = dropped
+				log.Printf("document catalog sync queue full: %d trigger(s) dropped so far; run hzy-document-catalog-reconcile to repair", dropped)
+			}
+		})
+		aimsAdapter.ConfigureDocumentCatalogSync(syncer.Trigger)
 	}
 
 	var enterpriseRequests *enterpriseplanning.RequestService
@@ -526,8 +560,38 @@ func New(cfg config.Config) (*Server, error) {
 			return nil, err
 		}
 	}
+	var apf *enterpriseapf.Service
+	if cfg.Enterprise.Enabled {
+		b, e := cfg.EnterpriseBinding()
+		if e != nil {
+			return nil, e
+		}
+		if domaininstall.IsAPFDomain("altoc", b.Domains["altoc"]) || domaininstall.IsAPFDomain("finance", b.Domains["finance"]) || domaininstall.IsAPFDomain("people", b.Domains["people"]) {
+			apf, e = enterpriseapf.New(registry, b)
+			if e == nil && consoleAdapter != nil {
+				apf.ConfigureProjectCostCalendar(consoleAdapter)
+				// Same process and tenant: Finance reaches the vault through its
+				// typed owner-bound entry, with no service token or grant.
+				vault := consoleAdapter
+				apf.ConfigureAccountNoVault(func(ctx context.Context, secretCode, secretType, ownerType, ownerKey, actor, reason string, access enterpriseapf.AccountNoAccess) (string, error) {
+					return vault.RevealCustodySecretForOwner(ctx, secretCode, secretType, ownerType, ownerKey, consoleapp.VaultAccessMeta{ActorType: "human", ActorID: actor, AppCode: "finance", RequestIP: access.RequestIP, UserAgent: access.UserAgent, Reason: reason})
+				})
+			}
+			// Owner assignment requires Directory; without it those writes fail closed.
+			if e == nil && directoryAdapter != nil {
+				apf.ConfigureOwnerDirectory(directoryAdapter.EnterpriseActiveUser)
+			}
+			if e == nil && workflowAdapter != nil {
+				apf.ConfigureAltocApprovalReader(workflowAdapter)
+				apf.ConfigureFinanceApprovalReader(workflowAdapter)
+			}
+			if e != nil {
+				return nil, e
+			}
+		}
+	}
 	var enterpriseAltocReads *enterprisecontracts.BasicReadService
-	if cfg.Enterprise.Enabled && cfg.Enterprise.Domains["altoc"].Read == enterprise.PathUnified {
+	if usesLegacyEnterpriseAltocReads(cfg) {
 		binding, err := cfg.EnterpriseBinding()
 		if err != nil {
 			return nil, err
@@ -538,14 +602,14 @@ func New(cfg config.Config) (*Server, error) {
 		}
 	}
 	var enterpriseAltocSalesReads *enterprisecontracts.SalesReadService
-	if cfg.Enterprise.Enabled && cfg.Enterprise.Domains["altoc"].Read == enterprise.PathUnified {
+	if usesEnterpriseAltocSalesReads(cfg) {
 		binding, err := cfg.EnterpriseBinding()
 		if err != nil {
 			return nil, err
 		}
 		complete := true
 		for _, table := range altocapp.SalesReadTables {
-			if binding.Domains["altoc"].Tables[table] == "" {
+			if binding.Domains["altoc"].Tables[table] == "" && binding.Domains["altoc"].Tables["altoc_"+table] == "" {
 				complete = false
 			}
 		}
@@ -582,6 +646,10 @@ func New(cfg config.Config) (*Server, error) {
 	if consoleAdapter != nil {
 		consoleAdapter.SetOIDCSigningIssuerSource(authenticator.TrustedJWTIssuer)
 		consoleAdapter.SetOIDCSigningDeploymentBindings(cfg.Deployment, cfg.DeploymentBindings)
+		policyRuntime := &Server{cfg: cfg}
+		consoleAdapter.SetServiceTokenExchangePolicySource(func(tenant, deployment string) (policyenvelope.Store, error) {
+			return policyRuntime.consoleExchangePolicyStore(consoleAdapter.DB(), tenant, deployment)
+		})
 	}
 	constructed = true
 	return &Server{
@@ -589,6 +657,7 @@ func New(cfg config.Config) (*Server, error) {
 		enterpriseContractActivation:  enterpriseContractActivation,
 		enterpriseMilestoneReceivable: enterpriseMilestoneReceivable,
 		enterpriseRegistry:            registry,
+		enterpriseAPF:                 apf,
 		enterpriseAltocReads:          enterpriseAltocReads,
 		enterpriseAltocSalesReads:     enterpriseAltocSalesReads,
 		enterpriseAssetsProducts:      enterpriseAssetsProducts,
@@ -690,6 +759,10 @@ func (s *Server) route(r *http.Request) (routeResult, error) {
 	if r.Method == http.MethodPost && path == "/v1/enterprise/aims/product-workspace:view" {
 		return s.routeEnterpriseProductWorkspace(r)
 	}
+
+	if op, ok := announcementOperation(path); ok {
+		return s.routeAnnouncements(r, op)
+	}
 	if path == enterpriseOrgBrandPath && r.Method == http.MethodPost {
 		return s.routeEnterpriseOrgBrand(r)
 	}
@@ -699,6 +772,30 @@ func (s *Server) route(r *http.Request) (routeResult, error) {
 	if r.Method == http.MethodPost && path == "/v1/enterprise/aims/product-list" {
 		return s.routeEnterpriseProductList(r)
 	}
+	if op, ok := enterprisePeopleDirectoryPaths[path]; ok {
+		if r.Method != http.MethodPost {
+			return routeResult{}, httperror.New(405, "method_not_allowed", "POST required")
+		}
+		return s.routeEnterprisePeopleDirectory(r, op)
+	}
+	if op, ok := enterprisePeopleFactsPaths[path]; ok {
+		if r.Method != http.MethodPost {
+			return routeResult{}, httperror.New(405, "method_not_allowed", "POST required")
+		}
+		return s.routeEnterprisePeopleFacts(r, op)
+	}
+	if path == enterprisePeopleCallbackPath {
+		if r.Method != http.MethodPost {
+			return routeResult{}, httperror.New(405, "method_not_allowed", "POST required")
+		}
+		return s.routeEnterprisePeopleCallback(r)
+	}
+	if spec, ok := enterpriseAPFPaths[path]; ok {
+		if r.Method != http.MethodPost {
+			return routeResult{}, httperror.New(405, "method_not_allowed", "POST is required")
+		}
+		return s.routeEnterpriseAPF(r, spec)
+	}
 	if spec, ok := enterpriseAltocSalesReadPaths[path]; ok && r.Method == http.MethodPost {
 		return s.routeEnterpriseAltocSalesRead(r, spec)
 	}
@@ -707,6 +804,9 @@ func (s *Server) route(r *http.Request) (routeResult, error) {
 	}
 	if action, ok := enterpriseProjectReadActions[path]; ok && r.Method == http.MethodPost {
 		return s.routeEnterpriseProjectRead(r, action)
+	}
+	if path == enterpriseAdminRoutineBatchPath && r.Method == http.MethodPost {
+		return s.routeEnterpriseAdminRoutineBatch(r)
 	}
 	if path == enterpriseAdminProjectListPath && r.Method == http.MethodPost {
 		return s.routeEnterpriseAdminProjectList(r)
@@ -719,6 +819,12 @@ func (s *Server) route(r *http.Request) (routeResult, error) {
 	}
 	if path == "/v1/enterprise/aims/project-documents:department-source" && r.Method == http.MethodPost {
 		return s.routeEnterpriseProjectDocumentDepartmentSource(r)
+	}
+	if path == "/v1/enterprise/aims/project-documents:access-check" && r.Method == http.MethodPost {
+		return s.routeEnterpriseProjectDocumentAccessCheck(r)
+	}
+	if path == "/v1/enterprise/aims/project-documents:repository-read" && r.Method == http.MethodPost {
+		return s.routeEnterpriseProjectRepositoryRead(r)
 	}
 	if path == "/v1/enterprise/aims/project-documents:context" && r.Method == http.MethodPost {
 		return s.routeEnterpriseProjectDocumentContext(r)
@@ -1300,6 +1406,17 @@ func (s *Server) route(r *http.Request) (routeResult, error) {
 	if path == "/v1/console/verified-policy" && (r.Method == http.MethodGet || r.Method == http.MethodPut) {
 		return s.routeVerifiedPolicy(r)
 	}
+	for _, op := range []string{"events", "freeze", "claim", "ack"} {
+		if path == "/v1/console/feedback-notifications:"+op {
+			return s.routeFeedbackNotification(r, op)
+		}
+	}
+	if path == "/v1/console/feedback:drain" {
+		return s.routeFeedbackDrain(r)
+	}
+	if op, ok := feedbackOperation(path); ok {
+		return s.routeFeedback(r, op)
+	}
 	if path == "/v1/enterprise/console-policy" {
 		return s.routeVerifiedPolicy(r)
 	}
@@ -1731,8 +1848,10 @@ func (s *Server) route(r *http.Request) (routeResult, error) {
 		allowedOperations := map[string]bool{
 			"project-info": true, "group-projects": true,
 			"commits": true, "commit-diff": true,
-			"markdown-tree": true, "file": true, "commit": true,
-			"issue-upsert": true, "resolve-actions": true,
+			"markdown-tree": true, "file": true,
+			// Repository content is read-only: commit and resolve-actions
+			// were removed (document asset design DOC-01).
+			"issue-upsert": true,
 		}
 		if !allowedOperations[operation] {
 			return routeResult{}, httperror.New(
@@ -1747,11 +1866,11 @@ func (s *Server) route(r *http.Request) (routeResult, error) {
 		if err != nil {
 			return routeResult{}, err
 		}
-		if (operation == "commit" || operation == "issue-upsert") && strings.TrimSpace(r.Header.Get("Idempotency-Key")) == "" {
+		if operation == "issue-upsert" && strings.TrimSpace(r.Header.Get("Idempotency-Key")) == "" {
 			return routeResult{}, httperror.New(
 				http.StatusBadRequest,
 				"idempotency_key_required",
-				"Idempotency-Key is required for GitLab commit operations",
+				"Idempotency-Key is required for GitLab write operations",
 			)
 		}
 		adapter, err := s.requireConsole()
@@ -1999,6 +2118,8 @@ func (s *Server) route(r *http.Request) (routeResult, error) {
 		var scope, operation string
 		sourceApp := "console"
 		switch {
+		case r.Method == http.MethodGet && (path == "/v1/console/directory/employment-lifecycle-status" || path == "/v1/console/directory/lifecycle-command-status"):
+			scope, operation = "console:directory-connector:execute", "console.directory.lifecycle.status"
 		case r.Method == http.MethodGet && path == "/v1/console/directory/provisioning":
 			scope, operation = "console:directory-connector:view", "console.directory.connector.provisioning"
 		case r.Method == http.MethodGet && path == "/v1/console/directory/me/password-capability":
@@ -2215,8 +2336,11 @@ func (s *Server) route(r *http.Request) (routeResult, error) {
 				if decodeErr != nil || operationID == "" || strings.Contains(operationID, "/") || operationID != stringValue(command["provisionOperationId"]) {
 					return routeResult{}, httperror.New(http.StatusBadRequest, "directory_connector_operation_id_invalid", "Directory Connector operation id is invalid")
 				}
+				if _, sourceErr := directoryapp.ConsoleOnboardingCommandSource(body); sourceErr != nil {
+					return routeResult{}, sourceErr
+				}
 				result, err = s.directory.ConsoleDirectoryOnboardingOperation(
-					r.Context(), operationID, stringValue(command["uid"]), stringValue(command["onboardingCode"]))
+					r.Context(), operationID, stringValue(command["uid"]), stringValue(command["onboardingCode"]), stringValue(body[integrationoperation.TrustedServiceCommandSourceAppKey]))
 			case r.Method == http.MethodPost && path == "/v1/console/directory/me/password":
 				actorUID, actorErr := trustedConsoleMutationActor(r, authCtx)
 				if actorErr != nil {
@@ -2273,6 +2397,9 @@ func (s *Server) route(r *http.Request) (routeResult, error) {
 					if actorErr != nil {
 						return routeResult{}, actorErr
 					}
+					if _, sourceErr := directoryapp.ConsoleOnboardingCommandSource(body); sourceErr != nil {
+						return routeResult{}, sourceErr
+					}
 					command = payload
 				} else {
 					var actorErr error
@@ -2305,6 +2432,15 @@ func (s *Server) route(r *http.Request) (routeResult, error) {
 			case r.Method == http.MethodPost && path == "/v1/console/directory/subject-merge":
 				return routeResult{}, httperror.New(http.StatusGone, "console_subject_merge_manual_only",
 					"Cross-application subject merge is disabled; use the audited migration runbook")
+			case r.Method == http.MethodGet && path == "/v1/console/directory/lifecycle-command-status":
+				revision, parseErr := strconv.ParseUint(r.URL.Query().Get("revision"), 10, 64)
+				if parseErr != nil {
+					return routeResult{}, httperror.New(400, "directory_status_input_invalid", "Revision required")
+				}
+				result, err = s.directory.ConsoleReadLifecycleCommandStatus(r.Context(), r.URL.Query().Get("uid"), r.URL.Query().Get("kind"), r.URL.Query().Get("hash"), revision)
+				if err == nil {
+					result = map[string]any{"code": 0, "data": result}
+				}
 			case r.Method == http.MethodGet && path == "/v1/console/directory/employment-lifecycle-status":
 				result, err = s.directory.ConsoleReadEmploymentLifecycleStatus(r.Context(), r.URL.Query().Get("uid"))
 				if err == nil {
@@ -2345,9 +2481,12 @@ func (s *Server) route(r *http.Request) (routeResult, error) {
 				if !ok || stringValue(command["actorUid"]) != actorUID {
 					return routeResult{}, httperror.New(http.StatusForbidden, "trusted_console_service_command_actor_required", "Reservation release command actor is invalid")
 				}
+				if _, sourceErr := directoryapp.ConsoleOnboardingCommandSource(body); sourceErr != nil {
+					return routeResult{}, sourceErr
+				}
 				result, err = s.directory.ConsoleReleaseOnboardingIdentityReservation(
 					r.Context(), stringValue(command["reservationId"]), stringValue(command["uid"]),
-					stringValue(command["onboardingCode"]))
+					stringValue(command["onboardingCode"]), stringValue(body[integrationoperation.TrustedServiceCommandSourceAppKey]))
 				if err == nil {
 					result = map[string]any{"code": 0, "data": result}
 				}
@@ -2376,9 +2515,12 @@ func (s *Server) route(r *http.Request) (routeResult, error) {
 				if !ok || stringValue(command["actorUid"]) != actorUID {
 					return routeResult{}, httperror.New(http.StatusForbidden, "trusted_console_service_command_actor_required", "Activation command actor is invalid")
 				}
+				if _, sourceErr := directoryapp.ConsoleOnboardingCommandSource(body); sourceErr != nil {
+					return routeResult{}, sourceErr
+				}
 				result, err = s.directory.ConsoleIssueOnboardingActivationCredential(
 					r.Context(), stringValue(command["uid"]), stringValue(command["provisionOperationId"]),
-					stringValue(command["onboardingCode"]), "people")
+					stringValue(command["onboardingCode"]), stringValue(body[integrationoperation.TrustedServiceCommandSourceAppKey]))
 				if err == nil {
 					result = map[string]any{"code": 0, "data": result}
 				}
@@ -2408,6 +2550,9 @@ func (s *Server) route(r *http.Request) (routeResult, error) {
 					actorUID, actorErr = trustedConsoleServiceCommandActor(r, authCtx)
 					if actorErr != nil {
 						return routeResult{}, actorErr
+					}
+					if _, sourceErr := directoryapp.ConsoleOnboardingCommandSource(body); sourceErr != nil {
+						return routeResult{}, sourceErr
 					}
 					command = payload
 				} else {
@@ -4723,6 +4868,13 @@ func (s *Server) routeAppRuntime(r *http.Request, appCode string, adapter runtim
 		scope = peopleHRSourceDepartmentRemapScope
 		sourceAppCode = "people"
 	}
+	if r.Method == http.MethodPost && path == "/v1/"+appCode+"/service/enterprise-knowledge-links" && (appCode == "assets" || appCode == "codocs") {
+		scope = appCode + ":knowledge-link:create"
+		if appCode == "assets" {
+			scope = "assets:asset-link:create"
+		}
+		sourceAppCode = appCode
+	}
 	if readScope := readOnlyAppRuntimeScope(appCode, r.Method, path); readScope != "" {
 		scope = readScope
 	}
@@ -4732,7 +4884,13 @@ func (s *Server) routeAppRuntime(r *http.Request, appCode string, adapter runtim
 	if isNotificationDetailAuthorizationRuntimePath(appCode, r.Method, path) {
 		scope = appCode + ".read"
 	}
-	authCtx, err := s.auth.Authenticate(r, auth.Requirement{AppCode: appCode, Scope: scope, SourceAppCode: sourceAppCode})
+	var authCtx auth.Context
+	var err error
+	if r.Method == http.MethodPost && path == "/v1/"+appCode+"/service/enterprise-knowledge-links" && (appCode == "assets" || appCode == "codocs") {
+		authCtx, _, err = authenticateEnterpriseSchedulerCapability(r, s.auth, enterpriseSchedulerRoute{App: appCode, Binding: enterprise.BindingKey{Tenant: s.cfg.Tenant, Environment: s.cfg.Enterprise.Environment, RuntimeDeployment: s.cfg.Deployment}, WorkerDeployment: s.cfg.DeploymentBindings[appCode], WorkerClient: appCode + ".runtime"}, s.verifyEnterpriseCredential, scope)
+	} else {
+		authCtx, err = s.auth.Authenticate(r, auth.Requirement{AppCode: appCode, Scope: scope, SourceAppCode: sourceAppCode})
+	}
 	if err != nil {
 		return routeResult{}, err
 	}
@@ -4770,6 +4928,11 @@ func (s *Server) routeAppRuntime(r *http.Request, appCode string, adapter runtim
 			body["hzy_runtime_actor_purpose"] = actorPurpose
 		}
 		if err := injectTrustedServiceCommandContext(r, authCtx, body); err != nil {
+			return routeResult{}, err
+		}
+	}
+	if path == "/v1/assets/service/enterprise-knowledge-links" {
+		if err := verifyKnowledgeAuthorization(r, authCtx, actorUID, body); err != nil {
 			return routeResult{}, err
 		}
 	}

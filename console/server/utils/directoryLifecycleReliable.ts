@@ -3,6 +3,14 @@ import { createError, getHeader, type H3Event } from 'h3'
 import type { ConsoleRuntimeBinding } from './consoleRuntimeBinding'
 
 type Row = Record<string, unknown>
+export type DirectoryCommandSource = 'people' | 'enterprise'
+
+// Only the already verified service identity can choose the source.
+export function directoryCommandSource(actor: { actorType?: string, actorId?: string | null, appCode?: string | null, tenantCode?: string | null, deploymentCode?: string | null }): DirectoryCommandSource {
+  if (actor.actorType !== 'service' || !actor.tenantCode || !actor.deploymentCode || !((actor.appCode === 'people' && actor.actorId === 'people.runtime') || (actor.appCode === 'enterprise' && actor.actorId === 'enterprise.runtime'))) throw createError({ statusCode: 403, statusMessage: 'directory_command_source_forbidden' })
+  return actor.appCode as DirectoryCommandSource
+}
+
 type LifecycleKind = 'employment' | 'offboarding'
 
 const contracts = {
@@ -23,11 +31,11 @@ function digest(value: unknown) {
   return createHash('sha256').update(JSON.stringify(canonical(value))).digest('hex')
 }
 
-export function parsePeopleDirectoryCommand(raw: unknown, kind: LifecycleKind) {
+export function parsePeopleDirectoryCommand(raw: unknown, kind: LifecycleKind, source: DirectoryCommandSource = 'people') {
   const envelope = record(record(raw).serviceCommand)
   const command = record(envelope.command)
   const contract = contracts[kind]
-  if (text(envelope.sourceApp) !== 'people' || text(envelope.sourceDeployment) === '' || text(envelope.targetDeployment) === '' || text(envelope.targetApp) !== 'console' || text(envelope.operationCode) !== contract.operationCode
+  if (text(envelope.sourceApp) !== source || text(envelope.sourceDeployment) === '' || text(envelope.targetDeployment) === '' || text(envelope.targetApp) !== 'console' || text(envelope.operationCode) !== contract.operationCode
     || text(envelope.requiredCapability) !== contract.capability || text(envelope.commandSchemaVersion) !== 'v1'
     || !text(envelope.operationId) || !text(envelope.idempotencyKey) || !text(command.employeeUid)
     || Number(command.sourceRevision) <= 0 || !/^[a-f0-9]{64}$/.test(text(command.snapshotHash))
@@ -38,6 +46,8 @@ export function parsePeopleDirectoryCommand(raw: unknown, kind: LifecycleKind) {
 }
 
 export function verifyPeopleDirectorySignature(event: H3Event, raw: unknown, binding: ConsoleRuntimeBinding) {
+  const auth = event.context.consoleAuth
+  const source = directoryCommandSource({ actorType: auth?.subjectType, actorId: auth?.clientCode, appCode: auth?.appCode, tenantCode: auth?.tenant, deploymentCode: auth?.deployment })
   const envelope = record(record(raw).serviceCommand)
   const command = record(envelope.command)
   const tenant = text(getHeader(event, 'x-hzy-tenant'))
@@ -47,11 +57,12 @@ export function verifyPeopleDirectorySignature(event: H3Event, raw: unknown, bin
   const supplied = Buffer.from(text(getHeader(event, 'x-hzy-service-command-signature')), 'hex')
   const bearer = text(getHeader(event, 'authorization')).replace(/^Bearer\s+/i, '')
   const age = Math.abs(Math.floor(Date.now() / 1000) - Number(timestamp))
-  if (tenant !== binding.tenantId || sourceDeployment !== text(envelope.sourceDeployment) || targetDeployment !== binding.deploymentId || targetDeployment !== text(envelope.targetDeployment) || !bearer || !Number.isFinite(age) || age > 60) throw createError({ statusCode: 403, message: 'People lifecycle signature binding invalid' })
+  if (auth?.authenticated !== true || auth.tokenUse !== 'service' || tenant !== auth.tenant || sourceDeployment !== auth.deployment || text(envelope.sourceApp) !== source || tenant !== binding.tenantId || sourceDeployment !== text(envelope.sourceDeployment) || targetDeployment !== binding.deploymentId || targetDeployment !== text(envelope.targetDeployment) || !bearer || !Number.isFinite(age) || age > 60) throw createError({ statusCode: 403, message: 'People lifecycle signature binding invalid' })
   const path = event.path.split('?')[0] || ''
-  const message = `POST\n${path}\n${tenant}\n${sourceDeployment}\n${targetDeployment}\npeople\nconsole\n${text(envelope.operationId)}\n${text(envelope.operationCode)}\n${text(envelope.requiredCapability)}\n${text(envelope.idempotencyKey)}\n${text(envelope.commandSchemaVersion)}\n${text(envelope.commandSha256)}\n${text(command.originalActorUid)}\n${timestamp}`
+  const message = `POST\n${path}\n${tenant}\n${sourceDeployment}\n${targetDeployment}\n${source}\nconsole\n${text(envelope.operationId)}\n${text(envelope.operationCode)}\n${text(envelope.requiredCapability)}\n${text(envelope.idempotencyKey)}\n${text(envelope.commandSchemaVersion)}\n${text(envelope.commandSha256)}\n${text(command.originalActorUid)}\n${timestamp}`
   const expected = createHmac('sha256', bearer).update(message).digest()
   if (expected.length !== supplied.length || !timingSafeEqual(expected, supplied)) throw createError({ statusCode: 403, message: 'People lifecycle signature mismatch' })
+  return source
 }
 
 export function resolvePeopleDirectoryTargetBinding(event: H3Event, actorTenantCode: unknown): ConsoleRuntimeBinding {

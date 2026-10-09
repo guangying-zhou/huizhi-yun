@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/DATA-DOG/go-sqlmock"
+	"github.com/huizhi-yun/data-runtime/internal/httperror"
 )
 
 const (
@@ -234,3 +235,27 @@ func expectCollaborationInvalidated(mock sqlmock.Sqlmock) {
 	mock.ExpectExec(`UPDATE document_collaboration_sessions SET status = 'revoked' WHERE document_uuid = \? AND status = 'active'`).WillReturnResult(sqlmock.NewResult(0, 0))
 }
 
+func TestCreateDocumentShareRejectsSelfBeforeTransaction(t *testing.T) {
+	for _, key := range []string{"sharedToUid", "shared_to_uid", "uid"} {
+		for _, permission := range []string{"read", "write"} {
+			t.Run(key+"/"+permission, func(t *testing.T) {
+				db, mock, err := sqlmock.New()
+				if err != nil {
+					t.Fatal(err)
+				}
+				defer db.Close()
+				expectShareDocument(mock)
+				_, err = (&Adapter{db: db}).createDocumentShare(context.Background(), shareDocumentUUID, map[string]any{
+					"current_user": shareOwnerUID, key: shareOwnerUID, "permission": permission,
+				})
+				var httpErr httperror.Error
+				if !errors.As(err, &httpErr) || httpErr.Code != "share_self_not_allowed" || httpErr.Status != 400 {
+					t.Fatalf("expected self denial, got %v", err)
+				}
+				if err = mock.ExpectationsWereMet(); err != nil {
+					t.Fatal(err)
+				}
+			})
+		}
+	}
+}

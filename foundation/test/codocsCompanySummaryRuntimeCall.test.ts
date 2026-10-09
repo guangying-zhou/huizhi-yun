@@ -31,16 +31,22 @@ test('company summary Runtime call fails closed with a fixed code when an actor 
   const server = createServer((request, response) => {
     let body = ''
     request.setEncoding('utf8')
-    request.on('data', chunk => { body += chunk })
+    request.on('data', (chunk) => {
+      body += chunk
+    })
     request.on('end', () => {
       requests.push({ headers: request.headers, body })
       response.setHeader('content-type', 'application/json')
       response.end(JSON.stringify({ code: 0, data: { ok: true } }))
     })
   })
-  await new Promise<void>((resolve, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', () => resolve()) })
+  await new Promise<void>((resolve, reject) => {
+    server.once('error', reject)
+    server.listen(0, '127.0.0.1', () => resolve())
+  })
   const address = server.address()
-  if (!address || typeof address === 'string') throw new Error('runtime test server did not bind')
+  if (!address || typeof address === 'string')
+    throw new Error('runtime test server did not bind')
   const config = { hzy: { tenantRuntime: { endpoint: `http://127.0.0.1:${address.port}`, token: 'short-lived-codocs-runtime-token',
     tenant: 'tenant-a', deployment: 'codocs-deployment', dataAccessMode: 'tenant-runtime' } } }
   const globals = globalThis as typeof globalThis & { useRuntimeConfig?: () => unknown }
@@ -49,7 +55,9 @@ test('company summary Runtime call fails closed with a fixed code when an actor 
   const event = (consoleAuth: Record<string, unknown>) => ({ context: { consoleAuth }, node: { req: { headers: {}, url: '/api/v1/service/company-weekly-summaries/2026-W40:publish' } } }) as never
   const warnings: string[] = []
   const originalWarn = console.warn
-  console.warn = (...args: unknown[]) => { warnings.push(args.map(String).join(' ')) }
+  console.warn = (...args: unknown[]) => {
+    warnings.push(args.map(String).join(' '))
+  }
   try {
     await assert.rejects(
       () => maybeCallTenantRuntime(event(aimsAuth), path, options({ serviceCommandActor: { uid: 'operator-1' } })),
@@ -77,11 +85,14 @@ test('company summary Runtime call fails closed with a fixed code when an actor 
     )
     assert.ok(warnings.some(line => line.includes('"code":"service_command_source_identity_required"')))
     assert.equal(requests.length, 1)
-    for (const line of warnings) assert.doesNotMatch(line, /short-lived-codocs-runtime-token|operator-1/)
+    for (const line of warnings)
+      assert.doesNotMatch(line, /short-lived-codocs-runtime-token|operator-1/)
   } finally {
     console.warn = originalWarn
-    if (originalUseRuntimeConfig) globals.useRuntimeConfig = originalUseRuntimeConfig
-    else delete globals.useRuntimeConfig
+    if (originalUseRuntimeConfig)
+      globals.useRuntimeConfig = originalUseRuntimeConfig
+    else
+      delete globals.useRuntimeConfig
     await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()))
   }
 })

@@ -4,6 +4,15 @@ import { lstat, mkdir, readdir, readFile, readlink, rename, rm, symlink } from '
 import { join, relative, resolve, sep } from 'node:path'
 
 export const APPS = Object.freeze(['gateway', 'console', 'workflow', 'enterprise', 'aims', 'codocs', 'collab', 'platform'])
+// Legacy Aims remains buildable for rollback; a retired release never requires it.
+export function releaseApplications({ aimsRetired = false, apps } = {}) {
+  if (typeof aimsRetired !== 'boolean') throw Error('aimsRetired must be boolean')
+  const selected = apps ?? APPS.filter(app => !aimsRetired || app !== 'aims')
+  if (!Array.isArray(selected) || selected.length === 0 || new Set(selected).size !== selected.length || selected.some(app => !APPS.includes(app))) throw Error('unknown or duplicate app')
+  if (aimsRetired && selected.includes('aims')) throw Error('retired release cannot include physical Aims')
+  return [...selected]
+}
+
 export const BASE_PATHS = Object.freeze({ gateway: '/', console: '/console/', workflow: '/workflow/', enterprise: '/enterprise/', aims: '/aims/', codocs: '/codocs/', collab: '/codocs/', platform: '/' })
 export const PORTS = Object.freeze({ gatewayIngress: 8780, gatewayHealth: 8781, runtime: 31080, console: 31001, enterprise: 31002, workflow: 31003, aims: 31004, codocs: 31005, platform: 31006, collab: 31007 })
 

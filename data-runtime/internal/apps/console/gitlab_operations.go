@@ -72,12 +72,8 @@ func (a *Adapter) ExecuteServiceGitLabOperation(
 		return runtime.markdownTree(ctx, repoPath, body)
 	case "file":
 		return runtime.file(ctx, repoPath, body)
-	case "commit":
-		return runtime.createCommit(ctx, repoPath, body)
 	case "issue-upsert":
 		return runtime.upsertIssue(ctx, repoPath, body)
-	case "resolve-actions":
-		return runtime.resolveActions(ctx, repoPath, body)
 	default:
 		return nil, httperror.New(
 			http.StatusNotFound,
@@ -309,6 +305,10 @@ func (a *Adapter) resolveServiceGitLabRuntime(
 	if err != nil {
 		return gitLabOperationRuntime{}, err
 	}
+	return a.resolveGitLabRuntime(ctx, code, VaultAccessMeta{ActorType: "service", ActorID: actorID, AppCode: appCode, RequestIP: requestIP, UserAgent: userAgent})
+}
+
+func (a *Adapter) resolveGitLabRuntime(ctx context.Context, code string, meta VaultAccessMeta) (gitLabOperationRuntime, error) {
 	row, err := scanIntegrationProjection(a.db.QueryRowContext(
 		ctx,
 		integrationProjectionSelect+" WHERE i.integration_code=? LIMIT 1",
@@ -344,14 +344,7 @@ func (a *Adapter) resolveServiceGitLabRuntime(
 	if err != nil {
 		return gitLabOperationRuntime{}, err
 	}
-	meta := VaultAccessMeta{
-		ActorType: "service",
-		ActorID:   actorID,
-		AppCode:   appCode,
-		RequestIP: requestIP,
-		UserAgent: userAgent,
-		Reason:    "gitlab_fixed_operation:" + code,
-	}
+	meta.Reason = "gitlab_fixed_operation:" + code
 	if secret.UsageType != "integration" || secret.OwnerType != "integration" ||
 		!secret.OwnerKey.Valid || secret.OwnerKey.String != code {
 		_ = insertVaultAccessLog(
@@ -665,117 +658,6 @@ func (runtime gitLabOperationRuntime) file(
 	}, nil
 }
 
-func (runtime gitLabOperationRuntime) createCommit(
-	ctx context.Context,
-	repoPath string,
-	body map[string]any,
-) (map[string]any, error) {
-	branch := normalizeGitLabOptionalRef(integrationText(body["branch"]))
-	if branch == "" {
-		branch = runtime.defaultBranch(ctx, repoPath)
-	}
-	message := strings.TrimSpace(integrationText(body["commitMessage"]))
-	if message == "" || len(message) > 5000 {
-		return nil, httperror.New(
-			http.StatusBadRequest,
-			"console_gitlab_commit_message_invalid",
-			"GitLab commit message is invalid",
-		)
-	}
-	actions, err := normalizeGitLabActions(body["actions"])
-	if err != nil {
-		return nil, err
-	}
-	payload := map[string]any{
-		"branch": branch, "commit_message": message, "actions": actions,
-	}
-	if authorName := strings.TrimSpace(integrationText(body["authorName"])); authorName != "" {
-		payload["author_name"] = authorName
-	}
-	if authorEmail := strings.TrimSpace(integrationText(body["authorEmail"])); authorEmail != "" {
-		payload["author_email"] = authorEmail
-	}
-	var commit struct {
-		ID      string `json:"id"`
-		ShortID string `json:"short_id"`
-		WebURL  string `json:"web_url"`
-	}
-	endpoint := "/api/v4/projects/" + url.PathEscape(repoPath) + "/repository/commits"
-	if err := runtime.requestJSON(ctx, http.MethodPost, endpoint, payload, &commit); err != nil {
-		return nil, err
-	}
-	if commit.ID == "" && commit.ShortID == "" {
-		return nil, httperror.New(
-			http.StatusBadGateway,
-			"console_gitlab_response_invalid",
-			"GitLab commit response is invalid",
-		)
-	}
-	revision := commit.ShortID
-	if revision == "" {
-		revision = commit.ID
-	}
-	return map[string]any{
-		"revision": revision, "commitId": commit.ID,
-		"webUrl": commit.WebURL, "repoPath": repoPath, "branch": branch,
-	}, nil
-}
-
-func (runtime gitLabOperationRuntime) resolveActions(
-	ctx context.Context,
-	repoPath string,
-	body map[string]any,
-) (map[string]any, error) {
-	branch := normalizeGitLabOptionalRef(integrationText(body["branch"]))
-	if branch == "" {
-		branch = runtime.defaultBranch(ctx, repoPath)
-	}
-	rawDocs, ok := body["docs"].([]any)
-	if !ok || len(rawDocs) == 0 || len(rawDocs) > 100 {
-		return nil, httperror.New(
-			http.StatusBadRequest,
-			"console_gitlab_docs_invalid",
-			"GitLab documents are invalid",
-		)
-	}
-	actions := make([]map[string]any, 0, len(rawDocs))
-	totalContent := 0
-	for _, raw := range rawDocs {
-		doc, _ := raw.(map[string]any)
-		filePath, err := normalizeGitLabFilePath(doc["gitlabPath"])
-		if err != nil {
-			return nil, err
-		}
-		content := integrationText(doc["content"])
-		totalContent += len(content)
-		if totalContent > 5*1024*1024 {
-			return nil, httperror.New(
-				http.StatusRequestEntityTooLarge,
-				"console_gitlab_payload_too_large",
-				"GitLab documents payload is too large",
-			)
-		}
-		action := "create"
-		endpoint := "/api/v4/projects/" + url.PathEscape(repoPath) +
-			"/repository/files/" + url.PathEscape(filePath) +
-			"?ref=" + url.QueryEscape(branch)
-		var ignored map[string]any
-		requestErr := runtime.requestJSON(ctx, http.MethodGet, endpoint, nil, &ignored)
-		if requestErr == nil {
-			action = "update"
-		} else if !isGitLabNotFound(requestErr) {
-			return nil, requestErr
-		}
-		actions = append(actions, map[string]any{
-			"action": action, "file_path": filePath,
-			"content": content, "encoding": "text",
-		})
-	}
-	return map[string]any{
-		"repoPath": repoPath, "branch": branch, "actions": actions,
-	}, nil
-}
-
 func (runtime gitLabOperationRuntime) requestJSON(
 	ctx context.Context,
 	method string,
@@ -918,53 +800,6 @@ func normalizeGitLabOptionalRef(value string) string {
 	return ""
 }
 
-func normalizeGitLabActions(value any) ([]map[string]any, error) {
-	rawActions, ok := value.([]any)
-	if !ok || len(rawActions) == 0 || len(rawActions) > 100 {
-		return nil, httperror.New(
-			http.StatusBadRequest,
-			"console_gitlab_actions_invalid",
-			"GitLab commit actions are invalid",
-		)
-	}
-	allowed := map[string]bool{
-		"create": true, "update": true, "delete": true,
-		"move": true, "chmod": true,
-	}
-	totalContent := 0
-	actions := make([]map[string]any, 0, len(rawActions))
-	for _, raw := range rawActions {
-		action, _ := raw.(map[string]any)
-		actionName := strings.TrimSpace(integrationText(action["action"]))
-		filePath, err := normalizeGitLabFilePath(action["file_path"])
-		if err != nil || !allowed[actionName] {
-			return nil, httperror.New(
-				http.StatusBadRequest,
-				"console_gitlab_actions_invalid",
-				"GitLab commit actions are invalid",
-			)
-		}
-		normalized := map[string]any{"action": actionName, "file_path": filePath}
-		for _, field := range []string{"content", "previous_path", "encoding"} {
-			if value := integrationText(action[field]); value != "" {
-				normalized[field] = value
-				if field == "content" {
-					totalContent += len(value)
-				}
-			}
-		}
-		actions = append(actions, normalized)
-	}
-	if totalContent > 5*1024*1024 {
-		return nil, httperror.New(
-			http.StatusRequestEntityTooLarge,
-			"console_gitlab_payload_too_large",
-			"GitLab commit payload is too large",
-		)
-	}
-	return actions, nil
-}
-
 func boundedGitLabInt(value any, fallback int, maximum int) int {
 	parsed, err := strconv.Atoi(strings.TrimSpace(integrationText(value)))
 	if err != nil || parsed <= 0 {
@@ -989,4 +824,39 @@ func decodeGitLabBase64(value string) ([]byte, error) {
 func isGitLabNotFound(err error) bool {
 	var httpErr httperror.Error
 	return errors.As(err, &httpErr) && httpErr.Status == http.StatusNotFound
+}
+
+// Same-process owning read only. The Runtime Aims orchestrator must freshly
+// authorize the user and exact project repository binding before calling this
+// entry. Never exposed as a Console Service API or an arbitrary operation.
+func (a *Adapter) ReadEnterpriseAimsRepository(ctx context.Context, operation, repoPath, path, ref, commitID, actorUID string) (map[string]any, error) {
+	if actorUID == "" || (operation != "file" && operation != "markdown-tree") || (operation == "markdown-tree" && (path != "" || commitID != "")) {
+		return nil, httperror.New(400, "console_aims_repository_read_invalid", "Invalid owning repository read")
+	}
+	repo, err := normalizeGitLabRepoPath(repoPath)
+	if err != nil {
+		return nil, err
+	}
+	if operation == "file" {
+		if _, err = normalizeGitLabFilePath(path); err != nil {
+			return nil, err
+		}
+	}
+	if (ref != "" && !gitLabRefPattern.MatchString(ref)) || (commitID != "" && !gitLabSHApattern.MatchString(commitID)) {
+		return nil, httperror.New(400, "console_aims_repository_read_invalid", "Invalid owning repository version")
+	}
+	runtime, err := a.resolveGitLabRuntime(ctx, "gitlab.default", VaultAccessMeta{ActorType: "user", ActorID: actorUID, AppCode: "aims"})
+	if err != nil {
+		return nil, err
+	}
+	body := map[string]any{"path": path, "ref": ref, "commitId": commitID}
+	if operation == "markdown-tree" {
+		return runtime.markdownTree(ctx, repo, body)
+	}
+	return runtime.file(ctx, repo, body)
+}
+
+// Called only by the owning feedback core with its frozen integration code.
+func (a *Adapter) resolveOwnedGitLabRuntime(ctx context.Context, code, actorID, appCode, requestIP, userAgent string) (gitLabOperationRuntime, error) {
+	return a.resolveGitLabRuntime(ctx, code, VaultAccessMeta{ActorType: "service", ActorID: actorID, AppCode: appCode, RequestIP: requestIP, UserAgent: userAgent})
 }

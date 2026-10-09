@@ -13,9 +13,11 @@ import {
 } from './consoleServiceBinding'
 import { resolveTrustedTenantGatewayContext } from './tenantGatewayTrust'
 import { forwardedServiceRouteCatalogHeader } from './serviceRouteCatalog'
-export { forwardedServiceRouteCatalogHeader }
+
 import { resolveTrustedServiceAppRoute } from './serviceAppUrl'
 import { executeServiceTokenRequest } from './serviceTokenRequest'
+
+export { forwardedServiceRouteCatalogHeader }
 
 type ServiceTokenResponse = {
   access_token?: string

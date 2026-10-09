@@ -25,7 +25,7 @@ test('company weekly summary uses immutable versions and a mutable draft only on
 
 test('company weekly summary publish is source-owned, reliable, and Codocs-bound', () => {
   const executor = source('server/utils/companyWeeklySummaryOperationExecutor.ts')
-  const dispatcher = source('server/utils/serviceTicketDeliveryOperation.ts')
+  const dispatcher = source('server/utils/codocsOperationTransport.ts')
   const route = source('server/api/v1/company-weekly-summaries/[summaryCommand].post.ts')
   const recipients = source('server/utils/companyWeeklySummaryRecipients.ts')
 

@@ -138,14 +138,13 @@ no cookies or login storage need to be cleared.
 
 The local Enterprise client explicitly prebundles Vue's runtime family and the
 large UI/VueUse dependency barrels after Nuxt module exclusions are applied. It
-keeps Nuxt's existing resolution aliases and source HMR. This is scoped to
+keeps Nuxt's existing resolution aliases; immutable hzy0 candidates disable HMR. This is scoped to
 `HZY0_LOCAL_ENTERPRISE=true`; cloud builds are unaffected. The Host layout owns
 one navigation discovery lease shared with descendant pages, including the home
 page, so they do not issue separate permission requests and refresh timers.
 The local Vite post-transform also discards source maps only for Nuxt's extracted
 `?macro=true` route metadata: those tiny modules otherwise embed the entire page
-source map for every registered route at startup. Metadata code, route HMR and
-actual page component debugging remain intact.
+source map for every registered route at startup. Metadata code and actual page component debugging remain intact.
 
 With explicit approval, `identity.credentialProviderRef: "protected-file:test-gateway"`
 enables a loopback-only Console egress on the profile's gatewayInternal listener
@@ -319,27 +318,66 @@ explicit loopback Workflow route. Do not submit a completion request until the
 receiver, route, grants and local Runtime have passed their preflight probes.
 
 
-## Dev 组合结构重载
+## hzy0 手动刷新
 
-Enterprise 的 `composition/registry.mjs` 与各应用 `layer/entry.mjs`、Console
-`layer/navigation.mjs` 在配置加载时冻结 pages/navigation/manifest 事实。Nuxt 原生
-pages watcher 能更新 SFC，不能使这些启动时导入的外部 ESM/JSON 快照自动变新。
-hzy0 dev 的 `composition/dev-watch.mjs` 因此对以下结构输入触发
-`restart({ hard: true })`，让配置和 ESM 依赖在新 worker 内重读；控制台打印固定提示，
-不输出文件内容或凭据。首次加载本修复需重启 `hzy0-enterprise`。
+hzy0 使用固定候选，禁用 Enterprise Vite HMR、Vite 文件监听与组合结构
+自动 hard restart。保留 `@vite/client` 的样式辅助函数，但禁用其 transport
+连接，避免断线重连或 full-reload 自动刷新浏览器。Nuxt chunk 错误只提示用户
+点击刷新；顶栏提供“刷新页面”。代码变化必须明确切候选并由用户刷新。
 
-| 变更 | 本机动作 |
-| --- | --- |
-| Enterprise composition `.mjs`、已登记贡献模块的 layer `.mjs`、manifest；Host pages 新增/删除 | Enterprise 在2秒无新结构事件后按最终内容去重，单次 hard reload（仅 hzy0 dev）；页面短暂加载后刷新 |
-| 已有 Vue 页/组件内容、样式 | 常规 Vite HMR，不触发本守卫重启 |
-| Host Nuxt 配置/模块注册 | Nuxt 自有配置重载；若启动失败，修复后 scoped restart enterprise |
-| gateway topology/transport/egress/facade/登记路由表 | 明确 scoped restart gateway（不会自动扩大公开路由） |
-| 私有 profile 或 runner 注入 env | scoped restart 受影响进程；Workflow/Console/Aims 各自独立 |
-| Go Runtime、schema、grant | 仍按 LOCAL_RUNTIME 与批准流程；不属于 dev watcher |
+项目摘要/关系（原120秒）、通知摘要（原120秒）、产品失败块恢复（原60秒）
+在 hzy0 不再轮询或因窗口focus自动读取；首次加载、路由变化、用户修改后
+刷新与用户点击仍正常。通知抽屉已有刷新按钮，打开通知会更新摘要。
 
-新增 API 仍需 `generate:api-readiness --check`，新增公开路径仍需登记 topology 和测试。
-自动重载不授予权限、不更新 grant、不重提 completion/outbox，也不部署 Worker。
-普通 source 错误（例如 Node Nitro 外部化 workspace `.mjs`）必须修复构建依赖；
-不能把所有 500 都归因于 watcher 或仅靠重启掩盖。
+保留导航授权发现租约120秒检查和300秒到期失败关闭：只更新权限发现，
+不刷新业务列表/统计；业务每次请求仍由服务端鉴权。保留OIDC到期前60秒
+续期、focus会话检查与确认失效后的登录跳转；同身份令牌轮换只校验会话，
+不再清空页面数据，身份或策略变化仍同步隔离缓存。保留在线状态心跳
+（使用者每120秒）、Collab WebSocket保活及安全字段到期清除。
 
-结构监听只覆盖实际启动输入（registry/host-native-pages/business-areas、贡献layer与manifest、Host Vue页面增删），不再递归监听各应用整目录或API就绪生成物。相同内容重写、空目录、普通页面编辑与短暂新增后删除不会触发hard reload；关闭时取消定时器。重载及上游错误日志包含UTC时间和固定事件类别，不记录查询串/头/正文；旧日志未含时间戳，不能精确追溯每次503。登录入口GET浏览器导航在503时显示固定重试页，dev返回Retry-After: 2；API保持安全JSON，写操作不自动重试。
+Gateway/配置变化仍需显式重启相应进程；不改变公开路由、grant和业务授权。
+
+### Candidate switch: child exits and listener gate
+
+`run-process.mjs` exits explicitly when its child closes, preserving its exit code
+or terminating with the same signal. SIGTERM/SIGINT are forwarded to the child.
+Gateway startup dependency failures therefore reach PM2 and trigger its existing
+restart policy; this does not add an independent retry loop or hide exceptions.
+A startup race with Runtime may cause a restart until Runtime is ready.
+
+After Runtime is ready and every enabled app has finished prewarming, require:
+
+```sh
+node deploy/test-env/local-enterprise/probe-listeners.mjs "$HOME/.config/huizhi-yun/hzy0/profile.json" || exit 1
+```
+
+The read-only gate checks every enabled application's expected TCP listener,
+including Gateway ingress and egress, plus the public `/enterprise/` entry
+(200 or 302, redirects not followed). PM2 `online` alone is insufficient. Keep
+existing authenticated health, 3×200 chunk prewarming, 60-second reload stability
+and view verification checks; an open port is not proof of application health.
+If the gate fails, stop the switch and follow the candidate rollback procedure.
+
+### Candidate preparation and dynamic route gate
+
+Before switching, run `nuxt prepare` in every composed module, including Codocs,
+and verify each module's `.nuxt/tsconfig.app.json` exists in the candidate.
+Protected Worker output does not replace Nuxt source preparation. Missing
+Codocs types can leave HTML and `@vite/client` healthy while page transforms fail.
+Run `node deploy/test-env/local-enterprise/smoke.mjs --profile "$HOME/.config/huizhi-yun/hzy0/profile.json"`
+after prewarming. It probes the actual Nuxt entry and composed personal/department
+Codocs page modules (metadata and full transforms) through Gateway ingress.
+Require all module responses to be JavaScript 200; HTML fallback or Vite error
+overlay fails the gate. Keep the candidate online only after this gate passes.
+
+### hzy0 Console 目录同步用户入口
+
+Host 用户菜单「控制台」打开 `/console/admin`；目录同步页为
+`https://hzy0.isme.dev/console/directory/sync`，按钮为「同步到 Platform」。
+仅精确页面及 `enterprise-topology.mjs` 中的只读依赖被代理；唯一新增业务
+POST 为 `/console/api/v1/console/directory/sync-jobs`，要求同源 Origin。
+Console 仍验证登录会话、`directory_sync:edit` 和 `directory_sync:admin`、
+Idempotency-Key，并由原 Foundation helper 签名真实用户委托交给 Runtime。
+Gateway 不接受浏览器自报 actor，不提供 `/console/**` 管理通配代理。
+管理首页的自动 bundle-refresh、其它管理写入及 LDAP 能力不因此开放；
+本次入口用于 Console subject 投影同步，策略重签另行批准。

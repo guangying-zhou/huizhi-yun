@@ -8,6 +8,7 @@ interface UserItem {
   username: string | null
   displayName: string
   status: string
+  directoryManaged?: boolean
   sourceType: string
   lastLoginAt: string | null
   createdAt: string
@@ -33,7 +34,7 @@ const allFilterValue = '__all__'
 
 const query = reactive({
   tenantCode: props.scope === 'dashboard' ? currentTenantCode.value : '',
-  status: allFilterValue,
+  status: 'active',
   keyword: ''
 })
 
@@ -57,7 +58,8 @@ type StatusColor = 'success' | 'warning' | 'neutral'
 const statusMeta: Record<string, { label: string, color: StatusColor }> = {
   active: { label: '启用', color: 'success' },
   suspended: { label: '暂停', color: 'warning' },
-  disabled: { label: '停用', color: 'neutral' }
+  inactive: { label: '已停用', color: 'neutral' },
+  disabled: { label: '已停用', color: 'neutral' }
 }
 
 const statusOptions = [
@@ -93,11 +95,12 @@ async function copyUid(uid: string) {
   }
 }
 
+const directoryManaged = computed(() => users.value.find(item => item.id === activeId.value)?.directoryManaged === true)
 const isEditing = computed(() => activeId.value !== null)
 const effectiveTenantCode = computed(() => props.scope === 'dashboard' ? currentTenantCode.value : query.tenantCode)
 const apiPrefix = computed(() => props.scope === 'dashboard' ? '/api/platform/tenant-admin' : '/api/platform/ops')
 const statusFilterOptions = computed(() => [
-  { label: '全部状态', value: allFilterValue },
+  { label: '显示已停用', value: allFilterValue },
   ...statusOptions
 ])
 
@@ -137,6 +140,7 @@ async function loadUsers() {
       query: {
         tenantCode,
         status: normalizeFilterValue(query.status),
+        showInactive: query.status === allFilterValue ? 'true' : undefined,
         keyword: query.keyword || undefined,
         page: 1,
         pageSize: 50
@@ -316,6 +320,7 @@ watch(() => effectiveTenantCode.value, async (value) => {
               :key="item.id"
               type="button"
               class="rounded-lg border px-3 py-2.5 text-left transition-colors"
+              :style="item.status !== 'active' ? { opacity: 0.6 } : undefined"
               :class="activeId === item.id
                 ? 'border-primary bg-primary/10'
                 : 'border-default bg-default hover:border-primary/40 hover:bg-elevated/50'"
@@ -420,6 +425,7 @@ watch(() => effectiveTenantCode.value, async (value) => {
               >
                 <UInput
                   v-model="form.username"
+                  :disabled="directoryManaged"
                   placeholder="外部系统用户名"
                   class="w-full"
                 />
@@ -435,10 +441,14 @@ watch(() => effectiveTenantCode.value, async (value) => {
                   class="w-full"
                 />
               </UFormField>
-              <UFormField label="状态">
+              <UFormField
+                label="状态"
+                :description="directoryManaged ? '由 Console Directory 管理' : undefined"
+              >
                 <USelect
                   v-model="form.status"
                   :items="statusOptions"
+                  :disabled="directoryManaged"
                   class="w-full"
                 />
               </UFormField>

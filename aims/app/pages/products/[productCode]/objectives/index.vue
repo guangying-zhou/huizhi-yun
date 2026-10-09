@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { objectiveStates as states, objectivePositive as positive, validProductObjective, type ProductObjective as Objective } from '~/utils/productObjectiveView'
 
-definePageMeta({ layoutHeader: true, layoutHeaderTitle: '产品目标', layoutHeaderProjectSwitcher: false })
+definePageMeta({ hostContentWidth: 'full', layoutHeader: true, layoutHeaderTitle: '产品目标', layoutHeaderProjectSwitcher: false })
 const route = useRoute()
 const code = computed(() => String(route.params.productCode || ''))
 const base = computed(() => `/api/v1/products/${encodeURIComponent(code.value)}/objectives`)

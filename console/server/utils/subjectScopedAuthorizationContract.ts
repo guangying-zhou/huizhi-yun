@@ -19,6 +19,7 @@ const targets = new Map([
   ['aims|enterprise_accessible_project_documents_list', { resourceCode: 'projects', action: 'view' }],
   ['aims|enterprise_project_admin', { resourceCode: 'projects', action: 'admin' }],
   ['aims|product_feedback_create', { resourceCode: 'product_requests', action: 'create' }],
+  ['assets|knowledge_link_deliveries', { resourceCode: 'deliveries', action: 'edit' }],
   ['assets|product_adoption_deliveries', { resourceCode: 'deliveries', action: 'view' }],
   ['assets|product_adoption_environments', { resourceCode: 'environments', action: 'view' }],
   ['finance|product_cost_read', { resourceCode: 'project_accounting', action: 'view' }],

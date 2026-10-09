@@ -18,7 +18,7 @@ const planningStep = computed(() => {
 <template>
   <div class="flex min-h-0 min-w-0 flex-1 flex-col">
     <ProductsNavbar :product-code="code" />
-    <div class="min-h-0 min-w-0 flex-1 overflow-y-auto">
+    <div data-host-content class="min-h-0 min-w-0 flex-1 overflow-y-auto">
       <div v-if="planningStep" class="flex flex-wrap items-center gap-2 border-b border-default px-4 py-2 sm:px-6">
         <UButton
           :to="versionPath"

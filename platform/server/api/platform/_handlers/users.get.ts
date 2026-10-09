@@ -1,3 +1,4 @@
+import { isDirectoryProjectedUser } from '~~/server/utils/directorySubjectStatus'
 import type { RowDataPacket } from 'mysql2/promise'
 import { normalizeNullableString, ok, parsePagination, requireString } from '~~/server/utils/api'
 import { queryRow, queryRows } from '~~/server/utils/db'
@@ -26,7 +27,7 @@ function fromSql() {
 export default defineEventHandler(async (event) => {
   const query = getQuery(event)
   const tenantCode = requireString(query.tenantCode, 'tenantCode')
-  const status = normalizeNullableString(query.status)
+  const status = normalizeNullableString(query.status) || (query.showInactive === 'true' ? null : 'active')
   const keyword = normalizeNullableString(query.keyword)
   const { page, pageSize, offset } = parsePagination(query)
 
@@ -94,6 +95,7 @@ export default defineEventHandler(async (event) => {
       mobile: null,
       avatarUrl: null,
       status: item.status,
+      directoryManaged: isDirectoryProjectedUser(item.uid, item.external_ref),
       sourceType: item.source_type,
       lastLoginAt: item.last_login_at,
       createdAt: item.created_at,

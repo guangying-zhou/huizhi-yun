@@ -276,7 +276,9 @@ CREATE TABLE IF NOT EXISTS `platform_app_releases` (
   `bundle_hash` VARCHAR(128) NULL,
   `bundle_size_bytes` BIGINT UNSIGNED NULL,
   `status` VARCHAR(32) NOT NULL DEFAULT 'draft'
-    COMMENT 'draft / permissions_pending / ready / released / deprecated',
+    COMMENT 'draft / permissions_pending / ready / released / deprecated / baseline',
+  `release_kind` VARCHAR(16) NOT NULL DEFAULT 'git',
+  `baseline_source_json` JSON NULL COMMENT 'baseline 专用：tenant/environment/bundleId/bundleHash/manifestId/manifestHash',
   `release_notes` TEXT NULL,
   `released_by_account_id` BIGINT UNSIGNED NULL,
   `released_at` DATETIME NULL,
@@ -289,6 +291,12 @@ CREATE TABLE IF NOT EXISTS `platform_app_releases` (
   KEY `idx_platform_app_releases_manifest` (`manifest_id`, `app_code`),
   KEY `idx_platform_app_releases_registration` (`source_registration_id`, `app_code`),
   KEY `idx_platform_app_releases_released_at` (`app_code`, `status`, `released_at`),
+  CONSTRAINT `chk_app_release_baseline` CHECK (
+    (release_kind='git' AND status<>'baseline' AND baseline_source_json IS NULL)
+    OR (release_kind='baseline' AND status='baseline' AND source_tag=''
+      AND source_commit_sha IS NULL AND source_registration_id IS NULL AND released_at IS NULL
+      AND baseline_source_json IS NOT NULL
+      AND JSON_CONTAINS_PATH(baseline_source_json,'all','$.tenant','$.environment','$.bundleId','$.bundleHash','$.manifestId','$.manifestHash')=1)),
   CONSTRAINT `fk_platform_app_releases_app`
     FOREIGN KEY (`app_code`) REFERENCES `platform_applications` (`app_code`),
   CONSTRAINT `fk_platform_app_releases_manifest`
@@ -490,6 +498,7 @@ CREATE TABLE IF NOT EXISTS `platform_app_role_scopes` (
   `resource_code` VARCHAR(128) NOT NULL,
   `action` VARCHAR(32) NOT NULL,
   `manifest_action_id` BIGINT UNSIGNED NULL COMMENT '关联 manifest 解析出的动作；NULL=跨版本/手工范围',
+  `source_type` ENUM('manual', 'manifest_default') NOT NULL DEFAULT 'manual' COMMENT 'manual/custom vs manifest default; existing rows manual',
   `scope_type` VARCHAR(32) NOT NULL,
   `scope_value` VARCHAR(255) NOT NULL,
   `status` VARCHAR(32) NOT NULL DEFAULT 'active',
@@ -2121,3 +2130,50 @@ CREATE TABLE IF NOT EXISTS `platform_gateway_service_keys` (
   CONSTRAINT `chk_gateway_key_validity` CHECK (`not_after` > `not_before` AND `not_after` <= `not_before` + 7776000000),
   CONSTRAINT `chk_gateway_key_revocation` CHECK ((`status` = 'revoked' AND `revoked_at` IS NOT NULL) OR (`status` <> 'revoked' AND `revoked_at` IS NULL))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+
+-- Candidate only. Platform DDL and prod39 initialization need separate approval.
+CREATE TABLE IF NOT EXISTS tenant_environment_app_release_sets (
+ tenant_code VARCHAR(64) NOT NULL,
+ environment VARCHAR(16) NOT NULL,
+ revision BIGINT UNSIGNED NOT NULL DEFAULT 1,
+ source_bundle_id BIGINT UNSIGNED NULL,
+ source_bundle_hash VARCHAR(128) NULL,
+ updated_by VARCHAR(128) NOT NULL,
+ updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+ PRIMARY KEY(tenant_code,environment),
+ CONSTRAINT ck_app_pin_environment CHECK(environment IN ('prod','test','dev'))
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+CREATE TABLE IF NOT EXISTS tenant_environment_app_releases (
+ tenant_code VARCHAR(64) NOT NULL,
+ environment VARCHAR(16) NOT NULL,
+ app_code VARCHAR(64) NOT NULL,
+ release_id BIGINT UNSIGNED NULL COMMENT 'NULL follows latest released; non-NULL is exact pin',
+ PRIMARY KEY(tenant_code,environment,app_code)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+CREATE TABLE IF NOT EXISTS platform_environment_app_release_audits (
+ id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+ tenant_code VARCHAR(64) NOT NULL,
+ environment VARCHAR(16) NOT NULL,
+ actor_uid VARCHAR(128) NOT NULL,
+ reason VARCHAR(500) NOT NULL,
+ old_selection_json JSON NOT NULL,
+ new_selection_json JSON NOT NULL,
+ review_hash CHAR(64) NOT NULL,
+ created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+ KEY idx_app_pin_audit(tenant_code,environment,id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Migration baseline registration audit (logical references; not a publication).
+CREATE TABLE IF NOT EXISTS platform_migration_baseline_audits (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  tenant_code VARCHAR(64) NOT NULL,
+  environment VARCHAR(16) NOT NULL,
+  source_bundle_id BIGINT UNSIGNED NOT NULL,
+  review_hash CHAR(64) NOT NULL,
+  actor_uid VARCHAR(128) NOT NULL,
+  reason VARCHAR(500) NOT NULL,
+  registrations_json JSON NOT NULL,
+  created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  UNIQUE KEY uk_baseline_review (tenant_code,environment,source_bundle_id,review_hash)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;

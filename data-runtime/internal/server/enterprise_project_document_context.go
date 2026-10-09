@@ -3,6 +3,7 @@ package server
 import (
 	"bytes"
 	"encoding/json"
+	codocsapp "github.com/huizhi-yun/data-runtime/internal/apps/codocs"
 	"github.com/huizhi-yun/data-runtime/internal/enterprise"
 	"github.com/huizhi-yun/data-runtime/internal/httperror"
 	"net/http"
@@ -13,9 +14,11 @@ import (
 
 type enterpriseProjectDocumentContextInput struct {
 	enterpriseProjectDocumentReadInput
-	ProjectAdmin    bool   `json:"projectAdmin"`
-	RepoProjectCode string `json:"repoProjectCode"`
-	DocumentUUID    string `json:"documentUuid"`
+	ProjectAdmin    bool                             `json:"projectAdmin"`
+	RepoProjectCode string                           `json:"repoProjectCode"`
+	DocumentUUID    string                           `json:"documentUuid"`
+	AccessAction    string                           `json:"accessAction,omitempty"`
+	RepositoryRead  *enterpriseProjectRepositoryRead `json:"repositoryRead,omitempty"`
 }
 
 var enterpriseRepositoryPathPattern = regexp.MustCompile(`^[A-Za-z0-9._-]+(/[A-Za-z0-9._-]+)*$`)
@@ -26,6 +29,14 @@ func validEnterpriseRepositoryPath(value string) bool {
 }
 
 func (s *Server) routeEnterpriseProjectDocumentContext(r *http.Request) (routeResult, error) {
+	return s.projectDocumentContext(r, false)
+}
+
+func (s *Server) routeEnterpriseProjectDocumentAccessCheck(r *http.Request) (routeResult, error) {
+	return s.projectDocumentContext(r, true)
+}
+
+func (s *Server) projectDocumentContext(r *http.Request, accessCheck bool, repositoryRead ...bool) (routeResult, error) {
 	if !s.cfg.Enterprise.Enabled || s.aims == nil || s.directory == nil {
 		return routeResult{}, httperror.New(503, "project_document_context_unavailable", "Project document context unavailable")
 	}
@@ -34,6 +45,12 @@ func (s *Server) routeEnterpriseProjectDocumentContext(r *http.Request) (routeRe
 		return routeResult{}, err
 	}
 	result := routeResult{Operation: "enterprise.aims.project-documents.context", Auth: &verified.Service}
+	if accessCheck {
+		result.Operation = "enterprise.aims.project-documents.access-check"
+		if s.codocs == nil {
+			return result, httperror.New(503, "project_document_dependency_unavailable", "Document access unavailable")
+		}
+	}
 	if r.URL.RawQuery != "" {
 		return result, httperror.New(400, "project_document_input_invalid", "Query is not supported")
 	}
@@ -50,6 +67,10 @@ func (s *Server) routeEnterpriseProjectDocumentContext(r *http.Request) (routeRe
 	dec.DisallowUnknownFields()
 	if dec.Decode(&in) != nil || len(in.Query) != 0 {
 		return result, httperror.New(400, "project_document_input_invalid", "Invalid context input")
+	}
+	repoRead := len(repositoryRead) == 1 && repositoryRead[0]
+	if (!repoRead && in.RepositoryRead != nil) || (repoRead && !validProjectRepositoryReadInput(in)) || (!repoRead && !validProjectDocumentAccessInput(in, accessCheck)) {
+		return result, httperror.New(400, "project_document_input_invalid", "Invalid document access input")
 	}
 	if err = validateEnterpriseProjectDocumentReadPermit(in.enterpriseProjectDocumentReadInput, verified, time.Now()); err != nil {
 		return result, err
@@ -88,6 +109,26 @@ func (s *Server) routeEnterpriseProjectDocumentContext(r *http.Request) (routeRe
 		if err == nil {
 			out["title"] = title
 			out["documentUuid"] = in.DocumentUUID
+		}
+	}
+	if err == nil && accessCheck {
+		text := func(key string) string { value, _ := out[key].(string); return value }
+		list := func(key string) []string { value, _ := out[key].([]string); return value }
+		facts := codocsapp.EnterpriseProjectDocumentFacts{ActorUID: verified.ActorUID, ProjectCode: text("projectCode"), ProjectCodes: list("actorProjectCodes"), DeptCodes: departments.DeptCodes, Roles: list("actorRoles")}
+		if out["repositoryReference"] == true {
+			out, err = s.codocs.CheckEnterpriseRepositoryProjectDocument(ctx, text("documentUuid"), in.AccessAction, facts)
+		} else {
+			out, err = s.codocs.CheckEnterpriseProjectDocumentAction(ctx, text("documentUuid"), text("documentRefType"), in.AccessAction, facts)
+		}
+		if err != nil {
+			err = projectDocumentDependencyError(err)
+		}
+	}
+	if err == nil && repoRead {
+		result.Operation = "enterprise.aims.project-documents.repository-read"
+		out, err = s.readProjectRepositoryDocument(ctx, in, out, verified.ActorUID, departments.DeptCodes)
+		if err == nil {
+			err = validateEnterpriseProjectDocumentReadPermit(in.enterpriseProjectDocumentReadInput, verified, time.Now())
 		}
 	}
 	result.Body = map[string]any{"code": 0, "data": out}
@@ -139,4 +180,11 @@ func (s *Server) routeEnterpriseProjectDocumentDepartmentSource(r *http.Request)
 		}
 	}
 	return result, httperror.New(403, "project_document_department_denied", "Department access denied")
+}
+
+func validProjectDocumentAccessInput(in enterpriseProjectDocumentContextInput, accessCheck bool) bool {
+	if !accessCheck {
+		return in.AccessAction == ""
+	}
+	return in.DocumentID != "" && in.RepoProjectCode == "" && in.DocumentUUID == "" && (in.AccessAction == "view" || in.AccessAction == "download" || in.AccessAction == "edit")
 }

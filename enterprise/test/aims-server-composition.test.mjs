@@ -104,7 +104,7 @@ test('AST recognizes aliases, reexports, dynamic imports, require and rejects op
 
 test('owning cores import only relative modules or Foundation; ingress uses public entries', () => {
   for (const file of files(resolve(root, 'aims/layer/server'))) {
-    for (const specifier of inspect(parse(file)).imports) assert.ok(specifier.startsWith('.') || specifier.startsWith('@hzy/foundation/'), `${file}: ${specifier}`)
+    for (const specifier of inspect(parse(file)).imports) assert.ok(specifier.startsWith('.') || specifier.startsWith('@hzy/foundation/') || specifier === 'h3', `${file}: ${specifier}`)
   }
   for (const file of files(resolve(root, 'enterprise/server/routes/enterprise/api/v1/service'))) {
     for (const specifier of inspect(parse(file)).imports) {
@@ -134,6 +134,9 @@ test('six document bridges traverse imports, reexports and dynamic edges without
       }
     }
     for (const specifier of inspect(ast).imports) {
+      // These named public exports belong to scheduler ingress, not any document bridge.
+      // Their transport and identity boundaries have separate signed-wake tests.
+      if (file === resolve(root, 'aims/layer/server/index.ts') && ['./internal/scheduler', '../../app/config/permissions'].includes(specifier)) continue
       if (specifier.startsWith('@hzy/foundation/')) continue // separately audited shared transport boundary
       const target = localTarget(file, specifier)
       if (target) walk(target)

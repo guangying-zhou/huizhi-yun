@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { FetchError } from 'ofetch'
+import { documentShareNotificationHint, persistedDocumentShareNotification } from '../../utils/documentShareNotification'
 import { createCreationAttempt } from '../../../layer/creationAttempt.mjs'
 import { createShareCreationAttempt } from '../../../layer/shareCreationAttempt.mjs'
 import { useCodocsModule } from '../../../layer/useCodocsModule'
@@ -21,6 +22,7 @@ interface SharePostResponse {
   message: string
   data?: {
     notifiedOnly?: boolean
+    notification?: unknown
   }
 }
 
@@ -75,12 +77,16 @@ const shareOrRemind = async () => {
   let shareCount = 0
   let remindCount = 0
   let failCount = 0
+  let pendingCount = 0
+  const warnings: string[] = []
   const errors: string[] = []
+  const failedUids = new Set<string>()
 
   const promises = usersToAdd.value.map(async (targetUser) => {
     const shouldRemind = !!props.deptCode && targetUser.deptCode === props.deptCode
     const actionLabel = shouldRemind ? '提醒' : '共享'
     try {
+      if (targetUser.uid === user.value) throw new Error('不能将文档共享给本人')
       const payload = {
         sharedToUid: targetUser.uid,
         permission: shouldRemind ? 'write' : selectedPermission.value,
@@ -94,6 +100,8 @@ const shareOrRemind = async () => {
         body: payload
       })
       shareAttempt.complete(attemptScope, attemptKey)
+      const hint = documentShareNotificationHint(response.data)
+      if (hint) warnings.push(hint)
 
       if (shouldRemind || response.data?.notifiedOnly) {
         remindCount++
@@ -101,9 +109,17 @@ const shareOrRemind = async () => {
         shareCount++
       }
     } catch (e: unknown) {
-      console.error(`Failed to ${actionLabel} ${targetUser.uid}`, e)
+      const persisted = persistedDocumentShareNotification(e)
+      if (persisted) {
+        shareCount++
+        pendingCount++
+        failedUids.add(targetUser.uid)
+        warnings.push(persisted)
+        return
+      }
+      failedUids.add(targetUser.uid)
       const fetchErr = e as FetchError
-      errors.push(`${targetUser.realName}（${actionLabel}）: ${fetchErr.data?.message || fetchErr.message || '未知错误'}`)
+      errors.push(`${targetUser.realName}（${actionLabel}）: ${fetchErr.data?.data?.message || fetchErr.data?.message || fetchErr.message || '未知错误'}`)
       failCount++
     }
   })
@@ -111,7 +127,7 @@ const shareOrRemind = async () => {
   await Promise.all(promises)
 
   if (shareCount > 0) {
-    toast.add({ title: `成功共享给 ${shareCount} 人`, color: 'success' })
+    toast.add({ title: `已共享给 ${shareCount} 人`, description: [...new Set(warnings)].join('；') || undefined, color: 'success' })
   }
   if (remindCount > 0) {
     toast.add({
@@ -128,10 +144,12 @@ const shareOrRemind = async () => {
     })
   }
 
-  if (shareCount > 0 || remindCount > 0) {
-    usersToAdd.value = []
-    usersToAddUids.value = []
-    shareMessage.value = ''
+  // A notification failure may follow a committed ACL: refresh even on 503,
+  // retaining failed recipients, payload and original intent for safe recovery.
+  if (shareCount > 0 || remindCount > 0 || failCount > 0) {
+    usersToAdd.value = usersToAdd.value.filter(target => failedUids.has(target.uid))
+    usersToAddUids.value = usersToAddUids.value.filter(uid => failedUids.has(uid))
+    if (failCount === 0 && pendingCount === 0) shareMessage.value = ''
     await fetchShares()
   }
 

@@ -44,6 +44,13 @@ func TestEnterpriseOutboundWorkerExplicitLocalBinding(t *testing.T) {
 	if _, err = c.EnterpriseAimsOutboundSource(r, b); err == nil {
 		t.Fatal("transport impersonation")
 	}
+	c.DeploymentBindings["enterprise"] = "host-site"
+	c.Enterprise.AimsDeliveryWorker.Deployment = "host-site"
+	if source, err := c.EnterpriseAimsOutboundSource(r, b); err != nil || source.WorkerClient() != "enterprise.runtime" {
+		t.Fatal("explicit Host worker rejected", err)
+	}
+	c.Enterprise.AimsDeliveryWorker.Deployment = "aims-site"
+
 	c.Enterprise.AimsDeliveryWorker.ServiceClientID = "aims.runtime"
 	delete(c.DeploymentBindings, "aims")
 	if _, err = c.EnterpriseAimsOutboundSource(r, b); err == nil {

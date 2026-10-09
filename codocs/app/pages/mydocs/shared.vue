@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { documentLoadErrorMessage } from '../../utils/departmentDocumentWriteError'
 import MyDocumentSpaceHeader from '../../components/MyDocumentSpaceHeader.vue'
 import { useDocumentPreviewBootstrap } from '../../composables/useDocumentPreviewBootstrap'
 import { useResizablePanel } from '../../composables/useResizablePanel'
@@ -15,7 +16,7 @@ const router = useRouter()
 const accountStore = useAccountStore()
 const { hasPermission, loadPermissions } = usePermissions()
 const { setPayload: setDocumentPreviewBootstrap } = useDocumentPreviewBootstrap()
-const { panelWidth, panelCollapsed, onResizeStart, showPanel } = useResizablePanel(288)
+const { panelWidth, panelCollapsed, onResizeStart, showPanel } = useResizablePanel(384)
 
 interface CollabDocItem {
   uuid: string
@@ -174,7 +175,6 @@ const refresh = async () => {
     if (epoch === generation) loadError.value = '协同文档加载失败，请重试'
   } finally { if (epoch === generation) pending.value = false }
 }
-await refresh()
 watch(currentQueryKey, refresh)
 onScopeDispose(() => {
   generation++
@@ -330,8 +330,7 @@ const loadPreview = async (uuid: string) => {
     }
   } catch (error: unknown) {
     if (epoch !== previewGeneration) return
-    const err = error as { data?: { message?: string }, message?: string }
-    previewError.value = err.data?.message || err.message || '预览加载失败'
+    previewError.value = documentLoadErrorMessage(error)
   } finally {
     if (epoch === previewGeneration) previewLoading.value = false
   }
@@ -417,12 +416,13 @@ const handleReceiveSuccess = async () => {
   const current = visibleItems.value.find(item => item.uuid === selectedDocUuid.value) || null
   await selectDocument(current)
 }
+void refresh()
 </script>
 
 <template>
   <UDashboardPanel grow>
     <div class="px-4 pt-4 sm:px-6 sm:pt-6">
-      <MyDocumentSpaceHeader description="查看共享给你的协作文档。" />
+      <MyDocumentSpaceHeader :description="sharedTab === 'sent' ? '查看你共享给他人的文档。' : '查看共享给你的协作文档。'" />
     </div>
     <div class="flex items-center justify-between gap-2 px-4 py-2 border-b border-default flex-wrap">
       <UTabs
@@ -492,43 +492,27 @@ const handleReceiveSuccess = async () => {
       </div>
     </div>
 
-    <div class="flex flex-1 overflow-hidden">
+    <div class="flex min-h-0 min-w-0 flex-1 overflow-hidden @container">
       <aside
         v-if="!panelCollapsed"
-        class="relative border-r border-default bg-default flex flex-col overflow-hidden shrink-0"
-        :style="{ width: panelWidth + 'px' }"
+        class="relative w-full border-r border-default bg-default flex flex-col overflow-hidden shrink-0 @3xl:w-(--document-list-width)"
+        :class="selectedDoc ? 'hidden @3xl:flex' : 'flex'"
+        :style="{ '--document-list-width': panelWidth + 'px' }"
       >
         <div
           v-if="category === 'shared'"
           class="px-3 pt-3"
         >
-          <button
-            v-for="tab in sharedTabs"
-            :key="tab.value"
-            class="inline-flex items-center gap-1.5 px-1 py-2 mr-5 text-sm border-b-2 transition-colors"
-            :class="sharedTab === tab.value
-              ? 'border-primary text-primary font-semibold'
-              : 'border-transparent text-muted hover:text-default'"
-            @click="sharedTab = tab.value"
-          >
-            <UIcon :name="tab.icon" class="size-4" />
-            {{ tab.label }}
-          </button>
-        </div>
-
-        <div class="px-3 py-2 text-sm text-muted flex justify-center">
-          共 {{ total }} 条
-        </div>
-
-        <div class="px-3 pb-2 flex justify-center">
-          <UPagination
-            v-model:page="page"
-            :items-per-page="pageSize"
-            :total="total"
-            :sibling-count="0"
-            size="xs"
+          <UTabs
+            v-model="sharedTab"
+            :items="sharedTabs"
+            :content="false"
+            color="primary"
+            variant="link"
+            :ui="{ list: 'w-full' }"
           />
         </div>
+
         <UAlert
           v-if="loadError"
           color="error"
@@ -573,15 +557,37 @@ const handleReceiveSuccess = async () => {
             </div>
           </button>
         </div>
+        <div class="px-3 py-2 text-sm text-muted flex justify-center">
+          共 {{ total }} 条
+        </div>
+
+        <div class="px-3 pb-2 flex justify-center">
+          <UPagination
+            v-model:page="page"
+            :items-per-page="pageSize"
+            :total="total"
+            :sibling-count="0"
+            size="xs"
+          />
+        </div>
       </aside>
 
       <div
         v-if="!panelCollapsed"
-        class="w-1.5 shrink-0 cursor-col-resize bg-default hover:bg-primary/40 active:bg-primary/60 transition-colors z-10 -ml-px"
+        class="hidden @3xl:block w-1.5 shrink-0 cursor-col-resize bg-default hover:bg-primary/40 active:bg-primary/60 transition-colors z-10 -ml-px"
         @mousedown.prevent="onResizeStart"
       />
 
-      <main class="flex-1 flex flex-col overflow-hidden bg-default">
+      <main class="min-w-0 flex-1 flex-col overflow-hidden bg-default" :class="selectedDoc ? 'flex' : 'hidden @3xl:flex'">
+        <UButton
+          v-if="selectedDoc"
+          label="返回列表"
+          icon="i-lucide-arrow-left"
+          color="neutral"
+          variant="ghost"
+          class="self-start @3xl:hidden"
+          @click="clearSelection"
+        />
         <div
           v-if="selectedDoc"
           class="flex flex-col sm:flex-row sm:items-center justify-between px-4 py-3 border-b border-default bg-default gap-3 sm:gap-0"

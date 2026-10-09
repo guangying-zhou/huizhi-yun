@@ -4,6 +4,7 @@
  */
 
 import { createOSSClient, createProjectsOSSClient } from '../../../../utils/oss'
+import { documentBucket } from '../../../../../shared/utils/documentStorage'
 import { requireRequestUid } from '~~/server/utils/authIdentity'
 import { getCodocsDocumentMetadata, callCodocsTenantRuntime } from '~~/server/utils/codocsRuntime'
 import { assertLegacyBodyDocument } from '~~/server/utils/documentBodyRef'
@@ -55,7 +56,7 @@ export default defineEventHandler(async (event) => {
     }
 
     // 通过 OSS versionId 获取历史版本内容
-    const useProjectsBucket = doc.doc_type === 'git-project'
+    const useProjectsBucket = documentBucket(doc.doc_type) === 'projects'
     const client = useProjectsBucket ? createProjectsOSSClient() : createOSSClient()
 
     const result = await client.get(doc.oss_path, {

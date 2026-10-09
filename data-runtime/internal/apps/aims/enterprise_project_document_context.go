@@ -111,6 +111,13 @@ func (a *Adapter) EnterpriseProjectDocumentContext(ctx context.Context, projectI
 		}
 		out["documentRefType"] = ref
 		out["documentUuid"] = uuid
+		if source == "repo" {
+			repo = firstBodyText(doc, "repoProjectCode", "repo_project_code")
+			if repo == "" {
+				return nil, httperror.New(403, "project_repository_mismatch", "Repository is not linked to the project")
+			}
+			out["repositoryReference"] = true
+		}
 	}
 	if repo != "" {
 		if !member {

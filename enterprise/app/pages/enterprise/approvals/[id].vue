@@ -1,5 +1,8 @@
 <script setup lang="ts">
-type Detail = { task: { id: number, status: string, node_name: string, created_at: string }, instance: { id: number, instance_no: string, action_name: string, biz_title: string, initiator_uid: string, created_at: string, form_data?: Record<string, unknown> }, capabilities: { can_approve: boolean, can_reject: boolean } }
+import ContentPageHeader from '../../../../../foundation/app/components/ContentPageHeader.vue'
+
+type Detail = { task: { id: number, status: string, node_name: string, created_at: string }, instance: { id: number, instance_no: string, action_name: string, biz_title: string, initiator_uid: string, created_at: string, people_summary?: { employee: string, changeType: string, department: string, position: string, effectiveDate: string, href: string }, form_data?: Record<string, unknown> }, capabilities: { can_approve: boolean, can_reject: boolean } }
+const assignmentChangeLabels: Record<string, string> = { onboard: '入职', transfer: '调动', rank_change: '调级', leave: '离职' }
 const route = useRoute()
 const backTo = computed(() => ({ path: '/enterprise/approvals', query: typeof route.query.returnPage === 'string' && /^[1-9]\d*$/.test(route.query.returnPage) && Number(route.query.returnPage) <= 1000000 ? { page: route.query.returnPage } : {} }))
 const id = computed(() => String(route.params.id || ''))
@@ -78,9 +81,10 @@ async function decide(action: 'approve' | 'reject') {
     >
       返回待办
     </UButton>
-    <h1 class="text-2xl font-semibold">
-      审批任务
-    </h1>
+    <ContentPageHeader
+      title="审批任务"
+      hosted
+    />
     <UAlert
       v-if="error || (data && data.code !== 0)"
       color="error"
@@ -118,6 +122,25 @@ async function decide(action: 'approve' | 'reject') {
             </dt><dd>{{ detail.instance.initiator_uid }}</dd>
           </div>
         </dl>
+        <div
+          v-if="detail.instance.people_summary"
+          class="mt-4 space-y-2 text-sm"
+        >
+          <p class="text-xs text-muted">
+            当前可见任职资料；审批提交快照以 Workflow 记录为准。
+          </p>
+          <p>员工：{{ detail.instance.people_summary.employee }}</p>
+          <p>任职变更：{{ assignmentChangeLabels[detail.instance.people_summary.changeType] || '任职变更' }}</p>
+          <p>部门：{{ detail.instance.people_summary.department }} · 岗位：{{ detail.instance.people_summary.position }}</p>
+          <p>生效日期：{{ detail.instance.people_summary.effectiveDate }}</p>
+          <UButton
+            :to="detail.instance.people_summary.href"
+            color="neutral"
+            variant="outline"
+          >
+            查看任职
+          </UButton>
+        </div>
         <p class="mt-4 text-xs text-muted">
           以上内容来自 Workflow 提交时保存的快照。
         </p>

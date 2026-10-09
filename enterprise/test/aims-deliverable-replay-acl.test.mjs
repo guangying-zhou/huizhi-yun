@@ -16,13 +16,19 @@ test('document binding checks current Codocs ACL again before receipt replay', a
   const calls = []
   try {
     const { requireDeliverableDocumentAccess } = await import('../server/utils/enterpriseAimsDeliverableDocumentAccess.ts')
-    globalThis.__pa04CodocsCheck = async (_event, code, metadataOnly) => { calls.push({ code, metadataOnly }) }
+    globalThis.__pa04CodocsCheck = async (_event, code, metadataOnly) => {
+      calls.push({ code, metadataOnly })
+    }
     await requireDeliverableDocumentAccess({}, { documentUuid: uuid })
     await requireDeliverableDocumentAccess({}, { documentUuid: uuid })
     assert.deepEqual(calls, [{ code: uuid, metadataOnly: true }, { code: uuid, metadataOnly: true }])
-    globalThis.__pa04CodocsCheck = async () => { throw { statusCode: 403 } }
+    globalThis.__pa04CodocsCheck = async () => {
+      throw { statusCode: 403 }
+    }
     await assert.rejects(requireDeliverableDocumentAccess({}, { documentUuid: uuid }), error => error.statusCode === 403)
-    globalThis.__pa04CodocsCheck = async () => { throw new Error('dependency unavailable') }
+    globalThis.__pa04CodocsCheck = async () => {
+      throw new Error('dependency unavailable')
+    }
     await assert.rejects(requireDeliverableDocumentAccess({}, { documentUuid: uuid }), error => error.statusCode === 503)
     await requireDeliverableDocumentAccess({}, { documentSource: 'repo', documentUuid: null })
     assert.match(readFileSync(new URL('../server/utils/enterpriseAimsDeliverables.ts', import.meta.url), 'utf8'), /requireDeliverableDocumentAccess\(event, call\.payload\)/)

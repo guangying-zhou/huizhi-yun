@@ -20,6 +20,12 @@ import (
 )
 
 func TestSchedulerRegistryMappedMilestoneRolloverMySQL(t *testing.T) {
+	testSchedulerRegistryMappedMilestoneRolloverMySQL(t, "aims", "aims.runtime")
+}
+func TestHostSchedulerRegistryMappedMilestoneRolloverMySQL(t *testing.T) {
+	testSchedulerRegistryMappedMilestoneRolloverMySQL(t, "enterprise", "enterprise.runtime")
+}
+func testSchedulerRegistryMappedMilestoneRolloverMySQL(t *testing.T, executor, client string) {
 	socket := os.Getenv("HZY_ENTERPRISE_SCHEDULER_TEST_SOCKET")
 	if socket == "" {
 		t.Skip("requires dedicated temporary MySQL")
@@ -121,7 +127,7 @@ func TestSchedulerRegistryMappedMilestoneRolloverMySQL(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	source, err := e.NewOutboundSource(q, resolved, "real-aims-worker", "aims.runtime")
+	source, err := e.NewOutboundSource(q, resolved, "real-aims-worker", client)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -147,7 +153,7 @@ func TestSchedulerRegistryMappedMilestoneRolloverMySQL(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	identity := e.SchedulerIdentity{Tenant: "tenant-a", Deployment: "real-aims-worker", SourceApp: "aims", ClientID: "aims.runtime", Subject: "aims.runtime"}
+	identity := e.SchedulerIdentity{Tenant: "tenant-a", Deployment: "real-aims-worker", SourceApp: executor, ClientID: client, Subject: client}
 
 	exec("INSERT INTO u_aims_projects(project_code,name,short_name,leader_uid,created_by) VALUES('P-ROLL','Rollover project','ROLL','leader-1','seed')")
 	var projectID int64
@@ -181,7 +187,7 @@ func TestSchedulerRegistryMappedMilestoneRolloverMySQL(t *testing.T) {
 
 	// A borrowed identity is rejected before any transaction.
 	bad := identity
-	bad.ClientID = "enterprise.runtime"
+	bad.ClientID = "other.runtime"
 	if _, err = service.RolloverDueMilestones(ctx, bad, 100, "auto"); !errors.Is(err, e.ErrBindingMismatch) {
 		t.Fatal("borrowed identity accepted", err)
 	}

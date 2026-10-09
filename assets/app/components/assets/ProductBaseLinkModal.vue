@@ -1,8 +1,9 @@
 <script setup lang="ts">
+import RemoteAssetObjectSelect from './RemoteAssetObjectSelect.vue'
 import { useAssetsModule } from '../../../layer/useAssetsModule'
-import type { ApiResponse, ListPayload, ProductAssetItem, TechnologyBaseItem } from '../../types'
+import type { ApiResponse, ProductAssetItem } from '../../types'
 
-const { moduleUrl, hosted } = useAssetsModule()
+const { moduleUrl } = useAssetsModule()
 const commandKey = ref(crypto.randomUUID())
 
 const props = defineProps<{
@@ -22,28 +23,9 @@ const isOpen = computed({
 
 const toast = useToast()
 const submitting = ref(false)
-const loadingBases = ref(false)
-const baseOptions = ref<Array<{ label: string, value: number }>>([])
 const state = reactive({
   technology_base_id: undefined as number | undefined
 })
-
-async function loadBases() {
-  loadingBases.value = true
-
-  try {
-    const response = await $fetch<ApiResponse<ListPayload<TechnologyBaseItem>>>(moduleUrl(hosted ? '/api/v1/products/link-candidates/bases' : '/api/v1/technology-bases'))
-    const linkedIds = new Set((props.product?.linked_bases || []).map(item => item.id))
-    baseOptions.value = (response.data.items || [])
-      .filter(item => !linkedIds.has(item.id))
-      .map(item => ({ label: `${item.base_code} · ${item.base_name}`, value: item.id }))
-  } catch (error) {
-    console.error('[ProductBaseLink] Failed to load bases:', error)
-    toast.add({ title: '底座加载失败', description: '请刷新后重试。', color: 'error', icon: 'i-lucide-circle-alert' })
-  } finally {
-    loadingBases.value = false
-  }
-}
 
 watch(state, () => {
   commandKey.value = crypto.randomUUID()
@@ -53,7 +35,6 @@ watch(() => props.open, async (open) => {
   if (open) {
     commandKey.value = crypto.randomUUID()
     state.technology_base_id = undefined
-    await loadBases()
   }
 })
 
@@ -100,13 +81,11 @@ async function handleSubmit() {
     <template #body>
       <div class="space-y-4 p-4">
         <UFormField label="技术底座" required>
-          <USelectMenu
+          <RemoteAssetObjectSelect
             v-model="state.technology_base_id"
-            :items="baseOptions"
-            :loading="loadingBases"
-            value-key="value"
-            placeholder="请选择技术底座"
-            searchable
+            kind="bases"
+            :enabled="isOpen"
+            :exclude-ids="(props.product?.linked_bases || []).map(item => item.id)"
           />
         </UFormField>
       </div>

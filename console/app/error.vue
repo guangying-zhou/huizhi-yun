@@ -13,7 +13,7 @@ const statusCode = computed(() => Number(props.error.statusCode || 500))
 const isNotFound = computed(() => statusCode.value === 404)
 
 useSeoMeta({
-  title: () => isNotFound.value ? '页面走丢了 · 汇智云数智协同平台' : '出现错误 · 汇智云数智协同平台',
+  title: () => isNotFound.value ? '页面走丢了' : '出现错误',
   description: () => isNotFound.value
     ? '您访问的页面不存在或已被移除。'
     : '页面暂时无法访问，请稍后重试。'

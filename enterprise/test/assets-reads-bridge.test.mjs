@@ -14,34 +14,51 @@ test('Assets read BFF binds exact asset_items:view scope before the exact Enterp
   const oldConfig = globalThis.useRuntimeConfig
   globalThis.useRuntimeConfig = () => ({ public: { appCode: 'enterprise' } })
   globalThis.__assetsReadSession = session
-  globalThis.__assetsReadTransport = async (_event, path, options) => { calls.push({ path, options }); return { handled: true, data: { code: 0, data: { items: [] } } } }
+  globalThis.__assetsReadTransport = async (_event, path, options) => {
+    calls.push({ path, options })
+    return { handled: true, data: { code: 0, data: { items: [] } } }
+  }
   globalThis.__assetsReadAuthorization = async (_event, uid, app, required) => {
     checks.push({ uid, app, ...required })
     return { grants: denied ? [] : [{ permissions: [{ appCode: app, resourceCode: required.resourceCode, action: required.action }], scopes: [{ dimension: 'asset', predicate: 'owner' }] }] }
   }
   const hooks = registerHooks({ resolve(specifier, context, next) {
     let source
-    if (specifier.endsWith('/consoleSessionBridge') || specifier === './consoleSessionBridge') source = 'export const resolveConsoleAuthWithSessionBridge=async()=>globalThis.__assetsReadSession'
-    if (specifier.endsWith('/tenantRuntimeClient') || specifier === './tenantRuntimeClient') source = 'export const maybeCallTenantRuntime=(...args)=>globalThis.__assetsReadTransport(...args);export const verifiedServiceCommandActor=()=>null;export const prepareTenantRuntime=async()=>true'
-    if (specifier.endsWith('/platformBundleAuthorization')) source = 'export const loadScopedAuthorizationFromConsoleRuntime=(...args)=>globalThis.__assetsReadAuthorization(...args)'
-    if (source) return { url: `data:text/javascript,${encodeURIComponent(source)}`, shortCircuit: true }
+    if (specifier.endsWith('/consoleSessionBridge') || specifier === './consoleSessionBridge')
+      source = 'export const resolveConsoleAuthWithSessionBridge=async()=>globalThis.__assetsReadSession'
+    if (specifier.endsWith('/tenantRuntimeClient') || specifier === './tenantRuntimeClient')
+      source = 'export const maybeCallTenantRuntime=(...args)=>globalThis.__assetsReadTransport(...args);export const verifiedServiceCommandActor=()=>null;export const prepareTenantRuntime=async()=>true'
+    if (specifier.endsWith('/platformBundleAuthorization'))
+      source = 'export const loadScopedAuthorizationFromConsoleRuntime=(...args)=>globalThis.__assetsReadAuthorization(...args)'
+    if (source)
+      return { url: `data:text/javascript,${encodeURIComponent(source)}`, shortCircuit: true }
     let candidate
-    if (specifier.startsWith('@hzy/foundation/')) candidate = resolve(root, 'foundation', specifier.slice('@hzy/foundation/'.length))
-    else if (specifier.startsWith('~~/')) candidate = resolve(root, 'enterprise', specifier.slice(3))
-    else if (specifier.startsWith('.') && context.parentURL?.startsWith('file:')) candidate = resolve(dirname(fileURLToPath(context.parentURL)), specifier)
-    if (candidate && !existsSync(candidate) && existsSync(candidate + '.ts')) return { url: pathToFileURL(candidate + '.ts').href, shortCircuit: true }
+    if (specifier.startsWith('@hzy/foundation/'))
+      candidate = resolve(root, 'foundation', specifier.slice('@hzy/foundation/'.length))
+    else
+      if (specifier.startsWith('~~/'))
+        candidate = resolve(root, 'enterprise', specifier.slice(3))
+      else
+        if (specifier.startsWith('.') && context.parentURL?.startsWith('file:'))
+          candidate = resolve(dirname(fileURLToPath(context.parentURL)), specifier)
+    if (candidate && !existsSync(candidate) && existsSync(candidate + '.ts'))
+      return { url: pathToFileURL(candidate + '.ts').href, shortCircuit: true }
     return next(specifier, context)
   } })
   let server
   try {
     const app = createApp(), router = createRouter()
-    app.use(defineEventHandler(event => { event.context.consoleAuth = session }))
+    app.use(defineEventHandler((event) => {
+      event.context.consoleAuth = session
+    }))
     router.get('/dictionaries', (await import('../server/routes/assets/api/v1/asset-dictionaries.get.ts')).default)
     router.get('/assets', (await import('../server/routes/assets/api/v1/assets/index.get.ts')).default)
     router.get('/assets/:id', (await import('../server/routes/assets/api/v1/assets/[id]/index.get.ts')).default)
-    app.use(router); server = createServer(toNodeListener(app)); await new Promise(done => server.listen(0, '127.0.0.1', done))
+    app.use(router)
+    server = createServer(toNodeListener(app))
+    await new Promise(done => server.listen(0, '127.0.0.1', done))
     const base = `http://127.0.0.1:${server.address().port}`
-    const request = async path => {
+    const request = async (path) => {
       const response = await fetch(base + path, { headers: { 'x-hzy-actor-uid': 'forged' } })
       return { status: response.status, body: await response.json() }
     }
@@ -69,8 +86,14 @@ test('Assets read BFF binds exact asset_items:view scope before the exact Enterp
     assert.ok(calls.at(-1).path.endsWith('/dictionaries:list'))
     assert.ok(checks.every(check => check.uid === session.uid && check.app === 'assets' && check.resourceCode === 'asset_items' && check.action === 'view'))
   } finally {
-    if (server) { server.closeAllConnections(); await new Promise(done => server.close(done)) }
-    hooks.deregister(); globalThis.useRuntimeConfig = oldConfig
-    delete globalThis.__assetsReadSession; delete globalThis.__assetsReadTransport; delete globalThis.__assetsReadAuthorization
+    if (server) {
+      server.closeAllConnections()
+      await new Promise(done => server.close(done))
+    }
+    hooks.deregister()
+    globalThis.useRuntimeConfig = oldConfig
+    delete globalThis.__assetsReadSession
+    delete globalThis.__assetsReadTransport
+    delete globalThis.__assetsReadAuthorization
   }
 })

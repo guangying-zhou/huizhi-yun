@@ -285,3 +285,12 @@ v2.3 中以下表述被 v2.4 修正：
 - `tenant_role_permissions.source_manifest_id` 删除，改为 `source_manifest_action_id`。
 - `action_code` 不再由应用层存普通字段，改为 DB generated column。
 - 不再创建 `platform_manifest_permission_checks` 表。
+
+
+## 环境应用 release pin（2026-10-07 候选）
+
+新增 tenant/environment 选择集、逐应用 release 选择与同事务审计。租户详情提供独立环境选择、只读完整差异预览和 CAS 保存；签包按选择解析 manifest/推荐角色，prod 未初始化时阻止新签包，test/dev 保持兼容。DDL/部署/生产初始化与签包尚待批准。数据关系、权限、迁移和验收见 [环境版本说明](../../docs/Platform-Environment-App-Release-Pins.md)。
+
+### 迁移基线 release
+
+`platform_app_releases` 增加 `release_kind`（默认 git）与 `baseline_source_json`。baseline 状态只用于绑定原已签包的历史 manifest，保留 manifest ID/hash，不具有 Git 来源，不参与 latest，不能通过普通发布或导入修改。登记审计由 `platform_migration_baseline_audits` 保存；原 draft 不变。详情见 [环境版本与迁移基线](../../docs/Platform-Environment-App-Release-Pins.md#5-历史迁移基线-release)。

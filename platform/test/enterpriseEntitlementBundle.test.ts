@@ -62,7 +62,7 @@ test('unified catalog never falls back to a historical commercial plan', async (
 test('bundle producer adds qualification without expanding automatic personnel grants', () => {
   const source = readFileSync(new URL('../server/utils/policyBundle.ts', import.meta.url), 'utf8')
   assert.match(source, /collectConfiguredBaselinePermissions\(legacyAppCodes\)/)
-  assert.match(source, /collectSystemAppRoleMaps\(legacyAppCodes\)/)
+  assert.match(source, /collectSystemAppRoleMaps\(legacyAppCodes, Boolean\(appSelection\)\)/)
   assert.match(source, /enterpriseEntitlement, enterpriseHostRoutes, moduleAvailability: enterpriseModuleAvailability\(applications, deployments, enterpriseHostRoutes\)/)
   assert.match(source, /bundleEnterpriseEntitlementMatches\(parsePolicyBundlePayload\(existing.bundle_payload_json\), currentEntitlement\)/)
 })

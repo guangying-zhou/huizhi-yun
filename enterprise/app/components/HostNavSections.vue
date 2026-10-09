@@ -3,7 +3,7 @@ import HostNavTree from './HostNavTree.vue'
 import { selectActiveLeaf } from '../utils/navigation-active.mjs'
 
 interface NavItem { id: string, label: string, icon?: string, to?: string, module?: string, permission?: { resource: string, action: string }, permissionRefs?: { resource: string, action: string }[], mode?: 'all' | 'any', children?: NavItem[] }
-interface NavArea { id: string, code: string, label: string, icon: string, children: NavItem[] }
+interface NavArea { id: string, code: string, label: string, icon: string, heading?: boolean, children: NavItem[] }
 
 // 业务领域（产品 / 交付与服务 / 经营…）是分节标题，不是可点、可展开的行：
 // 它本身没有页面，把它做成按钮会让读者以为点得进去。标题只分节，真正的
@@ -27,7 +27,10 @@ provide('enterprise-navigation-context', context)
       v-for="area in primary"
       :key="area.id"
     >
-      <p class="px-3 pb-1 pt-4 text-xs font-semibold text-[var(--host-nav-muted)] first:pt-1">
+      <p
+        v-if="area.heading !== false"
+        class="px-3 pb-1 pt-4 text-xs font-semibold text-[var(--host-nav-muted)] first:pt-1"
+      >
         {{ area.label }}
       </p>
       <HostNavTree :items="area.children" />
@@ -38,7 +41,10 @@ provide('enterprise-navigation-context', context)
         v-for="area in auxiliary"
         :key="area.id"
       >
-        <p class="px-3 pb-1 pt-4 text-xs font-semibold text-[var(--host-nav-muted)]">
+        <p
+          v-if="area.heading !== false"
+          class="px-3 pb-1 pt-4 text-xs font-semibold text-[var(--host-nav-muted)]"
+        >
           {{ area.label }}
         </p>
         <HostNavTree :items="area.children" />

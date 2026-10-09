@@ -7,12 +7,18 @@ import ts from 'typescript'
 import { createError } from 'h3'
 
 const compiled = ts.transpileModule(readFileSync(new URL('../server/utils/serviceTicketDeliveryOperation.ts', import.meta.url), 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText
-function harness(mode = '') {
+function harness(mode = '', company = false) {
   const exports: any = {}, calls: any[] = []
-  runInNewContext(compiled, { exports, URL, crypto: { randomUUID: () => 'request-id' }, require: (name: string) => {
+  const resolve = (name: string): any => {
+    if (name === './codocsOperationTransport') {
+      const transportExports = {}
+      const transport = ts.transpileModule(readFileSync(new URL('../server/utils/codocsOperationTransport.ts', import.meta.url), 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText
+      runInNewContext(transport, { exports: transportExports, URL, crypto: { randomUUID: () => 'request-id' }, require: resolve })
+      return transportExports
+    }
     if (name === 'h3') return { createError, getHeader: () => 'request-id' }
     if (name.endsWith('/serviceAppUrl')) return { resolveServiceAppBaseUrl: () => 'https://codocs.test/api/v1', resolveTrustedServiceAppRoute: () => mode === 'missing-route' ? null : { deploymentCode: 'CODOCS' } }
-    if (name.endsWith('/tenantGatewayTrust')) return { resolveTrustedTenantGatewayContext: () => mode === 'missing-gateway' ? null : { tenant: mode === 'foreign' ? 'OTHER' : 'TENANT', deployment: 'AIMS' } }
+    if (name.endsWith('/tenantGatewayTrust')) return { resolveTrustedTenantGatewayContext: () => mode === 'missing-gateway' ? null : { tenant: mode === 'foreign' ? 'OTHER' : 'TENANT', deployment: 'AIMS', appCode: mode === 'host' ? 'enterprise' : mode === 'wrong-source' ? 'people' : 'aims' } }
     if (name.endsWith('/serviceOidc')) return {
       requestWithServiceAccessToken: async (options: any) => {
         calls.push({ token: options.audience, scope: options.scope })
@@ -30,12 +36,13 @@ function harness(mode = '') {
     } }
     if (name.startsWith('./')) return {}
     throw new Error(name)
-  } })
-  const operation = { tenantCode: 'TENANT', deploymentCode: 'AIMS', operationCode: 'aims.codocs.product-document.create.v1', idempotencyKey: 'original-key' }
+  }
+  runInNewContext(compiled, { exports, URL, crypto: { randomUUID: () => 'request-id' }, require: resolve })
+  const operation = { tenantCode: 'TENANT', deploymentCode: 'AIMS', operationCode: company ? 'aims.company-weekly-summary.codocs-publish.v1' : 'aims.codocs.product-document.create.v1', idempotencyKey: 'original-key' }
   const envelope = { serviceCommand: { command: { actorUid: 'original-user' }, commandSchemaVersion: 'product-document-create.v1' } }
   return { calls, run: (scheduled = false, deployment = 'CODOCS') => {
     const io = scheduled ? exports.createScheduledServiceTicketDeliveryOperationIO(() => {}, { codocs: deployment }) : exports.createRequestServiceTicketDeliveryOperationIO({})
-    return io.callCodocsProductDocument(envelope, operation)
+    return company ? io.callCodocsCompanySummary(envelope, operation.idempotencyKey, '2026-W38', operation) : io.callCodocsProductDocument(envelope, operation)
   } }
 }
 test('product creation transport binds exact URL, scope and distinct source/target signature deployments', async () => {
@@ -61,12 +68,29 @@ test('product creation transport binds exact URL, scope and distinct source/targ
   }
 })
 test('missing or foreign trusted routing rejects before token issuance; scheduled delivery has no source fallback', async () => {
-  for (const mode of ['missing-route', 'missing-gateway', 'foreign']) {
+  for (const mode of ['missing-route', 'missing-gateway', 'foreign', 'wrong-source']) {
     const h = harness(mode)
-    await assert.rejects(h.run(), { statusCode: mode === 'foreign' ? 403 : 503 })
+    await assert.rejects(h.run(), { statusCode: ['foreign', 'wrong-source'].includes(mode) ? 403 : 503 })
     assert.equal(h.calls.length, 0)
   }
   const h = harness()
   await assert.rejects(h.run(true, ''), { statusCode: 503 })
   assert.equal(h.calls.length, 0)
+})
+
+test('Host product document signing uses real enterprise identity and original intent key', async () => {
+  const h = harness('host')
+  await h.run(false)
+  assert.equal(h.calls[1].signature.sourceApp, 'enterprise')
+  assert.equal(h.calls[1].signature.sourceClientId, 'enterprise.runtime')
+  assert.equal(h.calls[2].options.headers['idempotency-key'], 'original-key')
+})
+
+test('Host company summary keeps the original key and exact Codocs physical identity', async () => {
+  const h = harness('host', true)
+  await h.run()
+  assert.equal(h.calls[0].scope, 'codocs:company-weekly-summary:publish')
+  assert.equal(h.calls[1].signature.sourceApp, 'enterprise')
+  assert.equal(h.calls[1].signature.sourceClientId, 'enterprise.runtime')
+  assert.equal(h.calls[2].options.headers['idempotency-key'], 'original-key')
 })

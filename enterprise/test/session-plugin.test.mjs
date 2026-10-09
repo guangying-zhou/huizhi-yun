@@ -311,3 +311,22 @@ test('an unavailable renewal keeps the 401 without signing out', async (t) => {
   await settle()
   assert.deepEqual(h.redirects, [])
 })
+
+test('same-identity token renewal preserves page data while rechecking the session', async (t) => {
+  const h = harness()
+  t.after(h.dispose)
+  const initial = h.session.refresh()
+  await Promise.resolve()
+  h.pending[0].resolve(session())
+  await initial
+  const before = h.scope.value
+  const cleared = h.cleared.length
+  h.auth.token.value = 'renewed-token'
+  await settle()
+  assert.equal(h.scope.value, before)
+  assert.equal(h.pending.length, 2)
+  h.pending[1].resolve(session())
+  await settle()
+  assert.equal(h.scope.value, before)
+  assert.equal(h.cleared.length, cleared)
+})

@@ -15,30 +15,40 @@ function fakeStorage({ objects = {}, failOn = {}, delay = 0 } = {}) {
     calls.push(`${method}:${key}`)
     active++
     maxActive = Math.max(maxActive, active)
-    if (delay) await new Promise(resolve => setTimeout(resolve, delay))
+    if (delay)
+      await new Promise(resolve => setTimeout(resolve, delay))
     active--
     const failure = failOn[`${method}:${key.endsWith('.yjs') ? 'yjs' : 'md'}`]
-    if (failure) throw failure
+    if (failure)
+      throw failure
   }
   return {
-    calls, store, get maxActive() { return maxActive },
+    calls, store, get maxActive() {
+      return maxActive
+    },
     client: {
-      async head(key) { await enter('head', key); if (!store.has(key)) throw notFound(); return {} },
-      async get(key) { await enter('get', key); if (!store.has(key)) throw notFound(); return { content: store.get(key) } },
+      async head(key) {
+        await enter('head', key)
+        if (!store.has(key))
+          throw notFound()
+        return {}
+      },
+      async get(key) {
+        await enter('get', key)
+        if (!store.has(key))
+          throw notFound()
+        return { content: store.get(key) }
+      },
       async put(key, body, options) {
         await enter('put', key)
         assert.equal(options.forbidOverwrite, true)
-        if (store.has(key)) throw Object.assign(new Error('exists'), { statusCode: 409 })
+        if (store.has(key))
+          throw Object.assign(new Error('exists'), { statusCode: 409 })
         store.set(key, body)
         return {}
       }
     }
   }
-}
-const withLogs = async run => {
-  const logs = []
-  try { await run(line => logs.push(line)) } finally { /* logs are asserted by callers */ }
-  return logs
 }
 
 test('markdown and CRDT snapshot copy in parallel and never delete the source', async () => {
@@ -62,7 +72,8 @@ test('any failed path aborts before commit, logs a fixed code, and a same-plan r
     const logs = []
     await assert.rejects(() => copyRestoreObjects(async () => first.client, plan, messages, line => logs.push(line)), error => error.statusCode === 503 && error.message === messages.unavailable)
     assert.ok(logs.some(line => JSON.parse(line).code === code && JSON.parse(line).object === object && JSON.parse(line).cause === cause), `${code}: ${logs}`)
-    for (const line of logs) assert.doesNotMatch(line, /secret|recycle\.bin|document-restores|Bearer|hash/i)
+    for (const line of logs)
+      assert.doesNotMatch(line, /secret|recycle\.bin|document-restores|Bearer|hash/i)
     // Same plan again with a healthy backend and whatever the first attempt already wrote.
     const retry = fakeStorage({ objects: Object.fromEntries(first.store) })
     await copyRestoreObjects(async () => retry.client, plan, messages)
@@ -86,13 +97,18 @@ test('a lost race winner that cannot be confirmed does not commit, and client cr
   const yjsSource = plan.source_path.replace('.md', '.yjs')
   const racing = fakeStorage({ objects: { [plan.source_path]: Buffer.from('md'), [yjsSource]: Buffer.from('yjs') } })
   const originalPut = racing.client.put
-  racing.client.put = async (key, body, options) => { racing.store.delete(key); throw Object.assign(new Error('exists'), { statusCode: 409 }) }
+  racing.client.put = async (key) => {
+    racing.store.delete(key)
+    throw Object.assign(new Error('exists'), { statusCode: 409 })
+  }
   const logs = []
   await assert.rejects(() => copyRestoreObjects(async () => racing.client, plan, messages, line => logs.push(line)), error => error.statusCode === 503)
   assert.ok(logs.some(line => JSON.parse(line).code === 'codocs_restore_storage_confirm_failed'))
   void originalPut
   const clientLogs = []
-  await assert.rejects(() => copyRestoreObjects(async () => { throw new Error('credentials unavailable') }, plan, messages, line => clientLogs.push(line)), error => error.statusCode === 503)
+  await assert.rejects(() => copyRestoreObjects(async () => {
+    throw new Error('credentials unavailable')
+  }, plan, messages, line => clientLogs.push(line)), error => error.statusCode === 503)
   assert.deepEqual(clientLogs.map(line => JSON.parse(line).code), ['codocs_restore_storage_client_failed'])
   assert.doesNotMatch(clientLogs.join(''), /credentials/)
 })

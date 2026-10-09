@@ -163,6 +163,10 @@ func New(cfg config.AssetsConfig) (*Adapter, error) {
 }
 
 func (a *Adapter) HandleRuntime(ctx context.Context, method string, path string, query url.Values, body map[string]any) (any, string, error) {
+	if method == http.MethodPost && path == "/v1/assets/service/enterprise-knowledge-links" {
+		data, e := a.enterpriseKnowledgeLink(ctx, query, body)
+		return ok(data), "assets.enterprise.knowledge_link", e
+	}
 	if result, operation, handled, err := a.handleProductAdoptionRuntime(ctx, method, path, query, body); handled {
 		return result, operation, err
 	}

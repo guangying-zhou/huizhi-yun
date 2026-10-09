@@ -5,8 +5,8 @@ import { parse, compileScript, compileTemplate } from '@vue/compiler-sfc'
 
 // These two components are shared between the standalone Aims app and the
 // Enterprise Host (see aims/CLAUDE.md and aims/layer/entry.mjs). The Host
-// does not register /projects/:id/settings or /projects/:id/environments,
-// so any hard-coded link to those paths is a dead link once hosted.
+// retains settings as an exact native edit alias. Environments remains hidden
+// until its owning Host contract is implemented.
 const readVue = path => readFileSync(new URL(path, import.meta.url), 'utf8')
 const entrySource = readFileSync(new URL('../../aims/layer/entry.mjs', import.meta.url), 'utf8')
 
@@ -17,10 +17,8 @@ function assertValidSfc(source, path, id) {
   assert.deepEqual(compileTemplate({ source: descriptor.template.content, filename: path, id }).errors, [])
 }
 
-test('Host does not register a project settings or environments page', () => {
-  // Locks the premise these fixes depend on: if either path is ever
-  // registered, this test should be revisited alongside the components below.
-  assert.doesNotMatch(entrySource, /'\/projects\/:id\/settings'/)
+test('Host settings is an exact native edit alias and environments remains unavailable', () => {
+  assert.match(entrySource, /layerPage\('\/projects\/:id\/settings', 'project-settings-compat', 'enterprise-project-edit'\)/)
   assert.doesNotMatch(entrySource, /'\/projects\/:id\/environments'/)
   assert.match(entrySource, /'\/projects\/:id\/edit'/)
 })

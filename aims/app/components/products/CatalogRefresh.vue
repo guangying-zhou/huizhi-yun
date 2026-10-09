@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { useAimsModule } from '../../../layer/useAimsModule'
+
 const { moduleUrl } = useAimsModule()
 interface Batch { refresh_id: string, status: 'staging' | 'active' | 'failed' | 'superseded', row_count: number, revision: number, total: number }
 const emit = defineEmits<{ activated: [] }>()

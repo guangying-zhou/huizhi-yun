@@ -7,12 +7,12 @@ import ts from 'typescript'
 import { createError } from 'h3'
 
 const compiled = ts.transpileModule(readFileSync(new URL('../server/api/v1/service/aims-work-item-completion-approval.post.ts', import.meta.url), 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText
-function boundary(mode = '') {
+function boundary(mode = '', source = 'aims') {
   const calls: any[] = [], exports: any = {}
-  const auth: any = { authenticated: true, subjectType: 'service', tokenUse: 'service', appCode: 'aims', clientCode: 'aims.runtime', tenant: 'T1', deployment: 'AIMS', scopes: ['workflow:work-item-complete:create'] }
+  const auth: any = { authenticated: true, subjectType: 'service', tokenUse: 'service', appCode: source, clientCode: `${source}.runtime`, tenant: 'T1', deployment: 'AIMS', scopes: ['workflow:work-item-complete:create'] }
   const envelope: any = { targetApp: 'workflow', operationCode: 'aims.work-item.completion.workflow-submit.v1', requiredCapability: 'workflow:work-item-complete:create', commandSchemaVersion: 'v1', commandSha256: 'hash', command: { actorUid: 'U1' } }
   if (mode === 'no-cap') auth.scopes = []
-  if (mode === 'wrong-client') auth.clientCode = 'enterprise.runtime'
+  if (mode === 'wrong-client') auth.clientCode = source === 'aims' ? 'enterprise.runtime' : 'aims.runtime'
   if (mode === 'wrong-actor') envelope.command.actorUid = 'U2'
   if (mode === 'wrong-operation') envelope.operationCode = 'other'
   if (mode === 'wrong-hash') envelope.commandSha256 = 'forged'
@@ -78,4 +78,17 @@ test('completion BFF invalid command, scope, binding or signature never dispatch
     await assert.rejects(handler({}), { statusCode: 403 })
     assert.equal(calls.some(call => call.directory || call.runtime), false, mode)
   }
+})
+
+test('Host completion uses the exact physical pair and cannot borrow the legacy client', async () => {
+  const host = boundary('', 'enterprise')
+  await host.handler({})
+  assert.equal(host.calls[0].verify.sourceApp, 'enterprise')
+  assert.equal(host.calls[0].verify.sourceClientId, 'enterprise.runtime')
+  for (const mode of ['wrong-client', 'no-cap', 'wrong-tenant', 'wrong-source-deployment', 'wrong-signature']) {
+    const rejected = boundary(mode, 'enterprise')
+    await assert.rejects(rejected.handler({}), { statusCode: 403 })
+    assert.equal(rejected.calls.some(call => call.directory || call.runtime), false)
+  }
+  await assert.rejects(boundary('', 'people').handler({}), { statusCode: 403 })
 })

@@ -1,10 +1,15 @@
 import type { ResultSetHeader, RowDataPacket } from 'mysql2/promise'
 import { createError } from 'h3'
-import {
-  parseManifestPermissionString,
-  type ManifestPermission
+import { parseRecommendedRoles, type ManifestRecommendedRole } from './manifestRoleDefinition.ts'
+import type {
+  ManifestPermission
 } from '~~/server/utils/appManifestPermission'
 import { refreshSystemRolePolicySnapshot } from '~~/server/utils/rolePolicyHash'
+
+export interface ManifestRoleMaterializationResult {
+  roleCount: number
+  permissionCount: number
+}
 
 type QueryExecutor = {
   queryRow: <T extends RowDataPacket>(sql: string, params?: unknown[]) => Promise<T | null>
@@ -26,98 +31,6 @@ interface ManifestActionRow extends RowDataPacket {
   app_code: string
   resource_code: string
   action: string
-}
-
-interface ManifestRecommendedRole {
-  roleCode: string
-  roleName: string
-  description: string | null
-  permissions: ManifestPermission[]
-}
-
-export interface ManifestRoleMaterializationResult {
-  roleCount: number
-  permissionCount: number
-}
-
-function normalizeString(value: unknown) {
-  return String(value || '').trim()
-}
-
-function asRecord(value: unknown) {
-  return value && typeof value === 'object' && !Array.isArray(value)
-    ? value as Record<string, unknown>
-    : null
-}
-
-function parseSuggestedPermission(value: unknown, appCode: string, roleCode: string, index: number): ManifestPermission {
-  if (typeof value === 'string') {
-    return parseManifestPermissionString(value, appCode, roleCode, index)
-  }
-
-  const record = asRecord(value)
-  const permissionAppCode = normalizeString(record?.appCode) || appCode
-  const resourceCode = normalizeString(record?.resourceCode)
-  const action = normalizeString(record?.action)
-
-  if (!record || !permissionAppCode || !resourceCode || !action) {
-    throw createError({
-      statusCode: 400,
-      statusMessage: 'Bad Request',
-      message: `recommendedRoles[${roleCode}].suggestedPermissions[${index}] requires appCode/resourceCode/action`
-    })
-  }
-
-  if (permissionAppCode !== appCode) {
-    throw createError({
-      statusCode: 400,
-      statusMessage: 'Bad Request',
-      message: `recommendedRoles[${roleCode}].suggestedPermissions[${index}] appCode mismatch: expected ${appCode}, got ${permissionAppCode}`
-    })
-  }
-
-  return { appCode: permissionAppCode, resourceCode, action }
-}
-
-function parseRecommendedRoles(appCode: string, manifestJson: Record<string, unknown>) {
-  const rawRoles = manifestJson.recommendedRoles
-  if (!Array.isArray(rawRoles)) {
-    return []
-  }
-
-  return rawRoles.map((rawRole, roleIndex) => {
-    const record = asRecord(rawRole)
-    const roleCode = normalizeString(record?.code)
-    if (!record || !roleCode) {
-      throw createError({
-        statusCode: 400,
-        statusMessage: 'Bad Request',
-        message: `recommendedRoles[${roleIndex}].code is required`
-      })
-    }
-
-    if (!roleCode.startsWith(`${appCode}:`)) {
-      throw createError({
-        statusCode: 400,
-        statusMessage: 'Bad Request',
-        message: `recommendedRoles[${roleIndex}].code must start with ${appCode}:`
-      })
-    }
-
-    const rawPermissions = record.suggestedPermissions
-    const permissions = Array.isArray(rawPermissions)
-      ? rawPermissions.map((permission, permissionIndex) =>
-          parseSuggestedPermission(permission, appCode, roleCode, permissionIndex)
-        )
-      : []
-
-    return {
-      roleCode,
-      roleName: normalizeString(record.name) || roleCode,
-      description: normalizeString(record.description) || null,
-      permissions
-    } satisfies ManifestRecommendedRole
-  })
 }
 
 async function resolveManifestAction(
@@ -249,6 +162,13 @@ export async function materializeRecommendedRolesFromManifest(
 ): Promise<ManifestRoleMaterializationResult> {
   const roles = parseRecommendedRoles(input.appCode, input.manifestJson)
   let permissionCount = 0
+  if (roles.some(role => role.defaultScopes !== undefined)) {
+    const installed = await executor.queryRow<RowDataPacket>(
+      'SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = \'platform_app_role_scopes\' AND COLUMN_NAME = \'source_type\'',
+      []
+    )
+    if (!installed) throw createError({ statusCode: 503, message: 'Manifest default scopes require the platform_app_role_scopes.source_type migration', data: { code: 'manifest_default_scope_migration_required' } })
+  }
 
   for (const role of roles) {
     const roleId = await upsertSystemRole(executor, input.appCode, role)
@@ -258,6 +178,7 @@ export async function materializeRecommendedRolesFromManifest(
       [roleId]
     )
 
+    const manifestActions = new Map<string, ManifestActionRow>()
     const seenPermissions = new Set<string>()
     for (const permission of role.permissions) {
       const permissionKey = `${permission.appCode}:${permission.resourceCode}:${permission.action}`
@@ -277,7 +198,37 @@ export async function materializeRecommendedRolesFromManifest(
          VALUES (?, ?, ?, ?, ?, UTC_TIMESTAMP())`,
         [roleId, manifestAction.app_code, manifestAction.resource_code, manifestAction.action, manifestAction.id]
       )
+      manifestActions.set(permissionKey, manifestAction)
       permissionCount += 1
+    }
+
+    if (role.defaultScopes !== undefined) {
+      const desired = new Set(role.defaultScopes.map(scope => JSON.stringify([scope.appCode, scope.resourceCode, scope.action, scope.scopeType, scope.scopeValue])))
+      const existing = await executor.queryRows<RowDataPacket[]>(
+        'SELECT id, app_code, resource_code, action, scope_type, scope_value FROM platform_app_role_scopes WHERE app_role_id = ? AND source_type = \'manifest_default\'',
+        [roleId]
+      )
+      for (const scope of existing) {
+        if (desired.has(JSON.stringify([scope.app_code, scope.resource_code, scope.action, scope.scope_type, scope.scope_value]))) continue
+        await executor.execute<ResultSetHeader>(
+          'DELETE FROM platform_app_role_scopes WHERE id = ? AND app_role_id = ? AND source_type = \'manifest_default\'',
+          [scope.id, roleId]
+        )
+      }
+      for (const scope of role.defaultScopes) {
+        const action = manifestActions.get(`${scope.appCode}:${scope.resourceCode}:${scope.action}`)!
+        // The existing unique tuple also covers manual rows: a collision is a
+        // no-op for manual rows, never activation, reattribution or deletion.
+        await executor.execute<ResultSetHeader>(
+          `INSERT INTO platform_app_role_scopes
+            (app_role_id, app_code, resource_code, action, manifest_action_id, scope_type, scope_value, source_type, status, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, 'manifest_default', 'active', UTC_TIMESTAMP(), UTC_TIMESTAMP())
+           ON DUPLICATE KEY UPDATE
+             manifest_action_id = IF(source_type = 'manifest_default', VALUES(manifest_action_id), manifest_action_id),
+             status = IF(source_type = 'manifest_default', 'active', status)`,
+          [roleId, action.app_code, action.resource_code, action.action, action.id, scope.scopeType, scope.scopeValue]
+        )
+      }
     }
 
     await refreshSystemRolePolicySnapshot(executor, roleId)

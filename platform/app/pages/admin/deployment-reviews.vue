@@ -164,51 +164,151 @@ watch(kind, resetReview)
 </script>
 
 <template>
-  <UDashboardPanel id="platform-deployment-reviews" :ui="{ body: 'gap-4 sm:p-4' }">
+  <UDashboardPanel
+    id="platform-deployment-reviews"
+    :ui="{ body: 'gap-4 sm:p-4' }"
+  >
     <template #body>
       <UCard>
         <template #header>
           <div class="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <p class="text-xs font-semibold uppercase tracking-[0.24em] text-primary">Deployment Operations</p>
-              <h1 class="text-xl font-semibold text-highlighted">部署审阅</h1>
-              <p class="mt-1 text-sm text-muted">导入已准备的非密钥 JSON，请先检查请求；审批只允许使用同一份未变化的请求。</p>
+              <p class="text-xs font-semibold uppercase tracking-[0.24em] text-primary">
+                Deployment Operations
+              </p>
+              <h1 class="text-xl font-semibold text-highlighted">
+                部署审阅
+              </h1>
+              <p class="mt-1 text-sm text-muted">
+                导入已准备的非密钥 JSON，请先检查请求；审批只允许使用同一份未变化的请求。
+              </p>
             </div>
-            <UButton to="/admin/deployments" color="neutral" variant="ghost" icon="i-lucide-arrow-left">返回部署</UButton>
+            <UButton
+              to="/admin/deployments"
+              color="neutral"
+              variant="ghost"
+              icon="i-lucide-arrow-left"
+            >
+              返回部署
+            </UButton>
           </div>
         </template>
 
-        <UAlert v-if="!authorizationLoaded" color="neutral" variant="subtle" title="正在检查运维权限…" />
-        <UAlert v-else-if="!canOperate" color="error" variant="subtle" title="没有部署审阅权限" description="需要 ops.deployments:admin。" />
+        <UAlert
+          v-if="!authorizationLoaded"
+          color="neutral"
+          variant="subtle"
+          title="正在检查运维权限…"
+        />
+        <UAlert
+          v-else-if="!canOperate"
+          color="error"
+          variant="subtle"
+          title="没有部署审阅权限"
+          description="需要 ops.deployments:admin。"
+        />
 
-        <div v-else class="space-y-5">
+        <div
+          v-else
+          class="space-y-5"
+        >
           <div class="grid gap-4 md:grid-cols-2">
             <UFormField label="审阅类型">
-              <USelect v-model="kind" :disabled="pending" :items="[{ label: '外部排空审阅', value: 'external-drain' }, { label: '在途活动审阅', value: 'drain-activity' }]" />
+              <USelect
+                v-model="kind"
+                :disabled="pending"
+                :items="[{ label: '外部排空审阅', value: 'external-drain' }, { label: '在途活动审阅', value: 'drain-activity' }]"
+              />
             </UFormField>
-            <UFormField label="请求文件（JSON）" hint="离线排空请求内含封存证据原始字节及 SHA-256；服务端重新核对后签发">
-              <UInput type="file" accept="application/json,.json" :disabled="pending" @change="importRequest" />
+            <UFormField
+              label="请求文件（JSON）"
+              hint="离线排空请求内含封存证据原始字节及 SHA-256；服务端重新核对后签发"
+            >
+              <UInput
+                type="file"
+                accept="application/json,.json"
+                :disabled="pending"
+                @change="importRequest"
+              />
             </UFormField>
           </div>
 
-          <UFormField label="粘贴请求 JSON" hint="最多 44MB；编辑草稿会立即撤销之前的检查结果，载入后与文件导入共用同一校验。">
+          <UFormField
+            label="粘贴请求 JSON"
+            hint="最多 44MB；编辑草稿会立即撤销之前的检查结果，载入后与文件导入共用同一校验。"
+          >
             <div class="space-y-2">
-              <UTextarea v-model="pastedJson" class="w-full" :rows="5" :disabled="pending" placeholder="粘贴已准备的非密钥 JSON" @input="invalidatePastedPlan" />
-              <UButton color="neutral" variant="soft" icon="i-lucide-clipboard-paste" :loading="pending" :disabled="!pastedJson.trim()" @click="importPastedRequest">载入粘贴内容</UButton>
+              <UTextarea
+                v-model="pastedJson"
+                class="w-full"
+                :rows="5"
+                :disabled="pending"
+                placeholder="粘贴已准备的非密钥 JSON"
+                @input="invalidatePastedPlan"
+              />
+              <UButton
+                color="neutral"
+                variant="soft"
+                icon="i-lucide-clipboard-paste"
+                :loading="pending"
+                :disabled="!pastedJson.trim()"
+                @click="importPastedRequest"
+              >
+                载入粘贴内容
+              </UButton>
             </div>
           </UFormField>
 
-          <UAlert v-if="input" color="info" variant="subtle" :title="`${inputName} · ${kindLabel}`" :description="`tenant=${requestContext.tenant || '未识别'} · environment=${requestContext.environment || '未识别'} · evidenceSha256=${kind === 'external-drain' ? input.evidenceSha256 || '缺失' : '不适用'} · Platform kid=${kind === 'external-drain' ? (input.profileKey as Record<string, unknown>)?.kid || '缺失' : '不适用'}。服务端将复核原始字节、证据闭包和活动签名密钥；浏览器不会读取凭据。`" />
-          <UAlert v-if="notice" :color="notice.color" variant="subtle" :title="notice.message" />
+          <UAlert
+            v-if="input"
+            color="info"
+            variant="subtle"
+            :title="`${inputName} · ${kindLabel}`"
+            :description="`tenant=${requestContext.tenant || '未识别'} · environment=${requestContext.environment || '未识别'} · evidenceSha256=${kind === 'external-drain' ? input.evidenceSha256 || '缺失' : '不适用'} · Platform kid=${kind === 'external-drain' ? (input.profileKey as Record<string, unknown>)?.kid || '缺失' : '不适用'}。服务端将复核原始字节、证据闭包和活动签名密钥；浏览器不会读取凭据。`"
+          />
+          <UAlert
+            v-if="notice"
+            :color="notice.color"
+            variant="subtle"
+            :title="notice.message"
+          />
 
           <div class="flex flex-wrap gap-2">
-            <UButton color="primary" icon="i-lucide-scan-search" :loading="pending" :disabled="!input" @click="submit('plan')">检查请求</UButton>
-            <UButton color="error" icon="i-lucide-shield-check" :loading="pending" :disabled="!planPassed" @click="submit('approve')">批准</UButton>
-            <UButton color="neutral" variant="ghost" :disabled="pending" @click="resetReview">清空</UButton>
+            <UButton
+              color="primary"
+              icon="i-lucide-scan-search"
+              :loading="pending"
+              :disabled="!input"
+              @click="submit('plan')"
+            >
+              检查请求
+            </UButton>
+            <UButton
+              color="error"
+              icon="i-lucide-shield-check"
+              :loading="pending"
+              :disabled="!planPassed"
+              @click="submit('approve')"
+            >
+              批准
+            </UButton>
+            <UButton
+              color="neutral"
+              variant="ghost"
+              :disabled="pending"
+              @click="resetReview"
+            >
+              清空
+            </UButton>
           </div>
 
-          <div v-if="planResult" class="rounded-lg border border-muted bg-elevated p-3">
-            <p class="mb-2 text-sm font-medium text-highlighted">服务端结果</p>
+          <div
+            v-if="planResult"
+            class="rounded-lg border border-muted bg-elevated p-3"
+          >
+            <p class="mb-2 text-sm font-medium text-highlighted">
+              服务端结果
+            </p>
             <pre class="max-h-96 overflow-auto whitespace-pre-wrap text-xs text-muted">{{ JSON.stringify(planResult, null, 2) }}</pre>
           </div>
         </div>

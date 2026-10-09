@@ -1,3 +1,4 @@
+import { redirectLoginFailure } from '~~/server/utils/loginFailure'
 import { createError, defineEventHandler, getQuery, sendRedirect } from 'h3'
 import { getAuthRequestIp, writeAuthLoginEvent } from '~~/server/utils/authAudit'
 import { resolveOrBindDirectoryIdentity } from '~~/server/utils/authIdentity'
@@ -23,7 +24,7 @@ export default defineEventHandler(async (event) => {
       failureReason: 'missing_wecom_callback_parameter',
       ipAddress: getAuthRequestIp(event)
     })
-    throw createError({ statusCode: 400, message: '企业微信登录回调无效' })
+    return redirectLoginFailure(event, createError({ statusCode: 400, message: '企业微信登录回调无效' }))
   }
 
   try {
@@ -82,9 +83,6 @@ export default defineEventHandler(async (event) => {
       ipAddress: getAuthRequestIp(event)
     })
 
-    throw createError({
-      statusCode: [400, 401, 403, 409, 503].includes(statusCode) ? statusCode : 502,
-      message: statusCode === 403 ? '企业微信账号未绑定有效企业用户' : '企业微信登录失败，请重试'
-    })
+    return redirectLoginFailure(event, error)
   }
 })

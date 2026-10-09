@@ -17,7 +17,7 @@ test('department service facts preserve managed descendants and do not turn deni
   const source = readFileSync(new URL('../server/utils/userDepartments.ts', import.meta.url), 'utf8')
   const code = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText
   for (const denied of [false, true]) {
-    const exports: Record<string, Function> = {}
+    const exports = {} as typeof import('../server/utils/userDepartments')
     const event = { context: {} }
     const calls: string[] = []
     const child = { deptCode: 'child', name: 'Child', children: [] }

@@ -118,7 +118,10 @@ const switchToTab = (tab: 'outline' | 'history' | 'share' | 'annotations' | 'ai'
   activeTab.value = tab
 }
 
+const shareRef = ref<InstanceType<typeof import('./EditorShare.vue').default> | null>(null)
+
 defineExpose({
+  refreshShares: () => shareRef.value?.loadShares(),
   switchToTab
 })
 
@@ -399,6 +402,7 @@ const getGitLabCommitsUrl = () => {
       <!-- 共享标签页 -->
       <div v-if="allowShare" v-show="activeTab === 'share'">
         <EditorShare
+          ref="shareRef"
           :document-id="documentId"
           :is-project-doc="isProjectDoc"
           :readonly="readonly"

@@ -6,7 +6,7 @@ type Action = 'update' | 'delete' | 'folder-create' | 'folder-update' | 'folder-
 const code = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/
 const keyPattern = /^[A-Za-z0-9][A-Za-z0-9:_-]{7,199}$/
 const operations = {
-  update: 'codocs.department-cabinet-update', delete: 'codocs.department-cabinet-delete',
+  'update': 'codocs.department-cabinet-update', 'delete': 'codocs.department-cabinet-delete',
   'folder-create': 'codocs.department-cabinet-folder-create', 'folder-update': 'codocs.department-cabinet-folder-update',
   'folder-delete': 'codocs.department-cabinet-folder-delete'
 } as const
@@ -19,7 +19,7 @@ export async function writeEnterpriseDepartmentCabinet(event: H3Event, action: A
   if (!code.test(deptCode) || !keyPattern.test(key)) throw createError({ statusCode: 400, message: '部门或 Idempotency-Key 无效' })
   const user = await departmentCabinetAuthorize(event, deptCode, 'edit', true)
   const pathCode = getRouterParam(event, action.startsWith('folder-') ? 'id' : 'uuid') || ''
-  if (['update', 'delete'].includes(action) && !code.test(pathCode) || ['folder-update', 'folder-delete'].includes(action) && !/^[1-9]\d*$/.test(pathCode)) throw createError({ statusCode: 400, message: '文件或目录标识无效' })
+  if ((['update', 'delete'].includes(action) && !code.test(pathCode)) || (['folder-update', 'folder-delete'].includes(action) && !/^[1-9]\d*$/.test(pathCode))) throw createError({ statusCode: 400, message: '文件或目录标识无效' })
   const body = action === 'delete' || action === 'folder-delete' ? {} : await readBody<Record<string, unknown>>(event)
   if (!body || Array.isArray(body) || typeof body !== 'object') throw createError({ statusCode: 400, message: '部门柜请求无效' })
   const allowed = action === 'update' ? ['filename', 'folder_id'] : action === 'folder-create' || action === 'folder-update' ? ['name', 'folder_id'] : []

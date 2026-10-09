@@ -16,7 +16,7 @@ export default defineEventHandler(async (event) => {
   const auth = await ensureWorkflowConsoleAuth(event) as Row
   const sourceApp = String(auth.appCode || auth.clientCode || '').trim().replace(/\.runtime$/u, '')
   if (!auth.authenticated || auth.tokenUse !== 'service' || auth.subjectType !== 'service') throw createError({ statusCode: 401, message: 'Console service token is required.' })
-  if (sourceApp !== 'aims' || !scopesOf(auth).has('workflow:work-item-complete:create')) throw createError({ statusCode: 403, message: 'Aims work-item completion Workflow capability is required.' })
+  if (!['aims', 'enterprise'].includes(sourceApp) || !scopesOf(auth).has('workflow:work-item-complete:create')) throw createError({ statusCode: 403, message: 'Aims work-item completion Workflow capability is required.' })
   const body = (await readBody<Row>(event)) || {}
   const command = body.serviceCommand as SignedServiceCommandEnvelope | undefined
   const actorUid = String(getHeader(event, 'x-hzy-actor-uid') || '').trim()
@@ -24,7 +24,7 @@ export default defineEventHandler(async (event) => {
   const gateway = resolveTrustedTenantGatewayContext(event)
   const tenantCode = String(auth.tenant || '')
   const sourceDeploymentCode = String(auth.deployment || '')
-  if (auth.clientCode !== 'aims.runtime' || !tenantCode || !sourceDeploymentCode || !gateway || gateway.tenant !== tenantCode || gateway.appCode !== 'workflow' || !gateway.deployment) throw createError({ statusCode: 403, message: 'Completion service deployment binding is invalid.' })
+  if (auth.clientCode !== `${sourceApp}.runtime` || !tenantCode || !sourceDeploymentCode || !gateway || gateway.tenant !== tenantCode || gateway.appCode !== 'workflow' || !gateway.deployment) throw createError({ statusCode: 403, message: 'Completion service deployment binding is invalid.' })
   const payload = command?.command as Row | undefined
   const matterV2 = command?.commandSchemaVersion === 'v2' && payload?.kind === 'matter' && (payload.formData as Row | undefined)?.kind === 'matter'
   const targetV1 = command?.commandSchemaVersion === 'v1' && payload?.kind === undefined && (payload?.formData as Row | undefined)?.kind === undefined
@@ -35,7 +35,7 @@ export default defineEventHandler(async (event) => {
     token, method: 'POST', requestTarget: getRequestURL(event).pathname,
     requestId: getHeader(event, 'x-request-id') || '', tenantCode,
     sourceDeploymentCode, targetDeploymentCode: gateway.deployment,
-    sourceApp: 'aims', sourceClientId: 'aims.runtime', targetApp: 'workflow',
+    sourceApp, sourceClientId: `${sourceApp}.runtime`, targetApp: 'workflow',
     envelope: command, readHeader: name => getHeader(event, name)
   })
   const runtime = await maybeCallWorkflowDataRuntime<WorkflowRuntimeEnvelope<Row>>(event, '/v1/workflow/service/aims-work-item-completion-approval', {

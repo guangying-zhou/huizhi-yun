@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { normalizeProjectDocumentAccessResult, projectDocumentAccessDeniedMessage } from '../../../utils/projectDocumentAccessResult'
 import { isValidProjectAttachmentSize } from '../../../../shared/projectDocumentRules'
 import { useAimsModule } from '../../../../layer/useAimsModule'
 import type { DocumentNode } from '../../../components/document/DocumentTree.vue'
@@ -202,6 +203,11 @@ function ensureCanDeleteDocument(doc: ProjectDocument | null | undefined) {
 }
 
 const documents = ref<ProjectDocument[]>([])
+// 所属项目集对当前用户开放的文档（只读区，DOC-05）。项目集侧不可用时不影响项目文档。
+type PortfolioDocumentSection = { portfolioId: number, relation: string, total: number, documentTotal: number, items: Array<{ id: number, title: string, isFolder: boolean }> }
+const portfolioSection = ref<PortfolioDocumentSection | null>(null)
+const portfolioSectionUnavailable = ref(false)
+const portfolioSectionDocuments = computed(() => (portfolioSection.value?.items || []).filter(item => !item.isFolder))
 const documentsLoading = ref(false)
 const documentsError = ref(false)
 const selectedLibrary = ref<DocumentLibrary>('standard')
@@ -485,39 +491,23 @@ function normalizeDocument(raw: RawProjectDocument): ProjectDocument {
   }
 }
 
-function accessDeniedMessage(reason: string) {
-  if (reason === 'draft_requires_project_member') return '草稿文档仅项目成员可访问'
-  if (reason === 'readonly') return '归档或只读文档不可编辑'
-  if (reason === 'no_matching_grant') return '当前项目组未被授权访问该文档'
-  if (reason.startsWith('granted_by_')) return ''
-  return '你没有权限访问该文档'
-}
-
 async function checkDocumentAccess(doc: ProjectDocument, action: 'view' | 'download' | 'edit') {
-  const result = await $fetch<{
-    code: number
-    data: {
-      allowed: boolean
-      readonly: boolean
-      reason: string
-      lifecycleStage: 'draft' | 'formal' | 'archived'
-      confidentialityLevel: 'L0' | 'L1' | 'L2' | 'L3'
-    }
-  }>(moduleUrl(`/api/v1/projects/${projectId.value}/documents/${doc.id}/access-check`), {
+  const response = await $fetch<unknown>(moduleUrl(`/api/v1/projects/${projectId.value}/documents/${doc.id}/access-check`), {
     method: 'POST',
     body: { action }
   })
 
-  const denied = !result.data.allowed
+  const result = normalizeProjectDocumentAccessResult(response)
+  const denied = !result.allowed
   if (denied) {
-    const message = accessDeniedMessage(result.data.reason)
+    const message = projectDocumentAccessDeniedMessage(result.reason)
     if (message) toast.add({ title: message, color: 'warning' })
   }
 
-  doc.accessLifecycleStage = result.data.lifecycleStage
-  doc.accessConfidentialityLevel = result.data.confidentialityLevel
+  if (result.lifecycleStage) doc.accessLifecycleStage = result.lifecycleStage
+  if (result.confidentialityLevel) doc.accessConfidentialityLevel = result.confidentialityLevel
 
-  return result.data
+  return result
 }
 
 function buildTree(items: ProjectDocument[]): DocumentNode[] {
@@ -791,7 +781,7 @@ async function loadDocuments() {
   documentsLoading.value = true
   documentsError.value = false
   try {
-    const res = await $fetch<{ code: number, data: { items?: RawProjectDocument[] } }>(moduleUrl('/api/v1/project-documents/accessible'), {
+    const res = await $fetch<{ code: number, data: { items?: RawProjectDocument[], portfolioDocuments?: PortfolioDocumentSection | null, portfolioDocumentsUnavailable?: boolean } }>(moduleUrl('/api/v1/project-documents/accessible'), {
       retry: 0,
       params: {
         projectId: projectId.value
@@ -801,6 +791,8 @@ async function loadDocuments() {
       documents.value = normalizeListPayload(res.data)
         .map(normalizeDocument)
         .filter(doc => Boolean(doc.id))
+      portfolioSection.value = res.data?.portfolioDocuments || null
+      portfolioSectionUnavailable.value = res.data?.portfolioDocumentsUnavailable === true
     } else throw new Error('项目文档服务返回失败')
   } catch (error) {
     documentsError.value = true
@@ -1273,6 +1265,42 @@ onBeforeUnmount(clearRefresh)
                 </button>
               </div>
             </div>
+            <div v-if="portfolioSection || portfolioSectionUnavailable" class="space-y-2 border-t border-default p-3">
+              <div class="flex items-center gap-2 text-sm font-medium text-highlighted">
+                <UIcon name="i-lucide-library" class="size-4 shrink-0 text-muted" />
+                <span class="min-w-0 flex-1 truncate">所属项目集文档</span>
+                <span v-if="portfolioSection" class="text-xs text-muted">{{ portfolioSection.documentTotal }}</span>
+              </div>
+              <p v-if="portfolioSectionUnavailable" class="text-xs text-muted">
+                项目集文档暂不可用，不影响本项目文档。
+              </p>
+              <template v-else-if="portfolioSection">
+                <p v-if="!portfolioSectionDocuments.length" class="text-xs text-muted">
+                  暂无对本项目成员开放的项目集文档。
+                </p>
+                <ul v-else class="space-y-1">
+                  <li
+                    v-for="item in portfolioSectionDocuments.slice(0, 5)"
+                    :key="item.id"
+                    class="flex items-center gap-2 text-xs text-default"
+                  >
+                    <UIcon name="i-lucide-file-text" class="size-3.5 shrink-0 text-muted" />
+                    <NuxtLink :to="moduleUrl(`/portfolios/${portfolioSection.portfolioId}/documents/${item.id}`)" class="truncate transition-colors hover:text-primary">
+                      {{ item.title }}
+                    </NuxtLink>
+                  </li>
+                </ul>
+                <UButton
+                  :to="moduleUrl(`/portfolios/${portfolioSection.portfolioId}`)"
+                  variant="link"
+                  size="xs"
+                  class="-ml-2"
+                  trailing-icon="i-lucide-arrow-right"
+                >
+                  查看项目集文档
+                </UButton>
+              </template>
+            </div>
           </aside>
 
           <main class="flex min-h-0 flex-col overflow-hidden">
@@ -1627,6 +1655,7 @@ onBeforeUnmount(clearRefresh)
           :source="previewDoc.documentSource"
           :codocs-uuid="previewDoc.codocsUuid"
           :project-id="projectId"
+          :project-document-id="previewDoc.id"
           :repo-project-code="previewDoc.repoProjectCode"
           :repo-file-path="previewDoc.repoFilePath"
           :repo-commit-id="previewDoc.repoCommitId"

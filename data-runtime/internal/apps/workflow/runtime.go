@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/huizhi-yun/data-runtime/internal/httperror"
+	"github.com/huizhi-yun/data-runtime/internal/workflowapproval"
 )
 
 type workflowPage struct {
@@ -24,6 +25,7 @@ func (a *Adapter) HandleRuntime(ctx context.Context, method string, path string,
 	if err := a.reconcileAimsMilestoneProjectDirector(ctx, query); err != nil {
 		return InstanceAPIResponse{}, "workflow.aims_milestone_project_director.reconcile", err
 	}
+	ctx = withProjectDirectorFacts(ctx, query)
 	body := workflowRuntimeBodyFromRequest(query, rawBody)
 	switch {
 	case method == http.MethodGet && path == "/v1/workflow/delivery-effects/status":
@@ -194,6 +196,9 @@ func (a *Adapter) listTasks(ctx context.Context, query url.Values, listType stri
 	orderColumn := "t.created_at DESC"
 	if listType == "pending" {
 		conditions = append(conditions, "t.status = 'pending'", "i.status = 'running'")
+		if strings.TrimSpace(query.Get("current_project_director_uid")) == "" {
+			conditions = append(conditions, pendingNonDirectorPredicate)
+		}
 	} else {
 		conditions = append(conditions, "t.status = 'completed'")
 		operation = "workflow.tasks.done"
@@ -390,6 +395,9 @@ func (a *Adapter) taskDetail(ctx context.Context, query url.Values, taskID strin
 	if cleanAnyString(task["assignee_uid"]) != currentUser && cleanAnyString(instance["initiator_uid"]) != currentUser {
 		return InstanceAPIResponse{}, "", httperror.New(http.StatusForbidden, "forbidden", "无权查看此任务")
 	}
+	if !projectDirectorTaskAllowed(ctx, instance, task) && cleanAnyString(instance["initiator_uid"]) != currentUser {
+		return InstanceAPIResponse{}, "", httperror.New(http.StatusForbidden, "forbidden", "无权查看此任务")
+	}
 	data, err := a.instancePayload(ctx, instance, currentUser, task, "")
 	if err != nil {
 		return InstanceAPIResponse{}, "", err
@@ -438,12 +446,21 @@ func (a *Adapter) approveTaskTx(ctx context.Context, tx *sql.Tx, taskID string, 
 	if cleanAnyString(task["status"]) != "pending" {
 		return InstanceAPIResponse{}, "", httperror.New(http.StatusBadRequest, "task_already_handled", "任务已处理")
 	}
-	instance, err := queryOneMap(ctx, tx, "SELECT id, status, flow_snapshot FROM flow_instances WHERE id = ? FOR UPDATE", task["instance_id"])
+	instance, err := queryOneMap(ctx, tx, "SELECT id, status, flow_snapshot, app_code, resource_code, action_code, form_data FROM flow_instances WHERE id = ? FOR UPDATE", task["instance_id"])
 	if err != nil {
 		return InstanceAPIResponse{}, "", err
 	}
 	if instance == nil || cleanAnyString(instance["status"]) != "running" {
 		return InstanceAPIResponse{}, "", httperror.New(http.StatusBadRequest, "flow_not_running", "流程已结束或不存在")
+	}
+	if err := requireFinanceNonSelfApproval(instance, currentUser); err != nil {
+		return InstanceAPIResponse{}, "", err
+	}
+	if err := requireAltocNonSelfApproval(instance, currentUser); err != nil {
+		return InstanceAPIResponse{}, "", err
+	}
+	if err := requireProjectDirectorTask(ctx, instance, task); err != nil {
+		return InstanceAPIResponse{}, "", err
 	}
 
 	if _, err := tx.ExecContext(ctx, "UPDATE flow_tasks SET status = 'completed', completed_at = NOW(), updated_at = NOW() WHERE id = ?", taskID); err != nil {
@@ -538,6 +555,15 @@ func (a *Adapter) rejectTaskTx(ctx context.Context, tx *sql.Tx, taskID string, r
 	}
 	if instance == nil || cleanAnyString(instance["status"]) != "running" {
 		return InstanceAPIResponse{}, "", httperror.New(http.StatusBadRequest, "flow_not_running", "流程已结束或不存在")
+	}
+	if err := requireFinanceNonSelfApproval(instance, currentUser); err != nil {
+		return InstanceAPIResponse{}, "", err
+	}
+	if err := requireAltocNonSelfApproval(instance, currentUser); err != nil {
+		return InstanceAPIResponse{}, "", err
+	}
+	if err := requireProjectDirectorTask(ctx, instance, task); err != nil {
+		return InstanceAPIResponse{}, "", err
 	}
 	flowSnapshot, err := parseJSONObject(cleanAnyString(instance["flow_snapshot"]))
 	if err != nil {
@@ -670,12 +696,21 @@ func (a *Adapter) delegateTaskTx(ctx context.Context, tx *sql.Tx, taskID string,
 	if cleanAnyString(task["status"]) != "pending" {
 		return InstanceAPIResponse{}, "", httperror.New(http.StatusBadRequest, "task_already_handled", "任务已处理")
 	}
-	instance, err := queryOneMap(ctx, tx, "SELECT id, app_code, resource_code, biz_id, status, biz_title, biz_url, flow_snapshot FROM flow_instances WHERE id = ? FOR UPDATE", task["instance_id"])
+	instance, err := queryOneMap(ctx, tx, "SELECT id, app_code, resource_code, action_code, form_data, biz_id, status, biz_title, biz_url, flow_snapshot FROM flow_instances WHERE id = ? FOR UPDATE", task["instance_id"])
 	if err != nil {
 		return InstanceAPIResponse{}, "", err
 	}
 	if instance == nil || cleanAnyString(instance["status"]) != "running" {
 		return InstanceAPIResponse{}, "", httperror.New(http.StatusBadRequest, "flow_not_running", "流程已结束或不存在")
+	}
+	if err := requireProjectDirectorTask(ctx, instance, task); err != nil {
+		return InstanceAPIResponse{}, "", err
+	}
+	if err := requireFinanceNonSelfApproval(instance, delegateTo); err != nil {
+		return InstanceAPIResponse{}, "", err
+	}
+	if err := requireAltocNonSelfApproval(instance, delegateTo); err != nil {
+		return InstanceAPIResponse{}, "", err
 	}
 	flowSnapshot, err := parseJSONObject(cleanAnyString(instance["flow_snapshot"]))
 	if err != nil {
@@ -872,6 +907,9 @@ func (a *Adapter) instancePayload(ctx context.Context, instance map[string]any, 
 	actionName, embedURLPattern, err := a.actionDefDisplay(ctx, instance["action_def_id"])
 	if err != nil {
 		return nil, err
+	}
+	if !projectDirectorTaskAllowed(ctx, instance, task) {
+		task = nil
 	}
 	instance["flow_snapshot"] = flowSnapshot
 	instance["biz_context"] = bizContext
@@ -1269,7 +1307,7 @@ func calculateApproveThreshold(node map[string]any, totalTasks int) int {
 }
 
 func callbackEffect(instance map[string]any, status string) WorkflowCallback {
-	callbackPath := trustedWorkflowCallbackPath(cleanAnyString(instance["app_code"]), cleanAnyString(instance["callback_url"]))
+	callbackPath := trustedWorkflowCallbackPath(cleanAnyString(instance["app_code"]), cleanAnyString(instance["callback_url"]), cleanAnyString(instance["resource_code"]), cleanAnyString(instance["action_code"]))
 	if callbackPath == "" {
 		return WorkflowCallback{}
 	}
@@ -1296,12 +1334,32 @@ func callbackEffect(instance map[string]any, status string) WorkflowCallback {
 // a legacy callback_url for migration, but dispatch only accepts the exact
 // registered Service API path for its immutable app_code; the supplied origin,
 // query, and fragment are never used.
-func trustedWorkflowCallbackPath(appCode, raw string) string {
+func trustedWorkflowCallbackPath(appCode, raw string, business ...string) string {
+	if appCode == "finance" {
+		if len(business) != 2 {
+			return ""
+		}
+		if workflowapproval.FinanceRegistered(appCode, business[0], business[1]) && workflowapproval.FinanceCallbackPath(raw) {
+			return raw
+		}
+		if business[0] == "expenses" && (business[1] == "claim" || business[1] == "project_expense" || business[1] == "payment") && raw == "/api/v1/finance/workflow/callback" {
+			return raw
+		}
+		return ""
+	}
+	if appCode == "altoc" {
+		if len(business) != 2 || !workflowapproval.Registered(appCode, business[0], business[1]) {
+			return ""
+		}
+		if raw != workflowapproval.CallbackPath {
+			return ""
+		}
+		return raw
+	}
 	allowed := map[string]string{
-		"codocs":  "/api/reviews/workflow-callback",
-		"finance": "/api/v1/finance/workflow/callback",
-		"people":  "/api/v1/service/workflow/callback",
-		"aims":    "/api/v1/service/workflow/callback",
+		"codocs": "/api/reviews/workflow-callback",
+		"people": "/api/v1/service/workflow/callback",
+		"aims":   "/api/v1/service/workflow/callback",
 	}
 	expected := allowed[strings.TrimSpace(appCode)]
 	if expected == "" || strings.TrimSpace(raw) == "" {

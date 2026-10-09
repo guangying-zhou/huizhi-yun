@@ -3,9 +3,11 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { enterprisePilot as p, resolveEnterprisePilotPath as route, validateEnterprisePilotBinding as valid } from './enterprise-topology.mjs'
 import { enterpriseHostEntries, enterpriseHostRoutes } from './enterprise-host-routes.mjs'
-import { businessModules } from '../../enterprise/composition/registry.mjs'
+import { renderEnterpriseHostRoutes } from './generate-enterprise-host-routes.mjs'
+import { businessApiRoutes } from '../../enterprise/composition/business-api-routes.generated.mjs'
+import { businessModules, hostNativePages } from '../../enterprise/composition/registry.mjs'
 test('Console root/OAuth/callback remain separate from single Host auth and assets', () => {
-  for (const path of ['/api/auth/oidc-callback', '/oauth/token', '/_nuxt/console.js', '/finance/']) assert.equal(route(path), null)
+  for (const path of ['/api/auth/oidc-callback', '/oauth/token', '/_nuxt/console.js']) assert.equal(route(path), null)
   // The Host workbench is the site entry: root and slash form are aliases of /enterprise.
   assert.deepEqual(route('/enterprise'), { path: '/enterprise', kind: 'page' })
   for (const path of ['/', '/enterprise/']) assert.deepEqual(route(path), { path: '/enterprise', kind: 'redirect' })
@@ -40,12 +42,14 @@ test('Console root/OAuth/callback remain separate from single Host auth and asse
   assert.deepEqual(route('/shell/assets'), { path: '/assets/products', kind: 'redirect' })
   assert.deepEqual(route('/shell/aims', '?target=%2Faims%2F%3Fhzy_embed%3D1%26search%3Dx%23list'), { path: '/aims/projects?search=x#list', kind: 'redirect' })
   assert.equal(route('/shell/aims', '?target=%2Faims%2Fapi%2Fv1%2Fproducts'), null)
-  assert.equal(route('/shell/finance', '?target=%2Ffinance%2F'), null)
+  assert.equal(route('/shell/altoc'), null)
+  assert.deepEqual(route('/shell/finance', '?target=%2Ffinance%2F'), { path: '/finance/bank-accounts', kind: 'redirect' })
   for (const path of ['/enterprise/directory/departments-edit/extra', '/enterprise/unknown']) assert.deepEqual(route(path), { path, kind: 'page' })
   assert.equal(route('/enterprise/unknown', '', 'PUT').kind, 'unavailable')
   assert.equal(route('/aims-evil/'), null)
 })
 test('generated Host route artifact matches the composition registry', () => {
+  assert.equal(readFileSync(new URL('./enterprise-host-routes.mjs', import.meta.url), 'utf8'), renderEnterpriseHostRoutes())
   const gatewaySource = readFileSync(new URL('../cloudflare/tenant-gateway/src/index.js', import.meta.url), 'utf8')
   assert.doesNotMatch(gatewaySource, /enterprise\/composition|node:fs|fileURLToPath/)
   for (const module of businessModules) {
@@ -161,7 +165,7 @@ test('legacy shell redirects only registered Host pages on GET', async () => {
   assert.notEqual((await gateway.fetch(new Request(`${p.origin}/shell/aims?target=%2Faims%2Fproducts`, { method: 'POST' }), env)).status, 307)
   assert.equal((await gateway.fetch(new Request(`${p.origin}/shell/aims?target=%2Faims%2Fproducts`), { ...env, HZY_TENANT_GATEWAY_REGISTRY_JSON: JSON.stringify({ domains: { 'hzy-test.huizhi.yun': { ...tenant, environment: 'prod' } } }) })).status, 503)
   assert.equal((await gateway.fetch(new Request(`${p.origin}/shell/aims?target=%2Faims%2Fproducts`), { ...env, HZY_TENANT_GATEWAY_REGISTRY_JSON: JSON.stringify({ domains: { 'hzy-test.huizhi.yun': { ...tenant, apps: { enterprise: { deploymentCode: 'wrong' } } } } }) })).status, 503)
-  assert.notEqual((await gateway.fetch(new Request(`${p.origin}/shell/finance?target=%2Ffinance%2F`), env)).status, 307)
+  assert.equal((await gateway.fetch(new Request(`${p.origin}/shell/finance?target=%2Ffinance%2F`), env)).status, 307)
   assert.equal((await gateway.fetch(new Request(`${p.origin}/shell/aims?target=%2Faims%2Fproducts`), { ...env, HZY_ENTERPRISE_PILOT: 'false', HZY_ENTERPRISE_AUTH_PILOT: 'true' })).status !== 307, true)
   for (const path of ['/', '/enterprise/', '/?from=bookmark']) {
     for (const method of ['GET', 'HEAD']) {
@@ -188,19 +192,26 @@ test('personal profile is an exact Host page, without a new user selector or BFF
 })
 
 
-test('Altoc G1 registers each GET list/detail and six native pages without enabling its prefix or writes', () => {
- for (const folder of ['customers', 'contracts', 'payments', 'leads', 'opportunities', 'quotes']) {
-  for (const path of [`/altoc/${folder}`, `/altoc/${folder}/7`]) {
-   assert.deepEqual(route(path, '', 'GET'), { path, kind: 'page' })
-   assert.deepEqual(route(path, '', 'HEAD'), { path, kind: 'page' })
+test('APF exposes registered pages and exact BFF methods only', () => {
+  for (const app of ['finance', 'altoc']) {
+    for (const pattern of enterpriseHostRoutes[app]) {
+      const path = pattern.replace(/:[A-Za-z]+/g, app === 'altoc' ? '7' : 'ACCOUNT-7')
+      for (const method of ['GET', 'HEAD']) assert.deepEqual(route(path, '', method), { path, kind: 'page' })
+      for (const method of ['POST', 'PUT', 'PATCH', 'DELETE']) assert.equal(route(path, '', method).kind, 'unavailable')
+    }
+    for (const [method, pattern] of businessApiRoutes.filter(([, path]) => path.startsWith(`/${app}/api/v1/`))) {
+      const path = pattern.replace(/:[A-Za-z]+/g, app === 'altoc' ? '7' : 'ACCOUNT-7')
+      assert.deepEqual(route(path, '', method), { path, kind: 'api' }, `${method} ${path}`)
+      for (const wrong of ['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE']) {
+        const registered = businessApiRoutes.some(([allowed, registeredPath]) => allowed === wrong && registeredPath.split('/').length === path.split('/').length && registeredPath.split('/').every((segment, index) => segment.startsWith(':') || segment === path.split('/')[index]))
+        if (!registered) assert.equal(route(path, '', wrong).kind, 'unavailable', `${wrong} ${path}`)
+      }
+    }
   }
-  for (const path of [`/altoc/api/v1/${folder}`, `/altoc/api/v1/${folder}/7`]) {
-   assert.deepEqual(route(path, '', 'GET'), { path, kind: 'api' })
-   for (const method of ['POST', 'PUT', 'PATCH', 'DELETE', 'HEAD']) assert.equal(route(path, '', method).kind, 'unavailable')
+  for (const path of ['/finance/', '/finance/unknown', '/finance/api/v1/bank-accounts/7/extra', '/finance/api/v1/service/accounts', '/altoc/settings', '/altoc/api/v1/service/contracts', '/altoc/api/v1/customers/0', '/altoc/api/v1/customers/9007199254740993', '/altoc/api/v1/customers/7/extra', '/finance/bank-accounts/a%2fb', '/finance//bank-accounts']) {
+    assert.equal(route(path).kind, 'unavailable', path)
   }
-  for (const suffix of ['/0', '/new', '/9007199254740993', '/7/edit', '/7/invoices', '/7/extra']) assert.equal(route(`/altoc/api/v1/${folder}${suffix}`), null)
- }
- for (const path of ['/altoc', '/altoc/', '/altoc/api/v1/service/contracts', '/altoc/settings', '/altoc/contracts/new']) assert.equal(route(path), null)
+  assert.deepEqual(enterpriseHostRoutes.altoc, hostNativePages.filter(page => page.module === 'altoc').map(page => page.path))
 })
 
 test('P5a1 reuses both existing Host time-entry read paths with pagination query intact', () => {
@@ -244,4 +255,24 @@ test('G-12 Host shared user APIs reach the Host with its session; root /api stay
   }
   assert.equal(calls.length, before)
   for (const path of ['/api/notifications', '/api/directory/users', '/api/user/applications', '/api/workflow-proxy/tasks/pending', '/api/_nuxt_icon/lucide.json']) assert.equal(route(path, '', 'GET'), null)
+})
+
+
+test('B2 customer contacts read has exact Gateway registration without widening writes', () => {
+  assert.deepEqual(route('/altoc/api/v1/customers/1/contacts', '?page=2&pageSize=20', 'GET'), { path: '/altoc/api/v1/customers/1/contacts', kind: 'api' })
+  assert.equal(route('/altoc/api/v1/customers/1/contacts/unknown', '', 'GET').kind, 'unavailable')
+})
+
+
+test('announcements register exact Host pages and API verbs', () => {
+  const id = '00000000-0000-4000-8000-000000000001'
+  for (const path of ['/enterprise/help', '/enterprise/announcements', `/enterprise/announcements/${id}`]) {
+    assert.equal(route(path).kind, 'page')
+    assert.equal(route(path, '', 'POST').kind, 'unavailable')
+  }
+  assert.equal(route('/enterprise/api/announcements', '', 'GET').kind, 'api')
+  assert.equal(route(`/enterprise/api/announcements/${id}/read`, '', 'POST').kind, 'api')
+  assert.equal(route(`/enterprise/api/announcements/${id}/read`, '', 'GET').kind, 'unavailable')
+  assert.equal(route('/enterprise/api/announcements/manage', '', 'POST').kind, 'api')
+  assert.notEqual(route('/enterprise/api/announcements/execute-anything', '', 'POST')?.kind, 'api')
 })

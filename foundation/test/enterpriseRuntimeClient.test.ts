@@ -25,10 +25,12 @@ test('Enterprise Host scope derives only from bounded registered path domains', 
     ['assets', '/v1/enterprise/assets/products:list'],
     ['codocs', '/v1/enterprise/codocs/personal-documents:list'],
     ['altoc', '/v1/enterprise/altoc/customers:list'],
+    ['finance', '/v1/enterprise/finance/bank-accounts:list'],
+    ['people', '/v1/enterprise/people/positions:list'],
     ['console', '/v1/enterprise/console/directory-self:projects'],
     ['console', '/v1/enterprise/console/directory-self:accessible-departments']
   ]) assert.equal(enterpriseHostDomainCapabilityForPath(path), `${domain}:enterprise-host:execute`)
-  for (const path of ['/v1/enterprise/finance/items:list', '/v1/enterprise/aims/', '/v1/enterprise/aims/projects:list/extra', '/v1/enterprise/aims/projects:list?scope=admin']) {
+  for (const path of ['/v1/enterprise/unknown/items:list', '/v1/enterprise/aims/', '/v1/enterprise/aims/projects:list/extra', '/v1/enterprise/aims/projects:list?scope=admin']) {
     assert.throws(() => enterpriseHostDomainCapabilityForPath(path))
   }
 })
@@ -188,6 +190,8 @@ for (const [operation, path] of [
   ['aims.project-board-view', '/v1/enterprise/aims/project-board:view'],
   ['aims.timesheet-overview', '/v1/enterprise/aims/timesheet-overview:view'],
   ['aims.weekly-report-overview', '/v1/enterprise/aims/weekly-report-overview:view'],
+  ['aims.project-document-repository-read', '/v1/enterprise/aims/project-documents:repository-read'],
+  ['aims.project-document-access-check', '/v1/enterprise/aims/project-documents:access-check'],
   ['aims.project-document-accessible-list', '/v1/enterprise/aims/project-documents:accessible'],
   ['assets.product-directory', '/v1/enterprise/assets/product-directory'],
   ['aims.product-request-list', '/v1/enterprise/aims/product-requests:list'],
@@ -415,6 +419,18 @@ test('Altoc permit canonical matches the Runtime shared vector including Unicode
   }
 })
 
+test('Altoc permit canonical signs includeDescendants and keeps older permits byte-identical', () => {
+  const f = JSON.parse(readFileSync(new URL('../../data-runtime/internal/server/testdata/enterprise-altoc-contract-descendants-read-permit.json', import.meta.url), 'utf8'))
+  assert.equal(enterpriseAltocReadPermitCanonical(f.method, f.target, f.authorization), f.canonical)
+  assert.equal(createHmac('sha256', f.token).update(f.canonical).digest('base64url'), f.signature)
+  const single = { ...f.authorization, query: { ...f.authorization.query, includeDescendants: false } }
+  assert.notEqual(enterpriseAltocReadPermitCanonical(f.method, f.target, single), f.canonical)
+  const { includeDescendants: _dropped, ...older } = f.authorization.query
+  assert.equal(enterpriseAltocReadPermitCanonical(f.method, f.target, { ...f.authorization, query: older }), enterpriseAltocReadPermitCanonical(f.method, f.target, single))
+  // Only the literal boolean widens the read; truthy strings are not accepted as the flag.
+  assert.equal(enterpriseAltocReadPermitCanonical(f.method, f.target, { ...f.authorization, query: { ...f.authorization.query, includeDescendants: 'true' } }), enterpriseAltocReadPermitCanonical(f.method, f.target, single))
+})
+
 test('G2 permit canonical matches Runtime vector and signs opportunityId independently', () => {
   const f = JSON.parse(readFileSync(new URL('../../data-runtime/internal/server/testdata/enterprise-altoc-sales-read-permit.json', import.meta.url), 'utf8'))
   assert.equal(enterpriseAltocReadPermitCanonical(f.method, f.target, f.authorization), f.canonical)
@@ -433,4 +449,33 @@ test('timesheet review independent permit covers every authorization branch and 
     else permit[key] = 'tampered'
     assert.notEqual(enterpriseTimesheetReviewPermitCanonical(fixture.method, fixture.target, permit), fixture.canonical)
   }
+})
+
+test('W3 optional filters share Go vectors and sign each present field', () => {
+  const fixtures = JSON.parse(readFileSync(new URL('../../data-runtime/internal/server/testdata/enterprise-altoc-w3-read-permits.json', import.meta.url), 'utf8'))
+  for (const f of fixtures) {
+    assert.equal(enterpriseAltocReadPermitCanonical(f.method, f.target, f.authorization), f.canonical)
+    assert.equal(createHmac('sha256', f.token).update(f.canonical).digest('base64url'), f.signature)
+    for (const key of ['parentId', 'rootsOnly', 'ownerUnassigned', 'origin', 'category', 'parentContractId', 'customerIds']) {
+      const changed = { ...f.authorization, query: { ...f.authorization.query, [key]: typeof f.authorization.query[key] === 'boolean' ? !f.authorization.query[key] : 'tampered' } }
+      assert.notEqual(enterpriseAltocReadPermitCanonical(f.method, f.target, changed), f.canonical)
+    }
+  }
+  const old = JSON.parse(readFileSync(new URL('./fixtures/enterprise-altoc-read-permit.json', import.meta.url), 'utf8'))
+  assert.equal(enterpriseAltocReadPermitCanonical(old.method, old.target, { ...old.authorization, query: { ...old.authorization.query, parentId: '', rootsOnly: false, ownerUnassigned: false, origin: '', category: '', parentContractId: '', customerIds: '' } }), old.canonical)
+})
+
+test('B2 customer/contact read vectors bind all extensions while preserving legacy bytes', () => {
+  const fixtures = JSON.parse(readFileSync(new URL('../../data-runtime/internal/server/testdata/enterprise-altoc-customer-workspace-permits.json', import.meta.url), 'utf8'))
+  for (const fixture of fixtures) {
+    assert.equal(enterpriseAltocReadPermitCanonical(fixture.method, fixture.target, fixture.authorization), fixture.canonical)
+    assert.equal(createHmac('sha256', fixture.token).update(fixture.canonical).digest('base64url'), fixture.signature)
+    for (const key of ['workspace', 'industryCode', 'regionCode', 'updatedDateFrom', 'updatedDateTo', 'customerSort', 'contactsOnly', 'decisionRole', 'primaryOnly', 'starredOnly']) {
+      const query = { ...fixture.authorization.query, [key]: typeof fixture.authorization.query[key] === 'boolean' ? !fixture.authorization.query[key] : 'tampered' }
+      assert.notEqual(enterpriseAltocReadPermitCanonical(fixture.method, fixture.target, { ...fixture.authorization, query }), fixture.canonical)
+    }
+  }
+  const old = JSON.parse(readFileSync(new URL('./fixtures/enterprise-altoc-read-permit.json', import.meta.url), 'utf8'))
+  const query = { ...old.authorization.query, workspace: false, industryCode: '', regionCode: '', updatedDateFrom: '', updatedDateTo: '', customerSort: '', contactsOnly: false, decisionRole: '', primaryOnly: false, starredOnly: false }
+  assert.equal(enterpriseAltocReadPermitCanonical(old.method, old.target, { ...old.authorization, query }), old.canonical)
 })

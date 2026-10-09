@@ -7,7 +7,7 @@ const versionId = computed(() => String(route.params.versionId || ''))
 </script>
 
 <template>
-  <div class="min-h-0 min-w-0">
+  <div data-host-content class="min-h-0 min-w-0">
     <ProductsVersionWorkflowNav :key="`${code}:${versionId}`" :product-code="code" :version-id="versionId" />
     <NuxtPage />
   </div>

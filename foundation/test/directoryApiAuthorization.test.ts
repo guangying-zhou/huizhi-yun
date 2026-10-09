@@ -59,7 +59,7 @@ test('business app user lists use the restricted sharing projection instead of C
 
 test('user department relationships use the existing directory service grant without an authorization fallback', () => {
   const content = readFileSync(new URL('../server/utils/directoryApi.ts', import.meta.url), 'utf8')
-  const branch = content.slice(content.indexOf("if (normalizedPath === '/user-departments'"), content.indexOf("if (normalizedPath === '/users'"))
+  const branch = content.slice(content.indexOf('if (normalizedPath === \'/user-departments\''), content.indexOf('if (normalizedPath === \'/users\''))
   assert.match(branch, /options.method === 'GET'/)
   assert.match(branch, /fetchDirectorySharingByService<T>\(options, 'user-departments'\)/)
   assert.doesNotMatch(branch, /catch|fetchDirectoryApi/)
@@ -83,7 +83,7 @@ test('business app user detail uses the restricted sharing projection instead of
 
 test('project list reads use the exact project-directory service grant and fixed projection', () => {
   const content = readFileSync(new URL('../server/utils/directoryApi.ts', import.meta.url), 'utf8')
-  const branch = content.slice(content.indexOf("if (normalizedPath === '/projects'"), content.indexOf("if (normalizedPath === '/users'"))
+  const branch = content.slice(content.indexOf('if (normalizedPath === \'/projects\''), content.indexOf('if (normalizedPath === \'/users\''))
   assert.match(branch, /scope: 'console:directory-project-access:read'/)
   assert.match(branch, /\/api\/v1\/console\/service\/directory\/project-access/)
   assert.match(branch, /params: \{ \.\.\.options.params, projection: 'projects' \}/)

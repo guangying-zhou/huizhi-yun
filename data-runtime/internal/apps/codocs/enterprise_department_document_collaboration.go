@@ -135,20 +135,11 @@ func lockDepartmentDocument(ctx context.Context, tx *sql.Tx, dept, documentUUID 
 	return doc, nil
 }
 
-// allows applies the edit rule shared with edit-metadata: a Directory writer
-// (member or manager) who is a manager, the owner, or holds a write share.
-func (d departmentDocument) allows(ctx context.Context, tx *sql.Tx, role DepartmentCollabRole, uid string) (bool, error) {
-	if !role.CanWrite {
-		return false, nil
-	}
-	if role.CanManage || d.Owner == uid {
-		return true, nil
-	}
-	permission, err := readDocumentSharePermission(ctx, tx, d.ID, uid, true)
-	if err != nil {
-		return false, err
-	}
-	return permission == "write", nil
+// allows applies the department-body collaboration rule: current Directory
+// members and managers edit by default. Owner/share grants never substitute
+// for current membership; leader, parent and outsiders remain read-only.
+func (d departmentDocument) allows(_ context.Context, _ *sql.Tx, role DepartmentCollabRole, _ string) (bool, error) {
+	return role.CanWrite, nil
 }
 
 // --- participants -----------------------------------------------------------

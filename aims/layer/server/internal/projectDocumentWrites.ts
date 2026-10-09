@@ -38,10 +38,8 @@ export async function writeHostProjectDocument(event: H3Event, provider: Documen
     const repoPath = text(payload.repoFilePath ?? payload.repo_file_path)
     if (text(payload.documentSource ?? payload.document_source ?? payload.source) === 'repo' && !repoPath.startsWith('codocs/projects/')) {
       const repoProjectCode = text(payload.repoProjectCode ?? payload.repo_project_code)
-      await hostProjectDocumentContext(event, provider, projectId, undefined, repoProjectCode)
       const selectedCommit = text(payload.repoCommitId ?? payload.repo_commit_id)
-      const { getGitRepositoryFile } = await import('@hzy/foundation/server/utils/gitIntegration')
-      const file = await getGitRepositoryFile({ repoPath: repoProjectCode, path: repoPath, commitId: selectedCommit || undefined })
+      const { file } = await hostProjectDocumentContext<{ file: { path: string, commitId: string } }>(event, provider, projectId, undefined, repoProjectCode, undefined, undefined, { operation: 'file', path: repoPath, ...(selectedCommit ? { commitId: selectedCommit } : {}) })
       if (file.path !== repoPath || !/^[A-Za-z0-9._-]{1,120}$/.test(file.commitId || '')) throw createError({ statusCode: 503, message: '仓库返回的提交版本无效' })
       if (selectedCommit && file.commitId !== selectedCommit) throw createError({ statusCode: 409, message: '仓库文档提交版本不一致' })
       frozenPayload = { ...frozenPayload, repoCommitId: file.commitId }

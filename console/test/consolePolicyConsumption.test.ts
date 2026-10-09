@@ -32,11 +32,12 @@ describe('Console policy permission consumption', () => {
     assert.match(permissionsConfig, /pattern: '\/org-profile'[\s\S]*resource: 'org_profile'[\s\S]*action: 'view'/)
 
     assert.match(layout, /import \{ menus as rawMenus \} from '~\/config\/permissions'/)
-    assert.match(layout, /const \{ loadPermissions, filterMenus, loaded: permissionsLoaded, hasPermission \} = usePermissions\(\)/)
+    assert.match(layout, /const \{ loadPermissions, filterMenus \} = usePermissions\(\)/)
+    assert.match(layout, /onMounted\(\(\) => \{\s*loadPermissions\(\)/)
     assert.match(layout, /filterMenus\(rawMenus\) as NavigationMenuItem\[\]\[\]/)
     assert.match(layout, /\.map\(group => expandCurrentRouteGroups\(group\)\)/)
 
-    assert.match(foundationPermission, /const \{ loadAuthorization, getAuthorization, clearAuthorizationCache, loaded \} = useAuthorization\(\)/)
+    assert.match(foundationPermission, /const \{ loadAuthorization, getAuthorization, clearAuthorizationCache, loaded, error, authorizationApp \} = useAuthorization\(\)/)
     assert.match(foundationPermission, /function filterMenus\(menuGroups: PermissionMenuItem\[\]\[\]\)/)
     assert.match(foundationPermission, /hasPermission: \(resourceCode, action\) => hasPermission\(resourceCode, \(action as PermissionAction\) \|\| 'view'\)/)
     assert.match(foundationPermission, /resourceCode: item\.resourceCode \|\| item\.resource/)

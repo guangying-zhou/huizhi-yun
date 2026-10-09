@@ -102,7 +102,6 @@ test('legacy criteria only accepts criteria and revision fields with edit author
   }
 })
 
-
 test('scope visibility requires edit and preserves explicit false', async () => {
   const body = { expectedRevision: 1, expectedVersionRevision: 2, expectedScopeRevision: 3, reason: '内部范围', isPublic: false }
   const h = harness({ body })

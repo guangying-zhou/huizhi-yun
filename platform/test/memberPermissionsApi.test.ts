@@ -11,7 +11,7 @@ describe('tenant-admin member permissions API', () => {
     const content = source('server/api/platform/tenant-admin/member-permissions.get.ts')
 
     assert.match(content, /async function loadActiveRoleCounts\(tenantCode: string, members: MemberRow\[\]\)/)
-    assert.match(content, /const activeRoleCounts = await loadActiveRoleCounts\(tenantCode, rows\)/)
+    assert.match(content, /const activeRoleCounts = await loadActiveRoleCounts\(tenantCode, rows.filter\(row => row.status === 'active'\)\)/)
     assert.match(content, /const items = rows\.map\(\(row\) => \{/)
     assert.match(content, /const uid = row\.external_ref \|\| row\.subject_code/)
     assert.match(content, /activeRoleCount: activeRoleCounts\.get\(row\.id\) \|\| 0/)

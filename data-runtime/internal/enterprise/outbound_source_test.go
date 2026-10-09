@@ -11,7 +11,7 @@ func TestOutboundSourceUsesExplicitWorkerAndBoundTables(t *testing.T) {
 		t.Fatal(err)
 	}
 	ctx := source.Context(writer, "request")
-	if ctx.DeploymentCode != "actual-aims" || ctx.SourceApp != "aims" || ctx.ServiceClientID != "" || ctx.TenantCode != "tenant" {
+	if ctx.DeploymentCode != "actual-aims" || ctx.SourceApp != "aims" || ctx.ServiceClientID != "" || ctx.TenantCode != "tenant" || ctx.RetireAPFCommands {
 		t.Fatal("producer impersonated transport", ctx)
 	}
 	table, err := ctx.OperationTable()
@@ -28,7 +28,7 @@ func TestOutboundSourceUsesExplicitWorkerAndBoundTables(t *testing.T) {
 	if source.Context(changed, "request").SourceApp != "" {
 		t.Fatal("stale source accepted")
 	}
-	for _, client := range []string{"", "enterprise.runtime", "aims"} {
+	for _, client := range []string{"", "other.runtime", "aims"} {
 		if _, err = NewOutboundSource(writer, resolved, "actual-aims", client); err == nil {
 			t.Fatal(client)
 		}
@@ -36,6 +36,11 @@ func TestOutboundSourceUsesExplicitWorkerAndBoundTables(t *testing.T) {
 	if _, err = NewOutboundSource(writer, resolved, "", "aims.runtime"); err == nil {
 		t.Fatal("guessed owner")
 	}
+	host, hostErr := NewOutboundSource(writer, resolved, "actual-enterprise", "enterprise.runtime")
+	if hostErr != nil || host.WorkerClient() != "enterprise.runtime" || host.Context(writer, "r").SourceApp != "aims" || !host.Context(writer, "r").RetireAPFCommands {
+		t.Fatal("physical Host must retain logical aims source", hostErr)
+	}
+
 	delete(resolved.tables, "service_command_receipt")
 	if source.Validate(writer, resolved) == nil {
 		t.Fatal("missing table")

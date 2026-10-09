@@ -14,7 +14,8 @@ test('product document Host enforces product, document and Codocs read boundarie
   globalThis.__fe2Errors = { unavailable: createError({ statusCode: 503, message: 'down' }), denied: createError({ statusCode: 403, message: 'denied' }) }
   const hooks = registerHooks({ resolve(specifier, context, next) {
     let source
-    if (specifier.endsWith('/enterpriseRuntimeClient')) source = `
+    if (specifier.endsWith('/enterpriseRuntimeClient'))
+      source = `
       export const requireEnterpriseUser=async()=>({uid:'person-a',tenant:'tenant-a',deployment:'enterprise-test'});
       export const prepareEnterpriseRuntime=async(_event,op)=>{globalThis.__fe2State.prepared.push(op)};
       export const enterpriseRuntimePermitExpiresAt=()=>Date.now()+10000;
@@ -24,14 +25,22 @@ test('product document Host enforces product, document and Codocs read boundarie
         const common={product_code:body.productCode,workspace_revision:3};
         return op.endsWith('content')?{code:0,data:{...common,relation_biz_id:body.query.bizId,document:{uuid:'11111111-1111-1111-1111-111111111111',title:'Test',doc_type:'private',oss_path:'test/key'}}}:{code:0,data:{...common,items:[],total:0,page:1,pageSize:20}};
       }`
-    if (specifier.endsWith('/productAuthorization')) source = `export const checkProductPermission=async(_event,_code,resource)=>({allowed:resource==='products'?globalThis.__fe2State.product:globalThis.__fe2State.documents,facts:{product_code:'P1',actor_uid:'person-a',revision:3}})`
-    if (specifier.endsWith('/enterpriseProductAuthorization')) source = `export const enterpriseProductAuthorizationSource=async()=>({uid:'person-a'})`
-    if (specifier.endsWith('/enterpriseCodocsDocumentContent')) source = `export const withEnterpriseCodocsDocumentContent=async(_event,response)=>{if(!globalThis.__fe2State.codocs)throw globalThis.__fe2Errors.denied;return{data:{...response.data,content:'visible'}}}`
-    if (source) return { url: `data:text/javascript,${encodeURIComponent(source)}`, shortCircuit: true }
+    if (specifier.endsWith('/productAuthorization'))
+      source = `export const checkProductPermission=async(_event,_code,resource)=>({allowed:resource==='products'?globalThis.__fe2State.product:globalThis.__fe2State.documents,facts:{product_code:'P1',actor_uid:'person-a',revision:3}})`
+    if (specifier.endsWith('/enterpriseProductAuthorization'))
+      source = `export const enterpriseProductAuthorizationSource=async()=>({uid:'person-a'})`
+    if (specifier.endsWith('/enterpriseCodocsDocumentContent'))
+      source = `export const withEnterpriseCodocsDocumentContent=async(_event,response)=>{if(!globalThis.__fe2State.codocs)throw globalThis.__fe2Errors.denied;return{data:{...response.data,content:'visible'}}}`
+    if (source)
+      return { url: `data:text/javascript,${encodeURIComponent(source)}`, shortCircuit: true }
     let candidate
-    if (specifier.startsWith('@hzy/foundation/')) candidate = resolve(root, 'foundation', specifier.slice('@hzy/foundation/'.length))
-    else if (specifier.startsWith('.') && context.parentURL?.startsWith('file:')) candidate = resolve(dirname(fileURLToPath(context.parentURL)), specifier)
-    if (candidate && !existsSync(candidate) && existsSync(candidate + '.ts')) return { url: pathToFileURL(candidate + '.ts').href, shortCircuit: true }
+    if (specifier.startsWith('@hzy/foundation/'))
+      candidate = resolve(root, 'foundation', specifier.slice('@hzy/foundation/'.length))
+    else
+      if (specifier.startsWith('.') && context.parentURL?.startsWith('file:'))
+        candidate = resolve(dirname(fileURLToPath(context.parentURL)), specifier)
+    if (candidate && !existsSync(candidate) && existsSync(candidate + '.ts'))
+      return { url: pathToFileURL(candidate + '.ts').href, shortCircuit: true }
     return next(specifier, context)
   } })
   let server
@@ -41,12 +50,16 @@ test('product document Host enforces product, document and Codocs read boundarie
     for (const [path, file] of [
       ['/documents', 'documents.get.ts'], ['/documents/requests', 'documents/requests.get.ts'],
       ['/documents/search', 'documents/search.get.ts'], ['/documents/content', 'documents/content.get.ts']
-    ]) router.add('/products/:productCode/roadmaps' + path, (await import(base + file)).default, 'get')
+    ])
+      router.add('/products/:productCode/roadmaps' + path, (await import(base + file)).default, 'get')
     app.use(router)
     server = createServer(toNodeListener(app))
     await new Promise(done => server.listen(0, '127.0.0.1', done))
     const origin = `http://127.0.0.1:${server.address().port}`
-    const request = async suffix => { const response = await fetch(origin + '/products/P1/roadmaps/documents' + suffix); return { status: response.status, body: await response.json() } }
+    const request = async (suffix) => {
+      const response = await fetch(origin + '/products/P1/roadmaps/documents' + suffix)
+      return { status: response.status, body: await response.json() }
+    }
     const list = await request('?page=1')
     assert.equal(list.status, 200)
     assert.equal(state.calls.at(-1).op, 'aims.product-document-list')
@@ -78,7 +91,10 @@ test('product document Host enforces product, document and Codocs read boundarie
     assert.equal('oss_path' in visible.body.data, false)
     assert.equal((await request('/content?bizId=../secret')).status, 400)
   } finally {
-    if (server) { server.closeAllConnections(); await new Promise(done => server.close(done)) }
+    if (server) {
+      server.closeAllConnections()
+      await new Promise(done => server.close(done))
+    }
     hooks.deregister()
     delete globalThis.__fe2State
     delete globalThis.__fe2Errors

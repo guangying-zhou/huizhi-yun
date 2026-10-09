@@ -104,6 +104,7 @@ func (a *Adapter) ApplyWorkItemCompletionCallbackInTransaction(ctx context.Conte
 	return a.applyWorkItemCompletionCallbackTx(ctx, tx, c)
 }
 func (a *Adapter) applyWorkItemCompletionCallbackTx(ctx context.Context, tx *sql.Tx, c VerifiedWorkItemCompletionCallback) (map[string]any, error) {
+	ctx = ticketTransactionItem(ctx, fmt.Sprint(c.itemID))
 	if err := a.requireEnterpriseWriter(); err != nil {
 		return nil, err
 	}

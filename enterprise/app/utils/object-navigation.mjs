@@ -119,8 +119,8 @@ export function projectRouteTab(path) {
   return match ? projectTabForPath(match[2]) : ''
 }
 export function projectPageCanMount(path, project) {
+  const match = /^\/aims\/projects\/([1-9]\d*)(?:\/|$)/.exec(String(path))
+  if (!match) return true
   const tab = projectRouteTab(path)
-  if (!tab) return true
-  const projectId = /^\/aims\/projects\/([1-9]\d*)/.exec(String(path))[1]
-  return String(project?.id) === projectId && isUsableProject(project) && projectTabAllows(project, tab)
+  return String(project?.id) === match[1] && isUsableProject(project) && (!tab || projectTabAllows(project, tab))
 }

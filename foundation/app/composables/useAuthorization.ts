@@ -1,4 +1,5 @@
-import { effectScope, getCurrentInstance } from 'vue'
+import { effectScope, getCurrentInstance, inject } from 'vue'
+import { authorizationModuleScope } from '../utils/authorizationModuleScope'
 import { createAuthorizationState } from '@hzy/platform-adapter-nuxt'
 import {
   isEnterpriseHostAuthorization,
@@ -240,10 +241,11 @@ function captureRouteMeta(): () => unknown {
   return () => router.currentRoute.value.meta
 }
 
-export function useAuthorization() {
+export function useAuthorization(options: { routeMeta?: () => unknown } = {}) {
   const publicConfig = useRuntimeConfig().public
   const hostMode = isEnterpriseHostAuthorization(publicConfig)
-  const routeMeta = hostMode ? captureRouteMeta() : () => undefined
+  const componentApp = getCurrentInstance() ? inject(authorizationModuleScope, null) : null
+  const routeMeta = hostMode ? options.routeMeta || (componentApp ? () => ({ authorizationApp: componentApp }) : captureRouteMeta()) : () => undefined
 
   function currentScope() {
     const source = resolveAuthorizationSnapshotSource(publicConfig, routeMeta())

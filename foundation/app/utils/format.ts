@@ -38,8 +38,8 @@ export function formatDateTime(value: string | number | Date | null | undefined,
 
 export function formatMoney(value: string | number | null | undefined, options: MoneyFormatOptions = {}) {
   if (value === null || value === undefined || value === '') return options.placeholder ?? '-'
-  const amount = Number(value)
-  if (!Number.isFinite(amount)) return options.placeholder ?? '-'
+  const amount = typeof value === 'string' ? value.trim() : value
+  if (!Number.isFinite(Number(amount))) return options.placeholder ?? '-'
   const {
     locale = 'zh-CN',
     currency = 'CNY',
@@ -52,5 +52,6 @@ export function formatMoney(value: string | number | null | undefined, options: 
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
     ...intlOptions
-  }).format(amount)
+  // Modern Intl preserves decimal strings without rounding them through Number.
+  }).format(amount as number)
 }

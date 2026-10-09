@@ -6,14 +6,19 @@ import { timeEntryReadQuery } from '../../foundation/shared/utils/timeEntryReadQ
 
 test('complete initialization and keyed draft deltas retain hidden-page rows and full denominator', () => {
   const baseline = Array.from({ length: 107 }, (_, i) => ({ uid: `U${i}`, hours: 8, actualHours: 4, allocationPercent: 100 }))
-  const draft = baseline.map(r => ({ ...r })); draft[100]!.hours = 3; draft[100]!.allocationPercent = 37.5
+  const draft = baseline.map(r => ({ ...r }))
+  draft[100]!.hours = 3
+  draft[100]!.allocationPercent = 37.5
   const totals = weeklyDraftTotals(baseline, draft)
-  assert.equal(totals.hours, 851); assert.equal(totals.actual, 428); assert.equal(totals.memberCount, 107)
+  assert.equal(totals.hours, 851)
+  assert.equal(totals.actual, 428)
+  assert.equal(totals.memberCount, 107)
   assert.equal(totals.averagePercent, 99.42)
   assert.equal(draft.slice(0, 20).length, 20)
   assert.equal(draft.map(r => ({ uid: r.uid, hours: r.hours })).length, 107)
   const work = Array.from({ length: 105 }, (_, i) => ({ id: i + 1, workloadDays: 1 }))
-  const changed = work.filter(w => w.id !== 101).map(w => ({ ...w })); changed[0]!.workloadDays = 3
+  const changed = work.filter(w => w.id !== 101).map(w => ({ ...w }))
+  changed[0]!.workloadDays = 3
   changed.push({ id: 0, workloadDays: 4 })
   assert.equal(weeklyDraftWorkload(105, work, changed), 110)
   assert.equal(changed.length, 105)
@@ -26,7 +31,8 @@ test('period page validates bounded member/work identities and independent full 
 })
 test('UID actual hours require paged project read, never a weekly-report authorization flag', () => {
   assert.equal(timeEntryReadQuery({ page: '1', includeUidHours: '1' }, 'project').includeUidHours, '1')
-  for (const q of [{ includeUidHours: '1' }, { page: '1', includeUidHours: '0' }, { page: '1', includeUidHours: ['1', '1'] }]) assert.throws(() => timeEntryReadQuery(q, 'project'))
+  for (const q of [{ includeUidHours: '1' }, { page: '1', includeUidHours: '0' }, { page: '1', includeUidHours: ['1', '1'] }])
+    assert.throws(() => timeEntryReadQuery(q, 'project'))
   assert.throws(() => timeEntryReadQuery({ page: '1', includeUidHours: '1' }, 'user'))
 })
 test('project view requests real pages while replacement writes serialize complete draft', () => {
@@ -68,15 +74,21 @@ test('actual page functions retain second-page edits and serialize all 107/105 r
     mainWork: { value: 'complete' }, overallProgress: { value: '' }, summaryFields: {}, allocationRows: { value: rows }, allocationBaseline: { value: rows }, workItems: { value: work },
     entryUIDs: entries, workIDs, entriesPage: { value: 2 }, workPage: { value: 1 }, detailPageSize: 20,
     memberRead: { read: async () => identityPages }, workRead: { read: async () => identityPages }, selectedReport: { value: null }, draftFactsChanged: { value: false },
-    moduleUrl: (s: string) => s, roundHours: (n: number) => n, $fetch: async (_path: string, options: { body: typeof body }) => { body = options.body; return { code: 1 } },
+    moduleUrl: (s: string) => s, roundHours: (n: number) => n, $fetch: async (_path: string, options: { body: typeof body }) => {
+      body = options.body
+      return { code: 1 }
+    },
     toast: { add: () => assert.fail('unexpected error') }, console
   })
   await exports.page!()
   assert.equal(entries.value[0], 'U100')
-  assert.equal(rows.length, 107); assert.equal(rows[100]!.hours, 3)
+  assert.equal(rows.length, 107)
+  assert.equal(rows[100]!.hours, 3)
   await exports.save!()
-  assert.equal(body!.entries.length, 107); assert.equal(body!.entries[100]!.hours, 3)
-  assert.equal(body!.workItems.length, 105); assert.equal(body!.workItems[100]!.workloadDays, 5)
+  assert.equal(body!.entries.length, 107)
+  assert.equal(body!.entries[100]!.hours, 3)
+  assert.equal(body!.workItems.length, 105)
+  assert.equal(body!.workItems[100]!.workloadDays, 5)
   assert.equal(saving.value, false)
 })
 
@@ -101,8 +113,12 @@ test('actual-hour initialization ignores a late response for the same period', a
   const actual = { value: new Map<string, number>() }
   const context = { exports, selectedGeneration: 1, projectId: { value: 1 }, selectedPeriodKey: { value: '2026-W01' }, selectedWeekYear: { value: 2026 }, selectedWeek: { value: 1 }, initialRead: { fingerprint: { value: 'verified' } }, actualHoursByUid: actual, getWeekRange: () => ({ start: new Date(), end: new Date() }), formatDate: () => '2026-01-01', moduleUrl: (s: string) => s, roundHours: (n: number) => n, $fetch: () => new Promise(resolve => pending.push(resolve)) }
   runInNewContext(ts.transpileModule(`${fn}\nexports.read = fetchActualHours`, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText, context)
-  const old = exports.read!(); context.selectedGeneration = 2; const latest = exports.read!()
-  pending[1]!({ code: 0, data: { summary: { uidHours: [{ uid: 'U1', hours: 2 }] } } }); await latest
-  pending[0]!({ code: 0, data: { summary: { uidHours: [{ uid: 'U1', hours: 9 }] } } }); await old
+  const old = exports.read!()
+  context.selectedGeneration = 2
+  const latest = exports.read!()
+  pending[1]!({ code: 0, data: { summary: { uidHours: [{ uid: 'U1', hours: 2 }] } } })
+  await latest
+  pending[0]!({ code: 0, data: { summary: { uidHours: [{ uid: 'U1', hours: 9 }] } } })
+  await old
   assert.equal(actual.value.get('U1'), 2)
 })

@@ -66,6 +66,9 @@ export function enterpriseAimsRepoDoc(event: H3Event) {
   const commitId = queryText(event, ['commit_id', 'commitId'])
   if (commitId && !code.test(commitId)) throw createError({ statusCode: 400, message: 'commit_id 无效' })
   const command: Record<string, string> = { projectId: requireProjectId(event), repoProjectCode: repoCode(event), path, ...gitRef(event) }
+  const documentId = queryText(event, ['documentId'])
+  if (documentId && (!numericID.test(documentId) || !Number.isSafeInteger(Number(documentId)))) throw createError({ statusCode: 400, message: 'documentId 无效' })
+  if (documentId) command.documentId = documentId
   if (commitId) command.commitId = commitId
   return proxy(event, 'repo-doc', command)
 }

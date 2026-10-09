@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { headerErrorResponse } from './header-errors.mjs'
 // Self-hosted Tenant Gateway: runs the Cloudflare Worker source
 // (deploy/cloudflare/tenant-gateway/src/index.js) under Node for one site.
 import { createServer } from 'node:http'
@@ -45,7 +46,7 @@ export function createGatewayHost(config, { baseFetch = globalThis.fetch, log, n
   const upgrade = createUpgradeHandler({ config, log, peerGuard })
   ingress.on('upgrade', upgrade)
   ingress.on('clientError', (error, socket) => {
-    if (socket.writable) socket.end('HTTP/1.1 400 Bad Request\r\nconnection: close\r\ncontent-length: 0\r\n\r\n')
+    if (socket.writable) socket.end(headerErrorResponse(error))
     else socket.destroy()
   })
 
@@ -57,7 +58,7 @@ export function createGatewayHost(config, { baseFetch = globalThis.fetch, log, n
       host: config.site.publicHost,
       tenantCode: config.site.tenantCode,
       environment: config.site.environment,
-      appCodes: [...config.scheduler.drain.apps]
+      appCodes: [...new Set([...config.scheduler.drain.apps, ...(config.scheduler.apf.enabled ? ['enterprise'] : [])])]
     }],
     nextCursor: null
   })

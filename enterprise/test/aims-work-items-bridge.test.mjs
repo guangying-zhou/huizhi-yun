@@ -22,15 +22,24 @@ test('Aims work-item Host bridge retains actor, tenant and project scope', async
   const hooks = registerHooks({
     resolve(specifier, context, next) {
       let source
-      if (specifier.endsWith('/consoleSessionBridge') || specifier === './consoleSessionBridge') source = 'export const resolveConsoleAuthWithSessionBridge=async()=>globalThis.__aimsWorkItemSession'
-      if (specifier.endsWith('/tenantRuntimeClient') || specifier === './tenantRuntimeClient') source = 'export const maybeCallTenantRuntime=(...args)=>globalThis.__aimsWorkItemTransport(...args);export const verifiedServiceCommandActor=()=>null;export const prepareTenantRuntime=async()=>true'
-      if (specifier.endsWith('/platformBundleAuthorization')) source = "export const loadAuthorizationSnapshotFromConsoleRuntime=async()=>({resources:globalThis.__aimsWorkItemAllowed?{work_items:['view']}:{},actionPolicies:{}});export const loadScopedAuthorizationFromConsoleRuntime=async()=>({grants:[{permissions:[{appCode:'aims',resourceCode:'projects',action:'admin'}],scopes:[{dimension:'project',predicate:'code',value:'PRJ-1'}]}]})"
-      if (specifier.endsWith('/directoryApi')) source = "export const fetchDirectoryApi=async(path)=>path.includes('user-departments')?{code:0,data:{primaryDeptCode:'D-1',departments:[]}}:{code:0,data:{tree:[{deptCode:'D-1',name:'研发',children:[]}],flat:[{deptCode:'D-1',name:'研发',managerId:'person-a'}]}};export const fetchConsoleDirectoryApi=fetchDirectoryApi"
-      if (source) return { url: `data:text/javascript,${encodeURIComponent(source)}`, shortCircuit: true }
+      if (specifier.endsWith('/consoleSessionBridge') || specifier === './consoleSessionBridge')
+        source = 'export const resolveConsoleAuthWithSessionBridge=async()=>globalThis.__aimsWorkItemSession'
+      if (specifier.endsWith('/tenantRuntimeClient') || specifier === './tenantRuntimeClient')
+        source = 'export const maybeCallTenantRuntime=(...args)=>globalThis.__aimsWorkItemTransport(...args);export const verifiedServiceCommandActor=()=>null;export const prepareTenantRuntime=async()=>true'
+      if (specifier.endsWith('/platformBundleAuthorization'))
+        source = 'export const loadAuthorizationSnapshotFromConsoleRuntime=async()=>({resources:globalThis.__aimsWorkItemAllowed?{work_items:[\'view\']}:{},actionPolicies:{}});export const loadScopedAuthorizationFromConsoleRuntime=async()=>({grants:[{permissions:[{appCode:\'aims\',resourceCode:\'projects\',action:\'admin\'}],scopes:[{dimension:\'project\',predicate:\'code\',value:\'PRJ-1\'}]}]})'
+      if (specifier.endsWith('/directoryApi'))
+        source = 'export const fetchDirectoryApi=async(path)=>path.includes(\'user-departments\')?{code:0,data:{primaryDeptCode:\'D-1\',departments:[]}}:{code:0,data:{tree:[{deptCode:\'D-1\',name:\'研发\',children:[]}],flat:[{deptCode:\'D-1\',name:\'研发\',managerId:\'person-a\'}]}};export const fetchConsoleDirectoryApi=fetchDirectoryApi'
+      if (source)
+        return { url: `data:text/javascript,${encodeURIComponent(source)}`, shortCircuit: true }
       let candidate
-      if (specifier.startsWith('@hzy/foundation/')) candidate = resolve(root, 'foundation', specifier.slice('@hzy/foundation/'.length))
-      else if (specifier.startsWith('.') && context.parentURL?.startsWith('file:')) candidate = resolve(dirname(fileURLToPath(context.parentURL)), specifier)
-      if (candidate && !existsSync(candidate) && existsSync(`${candidate}.ts`)) return { url: pathToFileURL(`${candidate}.ts`).href, shortCircuit: true }
+      if (specifier.startsWith('@hzy/foundation/'))
+        candidate = resolve(root, 'foundation', specifier.slice('@hzy/foundation/'.length))
+      else
+        if (specifier.startsWith('.') && context.parentURL?.startsWith('file:'))
+          candidate = resolve(dirname(fileURLToPath(context.parentURL)), specifier)
+      if (candidate && !existsSync(candidate) && existsSync(`${candidate}.ts`))
+        return { url: pathToFileURL(`${candidate}.ts`).href, shortCircuit: true }
       return next(specifier, context)
     }
   })
@@ -38,7 +47,9 @@ test('Aims work-item Host bridge retains actor, tenant and project scope', async
   try {
     const app = createApp()
     const router = createRouter()
-    app.use(defineEventHandler(event => { event.context.consoleAuth = session }))
+    app.use(defineEventHandler((event) => {
+      event.context.consoleAuth = session
+    }))
     router.get('/work-items', (await import('../server/routes/aims/api/v1/work-items/index.get.ts')).default)
     router.get('/work-items/:id', (await import('../server/routes/aims/api/v1/work-items/[id].get.ts')).default)
     app.use(router)
@@ -71,7 +82,8 @@ test('Aims work-item Host bridge retains actor, tenant and project scope', async
       assert.equal(calls.length, before)
     }
   } finally {
-    if (server) await new Promise(done => server.close(done))
+    if (server)
+      await new Promise(done => server.close(done))
     hooks.deregister()
     globalThis.useRuntimeConfig = oldConfig
     delete globalThis.__aimsWorkItemSession

@@ -25,7 +25,7 @@ func (s *Service) CompanyWeeklySummaryPublishContent(ctx context.Context, identi
 	}
 	defer tx.Rollback()
 	tables := s.source.Tables()
-	trusted := integrationoperation.TrustedContext{TenantCode: identity.Tenant, DeploymentCode: identity.Deployment, SourceApp: identity.SourceApp, ServiceClientID: identity.ClientID, OutboxTables: &tables}
+	trusted := integrationoperation.TrustedContext{TenantCode: identity.Tenant, DeploymentCode: identity.Deployment, SourceApp: "aims", ServiceClientID: identity.ClientID, OutboxTables: &tables}
 	result, err := aimsapp.CompanyWeeklySummaryPublishContentInTransaction(ctx, tx, trusted, worker, body, now)
 	if err != nil {
 		return nil, err

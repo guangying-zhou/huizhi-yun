@@ -1,6 +1,7 @@
+import { trustedClientAddress } from '~~/server/utils/trustedClientAddress'
 import { randomUUID } from 'node:crypto'
 import type { ResultSetHeader, RowDataPacket } from 'mysql2/promise'
-import { getHeader, getRequestIP } from 'h3'
+import { getHeader } from 'h3'
 import { ok } from '~~/server/utils/api'
 import { queryRow, withTransaction } from '~~/server/utils/db'
 import {
@@ -193,7 +194,7 @@ export default defineEventHandler(async (event) => {
           deploymentCode: target.deployment_code,
           fingerprint: secret.fingerprint
         }),
-        getRequestIP(event, { xForwardedFor: true }) || null,
+        trustedClientAddress(event) || null,
         String(getHeader(event, 'user-agent') || '').slice(0, 500) || null
       ]
     )

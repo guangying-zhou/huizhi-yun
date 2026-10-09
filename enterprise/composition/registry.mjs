@@ -1,3 +1,5 @@
+import people from '../../people/layer/entry.mjs'
+import finance from '../../finance/layer/entry.mjs'
 import aims from '../../aims/layer/entry.mjs'
 import assets from '../../assets/layer/entry.mjs'
 import codocs from '../../codocs/layer/entry.mjs'
@@ -9,7 +11,7 @@ import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 
 const manifestFor = code => JSON.parse(readFileSync(fileURLToPath(new URL(`../../${code}/app.manifest.json`, import.meta.url)), 'utf8'))
-const permissionCatalogs = new Map([aims, assets, codocs, consoleNavigation, altocNavigation].map((module) => {
+const permissionCatalogs = new Map([aims, assets, codocs, finance, people, consoleNavigation, altocNavigation].map((module) => {
   const manifest = manifestFor(module.code)
   const permissions = new Set((manifest.resources || []).flatMap(resource =>
     (resource.actions || []).map(action => `${manifest.appCode}:${resource.code}:${action}`)))
@@ -34,7 +36,7 @@ function validatePermissions(module, permission, permissionRefs, mode) {
     : { permissionRefs: Object.freeze(normalized), mode }
 }
 
-export const businessModules = Object.freeze([aims, assets, codocs])
+export const businessModules = Object.freeze([aims, assets, codocs, finance, people])
 export const navigationContributors = Object.freeze([...businessModules, consoleNavigation, altocNavigation])
 export const hostNativePages = Object.freeze([...projectHostNativePages(consoleNavigation), ...projectHostNativePages(altocNavigation)])
 export const navigationSources = Object.freeze(navigationContributors.map(module => ({ appCode: module.code, manifestHash: createHash('sha256').update(JSON.stringify(module.code === 'console' ? consoleNavigationManifest : manifestFor(module.code))).digest('hex') })))
@@ -99,7 +101,7 @@ export function buildBusinessNavigation(modules, areas, auxiliary, nativePages =
     const collect = (pages, parent = '') => {
       for (const page of pages) {
         const full = page.path.startsWith('/') ? `${module.prefix}${page.path}` : `${parent}/${page.path}`.replace(/\/$/, '')
-        if (!full.includes(':') && !full.includes('*')) concrete.add(full)
+        if (!page.compatibilityOnly && !full.includes(':') && !full.includes('*')) concrete.add(full)
         if (page.children) collect(page.children, full)
       }
     }
@@ -146,7 +148,7 @@ export function buildBusinessNavigation(modules, areas, auxiliary, nativePages =
         return { id, label, to, module, ...(access ? { access } : permission ? { permission } : { permissionRefs, mode }) }
       }) }]
     })
-    return groups.length ? [{ id: area.code, code: area.code, label: area.label, icon: area.icon, children: groups }] : []
+    return groups.length ? [{ id: area.code, code: area.code, label: area.label, icon: area.icon, ...(area.heading === false ? { heading: false } : {}), children: groups }] : []
   })
   const unknown = [...contributed.keys()].filter(key => ![...areas, ...auxiliary]
     .some(area => area.groups.some(group => `${area.code}/${group.code}` === key)))
@@ -175,7 +177,7 @@ export function buildObjectWorkspaces(modules) {
       const collect = (pages, parent = '') => {
         for (const page of pages) {
           const full = page.path.startsWith('/') ? `${module.prefix}${page.path}` : `${parent}/${page.path}`.replace(/\/$/, '')
-          patterns.add(full)
+          if (!page.compatibilityOnly) patterns.add(full)
           if (page.children) collect(page.children, full)
         }
       }

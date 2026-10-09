@@ -24,7 +24,7 @@ test('DingTalk login uses a single-use external transaction and typed Connector 
   assert.match(client, /dingtalk_identity_profile_failed[\s\S]*用户身份信息权限/)
   assert.match(client, /dingtalk_identity_mapping_failed[\s\S]*通讯录成员查询权限/)
   assert.match(callback, /safeFailureCode[\s\S]*failureReason: safeFailureCode/)
-  assert.match(callback, /projectedMessage \|\|/)
+  assert.match(callback, /return redirectLoginFailure\(event, error\)/)
   assert.match(client, /root\.data, response\._data, response\.data, cause\.data/)
   assert.match(client, /Exchange failed:', failure\.code \|\| 'unclassified'/)
   assert.match(client, /connector\.dingtalkIdentityEnabled/)

@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { existsSync } from 'node:fs'
-import { resolve, dirname } from 'node:path'
+import { resolve } from 'node:path'
 
 test('Enterprise Codocs version bridge exposes Host routes and keeps restore as PUT plus version DELETE', async () => {
   const root = resolve(import.meta.dirname, '../..')
@@ -23,5 +23,5 @@ test('Enterprise Codocs version bridge exposes Host routes and keeps restore as 
   assert.match(editor, /saveMode:\s*'recovery'/)
   assert.match(editor, /moduleUrl\(`\/api\/documents\/\$\{documentId\.value\}\/versions/)
   assert.match(editor, /method:\s*'DELETE'[\s\S]*Idempotency-Key/)
-  assert.ok(!editor.includes("POST /api/documents/${documentId.value}/versions/${versionId}/restore"))
+  assert.ok(!editor.includes('POST /api/documents/${documentId.value}/versions/${versionId}/restore'))
 })

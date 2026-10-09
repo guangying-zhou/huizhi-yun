@@ -65,7 +65,7 @@ const getErrorMessage = (error: unknown, fallback: string) => {
 }
 
 const toast = useToast()
-const { user, userRealname } = useAuth()
+const { user, userRealname: _userRealname } = useAuth()
 const { setPayload: setDocumentPreviewBootstrap } = useDocumentPreviewBootstrap()
 const uid = computed(() => user.value || 'user1')
 const { panelWidth, panelCollapsed, onResizeStart, showPanel } = useResizablePanel(288)

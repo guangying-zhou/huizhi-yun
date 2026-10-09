@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { projectPageFailure } from '../../app/utils/projectPageFailure'
 import { statusLabel, typeLabel, priorityColor, statusColor, sourceLabel } from '../../app/config/requirement'
 import { priorityConfig } from '../../app/config/work-item'
 import type { Priority } from '../../app/types/aims'
@@ -25,7 +26,7 @@ async function refresh() {
       throw Error('需求详情暂不可用')
     item.value = response.data
   } catch (cause) {
-    error.value = cause instanceof Error ? cause.message : '需求详情暂不可用'
+    error.value = projectPageFailure(cause, '需求详情暂不可用')
   } finally {
     loading.value = false
   }

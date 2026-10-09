@@ -229,4 +229,61 @@ func TestNotificationDeliveryIdempotencyIsolatedMySQL(t *testing.T) {
 	if err := db.QueryRow("SELECT state,object_version FROM portal_actionable_projections WHERE actionable_key='workflow:tasks:1'").Scan(&state, &version); err != nil || state != "resolved" || version != "v2" {
 		t.Fatalf("lifecycle replay changed terminal state: %s %s %v", state, version, err)
 	}
+	t.Run("external_identity_skip_and_original_key_replay", func(t *testing.T) {
+		for _, ddl := range []string{
+			`CREATE TABLE directory_users(uid VARCHAR(64) PRIMARY KEY,status VARCHAR(32) NOT NULL)`,
+			`CREATE TABLE directory_identities(uid VARCHAR(64),provider_code VARCHAR(32),provider_subject VARCHAR(255),status VARCHAR(32),UNIQUE KEY identity_uid_provider(uid,provider_code))`,
+			`CREATE TABLE portal_notification_deliveries(id BIGINT AUTO_INCREMENT PRIMARY KEY,notification_id VARCHAR(64),uid VARCHAR(64),channel VARCHAR(32),provider VARCHAR(32),status VARCHAR(32),attempt_count INT,last_error VARCHAR(1000),sent_at DATETIME,created_at DATETIME,updated_at DATETIME)`,
+			`INSERT INTO directory_users VALUES('test','active'),('bound','active')`,
+			`INSERT INTO directory_identities VALUES('bound','wecom','wecom-bound','active')`,
+		} {
+			if _, err := db.Exec(ddl); err != nil {
+				t.Fatal(err)
+			}
+		}
+		payload := map[string]any{}
+		for k, v := range request {
+			if k != "actionable" {
+				payload[k] = v
+			}
+		}
+		payload["idempotencyKey"] = "codocs:share:identity"
+		payload["resolveExternalChannel"] = "wecom"
+		payload["recipients"] = []string{"test", "bound"}
+		one, err := a.PublishCanonicalNotification(ctx, payload)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resolution := one["data"].(map[string]any)["externalIdentityResolution"].(map[string]any)
+		if len(resolution["skipped"].([]map[string]string)) != 1 || len(resolution["recipients"].([]map[string]string)) != 1 {
+			t.Fatal("bad resolution")
+		}
+		if resolution["recipients"].([]map[string]string)[0]["subject"] != "wecom-bound" {
+			t.Fatal("must use bound provider subject")
+		}
+		errors := make(chan error, 2)
+		for range 2 {
+			go func() { _, e := a.PublishCanonicalNotification(ctx, payload); errors <- e }()
+		}
+		for range 2 {
+			if e := <-errors; e != nil {
+				t.Fatal(e)
+			}
+		}
+		var count int
+		if err = db.QueryRow("SELECT COUNT(*) FROM portal_notification_deliveries WHERE status='skipped' AND last_error='external_identity_missing'").Scan(&count); err != nil || count != 1 {
+			t.Fatalf("skip replay duplicated: %d %v", count, err)
+		}
+		if _, err = db.Exec("DROP TABLE directory_identities"); err != nil {
+			t.Fatal(err)
+		}
+		payload["idempotencyKey"] = "codocs:share:db-failure"
+		if _, err = a.PublishCanonicalNotification(ctx, payload); err == nil {
+			t.Fatal("identity dependency failure must not skip")
+		}
+		if err = db.QueryRow("SELECT COUNT(*) FROM portal_notifications WHERE idempotency_key='codocs:share:db-failure'").Scan(&count); err != nil || count != 0 {
+			t.Fatal("failed resolution must roll publication back")
+		}
+	})
+
 }

@@ -1,0 +1,37 @@
+{
+  "method": "POST",
+  "target": "/v1/enterprise/people/directory-operations:replay",
+  "body": {
+    "authorization": {
+      "actorUid": "HR-A",
+      "tenant": "C000001",
+      "deployment": "Host",
+      "resource": "integration_operations",
+      "action": "replay",
+      "operation": "directory-operations-replay",
+      "objectId": "57bba46a-1c80-4c51-8a60-62d81953cff0|",
+      "allowed": true,
+      "expiresAt": 2000,
+      "bundleVersion": "v1",
+      "bundleHash": "hash",
+      "policyRevision": 1,
+      "scope": {
+        "access": "all",
+        "departmentCodes": []
+      }
+    },
+    "peopleFacts": {
+      "id": "57bba46a-1c80-4c51-8a60-62d81953cff0",
+      "employeeUid": "",
+      "page": 0,
+      "pageSize": 0,
+      "search": "",
+      "payload": {
+        "expectedVersion": 7,
+        "reason": "核对原命令后恢复"
+      },
+      "sensitiveAllowed": false
+    }
+  },
+  "canonical": "[\"hzy-enterprise-apf-permit.v1\",\"POST\",\"/v1/enterprise/people/directory-operations:replay\",\"HR-A\",\"C000001\",\"Host\",\"integration_operations\",\"replay\",\"directory-operations-replay\",\"57bba46a-1c80-4c51-8a60-62d81953cff0|\",true,2000,\"v1\",\"hash\",1,\"all\",[],\"\",\"\",\"\",0,0,0,\"\",[\"57bba46a-1c80-4c51-8a60-62d81953cff0\",\"\",0,0,\"\",[[\"expectedVersion\",7],[\"reason\",\"核对原命令后恢复\"]],false]]"
+}

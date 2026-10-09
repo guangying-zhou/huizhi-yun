@@ -4,6 +4,8 @@ import (
 	"context"
 	"github.com/DATA-DOG/go-sqlmock"
 	"net/url"
+	"regexp"
+	"strings"
 	"testing"
 )
 
@@ -27,7 +29,8 @@ func TestPendingScopeCountAndPageSameSnapshotNonInitiatorBusinessRule(t *testing
 	defer db.Close()
 	a := &Adapter{db: db}
 	m.ExpectBegin()
-	where := `(?s)t.assignee_uid = \? AND t.status = 'pending' AND i.status = 'running' AND i.app_code = \? AND CAST\(i.app_code AS BINARY\) = CAST\(\? AS BINARY\) AND CAST\(i.resource_code AS BINARY\) = CAST\(\? AS BINARY\) AND CAST\(i.action_code AS BINARY\) = CAST\(\? AS BINARY\) AND CAST\(COALESCE\(i.initiator_uid,''\) AS BINARY\) <> CAST\(\? AS BINARY\)`
+	directorFilter := regexp.QuoteMeta(strings.Join(strings.Fields(pendingNonDirectorPredicate), " "))
+	where := `(?s)t.assignee_uid = \? AND t.status = 'pending' AND i.status = 'running' AND ` + directorFilter + ` AND i.app_code = \? AND CAST\(i.app_code AS BINARY\) = CAST\(\? AS BINARY\) AND CAST\(i.resource_code AS BINARY\) = CAST\(\? AS BINARY\) AND CAST\(i.action_code AS BINARY\) = CAST\(\? AS BINARY\) AND CAST\(COALESCE\(i.initiator_uid,''\) AS BINARY\) <> CAST\(\? AS BINARY\)`
 	m.ExpectQuery(`SELECT COUNT\(\*\).*`+where).WithArgs("viewer", "aims", "aims", "tasks", "complete", "viewer").WillReturnRows(sqlmock.NewRows([]string{"total"}).AddRow(3))
 	m.ExpectQuery(`SELECT t.id AS task_id.*`+where+`.*ORDER BY t.created_at DESC, t.id DESC.*LIMIT \? OFFSET \?`).WithArgs("viewer", "aims", "aims", "tasks", "complete", "viewer", 2, 2).WillReturnRows(sqlmock.NewRows([]string{"task_id", "app_code", "resource_code", "action_code", "initiator_uid"}).AddRow(1, "aims", "tasks", "complete", "other"))
 	m.ExpectCommit()

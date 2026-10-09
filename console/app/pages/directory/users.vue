@@ -131,10 +131,10 @@ const total = computed(() => data.value?.data.total || 0)
 
 const statusOptions = [
   { label: '正常', value: 'active' },
-  { label: '停用', value: 'inactive' },
+  { label: '已停用', value: 'inactive' },
   { label: '待激活', value: 'pending' },
   { label: '已删除', value: 'deleted' },
-  { label: '全部', value: 'all' }
+  { label: '显示已停用', value: 'all' }
 ]
 const formStatusOptions = statusOptions.filter(item => item.value !== 'all')
 const userTypeOptions = [

@@ -5,7 +5,7 @@ import { createRequire } from 'node:module'
 import { build } from 'esbuild'
 import { parse, compileScript } from '@vue/compiler-sfc'
 import { ref, reactive, computed } from 'vue'
-import { createConsoleMutationIntent } from '../shared/utils/consoleMutationIntent.ts'
+import '../shared/utils/consoleMutationIntent.ts'
 
 async function editor() {
   const file = new URL('../app/components/DirectoryCommitteeEditor.vue', import.meta.url).pathname
@@ -23,11 +23,15 @@ test('committee editor keeps exact retries, drafts, member roles and independent
   const mocks = { ref, reactive, computed, watch: () => {},
     useDebouncedSearch: () => ({ search: ref(''), debounced: ref(''), flush: () => {}, reset: () => {} }),
     useToast: () => ({ add: value => state.toasts.push(value) }),
-    useConfirm: () => ({ confirm: async value => { state.confirmations.push(value); return state.confirmed } }),
+    useConfirm: () => ({ confirm: async (value) => {
+      state.confirmations.push(value)
+      return state.confirmed
+    } }),
     $fetch: async (path, options) => {
       state.calls.push({ path, ...options })
       const status = options.method ? state.status : state.readStatus
-      if (status) throw Object.assign(Error('test'), { statusCode: status })
+      if (status)
+        throw Object.assign(Error('test'), { statusCode: status })
       return { code: 0, data: { items: state.emptyLastPage && options.query?.page > 1 ? [] : state.items, total: state.total } }
     }
   }
@@ -35,7 +39,10 @@ test('committee editor keeps exact retries, drafts, member roles and independent
   Object.assign(globalThis, mocks)
   try {
     const component = await editor()
-    const props = { apiPath: '/enterprise/api/directory/committees', committees: [committee], departments: [], canEdit: true, refresh: async () => { if (state.refreshFail) throw Error('refresh') } }
+    const props = { apiPath: '/enterprise/api/directory/committees', committees: [committee], departments: [], canEdit: true, refresh: async () => {
+      if (state.refreshFail)
+        throw Error('refresh')
+    } }
     const c = component.setup(props, { expose: () => {}, emit: (_, status) => state.denied.push(status) })
     const writes = () => state.calls.filter(call => call.method)
     c.openCreateCommittee()
@@ -156,5 +163,7 @@ test('committee editor keeps exact retries, drafts, member roles and independent
     state.status = 403
     await c.deleteCommittee(committee)
     assert.deepEqual(state.denied, [403])
-  } finally { Object.assign(globalThis, previous) }
+  } finally {
+    Object.assign(globalThis, previous)
+  }
 })

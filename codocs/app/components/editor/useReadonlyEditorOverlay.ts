@@ -39,6 +39,8 @@ export const useReadonlyEditorOverlay = ({
     href: string
   }>>([])
 
+  const readonlyWatermarkCount = ref(0)
+  let watermarkResizeObserver: ResizeObserver | null = null
   let codeBlockObserver: MutationObserver | null = null
   let codeBlockRefreshTimer: number | null = null
   const isReadonlyOverlayActive = () => readonly.value && viewMode.value !== 'source'
@@ -75,6 +77,7 @@ export const useReadonlyEditorOverlay = ({
     }
 
     const wrapperRect = wrapper.getBoundingClientRect()
+    readonlyWatermarkCount.value = Math.max(1, Math.floor(wrapperRect.width / 280)) * Math.ceil(wrapperRect.height / 180)
     const candidates = Array.from(editorRef.value.querySelectorAll('.milkdown-code-block, .code-fence')) as HTMLElement[]
     const seen = new Set<HTMLElement>()
 
@@ -140,6 +143,11 @@ export const useReadonlyEditorOverlay = ({
       scheduleReadonlyCodeBlockRefresh()
     })
 
+    watermarkResizeObserver?.disconnect()
+    watermarkResizeObserver = new ResizeObserver(scheduleReadonlyCodeBlockRefresh)
+    const wrapper = editorRef.value.closest('.crepe-wrapper')
+    if (wrapper) watermarkResizeObserver.observe(wrapper)
+
     codeBlockObserver.observe(editorRef.value as unknown as Node, {
       childList: true,
       subtree: true,
@@ -161,6 +169,8 @@ export const useReadonlyEditorOverlay = ({
   }
 
   const teardownReadonlyCodeBlockObserver = () => {
+    watermarkResizeObserver?.disconnect()
+    watermarkResizeObserver = null
     codeBlockObserver?.disconnect()
     codeBlockObserver = null
 
@@ -212,6 +222,7 @@ export const useReadonlyEditorOverlay = ({
     readonlyCodeBlocks,
     readonlyLinks,
     readonlyWatermarkText,
+    readonlyWatermarkCount,
     scheduleReadonlyCodeBlockRefresh,
     setupReadonlyCodeBlockObserver,
     syncReadonlyCodeBlockObserver,

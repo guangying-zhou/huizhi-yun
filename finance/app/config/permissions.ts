@@ -1,4 +1,6 @@
-export type PermissionAction = 'view' | 'edit' | 'approve' | 'issue' | 'confirm' | 'export' | 'replay' | 'admin'
+import manifest from '../../app.manifest.json' with { type: 'json' }
+
+export type PermissionAction = 'view' | 'edit' | 'approve' | 'issue' | 'confirm' | 'export' | 'replay' | 'activate' | 'reverse' | 'reveal-account-no' | 'resolve' | 'read' | 'replace-rules' | 'read-rules' | 'admin'
 
 export interface ResourceDefinition {
   code: string
@@ -71,19 +73,7 @@ export const approvalActions = [
   }
 ]
 
-export const resources: ResourceDefinition[] = [
-  { code: 'dashboard', name: '财务工作台', description: '现金流、应收应付、审批和经营财务摘要', actions: ['view', 'export'], sortOrder: 1 },
-  { code: 'invoices', name: '发票管理', description: '开票申请、正式发票、发票状态和发票关联', actions: ['view', 'edit', 'approve', 'issue', 'admin'], sortOrder: 10 },
-  { code: 'receipts', name: '收款管理', description: '到账记录、银行流水、收款确认和收款核销', actions: ['view', 'edit', 'confirm', 'admin'], sortOrder: 20 },
-  { code: 'expenses', name: '费用支出', description: '项目支出、费用报销、付款申请和支出台账', actions: ['view', 'edit', 'approve', 'confirm', 'admin'], sortOrder: 30 },
-  { code: 'bank_accounts', name: '银行账户', description: '账户资料、余额快照和资金账户管理', actions: ['view', 'edit', 'admin'], sortOrder: 40 },
-  { code: 'reconciliation', name: '核销管理', description: '发票、收款、合同和回款计划核销', actions: ['view', 'edit', 'confirm', 'admin'], sortOrder: 50 },
-  { code: 'project_accounting', name: '项目核算', description: '项目收入、支出、成本、毛利和费用分摊', actions: ['view', 'edit', 'admin'], sortOrder: 60 },
-  { code: 'performance', name: '绩效金额快照', description: '财务贡献归因、提成、奖金和绩效金额财务口径', actions: ['view', 'edit', 'admin'], sortOrder: 70 },
-  { code: 'reports', name: '财务报表', description: '现金流、收支、利润和经营财务分析', actions: ['view', 'export', 'admin'], sortOrder: 80 },
-  { code: 'integration_operations', name: '跨应用操作', description: '诊断并受控重放 Finance 发起的跨应用可靠操作', actions: ['view', 'replay'], sortOrder: 85 },
-  { code: 'settings', name: '财务设置', description: '科目、费用类型、审批规则、集成配置和系统参数', actions: ['view', 'edit', 'admin'], sortOrder: 90 }
-]
+export const resources: ResourceDefinition[] = manifest.resources.map(resource => ({ ...resource, actions: resource.actions as PermissionAction[] }))
 
 export const menus: MenuItemDefinition[][] = [[
   {

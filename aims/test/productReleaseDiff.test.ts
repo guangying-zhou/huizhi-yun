@@ -1,6 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { validReleaseDiff, type Diff, type Scope } from '../app/utils/productReleaseDiff'
+
 const scope: Scope = { id: 1, title: '范围', description: null, status: 'delivered', acceptance_criteria: null, product_feature_biz_id: null, planning_item_biz_id: null, change_type: null, category: null, is_public: false, sort_order: 0, legacy_unscored: true, deferred_from_feature_id: null }
 const query = { beforeRecordId: 1, afterRecordId: 2, page: 1, pageSize: 20 }
 const value: Diff = { product_code: 'P', before_record_id: 1, after_record_id: 2, before_content_hash: 'a'.repeat(64), after_content_hash: 'b'.repeat(64), added: 1, removed: 0, changed: 0, unchanged: 0, total: 1, page: 1, pageSize: 20, changes: [{ scope_id: 1, kind: 'added', before: null, after: scope }] }

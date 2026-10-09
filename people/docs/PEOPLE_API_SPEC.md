@@ -346,3 +346,53 @@ Schema 检查：
 ```bash
 curl 'http://127.0.0.1:18080/runtime/schema/status?app=people'
 ```
+
+
+## Enterprise APF-09c1 候选：业务事实与任职审批
+
+Host REST `/enterprise/api/apf/people/employees` POST、`/{id}` PATCH；`assignments` POST、`change` POST、`/{id}` PATCH/DELETE、`/{id}/submit` POST；`onboarding` GET/POST、`/{id}` GET/PATCH。列表使用 page/pageSize/search、服务端 COUNT/分页。写请求必须有稳定 Idempotency-Key；更新/删除带数字 expectedVersion 和精确 employeeUid（候选不带 employeeUid）。输出 whitelist 与内部审批快照隔离，普通变更仅返回对象 id、row_version、状态与 receiptId。
+
+Host submit 内部才可调用 assignments:attach-workflow，浏览器无此入口。新员工事实不创建 Directory 身份，入职候选不是 employee。任职 create/change 创建 draft；attach 冻结为 pending；正式实例 approved/rejected/cancelled 经系统回调处理。回调必须匹配既有绑定实例、People/assignments/change、业务编码、发起人及 snapshotHash。未来日期批准不提前投影。身份/开通/激活/Directory 投递 c2 前禁用。
+
+候选安装规格 `internal/enterprise/domaininstall/people_facts.json` 和 `apf_onboarding_lifecycle_incremental.sql` 复用 canonical onboarding/lifecycle_versions 表；不会改变基础 APF 10 表与 09d。部署顺序须先安装 09d（若需私密档案），然后该两表增量，更新映射后再开放 c1。仅提供代码与演练，不表示环境已安装。
+
+## Enterprise APF-09c2 自动开通
+
+Host POST `/enterprise/api/apf/people/onboarding/:id/{provision,refresh-status,activation-link,activate,cancel}`：所有动作需 `Idempotency-Key`（≤64 字符）及 expectedVersion；取消另需 5–200 字符 reason。禁止浏览器输入 UID、sourceApp、provider、operationKey、confirmation 或批准状态。自动开通只支持真实钉钉候选；手工候选返回 409 people_manual_onboarding_unsupported 与“手工候选暂不支持自动开通，请在 Console 中处理”。manual 资料 create/update 保持可用。
+
+响应只包含阶段、当前版本、开通状态或激活投递结果/到期时间，不含一次性激活 token。Console 命令由 Runtime 冻结，目标源身份为 enterprise.runtime，重试原意图保留原阶段 key 与版本偏移。开通成功后建立员工与主任职；未来生效不提前投影。Directory 与 Platform 两端确认才 completed。新增 Runtime U 操作及四个系统 worker 操作见 MODULE_CONTRACTS APF-09c2；没有新增 capability。
+
+系统投递仅限已验签的 Enterprise APF wake，以 people:scheduler:execute 绑定 generation；每轮 prepare≤500，deliver≤5/25秒，使用 lease/fencing 和目标原键幂等。Console 已接收即 ACK，不因 Platform pending 重投源。grant 候选与 owner 启用须另经环境批准，本文不会执行。
+
+## APF-17a Host HR 来源（候选）
+
+页面 `/people/settings/hr-source-sync`；Host 固定 BFF 前缀 `/enterprise/api/apf/people/hr-source/dingtalk`：GET state/department-mappings/department-changes/jobs/:jobId；POST department-mappings/department-changes/jobs/start/jobs/cancel/jobs/retry。写body仅 `{expectedVersion,command}`，Idempotency-Key必须稳定；浏览器不得提交 actor、sourceReady 或 confirmation。mappings.command={mappings:[{externalDepartmentId,canonicalDeptCode}]}，changes.command={snapshotRunId,snapshotHash,departmentCodes}，start.command={}，cancel/retry.command={jobId}（Console `crj_`格式）。当前全租户hr_source_sync人员动作仍由唯一Foundation helper+短期签名permit复核。
+
+Runtime复用People facts协议，增加11个固定操作：`/v1/enterprise/people/hr-source:hr-state`，以及 `hr-{mappings,changes,jobs-start,jobs-cancel,jobs-retry}-{prepare,confirm}`。prepare body内peopleFacts.payload是原意图，confirm仅供Host签名的目标确认；无浏览器confirm入口。原actor可按原键重放；新命令要求source root expectedVersion一致。400输入，403权限/身份，409版本/意图/未确认闸门，503依赖/子集未安装；不能将依赖失败当作无权限或无来源记录。
+
+安装子集 `people-hr-source` 以 `people_enterprise_hr_source_schema.sql` 为canonical候选；只建state表，不执行。事务和切换门禁见MODULE_CONTRACTS APF-17a节。Console服务grant seed/verify候选 `Console-SQL-*-apf17a-enterprise-hr-source.sql`，参数必须为经批准租户及Enterprise部署；存在revoked或缺绑定行不更新/不复活，verify失败须另批。
+
+### APF-18B1 到期通知候选
+
+离职交接/资产回收协调各三条固定 S 路径：`/v1/enterprise/people/{handover-due|asset-recovery-due}:{scan-due|published|closure-ack}`。只接受 enterprise.runtime 的 `people:scheduler:execute`，精确部署、实时 grant 和 unified generation；不接受用户事实或提前投影、不伪造 Assets 归还。scan `{}`；published `{eventKey,notificationId,recipientUid}`；closure-ack `{eventKey,state}`（resolved/cancelled）。来源为 17b 协调任务的当前显式责任人/截止/状态，发布还需 Directory active 与 Console offboarding_tasks:view 资格。P 复用 `/v1/people/notification-details/authorize` 签名 viewer 和固定 `{eventKey}`。新增表候选 people_enterprise_due_schema.sql；owner 默认关闭，在旧 People 开关实际关闭/在途对账后才启用，详见 MODULE_CONTRACTS APF-18B1。绩效和其它 People 审批归属不变。
+
+#### APF-18B2 死信通知候选
+
+固定 S POST `/v1/enterprise/people/{pending-dead-letter-actionables|dead-letter-actionable-published|pending-dead-letter-closures|dead-letter-closure-acknowledged}`，enterprise.runtime + people:scheduler:execute + Registry scheduler generation。沿用 source_app=enterprise 的当前任职/Directory operation 冻结 generation、收件人和原 key；不处理旧 People 部署或非任职审批。`HZY_ENTERPRISE_PEOPLE_DEAD_LETTER_NOTIFICATIONS_ENABLED` 默认关闭，旧 `HZY_PEOPLE_INTEGRATION_OPERATION_DEAD_LETTER_NOTIFICATIONS_ENABLED` 要实际停并对账；仅站内，详情 current integration_operations:view + 冻结收件人，环境未启用。
+
+
+## APF-17c Host 原键恢复与 Directory 诊断（候选）
+
+- 开通页的原操作恢复保留 action/expectedVersion/Idempotency-Key；同身份策略刷新仍可恢复，但请求重新授权。手工候选自动开通仍拒绝。Console 开通、Directory 应用、Platform 投影分别显示，不合并成一个成功状态。
+- 页面 `/people/directory-recovery`：全局 `integration_operations:view` 读取，显式 `replay` 恢复；无权限或依赖失败分别显示，不显示底层错误。
+
+| Host 端点 | 固定 Runtime 操作 | 输入与行为 |
+| --- | --- | --- |
+| GET `/enterprise/api/apf/people/directory-operations` | `directory-operations-list` | page/pageSize（每页≤100），COUNT 与列表同快照 |
+| GET `/enterprise/api/apf/people/directory-operations/:id` | `directory-operations-view` | UUIDv4；仅返回诊断字段白名单 |
+| GET `/enterprise/api/apf/people/directory-operations/:id/probe` | 同 view 后只读 Console probe | 不接受 query；由原冻结命令核对 Directory/Platform 原版本 |
+| POST `/enterprise/api/apf/people/directory-operations/:id/replay` | `directory-operations-replay` | expectedVersion、reason（5–200字符）和 Idempotency-Key；仅恢复终止失败，不改原命令 |
+
+固定 Runtime 路径为 `/v1/enterprise/people/directory-operations:{list,view,replay}`，采用既有 People U 服务能力与签名短期 permit；只接受 Enterprise 产生的 employment-sync/offboarding-disable employee family。400 输入无效；403 当前权限/范围不足；404 不属于此租户/部署/family；409 原版本变化、命令完整性冲突或非终止状态；503 依赖不可用。replay 同键重放仍复核当前授权，原命令和回执同事务，失败全部回滚。
+
+Console 内部只读 GET `/api/v1/console/service/directory/onboarding/lifecycle-command-status` 要求精确 kind/uid/revision/hash，kind 决定既有 employment-sync 或 offboarding-disable 服务能力，服务来源仅 enterprise.runtime。不是浏览器共享 Directory 入口，不扩展目录管理权限。LDAP/邮箱停用仍是待裁定缺口。

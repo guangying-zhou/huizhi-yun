@@ -9,6 +9,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/huizhi-yun/data-runtime/internal/httperror"
 )
@@ -38,12 +39,38 @@ type BasicReadScope struct {
 	DepartmentCodes []string `json:"departmentCodes"`
 }
 type BasicReadQuery struct {
-	Page       int    `json:"page"`
-	PageSize   int    `json:"pageSize"`
-	Search     string `json:"search"`
-	Status     string `json:"status"`
-	CustomerID string `json:"customerId"`
-	ContractID string `json:"contractId"`
+	Workspace        bool   `json:"workspace,omitempty"`
+	IndustryCode     string `json:"industryCode,omitempty"`
+	RegionCode       string `json:"regionCode,omitempty"`
+	UpdatedDateFrom  string `json:"updatedDateFrom,omitempty"`
+	UpdatedDateTo    string `json:"updatedDateTo,omitempty"`
+	CustomerSort     string `json:"customerSort,omitempty"`
+	ContactsOnly     bool   `json:"contactsOnly,omitempty"`
+	DecisionRole     string `json:"decisionRole,omitempty"`
+	PrimaryOnly      bool   `json:"primaryOnly,omitempty"`
+	StarredOnly      bool   `json:"starredOnly,omitempty"`
+	OwnerUID         string `json:"ownerUid,omitempty"`
+	AmountMin        string `json:"amountMin,omitempty"`
+	AmountMax        string `json:"amountMax,omitempty"`
+	Direction        string `json:"direction,omitempty"`
+	ContractType     string `json:"contractType,omitempty"`
+	SignedDateFrom   string `json:"signedDateFrom,omitempty"`
+	SignedDateTo     string `json:"signedDateTo,omitempty"`
+	ParentContractID string `json:"parentContractId,omitempty"`
+	CustomerIDs      string `json:"customerIds,omitempty"`
+	Page             int    `json:"page"`
+	PageSize         int    `json:"pageSize"`
+	Search           string `json:"search"`
+	Status           string `json:"status"`
+	CustomerID       string `json:"customerId"`
+	ContractID       string `json:"contractId"`
+	// Contract list only: also cover every descendant of CustomerID.
+	IncludeDescendants bool   `json:"includeDescendants,omitempty"`
+	ParentID           string `json:"parentId,omitempty"`
+	RootsOnly          bool   `json:"rootsOnly,omitempty"`
+	OwnerUnassigned    bool   `json:"ownerUnassigned,omitempty"`
+	Origin             string `json:"origin,omitempty"`
+	Category           string `json:"category,omitempty"`
 }
 
 func (s BasicReadScope) Validate() error {
@@ -74,6 +101,43 @@ func basicReadForbidden() error {
 	return httperror.New(http.StatusForbidden, "altoc_basic_scope_invalid", "Altoc read scope is invalid")
 }
 func (q BasicReadQuery) Validate(resource string) error {
+	if err := q.ValidateCustomerWorkspace(resource); err != nil {
+		return err
+	}
+	if q.OwnerUID != "" || q.AmountMin != "" || q.AmountMax != "" || q.Direction != "" || q.ContractType != "" {
+		if (resource != "contract" && !(resource == "customer" && q.AmountMin == "" && q.AmountMax == "" && q.Direction == "" && q.ContractType == "")) || len(q.OwnerUID) > 128 || strings.ContainsAny(q.OwnerUID, "\x00\r\n") || (q.OwnerUID != "" && q.OwnerUnassigned) || (q.Direction != "" && q.Direction != "sales" && q.Direction != "purchase") || len(q.ContractType) > 64 || strings.ContainsAny(q.ContractType, "\x00\r\n") {
+			return httperror.New(400, "altoc_basic_input_invalid", "Invalid contract filters")
+		}
+		for _, v := range []string{q.AmountMin, q.AmountMax} {
+			if v != "" && !regexp.MustCompile(`^(0|[1-9][0-9]{0,15})(\.[0-9]{1,2})?$`).MatchString(v) {
+				return httperror.New(400, "altoc_basic_input_invalid", "Invalid contract amount")
+			}
+		}
+		cents := func(v string) string {
+			parts := strings.Split(v, ".")
+			fraction := "00"
+			if len(parts) > 1 {
+				fraction = (parts[1] + "00")[:2]
+			}
+			return strings.Repeat("0", 16-len(parts[0])) + parts[0] + fraction
+		}
+		if q.AmountMin != "" && q.AmountMax != "" && cents(q.AmountMin) > cents(q.AmountMax) {
+			return httperror.New(400, "altoc_basic_input_invalid", "Invalid contract amount range")
+		}
+	}
+
+	for _, date := range []string{q.SignedDateFrom, q.SignedDateTo} {
+		if date != "" {
+			d, err := time.Parse("2006-01-02", date)
+			if resource != "contract" || err != nil || d.Format("2006-01-02") != date || date < "1000-01-01" {
+				return httperror.New(400, "altoc_basic_input_invalid", "Invalid signed date range")
+			}
+		}
+	}
+	if q.SignedDateFrom != "" && q.SignedDateTo != "" && q.SignedDateFrom > q.SignedDateTo {
+		return httperror.New(400, "altoc_basic_input_invalid", "Invalid signed date range")
+	}
+
 	if q.Page < 1 || q.Page > 1000000 || q.PageSize < 1 || q.PageSize > 100 || len(q.Search) > 200 || len(q.Status) > 40 || strings.ContainsAny(q.Search+q.Status, "\x00\r\n") {
 		return httperror.New(400, "altoc_basic_input_invalid", "Invalid Altoc read query")
 	}
@@ -82,7 +146,32 @@ func (q BasicReadQuery) Validate(resource string) error {
 			return httperror.New(400, "altoc_basic_input_invalid", "Invalid Altoc object ID")
 		}
 	}
+	if (q.ParentID != "" && (!basicPositiveID(q.ParentID) || resource != "customer" || q.RootsOnly)) || (q.RootsOnly && resource != "customer") || (q.OwnerUnassigned && resource != "customer" && resource != "contract") || ((q.Origin != "" || q.Category != "") && resource != "contract") {
+		return httperror.New(400, "altoc_basic_input_invalid", "Unsupported Altoc filter")
+	}
+	if q.Origin != "" && q.Origin != "native" && q.Origin != "historical_import" || len(q.Category) > 64 || strings.ContainsAny(q.Category, "\x00\r\n") {
+		return httperror.New(400, "altoc_basic_input_invalid", "Invalid Altoc filter")
+	}
 	if resource == "customer" && (q.CustomerID != "" || q.ContractID != "") || resource == "contract" && q.ContractID != "" {
+		return httperror.New(400, "altoc_basic_input_invalid", "Unsupported Altoc filter")
+	}
+	if q.ParentContractID != "" && (resource != "contract" || !basicPositiveID(q.ParentContractID)) {
+		return httperror.New(400, "altoc_basic_input_invalid", "Invalid parent contract")
+	}
+	if q.CustomerIDs != "" {
+		ids := strings.Split(q.CustomerIDs, ",")
+		if resource != "contract" || q.CustomerID != "" || q.IncludeDescendants || len(ids) > 100 {
+			return httperror.New(400, "altoc_basic_input_invalid", "Invalid customer batch")
+		}
+		seen := map[string]bool{}
+		for _, id := range ids {
+			if !basicPositiveID(id) || seen[id] {
+				return httperror.New(400, "altoc_basic_input_invalid", "Invalid customer batch")
+			}
+			seen[id] = true
+		}
+	}
+	if q.IncludeDescendants && (resource != "contract" || q.CustomerID == "") {
 		return httperror.New(400, "altoc_basic_input_invalid", "Unsupported Altoc filter")
 	}
 	return nil
@@ -110,6 +199,11 @@ func (r *BasicReader) ReadInTransaction(ctx context.Context, tx *sql.Tx, resourc
 	}
 	if err := query.Validate(resource); err != nil {
 		return nil, err
+	}
+	// W3 filters belong to the APF owning reader. The legacy projection must
+	// fail closed rather than silently ignore a signed narrowing filter.
+	if query.Workspace || query.IndustryCode != "" || query.RegionCode != "" || query.UpdatedDateFrom != "" || query.UpdatedDateTo != "" || query.CustomerSort != "" || query.ContactsOnly || query.DecisionRole != "" || query.PrimaryOnly || query.StarredOnly || query.OwnerUID != "" || query.AmountMin != "" || query.AmountMax != "" || query.Direction != "" || query.ContractType != "" || query.SignedDateFrom != "" || query.SignedDateTo != "" || query.ParentContractID != "" || query.CustomerIDs != "" || query.ParentID != "" || query.RootsOnly || query.OwnerUnassigned || query.Origin != "" || query.Category != "" {
+		return nil, httperror.New(503, "altoc_basic_fields_unavailable", "W3 filters require the APF reader")
 	}
 	if identifier != "" && !basicPositiveID(identifier) {
 		return nil, httperror.New(400, "altoc_basic_input_invalid", "Invalid Altoc object ID")

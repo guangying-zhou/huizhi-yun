@@ -114,7 +114,7 @@ Foundation 的 request-local 已验签 actor 证明只由 `verifyServiceCommandR
 
 策略包持久存储：Console → Foundation `consolePolicyStore` → Data Runtime `GET/PUT /v1/console/policy-bundle` → `hzy_console.policy_bundle_snapshots`。精确 capability 为 `console:policy-bundle:read|write`，来源固定 Console，audience 为 Runtime；完整 JWT、credential/grant 撤销及租户/部署校验先于读写。这两个 scope 的 Token 签发不读包摘要。PUT 内容 ETag + expectedEtag CAS 幂等，禁止旧同步覆盖新同步；GET 缺包为 null。协议及上线核验见 [持久包说明](../console/deploy/cloudflare/POLICY_BUNDLE_STORAGE.md)。
 
-Console 的可选服务令牌 exchange 仅处理携带 `client_secret` 的 `client_credentials`：Foundation 以 `console.runtime` 已签发的 Runtime 令牌和独立 `console:service-token:exchange` grant 调用 `POST /v1/console/auth/service-tokens/exchange`。Runtime 亲自校验客户端密钥和 ACTIVE grant；来源 app 来自客户端库，租户来自认证上下文，来源部署来自所选 grant。Console 传入的已验证策略 version/hash 仅与 Runtime 持久摘要比较，摘要不参与授权；签名和成功审计同一事务，审计失败不返回令牌。缺密钥 Gateway 身份、授权码及刷新令牌继续原路径；功能开关默认关闭。新 scope 不能通过 Platform bootstrap 或 Console key assertion 直接调用，只能使用真实 `console.runtime` 身份。两种 Runtime audience 共享一条精确 grant，启用前均需真实签发探测。
+Console 的可选服务令牌 exchange 仅处理携带 `client_secret` 的 `client_credentials`：Foundation 以 `console.runtime` 已签发的 Runtime 令牌和独立 `console:service-token:exchange` grant 调用 `POST /v1/console/auth/service-tokens/exchange`。Runtime 亲自校验客户端密钥和 ACTIVE grant；来源 app 来自客户端库，租户来自认证上下文，来源部署来自所选 grant。Console 传入的已验证策略 version/hash 仅与正式 `verified_policy_snapshots` 的签名信封比较，摘要不参与客户端/grant 授权；exchange（密钥客户端与 Gateway 两种 lane）复用 Runtime `policyenvelope.Store`、`VerifyAuthenticity`、`EvaluateValidity`，要求本机信任锚、精确 tenant/environment/Console deployment 与 `valid/grace` 租约。读取沿用签发事务，缺失、损坏、错绑定或过期返回 `503 console_exchange_policy_unavailable`，摘要不同返回 `503 console_exchange_policy_mismatch`；不读或更新 legacy `policy_bundle_snapshots`，禁止旧表回退或新旧双接受。签名和成功审计同一事务，审计失败不返回令牌。缺密钥 Gateway 身份、授权码及刷新令牌继续原路径；功能开关默认关闭。新 scope 不能通过 Platform bootstrap 或 Console key assertion 直接调用，只能使用真实 `console.runtime` 身份。两种 Runtime audience 共享一条精确 grant，启用前均需真实签发探测。
 
 
 签发 issuer（ADR-017 F3-1）：Runtime 的 `/v1/console/auth/oidc/sign`、`/v1/console/auth/service-tokens/issue` 及服务令牌 exchange（密钥客户端与 Gateway 两种 lane）统一取本机认证器正在使用的受信 JWT issuer；已批准的 trust 引导更新由同一认证器实时提供。调用方 `iss`/`issuer` 仅作一致性断言，错值返回 403 `oidc_signing_issuer_mismatch`，签出的 `iss` 一律为受信值；未配置/无效 Runtime issuer 返回 503 `oidc_signing_issuer_unavailable`，不使用请求值回退。issuer 拒绝先于凭据、密钥引导、replay 与审计写入，不授予额外 capability/grant。
@@ -1045,7 +1045,7 @@ Aims 是任务事实源，GitLab Issue 只是外部执行投影。GitLab Token �
 | 调用方 | 被调用方 | 端点 / 事件 | 认证 | 幂等 / 追溯 | 状态 |
 | ------ | -------- | ----------- | ---- | ----------- | ---- |
 | Aims BFF | Console GitLab integration | `POST /api/v1/projects/{projectId}/sync-gitlab-issues` → Console fixed operation `gitlab.issue-upsert` | 浏览器先通过 Aims 项目 manager/scoped-admin 校验；Aims runtime 需 `integration_operations:execute` 且 semantic grant 包含 `gitlab.issue-upsert` | SHA-256 幂等键；Issue 正文固定 `hzy-aims:item-key` marker；`gitlab_issue_links` 对 `work_item_id+repo` 和 `repo+iid` 双唯一，已有 IID 更新前复验 marker | 已落地；单次最多 100 条，completed→closed，其余→opened；只允许 `aims_project_repos` 已绑定仓库，部分失败不写本地链接 |
-| Orca / WebDev / 已登记服务客户端 | Aims | `GET /api/v1/service/tasks?projectCodes=&statuses=&assigneeUid=&cursor=&limit=` | Console service token，`aud=aims`、`token_use=service`、精确 capability `aims:tasks:read`；调用方准入只由 Console grant 决定 | 按 `work_items.updated_at,id` 升序的不透明 cursor；返回稳定 item/project key、任务执行字段、Aims 相对路径及最近 GitLab Issue 投影 | 已落地；`limit<=200`、项目过滤最多 100 个。Console v1.94 seed 为已存在的 WebDev/Orca service client 授权，未登记客户端需先安全 provision |
+| Orca / WebDev / 旧服务客户端 | Aims | `GET /api/v1/service/tasks` | 已退役，不再建立 Host 服务 tuple | 返回 `410 aims_service_tasks_retired`；使用 Enterprise 工作项页面 | 2026-10-07 只读核查 hzy0 与生产 Console：精确 semantic scope/已知 resource 闭集均无 active 持有者；按用户裁定退役，不迁移执行器 |
 
 ## People ↔ Aims / Finance / Workflow 项目绩效契约（Phase 3）
 
@@ -1846,6 +1846,8 @@ Host → Workflow 的拓扑只由部署配置决定（G-3，2026-09-29）：`HZY
 
 Host 页面核验私人文档共享状态后，经 `POST /codocs/api/documents/{uuid}/collaboration` 让当前用户打开 Runtime 的 `personal-documents:collaboration-open`（精确 `codocs:personal-documents:edit`）。Host 先用 Foundation 读取 Console 权限快照并要求 `documents:edit`，再签发 Runtime 操作许可；Runtime 重验当前 owner/write-share 和 v2 代际，返回绑定用户/文档/会话的一次性票据。浏览器每条 WebSocket 经 `/codocs/ws` 将票据交 Collab；Collab 以独立 `collab.runtime` 身份兑换并按活动会话续租。hzy0 本机 Collab 的服务令牌经 Gateway 的本机 Host 限定 `/__hzy0/collab-token` 精确代理到本机 Console，该代理核对独立客户端密钥、目标 audience 与两项协作 scope 后才注入固定 Collab 部署上下文；公网 Console token 路由仍不接受服务客户端凭据。Host 共享正文禁用 HTTP PUT，避免与 Collab 发布并行覆盖。两个 Host 开关及 Collab v2 开关默认关闭，双人端到端尚未验收，不构成发布声明。细节见[写入协调合同](./Codocs-Document-Write-Coordination.md)。
 
+hzy0 本机启用例外：`HZY_LOCAL_COLLAB_DEPLOYMENT=C000001-test-collab` 可在Platform overlay未登记Collab时显式启用精确绑定，仅限C000001、c000001-test-tenant-runtime、127.0.0.1:18084、Codocs enabled且v2快照/协作开启、静态配置同一绑定。overlay已有不同绑定则拒绝，其他应用绑定不变；不设置时不补静态绑定。此开关不修改服务身份、capability/grant或签名校验，生产/云端仍要求正式Platform部署绑定。见[hzy0启用计划](./Codocs-Collaboration-hzy0-Enablement-Plan.md)。
+
 v2 快照字节由 Collab 通过同一 `collab.runtime` 身份调用 Runtime `POST /v1/codocs/collaboration-snapshots:upload|download`；上传沿用精确 `codocs:collaboration-snapshots:publish`，下载沿用 `codocs:collaboration-snapshots:read`，不新增 capability/grant。Runtime 先校验当前服务凭据、grant 与活动会话；上传再绑定已 prepare 的同一命令、声明长度与 SHA-256，只写该候选前缀下 32 位随机 attempt 的 `body.md` / `state.yjs`，每对象上限 16 MiB；下载只返回已发布 head 的精确对象版本，并重验长度与摘要。Collab 不持有 OSS 密钥，Runtime 使用 vault 绑定的 `oss.default`。新路由仍受 Runtime 协作开关控制，尚未部署或进行双人端到端验收。
 
 #### Enterprise Host → Codocs 部门文档协作（Runtime 批次 R1，代码已实现，默认关闭）
@@ -1856,7 +1858,7 @@ v2 快照字节由 Collab 通过同一 `collab.runtime` 身份调用 Runtime `PO
 
 | 操作 | permit 动作 | 请求体 | 说明 |
 | --- | --- | --- | --- |
-| `collaboration-open` | `edit` | 必须为空 | 仅**可写者**获得会话与一次性票据：Directory 关系 R∈{member,manager} 且（manager ∨ owner ∨ `document_shares.permission='write'`）；leader/parent/无写权限成员 403 `department_writer_required`/`department_document_write_denied`。要求文档已 v2（否则 409 `document_not_on_snapshot_v2`）、类型/部门/`project_code=''`/未回收/未只读。租期 90 秒；同 epoch 复用活动会话并作废该用户旧的未兑换票据（票据不可重放，会话由稳定业务键决定，故不要求 `Idempotency-Key`）；每 (用户,文档) 每分钟 ≤6 次（429 `collaboration_open_rate_limited`）；每会话并发写者（已兑换参与者 + 未兑换有效票据）≤20（409 `collaboration_writer_limit_reached`）。 |
+| `collaboration-open` | `edit` | 必须为空 | 仅**可写者**获得会话与一次性票据：Directory 关系 R∈{member,manager}（2026-10-07用户裁定：当前同部门成员默认可编辑他人正文，不要求owner或写分享）；leader/parent/非成员 403 `department_writer_required`，分享不能替代部门关系。要求文档已 v2（否则 409 `document_not_on_snapshot_v2`）、类型/部门/`project_code=''`/未回收/未只读。租期 90 秒；同 epoch 复用活动会话并作废该用户旧的未兑换票据（票据不可重放，会话由稳定业务键决定，故不要求 `Idempotency-Key`）；每 (用户,文档) 每分钟 ≤6 次（429 `collaboration_open_rate_limited`）；每会话并发写者（已兑换参与者 + 未兑换有效票据）≤20（409 `collaboration_writer_limit_reached`）。 |
 | `snapshot-read` | `read` | 必须为空 | 任一部门关系（含 leader/parent）读取已发布 head（generation/epoch/精确对象版本或 `legacy:true`）；**不创建 head，阅读不触发转换**。 |
 | `snapshot-prepare` / `snapshot-publish` | `edit` | 快照命令；必须带 `Idempotency-Key` | **仅用于 v1→v2 转换**：Directory 加锁的写者、`generation=0`、仅 Markdown（无 Yjs）。head 已 >0 时 CAS 失败 409 `snapshot_generation_conflict`（两名并发点击者恰一人成功，另一人重读 head 后开会话）；`generation≠0` 409 `department_snapshot_conversion_only`；带 Yjs 400 `department_snapshot_conversion_invalid`。转换后部门正文只经 Collab 变更；旧 PUT / Host v1 保存 / v1 Collab 版本被 `document_on_snapshot_v2` 拒绝。 |
 
@@ -1900,6 +1902,8 @@ Host 端点、人员权限与转换流程见 `enterprise/docs/API_SPEC.md`「部
 - **回收站恢复（A9/A10/B4）**：个人与部门 `restore-plan`/`restore` 读取当前发布头代际；代际 >0 时计划带 `snapshot_backed: true`，`state_sha256` 绑定该代际（转换发生在预检与提交之间则 409 `*_state_changed`），v1 计划哈希不变。恢复**只翻转状态**（标题、目录、`oss_path` 目标沿用既有规则），不读取、不复制、不重建镜像与 `.yjs`，发布头与 epoch 不动；恢复后可重新开会话。Host 看到 `snapshot_backed=true` 跳过存储阶段，不再因镜像缺失误报“正文与快照均不存在”；未带该标记（v1）的行为不变。
 - **部门文档版本历史（A11，Q3 首版只读）**：随部门协作三开关注册 `department-documents:versions` 与 `:version-view`（读 permit、`departments:view`，Foundation 操作 `codocs.department-documents-{versions,version-view}`，hzy0 egress 投影排除）。Runtime 先校验部门读关系与文档归属（`doc_type=department` 且 `dept_code` 相符），再由 Codocs 适配器在精确部门读取上下文下返回 `document_versions` 行；Host 读取行内 `object_key`（必须位于 `codocs/snapshots/`）或 v1 行的 `oss_path` 对象的指定版本并校验长度与 SHA-256。无回滚、无删除、无差异；页面对部门文档隐藏差异入口，只读成员可查看。
 - 验证：Runtime 单元与隔离 MySQL（Directory 与 Codocs 分 schema：镜像路径与 `recycle.bin/` 路径的 v2 恢复、v1 对照、陈旧哈希、非经理与错部门、无分享部门成员读取版本历史）；Host 恢复与版本桥接测试；Foundation 操作表与 egress 生成器 `--check`。
+
+个人协作首次打开（AR09）：Host仅在`personal-documents:collaboration-open`已复核当前写ACL并返回精确409 `document_not_on_snapshot_v2`后转换generation0。权威个人文档元数据、旧正文与静默窗口检查沿用部门转换；通过已有snapshot prepare/publish，以actor/tenant/deployment/UUID/epoch/正文摘要生成稳定键，CAS 0→1，失败同键重试。仅精确snapshot_generation_conflict可在重新授权读取已发布head后加入；并发出版使updated_at变新而触发document_v1_collaboration_active时，也须重新读取head证实已v2才可加入，其他失败原样拒绝。已v2直接申请ticket；普通GET绝不转换。只读/撤权/回收仍在Runtime文档锁下拒绝，Collab握手ACL不变，无新增操作、capability/grant/schema。大图/表格Markdown完整字节保留，仍受10MiB正文上限。
 
 ### FE-2 产品资料只读闭包（C000001 MVP 候审）
 
@@ -2146,7 +2150,7 @@ Enterprise 项目工时 create/update/delete 使用 Foundation 的 timesheet:sub
 
 企业宿主独立提供 `GET /aims/api/v1/admin/projects` 与 `PUT /aims/api/v1/admin/projects/:id`，只面向 Console 快照中拥有**无对象范围静态** `aims:admin:admin` 的人员；项目经理关系及 `projects:edit` 不能替代。Host 在调用 Runtime 前使用 Foundation 统一授权求值，依赖失败返回 503、缺权返回 403。Service Token 能力分别为 `aims:admin-projects:view` 与 `aims:admin-projects:edit`，对应两条精确 Enterprise POST 操作，均由 Runtime 核对 enterprise 来源、部署、actor、audience 和当前服务凭据；人员许可绑定 actor/tenant/deployment 与 `admin/admin`，最长 15 秒。项目内 PA-02 编辑路径保持原 scoped projects:edit 加当前 leader/active manager 门槛，两个入口的许可不能互用。
 
-管理员列表只接受界定的筛选与 1–100 页大小，在单个一致快照中计算 COUNT、稳定分页和编辑版本，输出基本字段及访问控制字段白名单。管理员编辑与 PA-02 共用字段校验、项目行锁、editVersion、同事务 receipt/活动日志、负责人同步和 L2/L3 收紧；管理员独立 operation code/required capability，审计 action 为 `admin-edit` 且记录入口和操作者，旧键重放前仍重新校验现时管理员授权。删除、批量常规项目创建、项目集创建不在此入口开放。manifest 增加细粒度服务资源声明，不给人员推荐角色新增权限。C000001 的两个 data-runtime qualified grant 尚待代码审查与正式安装后才生效。
+管理员列表只接受界定的筛选与 1–100 页大小，在单个一致快照中计算 COUNT、稳定分页和编辑版本，输出基本字段及访问控制字段白名单。管理员编辑与 PA-02 共用字段校验、项目行锁、editVersion、同事务 receipt/活动日志、负责人同步和 L2/L3 收紧；管理员独立 operation code/required capability，审计 action 为 `admin-edit` 且记录入口和操作者，旧键重放前仍重新校验现时管理员授权。管理员基本编辑入口仍不接受删除和强制生命周期改写。批量部门事务创建与项目集创建分别使用下文的独立固定入口。manifest 增加细粒度服务资源声明，不给人员推荐角色新增权限。C000001 的两个 data-runtime qualified grant 尚待代码审查与正式安装后才生效。
 
 ### Host 本人工时填报动作与周提交（2026-09-29）
 
@@ -2296,6 +2300,8 @@ Host 三个项目内 POST 经 Aims owning typed `writeHostDeliverableQuality`，
 
 Git 文档创建先复核项目/仓库权威关系，再冻结服务端解析的提交 ID；preview 返回固定提交的正文与单独读取的当前文件 blob 更新标识。latest 的正文不下发、不替换快照、不写引用。过期或撤销项目访问仍在 Git 读取前拒绝。非 Git 的项目附件仍保留 Codocs 文件柜的生命周期，项目删除不影响其本体。
 
+仓库正文与 Markdown 树保留旧浏览器路径，但 Host 原生调用固定 U 操作 `POST /v1/enterprise/aims/project-documents:repository-read`（`aims:enterprise-host:execute`），不再使用旧 Account/Aims HTTP 或 Console `integration_operations:execute` 服务令牌。Runtime 校验短期 projects:view 范围、当前项目成员和精确仓库绑定；引用预览额外绑定 documentId/文件路径/固定提交并复核 Codocs 策略。GitLab 读取后再次校验成员、引用与许可有效期再返回正文。同进程 Console typed 只读入口固定 `gitlab.default` 的 file/markdown-tree，复用配置、Vault 归属验证与审计；不开放 issue 写入，不接受浏览器指定 integration。新引用冻结提交也复用此读取入口，无新增 capability/grant/schema。
+
 ### Enterprise 顶栏企业简称（2026-10-02）
 
 `GET /enterprise/api/org-brand` → Foundation 固定 `console.org-brand-view` → `POST /v1/enterprise/console/org-brand:view`；复用 `console:enterprise-host:execute`，只允许 enterprise.runtime 的已验证本租户签名用户委托，实时核验服务凭据/grant。无需 org_profile:view，不新增 grant/capability。Runtime 只查询 tenant_code/org_name/org_short_name/display_name 并复核租户，输出仅 `{shortName,displayName}`：shortName 按 orgShortName→displayName→orgName 回退，displayName 按 displayName→orgName 回退；拒绝 query/body 输入。顶栏会话缓存，切用户失效，失败静默回退企业编码。不重新开放企业资料管理页。
@@ -2312,3 +2318,624 @@ Git 文档创建先复核项目/仓库权威关系，再冻结服务端解析的
 - 租户人员授权事实的编辑仍是租户级，各环境发布快照独立；test 发布不撤销 prod 快照，角色变化经各环境正式发布后保留该环境撤权语义。
 - Runtime 软件批准使用 `stable-prod/test/dev`，不存在渠道不回退旧 stable/bootstrap；目标仅写同环境、同登记发布key、`release_update_mode=tracking` 实例。pinned 不返回自动升级目标；retired 拒绝心跳与重新登记。mode 不替代主机 timer/API 路径冻结。
 - 受管安装要求 exact semver 安装与 timer目标（或禁用 timer），不能 latest。环境迁移、日本实例、旧 stable 映射与主机冻结均需独立现场批准。候选SQL及回滚见 Platform Environment-Policy-Runtime-Release-Rollout.md。
+
+### APF M1 三域统一库与三通道样例（首批合同，当前状态见下）
+
+**2026-10-03 同步更正（源码 `4a5fa619`）**：以下 M1/各实施批段落描述当批合同，不能把当时“无页面、People 无写、候选/未部署”读成当前总状态。M1 `9146cf23` 之后 WP3/WP4、09c2、11～14、16a～g、18A 已扩展固定闭集、页面与恢复链。hzy0 base+七增量 read/write 已启用，最近文档化候选 `8ee33d32` / Runtime `0.3.295-test.apf-enable.5`；Finance 范围待 Platform 发布。后续提交、B5/成本投影新表、目标 seed 与全链验收不可按源码推定已启用，Workflow/Console seed 仅部分在 hzy0 执行。scheduler disabled；17/18B 用户规则和18C旧owner收口尚未关闭。本轮只核对仓库及既有回执，未连接环境。逐入口、操作、权限和安装子集见 [APF 全动作对照表](./Enterprise-APF-Action-Matrix.md)，四类交付材料与提交见 [专项计划 §12.1](./Enterprise-Altoc-People-Finance-Integration-Plan.md#121-每个动作的完成记录)。
+
+
+- 新域首批业务表：Altoc **26**、Finance **9**、People **6**；各域另有四张物理域前缀账本表，共 **53** 张。候选 canonical 为各模块 `docs/apf_m1_schema.sql`，由 `data-runtime/scripts/generate-apf-domain-manifests.py --check` 对设计 SQL 校验。旧 schema 留作历史，不导入历史数据。业务逻辑名=物理名，账本仅经 `Resolved.Table` 解析，不创建共享账本视图；既有 Aims/Assets/Workflow 映射、兼容视图和 hash 不变。
+- `domaininstall.WithAPF` 只增完整映射、保留非零 generation；初始 read=unified、write/scheduler=disabled。`ForAPF` 在已有迁移锁、Runtime 停止及身份核对护栏内 plan/apply/verify/rollback；reviewHash 覆盖 53 张 DDL。已有对象拒绝覆盖；回滚仅删本批摘要匹配、无数据、无外部 FK 的对象。启用模式和部署均需另批。
+- U：`<domain>:enterprise-host:execute`，fresh Enterprise 服务身份 + 已验签用户委托 + ≤15 秒签名 permit。P：`<domain>:notification-detail:authorize`，仅经 Console purpose 委托复核该查看者读取权，无写入。S：`<domain>:scheduler:execute`，拒绝用户委托头并核对当前 grant、部署和 generation；M1 `scheduler:inspect` 本身仅统计至多 100 条到期 operation；18A Host wake 随后分别恢复审批和 Directory 队列，详见18A，不能因此启用第二个 owner。
+- M1 首批共 14 个固定 Runtime 操作（不是当前全闭集）：客户 list/view/save（3）、银行账户 list/view/save（3）、岗位 list/view（2）、三域 scheduler inspect（3）、三域 notification detail authorize（3）。M1 样例 People 无写；09ab/c/d 已增加独立固定写操作。全部路径闭合，无任意表名/SQL/资源代理。
+- 客户人员许可沿用 `customer:view/edit` 和既有 Altoc 范围编译；银行账户沿用 `bank_accounts:view/admin`；岗位沿用 `positions:view`。后两类样例只能在 Foundation 现有 evaluator 未提供对象事实也可授权时执行，不能把对象约束 grant 扁平化为 all。旧业务路径权限不变。样例仅修改 code/name 元数据，不实现审批、资金交易、凭据字段或人员成本写入。
+- APF permit HMAC 绑定 fresh service token、method/path、actor/tenant/Host deployment、resource/action、operation/object、policy revision/version/hash、范围与完整请求意图；共同 TS/Go fixture 锁定编码。列表范围在 COUNT/分页前，读取同一 snapshot。写事务在回执读取前锁对象并复核范围；业务行、回执、审计同事务；同键改意图 409、撤权旧键拒绝、rowVersion 冲突 409。
+- Host 候选 BFF 为 `/enterprise/api/apf/{altoc/customers,finance/bank-accounts,people/positions}/{list,view,save}`（People 无 save），系统样例为 `/enterprise/api/internal/apf/scheduler-inspect`；并入现有 Console 通知 purpose 入口。这是 M1 首批状态；后续已增加页面和18A Gateway签名wake owner代码（默认关闭），环境安装/路由/调度启用分别取证。
+- v2.34 seed/verify 仅为候选，以配置中实际 **一个** Runtime audience 参数化生成九项 exact grant，不默认授双 audience。已有任何同键行均不覆盖，revoked 不复活；新事实包含 audience/semanticScope/tenant/deployment。本批无真实签发与授权写入。
+- Finance 样例 Host 编辑字段 `expectedVersion` 规范化为 Runtime 签名意图里的 `rowVersion`；拒绝浏览器直接携内部字段。`Idempotency-Key` 不自动重发。Codex-sol2 的完整账户/参数 UI 草案（`hostFinanceClient.ts`）包含不同的 REST/PATCH 及字段封套，WP3 `9de74eff` 与前端 `ea49496a` 已实现完整 REST 合同；M1 元数据样例仍独立，不能以简化响应替代完整页面字段。
+
+### APF WP3 Finance 完整账户与参数 U 合同
+
+十个新固定 U 操作，复用 `finance:enterprise-host:execute`，详见 `finance/docs/Host-Finance-API.md`。Host REST 对齐 sol2 typed 草案；POST自动编码、PATCH expectedVersion 与 Idempotency-Key、响应 snake_case 白名单与定点字符串。银行账户 view/admin，参数严格保留既有 settings:admin（manifest无 people_cost_parameters，不新增人员资源）。permit完整绑定finance意图、目标code与policy事实，≤15s；Runtime验签后再校验字段/对象。
+
+参数 active 生效闭区间不重叠，Registry排他行锁覆盖空表并发；业务、既有域 receipt、完整版本审计快照同事务。历史仅读取该版本快照，旧审计不伪装历史。回放先复核权限/对象、返回原版本；同键变意图/版本/区间冲突409。既有 M1 样例、独立 Finance legacy 通道不变。没有新DDL、capability、grant、调度或环境操作。
+
+### APF WP4a 客户主链（d057d697；hzy0基础抽验，非全链验收）
+
+新增10个Altoc固定U操作，使用既有 `altoc:enterprise-host:execute`，人员门槛 customer:edit、读取customer:view；客户owner/dept范围在Runtime锁内、旧回执之前复核，子对象必须权威归属该客户。负责人调整的目标事实同样受范围约束。所有写入使用既有Altoc receipt + audit，同事务；默认开票资料在客户锁内切换并受唯一约束。接口、字段、范围和失败恢复见 [Host-Customer-API](../altoc/docs/Host-Customer-API.md)。客户审批、导入及报价/合同不在本段，未开放任何新能力或环境配置。
+
+### APF WP4b 报价主链（1f92cd36；正式审批见APF-12a）
+
+新增六个固定 U 操作，全部在 `altoc:enterprise-host:execute` 内，人员 quotation:view/edit 与当前 owner/dept scope 独立复核；明细金额由 Runtime 十进制计算，版本冻结、现有 receipt/audit 同事务。批准/拒绝不能由浏览器写入，APF-12a `58685d12` 已接入正式 Workflow request/bind 与回调，浏览器 submit 只创建冻结审批意图；未配置正式 action/route 或目标依赖时失败关闭。send/accept 保留原状态门槛。完整字段、固定路由、舍入、失败恢复见 [Host-Quotation-API](../altoc/docs/Host-Quotation-API.md)。不新增 capability/grant/schema。
+
+### APF WP4c：Altoc 合同 → Aims 项目/里程碑 caller-Tx
+
+详见 [Host 合同 API](../altoc/docs/Host-Contract-API.md)。12 个固定 Altoc U 操作复用 `altoc:enterprise-host:execute`，人员 `contract:view/edit`，项目创建/关联与里程碑另由 Foundation 当前 Aims `projects:create/edit` scoped 许可并入 token-bound HMAC。Runtime Aims owning core同caller事务、锁内派生关系和范围，项目计划按code排序；固定域锁序 People→Altoc→Aims→Assets→Finance→Workflow，无锁内网络、无Aims反向调用Altoc。全部业务/receipt/audit同事务；重放前复核授权、短期授权事实不进入稳定业务摘要。
+
+D-06可空billing_schedule_code及兼容视图刷新仅交付SQL候选；有绑定时禁止rollback删列。AA-04自动回写仍关闭；APF-12a `58685d12` 已接入新合同正式 Workflow 审批，Runtime 依据正式结果推进，草稿不可由浏览器批准/签署。
+
+### APF-09ab：Enterprise People 基础主数据和读取
+
+Enterprise 固定 `people:enterprise-host:execute` U 通道新增 16 个操作：岗位 create/update/delete；职级 list/view/create/update/delete；职级工资设置 list/view/create/update；员工 search/profile；任职 list/view。人员门槛仍是 People manifest 的 positions/ranks/standard_costs `view/admin`、employees/assignments `view`；字典为全局主数据，不把部门范围升级成全局管理。
+
+Host 从 Console 当前快照经 Foundation 唯一 scoped evaluator 编译 all/self/dept/self_dept/none 真值表，无法表达的谓词和缺失部门树整体 503，不降级。短期 permit 绑定 actor、tenant、deployment、resource/action、对象、请求、策略版本/hash 和 ≤15s TTL；Runtime 在分页/COUNT 前按权威 employee_uid/dept_code 过滤。员工和任职白名单不含手机号、登录名、metadata、私密档案或成本快照。rank_code/name 和 cost_center_code 另由 standard_costs:view 的同一策略事实与独立范围控制，签名包含字段掩码；取两份快照更早的到期时间。没有该权限不查询这些列。
+
+岗位/职级/工资设置写入复用 People service_command_receipt，与领域更新在同一 caller-Tx；expectedVersion 冲突 409，同键异意图拒绝，同键重放保留原 ID/版本。稳定业务编码不可改变；员工、任职和工资设置仍引用的岗位/职级不可删除。工资 DECIMAL 字符串与有效日期保留精度，成本计算参数仍由 Finance 自身 settings:admin 入口提供；Finance 403 只影响参考区块。M/P 序列数量暂仅显示 Console 维护说明，不申请 system_settings 宽 scope。
+
+09ab 不提供员工、任职、身份或 Workflow 写入，私密档案入口暂未开放。后续 09c 须由 Enterprise 自身身份承接可靠 Console 生命周期与正式审批回调；09d 须先提供增量私密表安装候选，不能回落到 metadata。
+
+### APF-09d：员工私密档案
+
+Host 固定 `people.apf09-employees-private-view/update` → Runtime `/v1/enterprise/people/employees-private-profiles:view/update`，均要求 personnel `employees:edit` 和员工对象范围，服务 capability 仍为 `people:enterprise-host:execute`。不借标准成本或 employees:view 放行。范围依据锁定的员工当前 employee_uid/dept_code，读取和回执重放都重新核对；浏览器不能提交 source_code、actor、scope、状态或附加字段。
+
+白名单为 id_number、birth_date、education_level、major、graduation_school、graduation_date；身份证号输出始终掩码。保留原分来源事实（dingtalk > manual > oa_archive）；DingTalk 非空事实不可人工覆盖。update 的 expectedVersion 使用 employee row_version，私密写、员工版本递增和既有 People service-command receipt 同事务；同键原回执重放，异参/旧版本 409。审计保存目标员工、actor、requestId、expectedVersion、意图 hash 和结果 hash/版本，不将私密原文复制到共享回执 command_json；private facts 是唯一内容存储。界面仅权限允许后主动展开读取；scope/对象变化清空内存，稳定意图存储仅摘要和键，不含私密字段。
+
+基础 APF 10 表规格保持不变。`domaininstall.ForPeoplePrivateFacts/WithPeoplePrivateFacts` 为固定一表增量候选；只添加私密表映射、不改 generation/schemaVersion、不启用 lane。plan/apply/verify/rollback 复用迁移锁、停止 Runtime、reviewHash、既有对象与行 baseline、摘要及外部引用护栏；表非空拒绝 rollback。没有映射/表时失败关闭，不回退 employee.metadata。安装候选不表示已在任何环境执行。
+
+### APF-09c1：People 业务事实与正式审批（当批冻结；c2已补投递）
+
+固定 11 个 U 操作 `people.apf09c1-*` 只使用 `people:enterprise-host:execute`：employees create/update；assignments create/update/delete/change/attach-workflow；onboarding list/view/create/update。人员门槛分别为 employees:view/edit、assignments:edit，Foundation 唯一 evaluator 将当前人员范围签进 ≤15s permit；actor、对象 UID/ID、完整请求意图与字段掩码均绑定。Runtime 用员工当前部门与拟变更部门复核，先复核范围再读取回执。rank/cost_center 只接受经 standard_costs:view 的全局字段许可；普通响应不返回内部审批快照。岗位/职级引用按 owning 有效字典核对，不接受浏览器提供名称或状态。
+
+写事实、CAS、同意图 receipt、Directory lifecycle operation 在同一 caller-Tx 内提交或回滚。复用 People service_command_receipt，不新增回执表；审计包含已验证 actor/client、requestId、对象、意图 hash、结果版本与 hash。Directory operation 固定 source_app=enterprise、service_client_id=enterprise.runtime；冻结命令不等于已向 Console 投递，本阶段没有开通、激活、停用或自动 drain 入口。c2 `635acaed` 已交付目标端幂等投递、确认与阶段恢复；仍不允许在业务事务内网络投递。
+
+主任职变更先保存 draft，再由 Host 使用既有 Workflow prepare/create 通道创建实例，以同一意图键续行并由内部 attach 操作核对实例。实例须为 People/assignments/change、相同业务编码、正式发起人与冻结 snapshotHash。待审批事实不可修改；浏览器不能传 approval_status、审批结果、来源、actor 或 attach 的实例 ID。正式回调经 Enterprise 入站鉴权 → `people:scheduler:execute` 系统通道，Runtime 在 People→Workflow 同库事务内读正式实例终态后推进，不能信任回调正文独自宣称批准。其他应用的回调映射与业务处理保持原合同。
+
+未来生效的 approved 任职不提前修改员工当前 cache 或 Directory projection；旧主任职区间按权威生效时间截断，重放不重复建任职/operation。c1 入职候选不创建员工或 Directory 身份；c1 当时账号开通/激活按钮禁用；c2 对真实钉钉候选已启用，manual 在页面与服务端均失败关闭，提示“手工候选暂不支持自动开通，请在 Console 中处理”。manual 身份/激活合同仍待用户决定。新增固定增量安装候选仅 onboarding_cases 与 directory_lifecycle_versions（均沿用 People canonical DDL），不改基础 10 表、不启用 lane、不执行安装。
+
+**切换与旧入口**：只有完整 `people/assignments/change` 业务元组及冻结 `/api/v1/service/workflow/callback` 路径转至 Enterprise（aud=enterprise、enterprise:workflow-callback:execute）。绩效周期与其他 People 类型保留原 People 目标、aud=people、workflow:callback；不是整 app 切换。未知业务类型由 People owning 接收端明确拒绝，不默认成功。绩效周期是否迁入另待用户裁定；旧独立 People callback 不能在绩效在途未收尾前删除。部署执行单须记录在途实例的冻结业务元组与 callback URL，完成清空/对账后才删除旧入口或以 410 拒绝，禁止双方同时产生业务投影。此次只交付代码与测试，不切换环境。
+
+
+### APF-11a Finance 收支事务合同（79afbe43；范围发布/完整业务待验）
+
+以 Domain Design §2.7 / APF-11a 补充锁序为准：Registry → Altoc customer→contract→line→obligation→billing_schedule → Finance invoice_request→invoice→receipt→reconciliation→finance_contract_summary（contract_code 升序）→unclassified_income→attachment → receipt/ledger。同表 id 升序，discovery 后锁定再复核；Finance/Altoc owning 核心复用 caller-Tx，任何摘要/审计/回执失败全回滚，无事务内网络调用。D-01/D-02 已采用，开票人≠申请人、核销人≠到账确认人；到账 draft 需显式 confirm。正式发票只由已批申请 issue；手工新建与 submit 本批不开放。B3 schema 与安装/verify/rollback 仅交付候选，不自动安装或启用 Registry。
+
+### APF-09c2：Enterprise 入职开通与 Directory 可靠投递
+
+- 仅真实 `provider_code=dingtalk` 且拥有非空 provider subject 的候选可进入身份预留、开通、查询与激活。manual 可维护资料，但页面和 Runtime 开通族均返回 `409 people_manual_onboarding_unsupported`：“手工候选暂不支持自动开通，请在 Console 中处理”。manual 身份绑定/激活为待用户裁定的新信任合同，本批不实现。
+- 新增固定 U 操作 12 个：begin-provisioning/reserved/provisioning/failure/cancel/aggregate-status/activate 与 prepare-reserve/release/provision/status/activation-link，均使用既有 `people:enterprise-host:execute`。人员门槛为当前 `employees:edit` 和 Foundation 唯一范围投影；Runtime 在事务内复核范围，早于回执读取。浏览器五种动作只接受 expectedVersion（取消另需 reason），不得传确认结果、UID、provider 或来源。
+- 五个 Console 命令从 Runtime 权威入职行冻结，使用既有 integration_operation 和 service_command_receipt，无新增 DDL。提交后重新获取 `enterprise.runtime` 身份调用 Console，不使用 People 身份，不转发入站令牌。每个阶段固定操作 ID/key、摘要、source/target deployment、原操作者；同意图恢复保留最初版本偏移。Console 以验签后的精确 `(app,client)` 判定来源，仅并列接受 `(people,people.runtime)` 和 `(enterprise,enterprise.runtime)`，不根据正文 sourceApp 授权。
+- Console 身份预留/释放固定 `console:directory-identity:reserve`；开通、状态查询、激活链接固定 `console:directory-user:provision`；生命周期同步固定 `console:directory-employment:sync`，停用固定 `console:directory-offboarding:disable`。audience 为 console。候选 seed/verify 为 `Console-SQL-{Seed,Verify}-apf09c2-enterprise-directory.sql`，不执行、不复活 revoked；既有 People 调用保持其来源与精确授权。
+- 开通结果须由服务端通过目标 operation 状态读取确认，之后方可原子建立员工与主任职。未来生效日不提前投影/冻结生命周期。完成还须 Directory 生效且 Platform 已确认，未来日期不得提前完成；激活 token/凭据不返回浏览器。开通在途不得用取消绕过停用合同。
+- Directory 系统命令 prepare-due/claim/ack/fail 固定 `people:scheduler:execute`，仅既有已验签 Enterprise APF wake 可调用，绑定 Registry generation，拒绝用户委托和未知字段。bounded prepare 每页 100、最多 5 页，delivery 最多 5 条/25 秒。claim 使用租约和 fencing，原键重投；fail 固定错误类别，ack 验证完整目标回执身份。ACK 写入失败不误记为目标失败。Console 已成功接收即 ACK；Platform pending 是目标端下一跳，不导致源重复投递。
+- 环境切换前必须核对 People 未结束的绩效审批：旧 People 还支持 performance_cycle/performance_cycles/cycle，本批仅接管任职审批。不得把未支持的回调当成功；若有在途绩效，不得直接退役旧回调或切换整 app。旧入口删除/410 以在途清零及新处理验证为前置，需协调者确认。没有在本批执行任何环境切换、定时任务启用或 grant 写入。
+
+### APF-13a Finance 支出台账与申请
+
+Host Finance 新增20个精确用户操作：expenses 6、claims 7、project-requests 7；合同见 `finance/docs/Host-Expense-API.md`。复用现有 Finance Host/scheduler service能力和Finance审批typed reader，不新增grant。审批仅改变申请状态；付款确认需显式expenses:confirm，并比较受信actor与落库制单人/经办人，确认后caller-Tx生成唯一台账。仅finance/expenses/claim、finance/expenses/project_expense的两个旧固定相对回调路径承接至Enterprise；payment留给13b，SourceApp不放宽。Altoc owning caller-Tx只核对合同引用，不写销售事实或billing_schedule；schema、Workflow seed/verify仅候选交付，不执行环境。
+
+### APF-07a 线索与商机主链（5c0ffc5f；B2已装，完整业务待验）
+
+15 个固定 U 操作使用既有 Altoc 域能力，人员动作分别为 lead 的 edit/assign/disqualify/convert/activity 和 opportunity 的 edit/assign/transition/activity，不由 edit 或 view 替代专门动作。详情读取、COUNT 和分页同 snapshot；B2 owner_uid 与 row_version 在白名单投影中返回。创建、分配、转化及重放均重新核对 current source/target owner/dept；转换的客户、联系人、商机和源在同一 caller-Tx，失败整体回滚。协议与候选安装见 [Host-Sales-API](../altoc/docs/Host-Sales-API.md)。不新增授权或审批闭集，支撑/关系/文档操作已由 APF-07b `6176fa7f` 补齐，详见下节。
+
+### APF-13b Finance 付款与配置
+
+Host 使用 24 个新增精确 Finance 用户固定操作：付款申请7、五组分类配置15、审批关联/审计读取2；不增加系统操作或 grant。finance/expenses/payment 与两条旧相对 callback path 精确承接，审批只改申请状态，显式确认且与持久化制单/经办人分离后才生成唯一台账。配置及两种查询保持 settings:admin + tenant:global，caller-Tx 引用锁顺序、CAS、原键回执及审计与 finance/docs/Host-Expense-API.md 一致；不直写 Altoc 07b，不返回审核快照或凭据。
+
+### APF-07b Altoc 销售支撑与引用
+
+14 个闭集 U 操作见 `altoc/docs/Host-Sales-API.md` APF-07b；沿用 `altoc:enterprise-host:execute`，服务能力不替代 lead/opportunity 的人员动作及对象范围。支撑读取先核 owning 父对象范围，在 Registry 同快照做 COUNT/分页；写入的父 ID、子 ID、expectedVersion 和全部字段受原 APF HMAC 绑定。联系人当前归属商机客户，主要联系人与父版本同事务；目标文档只以验签 actor 调用 Codocs owning 当前 view ACL，关联不授予权限、不写正文。删除允许清理失权引用但只操作当前父对象的引用。授权重验在旧 receipt 之前，审计与 receipt、主写全事务，无 HTTP/外部网络在事务内。配置 purpose 为闭集：opportunity-view 或 lead-convert，后者独立检查 lead:convert，不能借 view 升级转换权限。
+
+## APF-14a 项目成本输入与历史合同（2026-10-03）
+
+此节冻结 14b/14c 的接口，不表示命令已开放。人员资源复用 Finance `project_accounting:view/admin`；计算 authority 与项目范围绑定。个人工资/职级依据须 Finance 管理与 People `standard_costs:view` 两项当前范围同时满足，但 **Host 公开响应不返回个人工资明细**。受信通道复用 `finance:enterprise-host:execute`，不新增 grant，不将 grant 当人员权限。
+
+### 固定操作闭集（14b 才注册）
+
+13 个操作：`project-accounting-page/view`、`project-labor-preview/recalculate`、`project-cost-allocations-page/view`、`employee-costs-page/view`、`project-labor-history-page/view`、`project-cost-period-view/confirm-zero/close`。前 10 项对应 APF-14 盘点；后 3 项提供正式关账信号与显式零投入。写操作使用 Idempotency-Key、expectedVersion 和 expectedInputHash；同键异意图 409，同键同意图返回原回执，未知响应保留原键。
+
+`finance_project_cost_period(project_code,period_month)` 为 Finance owning 冻结事实，`closed_at/closed_by` 非空即已关账。close 要求 Finance `project_accounting:admin`、当前项目范围、当前版本和 ready 批次；没有有效批次不能关账。关账后 confirm-zero/recalculate 均拒绝，不开放 reopen；关账调整另建后续调整批次，本轮不开放绕过入口。close 不改变 Aims 工时状态/People 快照，亦不等于总账全公司关账。
+
+confirm-zero 仅在 owning 读取完整项目/月工时集合为空时写入，绑定该空集合 input SHA。后来新增任何工时使零确认失效；存在 returned/draft/submitted 等未审核工时即整月 not_ready，不能靠确认零投入抹去。无工时且无有效确认仍 not_ready。重算比例可以大于 1，不封顶或跨项目归一化；CN 标准月小时分母、月末任职、入离职整月标准成本不变。
+
+### Typed owning 输入与锁序（先于实施冻结）
+
+接口在 `data-runtime/internal/projectcost/contracts.go`：AimsInputs、PeopleInputs、FinanceInputs 接收同一 caller `*sql.Tx`；CalendarReader 在事务外读取 CN 月。无 arbitrary table/path、trusted bool、用户 actor 或 capability 参数。所有 authority 由 owning 服务/编排的签名 permit 复核；接口存在不表示可以绕过鉴权调用。PeopleSnapshotCode 可空，Finance 不隐式写 People。14b 实现 SQL owning readers 与确定性计算，14a 不开放业务路由。
+
+锁序固定：Registry generation SHARE → People employees（UID）→ assignments（id）→ standard_cost_rates（id）→ Aims projects（id）→ 必要 work_items（id）→ time_entries（project/date/id）→ Finance people_cost_parameter（id）→ 所需 M3 confirmed 收支事实（按 APF-11a 表序）→ finance_contract_summary（contract_code）→ finance_project_cost_period（project/month）→ finance_project_summary（project/month）→ finance_employee_cost_snapshot（UID/month）→ finance_project_cost_allocation（code）→ finance_project_cost_batch/item → service_command_receipt/integration_operation 最后。无需某类事实不取得其锁；反向重算/历史/确认不可反序。预览发现集合，锁后 owning 复核集合 hash，不一致拒绝，禁止向已锁定的后序对象反向追加 People 锁。
+
+**工时幻读防护选择**：14b 为这条共享写事务提供 generation-fenced REPEATABLE READ；Aims owning reader 使用既有 `idx_project_date(project_id,entry_date)` 对该项目/月全状态范围做锁定读，包括空范围 next-key/gap。不先过滤 approved，不漏新增、删除、审核退回；与现有写端行锁冲突串行。执行前由隔离 MySQL 实证空范围 INSERT、DELETE 和 approved→returned 三类阻塞/回滚及重读行为；当前 READ COMMITTED 的通用 BeginWriteTransaction 不足以防幻读，禁止直接调用后声称有范围锁。此方案不新增 project-period 输入代次，避免只给部分写端加代次造成漏记；若隔离证据发现范围锁不满足，则在实施前改成全写端代次方案并重新审查，不能降级。
+
+People/Finance 费率选择也必须锁定候选范围并重新匹配月末 effective date；不只锁预览命中的那条记录而遗漏并发新有效版本。外部日历不能事务内网络读，保存内容/来源版本/hash/获取时间，历史仅读冻结事实。
+
+### 完整集合与不可变历史
+
+安装候选六表：Finance period、batch、batch_item、employee_cost_snapshot、project_cost_allocation、project_summary。batch/input/calendar/item 的冻结 JSON 为服务端私密计算证据；公开列表使用独立 PublicSummary 投影，不序列化这些内部结构。批次创建后只读，不 UPDATE/DELETE；当前 projection 可更新，旧历史不 join 当前 People/参数重新计算。People 已确认留档不可覆盖。批次 receipt_key 是完整作用域回执标识，绑定 actor/操作/项目/月意图，不能只存浏览器裸键导致跨人冲突。
+
+recalculate 全量替换同 project/month/source/rule 托管 labor 集合，旧项 reversed，其他来源保留；not_ready 撤销旧集合、金额/毛利 NULL，不以部分有效工时小计作完整成本。已确认 M3 财务事实由 Finance owning 聚合读，不由 BFF 传入金额；summary 与 cost projection/批次/receipt 同 Tx，失败全部回滚。双项目共享员工月投影不得使旧批次金额漂移。
+
+### APF-18A signed machine wake and People frozen approval recovery (075db5f0; default disabled)
+
+Owner is the existing Gateway five-minute cron, separately registered by protected exact host/tenant/environment/Enterprise deployment/generation/domain bindings and disabled by default. Host verifies the Gateway signature including domain, then obtains a fresh `enterprise.runtime` system token with exact `<domain>:scheduler:execute`; no U scope, forwarded user token or browser actor is accepted. Runtime checks Strict issuer/audience/client/deployment/live grant state and Registry scheduler authority/generation. Dual data-runtime/tenant-runtime qualified scheduler seed+verify are candidates only.
+
+Three new fixed operations: user `people.apf09c1-assignments-request-workflow` and system `/v1/enterprise/people/assignment-approval:pending`, `:bind`. User submit freezes original initiator, authoritative form/hash/assignment+employee IDs/version and Workflow key in People integration_operation, in the same caller transaction as pending assignment and existing user receipt. Ordinary drafts are never scanned. Machine recovery needs no active browser session but cannot invent an initiator or rewrite the frozen intent. Future effective dates do not apply employee projections while creating/binding approval.
+
+Pending validates the current row against frozen command and version. Bind locks employee then assignment then reads the real Workflow instance through the existing narrow owning reader; app/resource/action/biz/initiator/hash/status must match. No network calls occur in transaction. Request-driven and machine bind both acknowledge the same operation; response loss retries original key and the Workflow idempotent creation contract. A different instance/changed frozen intent is rejected. Registry generation SHARE remains pinned without a SHARE→UPDATE upgrade. Approved/rejected callback stays the existing formal system callback and is not a machine-provided result.
+
+Host families are bounded (at most 3 approval intents / one Directory claimed command per wake), issue fixed count/unavailable results and retain unfinished commands. Domain signature prevents wake substitution; gate disabled, wrong actor/client/audience/deployment/generation/grant return closed failures, dependency failures remain 503. Legacy owner retirement, notifications/purpose migration, other People approval types and raw-command replay remain B/C gaps; installing this code does not authorize enabling owners or modifying grants.
+
+### APF-16a Host 投标（fc725e44；B5环境安装待验）
+
+投标 ten-operation 闭表为 `tenders-page/view/create/update`、`tender-agencies-page/create`、`tender-members-add/remove`、`tender-milestones-create/update`。均为 Enterprise 用户 U 通道 `altoc:enterprise-host:execute`，不新增 tender 人员资源或服务 grant；人员门槛明确为 `opportunity:view/edit`。无商机的手工投标仍须 edit 与投标负责人/部门范围。团队分工仅业务事实，不授予任何应用权限或 Aims 项目关系。
+
+Runtime 从投标行取当前 owner/dept，读列表在 COUNT/分页前过滤、详情同一快照复核；存在的商机和客户引用还须满足当前同一签名 opportunity 范围。写入复核来源、拟变更目标与引用的权威行后才读取旧 receipt。customer/opportunity/contact/agency pair 必须存在且客户一致；不接受前端“可见/经理”事实。所有修改携父投标 expectedVersion，子对象不能跨父；主写、父版本推进、audit 和 service_command_receipt 同事务。删除团队成员仅删除业务分工，原键重放不重复删除/审计。无 Workflow 审批、调度或 outbox 扩展。
+
+锁序为 Registry generation SHARE → 销售 stage gate（存在时，沿用销售写入串行门）→ 当前投标 → customer → opportunity → contact → agency → 当前子对象 → receipt/audit；没有 stage 时手工投标可创建（销售旧写入本身拒绝未配置 stage），不臆造商机。Tenders 的 caller-Tx 不作网络调用。row_version 冲突为409；范围拒绝403、对象不存在404、未安装四表503。金额是非负固定十进制字符串，不由浮点 round-trip 冻结。
+
+安装候选 `domaininstall.ForAltocTenders/WithAltocTenders` 只新增 B5 的 altoc_tender/agency/member/milestone 四物理表、无 FK/CASCADE、无 Registry 写入或现有域数据覆盖。复用 plan→reviewHash→Runtime stopped→迁移锁→apply→verify 与空表 rollback；新增 Runtime 操作10个、无 grant。`hzy-enterprise-add-apf --subset altoc-tenders` 已由16b `32244c98` 接入固定子集框架，串联/逆序回滚测试已交付。任何真实安装另行批准。
+
+### APF-16b 服务协议、覆盖与项目关系（32244c98；B5安装/业务待验）
+
+- 14 个固定 U 操作：service-agreements page/view/create/update；service-coverages page/create/resolve/suspend/end；service-projects page/bind/set-default/suspend/end。人员统一 `contract:view/edit`，签名委托 actor/tenant/deployment/object/TTL 与规范意图绑定；使用 `altoc:enterprise-host:execute`，无新增 capability/grant。
+- 范围来自 Foundation 唯一 evaluator 的编译结果。分页/COUNT 前同时过滤当前合同和客户范围；详情/子列表同一快照。新建从所属合同权威派生客户；不可改合同归属。锁序 customer→contract→contract_line→agreement→child/siblings→Aims→Assets→receipt/audit。多域 Registry generation 栅栏同 caller-Tx；跨域锁参与者须 unified write 就绪，但 owning 核验不改目标域任何事实。禁止持锁网络调用。
+- Aims `CheckServiceProjectTx`：精确 code 读取权威 project/member；不同合同、archived/completed 拒绝；本合同项目或当前 leader/active manager 可选。关联不创建项目、不授予权限、不修改合同绑定。默认项目由协议行锁串行化，只能选择 active 关系；暂停/结束清除默认。
+- Assets `CheckServiceCoverageTx`：只核验协议客户的正式资产/环境身份，不暴露通用资产查询；客户必须精确相等。双对象必须有唯一有效 asset/environment relation。计划属于同一合同；pending plan 不直接 active，仅 resolve 经正式身份核验后生效；禁止 legacy/confirm-legacy。跨客户、悬空引用、混合计划编码不能被当成已解析目标。
+- 所有写入带父协议 expectedVersion（创建除外）+稳定 key；既有 service_command_receipt 与审计同事务，失败全回滚。旧键重放先重验当前合同/客户范围和目标资格；版本/状态只在执行新业务时复核，不阻止同键回放已确认结果。子对象必须属于当前协议；不接受客户端 source/状态/额度消耗/解析结果事实。
+- 六表 B5 只建安装候选：altoc_contract_delivery_asset_plan、altoc_service_agreement、altoc_service_agreement_coverage、altoc_service_agreement_project_rel、altoc_maintenance_contract、altoc_service_entitlement。旧维保/权益只读，service_agreement_asset 不作为第二套新写来源。安装、激活、真实授权/浏览器验收另行执行；本批无环境操作。
+
+### APF-16c 工单、派发与同库回写（95c8ff35；B5安装/业务待验）
+
+- 九个固定 U 操作：service-tickets page/view/create/update/close/reopen；service-ticket dispatch/dispatch-resume/dispatch-view。仍为 `altoc:enterprise-host:execute`。人员 `service_ticket:view/edit/close/reopen`；重开是独立动作，新增 manifest action 不默认授予任何角色。签名 actor/tenant/deployment/action/object/TTL/当前范围与规范意图由 Foundation 唯一 helper 产生，Runtime 在原 receipt 前复核。无 capability/grant/Workflow 闭集扩展。
+- 新模型必须选择正式服务协议，Runtime 权威派生 customer/contract；客户和工单负责人/部门范围在 COUNT/分页之前和锁内复核。修改不接受状态、耗用额度、项目归属或投递 generation。expectedVersion 冲突409；业务/receipt/audit 同 caller-Tx。close 与 reopen 各需自己的许可，终态不接受普通编辑，重开不重开 Aims 事项、不退款。
+- 派发目标顺序为显式项目、工单已绑定项目、服务协议唯一 active 默认项目。**新统一模型不采用旧合同项目猜测兜底**。Aims owning typed Prepare/Apply 在同一 Registry 多域写事务中核验项目合同/当前经理关系、生命周期、处理人成员关系与来源自然键；不能改绑到其他项目。旧键重放前仍复核来源与目标资格；新意图恢复不重复建事项。服务协议过期、额度超限或默认项目歧义均失败关闭；沿用绝对分钟 SLA 与累计额度规则，不引入暂停计时规则。小时额度按已耗用与预计工时检查，不新增预占模型。
+- 全局锁序 Altoc→Aims→Workflow，Altoc 内部所有 customer→contract→agreement→ticket ID 升序预锁，之后才允许 Aims 工作项/项目锁。状态动作、批量 patch、完成申请与正式完成回调均在开事务前固定事项集合；原状态/人员/范围门槛不变。Runtime 构造时注入窄 owning 回写接口，HTTP 无选择器或“可信事实”开关。仅精确安装新表且 unified 的 lane 参与，缺 owner/绑定则503，不能退到远端投递。
+- Aims 在 caller-Tx 派生真实状态、源工单码、项目码、工作项键、实际工时与首次响应/解决时间；先更新 service extension 再读取快照，Altoc 当前 binding 锁内复核。generation 旧值跳过、同代异摘要409，累计耗用只加差额，终态不会被迟到的结果重开。一项回写失败使整批 Aims 修改、Altoc 配额/状态/审计全部回滚。不产生新 HTTP/outbox；独立旧模型保持原投递路径。
+- `altoc-tickets` 安装候选仅新增 `altoc_service_ticket` 一表（row_version/delivery_hash），依赖已安装 sales-B2/services、Tender 可选。固定 DDL 无 FK/CASCADE，generation/既有域/原模式不变；沿原 plan/apply/verify/空表 rollback，已有业务时不可 DROP。本批不安装、激活、改 grant 或运行浏览器。正式启用前必须由协调者盘点旧 ticket-result 在途命令并对账，同一业务键不能同时由独立旧投递和新同库回写拥有；旧 owner 的关闭/收尾属于 APF-18C，不能把本批提交视为退役完成。
+
+### APF-16d 续约基础记录
+
+Enterprise 的 `altoc.apf16d-renewals-{page,view,create,update}` 固定操作仅使用既有 `altoc:enterprise-host:execute`，人员门槛为 `renewal_opportunity:view/edit`。签名 permit 绑定 actor/tenant/deployment、操作、对象 ID、完整意图、当前权限修订及短有效期；Runtime 使用唯一数据范围实现复核。
+
+记录客户必填，可选合同必须属于该客户。读取的 COUNT/分页在记录与关联客户/合同范围过滤之后，同一快照返回姓名标签与白名单字段。写入锁序为既有 sales stage gate → 当前及目标客户（ID 排序）→ 当前及目标合同（ID 排序）→ 续约行；在回执查询之前复核当前源/目标范围及权威归属。更新须 expectedVersion；同意图键回放，变意图 409；回执、记录、审计同事务，失败回滚。原客户/合同失权后旧键重放仍拒绝。
+
+本批只保存续约记录，状态 won 不代表合同生效。不接受 opportunity_id、旧 maintenance_contract_id 或覆盖日期，不创建/绑定商机、不延长协议/覆盖，续约以新合同/新服务期表达。`altoc-renewals` 是增量安装候选；只建一表，保留 generation 和其它域，按原 receipt 校验逆序回滚，非空业务证据禁止删除。未执行安装或配置变更。
+
+#### APF-14b 实施补充（6aed7346；新增输入/投影安装与范围待验）
+
+13 个成本操作使用 `cost` 闭合输入与签名 `authorization.costScope`（all 或显式 projectCodes、People salary 范围）；对象为 projectCode|periodMonth|code。Finance project_accounting:view/admin 与 People standard_costs:view 联合范围只能由 Host evaluator 编译，浏览器不得提交 scope。CostIntent 与 scope 完整进入现有 APF HMAC canonical。14c 配套 Host 后才开放页面；本批无 grant/环境操作。
+
+Registry 新增显式 REPEATABLE READ 写事务入口，保持旧 READ COMMITTED 入口不变。People assignment/rate 通过主键顺序锁定完整候选配置集合；UID discovery 不加 Aims 业务锁，锁后全状态 UID 集合变化返回409，不反向补 People 锁。Aims 工时仍为 idx_project_date 项目月范围锁。
+
+M3 取 Finance receipt→reconciliation→expense 顺序，只聚合已确认父到账的 active 核销及 confirmed 支出，按到账/支出日期归月；不改变收支或 Altoc 状态。为防核销跨项目重新归属漏掉父锁，目前锁定完整 receipt 父集合、目标项目 reconciliation/expense 候选集合；不保存其它项目金额或身份，不查询 contract_summary（没有该事实依赖）。该保守锁法可能使财务并发串行，后续优化必须保持父子集合与锁序证据。财务输入 hash 纳入计算 inputHash，作为重算预览 CAS 与批次证据。
+
+Preview 返回预览 inputs hash 与当前期版本；recalculate/confirm-zero/close 使用这组值。重试原键在当前范围复核后回放旧 receipt，不因期间已关账重新执行；新键 CAS/关账状态在 receipt 业务回调内校验。员工月 projection 可更新，不可变 batch/item 永不更新或删除。项目/历史输出使用金额/readiness公开列；employee-costs 只输出员工成本总額并叠加当前 People salary 范围，不输出工资分量。
+
+M3 写端联动：B4 映射存在时，Finance 收支命令在 owning 父对象/contract_summary 锁后、receipt 前，以项目/月排序锁定已存在的 cost_period→project_summary；业务回调只用同 Tx 非锁定聚合刷新已确认核销/支出及毛利，不反向获取新的 receipt/expense 锁。相同期间通过 period 行串行，READ COMMITTED 写端在取该锁后聚合，避免最后提交覆盖其它已提交收支。没有 B4 时原 M3 行为不变；没有成本期间不隐式建成本批次；成本关期不禁止合法收支事实。批次不可变，M3 更新只修改当前财务 projection，不改历史成本或工资证据。
+
+#### APF-14c Host 接入补充
+
+13 条成本用户路径纳入 Foundation 精确 APF 签名白名单和 Enterprise Runtime 用户映射；canonical 追加 CostIntent 与 costScope，TS/Go 共享 golden fixture。人员资源/受信 transport capability 沿用 14a，不增加 grant。BFF 对公开响应做白名单投影，个人月标准成本只在 Finance project_accounting:admin 与 People standard_costs:view 双重当前范围内返回，工资组成/内部冻结证据不出 Host。
+
+首算列表复用 project-accounting-page/view：Aims 项目集左连接当月 Finance 摘要，签名 Finance 项目范围在 COUNT/LIMIT 前下推，未计算项目为 not_ready。跨域编码 JOIN 使用 BINARY，避免 owning 库历史 collation 差异或大小写归并。员工月快照详情允许空 projectCode，但必须在 costScope 项目集合的分摊成员子查询及 People 当前范围中命中 id；不增加任意员工读取入口。
+
+APF-14c 公开托管 labor 分摊按项目/月/规则/状态聚合为总额，公开 group code 不含个人 UID，basis_value 为 NULL；不允许用旧的 per-UID CA code 读取个人分摊。避免项目管理员以已知工时和确定性个人行编码反推个人月工资。未托管的手工/资产等分摊仍保留原行；员工月标准成本继续走双重权限接口。
+
+### APF-16e Enterprise 知识关联与只读摘要（2271f417；目标seed/安装/业务待验）
+
+五个固定 U 操作 `altoc.apf16e-{customer-assets-summary,customer-documents-page,service-ticket-knowledge-link,service-ticket-knowledge-resume,service-ticket-knowledge-view}` 使用 `altoc:enterprise-host:execute`，人员分别要求 `customer:view`、`service_ticket:edit/view` 与当前 owning 对象范围。客户权限不能代替 Assets 或 Codocs ACL。Assets 摘要使用 Assets 唯一范围编译器按 deliveries:view 与 environments:view 求交；Codocs 摘要逐文档复核当前普通 ACL，COUNT/分页只包含有权对象。目标整体无权返回 `access=denied`，不带数量/UUID/标题；依赖故障仍 503。
+
+知识关联只接受已有 UUID 和工单 expectedVersion。Runtime 按当前客户→合同→工单锁序重验范围，在同一 caller-Tx 中冻结两份命令（序号 1/2）、reserve 回执、pending 投影与审计；事务回滚不能遗留 operation。冻结 actor、权威 customer/contract/project/delivery/asset/environment code、目标 deployment 和 command digest。Host 提交后分别以 **enterprise.runtime 新签 token** 调两个精确目标：
+
+| 目标 | 固定 Service API | 入站 capability | 目标 Runtime scope |
+| --- | --- | --- | --- |
+| Assets | POST /api/v1/service/enterprise-knowledge-links | assets:asset-link:create | assets:asset-link:create |
+| Codocs | POST /api/v1/service/enterprise-knowledge-links | codocs:knowledge-link:create | codocs:knowledge-link:create |
+
+目标先完成 JWT audience/实时身份与撤权校验、受信 tenant/目标 deployment 以及短时 service-command HMAC，再使用自身 service identity 获取 Runtime token，不能转发入站 token。Runtime 要求精确目标 client (`assets.runtime`/`codocs.runtime`)、部署与 scope，重新验证源 enterprise.runtime 的签名命令上下文及 actor 委托。Assets 从 Console 固定 purpose `knowledge_link_deliveries` 求 deliveries:edit、`product_adoption_environments` 求 environments:view；其授权 JSON 由目标 token 独立 HMAC 绑定 method/path/tenant/deployment/actor/digest，Runtime 在旧回执前复核当前目标范围和交付事实。Codocs 在同一 Serializable Tx 内锁文档并复核既有 owner/share/relation 可读 ACL，再读回执。
+
+两个目标仅写关联与不可变回执。Codocs 的 service principal 关系全部 read/edit/comment 标志为 false；Assets 关联不扩大资产对象范围。**不创建、复制或发布正文，不授予他人文档访问。**命令严格固定 11 个字符串字段，按 Go 字典序规范编码；不接受任意目标、源路径、授权事实或客户端 receipt。
+
+Host 验证每份目标回执的 operation/schema/digest/key/UUID/类型，再以新求值短期 U permit 写 checkpoint。中途失败、响应丢失均保留第一次 frozen actor/key/command；请求驱动 resume 每次重验源、Codocs 和 Assets 当前权限，目标以原 key 回放原 receipt，两个目标都确认后才把工单标为 linked。此族为用户恢复路径，不新增 scheduler owner；现有 APF wake 的闭集只恢复审批，不认领本族。撤权后禁止恢复，故成功目标与 pending 状态可等待原用户恢复权限或后续独立对账决定，不允许机器冒用用户。
+
+**切换门禁**：新合同的 grant seed/verify 为候选 `Console-SQL-{Seed,Verify}-apf16e-knowledge-links-candidate.sql`，只有经批准备份后才能执行；Runtime audience 从部署实际配置取 data-runtime 或 tenant-runtime，不固定生成额外 audience。先验四行精确映射/绑定、两项目标 Runtime 与 App 合同，再启用用户入口。旧 Altoc 精确/宽能力入口、既有冻结命令、owner 与回执均保持原样，不能把旧 source_app=altoc 命令改为 Enterprise；在途旧队列须由原 owner 原键收口，另批退役。回滚撤回新入口与新版本，不删已成功关联/回执；停用新 grant 需单独审批。
+
+### APF-16f 产品反馈接收落点的 owner 门禁
+
+本批保留现有 Aims 产品反馈投递 owner `aims.runtime`。状态与进度命令的生产者可信来源、目标逻辑应用 Altoc、精确 capability、冻结命令/schema 与原幂等键均保持原合同。Enterprise/Altoc 只新增接收落点，不提前把生产者改成 `enterprise.runtime`，不转发入站令牌，不伪装来源。
+
+owner 迁移、旧在途命令对账与收口统一由 APF-18B/C 处理；该门禁通过前不得退役旧 Aims owner或给同一任务启用第二个 owner。用户恢复只重放原冻结意图，读取评估和进度，不补充证据、不重新提交已拒绝需求、不扩展 Workflow 闭集。候选代码和安装制品不等于已执行环境切换。
+
+### APF-16f 原键恢复与旧 owner 接收合同
+
+- 用户固定 U 操作为 `altoc.apf16f-product-feedback-view/submit/resume`，要求工单 edit 范围；提交/恢复另复核当前产品 `product_requests:create`。请求不能提交 actor、product、审批状态或附加证据。首次冻结原作者、源摘要、命令、operation/key；同事务审计。恢复只调用 Aims owning caller-Tx 核心，重放前重验权限；拒绝后不能生成第二份需求。
+- 接收端为 `/altoc/api/v1/service/product-feedback/status|progress`，保留 Aims 原 `aims.runtime`、aud=altoc、`altoc:product-feedback:update-status|update-progress`、原信封与幂等键。先做 Console 实时内省、来源/目标部署与命令签名验证，再重新取得 Enterprise 身份，以既有 `altoc:scheduler:execute` 调 Runtime 固定接收操作。入站令牌不转发。版本单调、同版本异摘要冲突；状态和进度只读展示。
+- Aims 投影生产者及其 outbox owner 不变。本批不新增调度或 Workflow。用户冻结 operation 不属于 APF-18A 机器审批恢复闭集。owner 迁移、旧在途来源/绑定收口及路由切换统一留待 APF-18B/C；部署前必须核对新接收表已安装、旧源绑定与新目标部署可解析。
+
+### APF-16g 服务财务与成本只读摘要
+
+- 两个固定 U 操作：`altoc.apf16g-customer-service-finance-summary`（customer:view）和 `altoc.apf16g-service-cost-summary-view`（contract:view）；沿用 `altoc:enterprise-host:execute`，没有新 capability、grant、表或后台 owner。
+- Host 用 Foundation 唯一 evaluator 生成 Altoc 对象范围，并从同修订的 Finance 快照投影 `invoices:view`、`receipts:view`、`reconciliation:view` 各自 all/self/none，或 `project_accounting:view` 的 all/projects/none；这份窄投影作为 opaque 字符串绑定在已有签名 U 意图中，含 actor/tenant/deployment、≤15秒有效期，不接受浏览器事实。
+- Runtime 同一只读快照解析 Altoc 与 Finance Registry。先复核客户；服务协议还复核其合同与客户。客户摘要仅统计该客户服务协议对应合同的正式发票/确认回款/有效核销，逐资源责任人过滤在金额/COUNT 前；不同币种分别统计。服务成本仅取当月有效协议项目关系与 Finance 授权项目的交集，再由 Finance owning 核心读取 APF-14 公共核算结果。
+- 无权限返回 `access=denied`，不解析 Finance 表、不查询数量、不泄露隐藏项目总数；部分资源拒绝只拒绝相应区块。依赖故障不可伪装成无权限或零金额。未核算返回 `not_ready` 与空金额，不返回个人工资、员工成本、输入 hash 或原始核算日志。范围超过1000对象整体失败503，不部分成功。
+- 两条 Host GET 入口为 `/altoc/api/v1/customers/:customerId/service-finance-summary`、`/altoc/api/v1/service-agreements/:agreementId/cost-summary?periodMonth=YYYY-MM`，响应 `private,no-store`，白名单重建。只读，不提供重算/恢复/批量写入；旧 service_cost_summary 与旧 maint 模型不启用。
+
+### APF-17b 离职事项与 Assets 协调锁序（候选，环境未启用）
+
+Registry 代次 SHARE → People employee UID 升序 → assignments → offboarding case → tasks 按类型 → Assets recovery 根 → asset_items 按 id → audit/receipt。People/Assets owning helper 仅接受 caller Tx 和注册表映射，不自行 Begin/Commit，不接收浏览器 trusted/source 标志。六个用户操作 list/view/create/arrange/confirm/cancel，使用现有 People Host capability 与 offboarding_tasks 的 view/admin/confirm/cancel 精确动作；当前 scope 复核先于旧 receipt。未归还阻断资产协调完成，不阻断已生效离职及 Directory 安全撤权。责任人须 active 且不是离职人，期限由 HR 明确提交；自动事项不默认期限或责任人。17c 外部账号 receipt、17d 通知/自动 delivery 不在本批伪造为成功。
+
+### APF-17a Enterprise HR 来源与部门映射（候选，环境未启用）
+
+- 人员合同仍是 People `hr_source_sync:view/admin/execute` 三个独立动作；Foundation 唯一范围投影只接受全租户 HR 字典权限，员工范围不升格为全公司映射管理。固定 U 闭集为 `hr-state` 和 mappings/changes/jobs-start/jobs-cancel/jobs-retry 各 prepare/confirm，共11个；复用 `people:enterprise-host:execute`，permit 绑定 actor/tenant/Enterprise deployment、动作、意图、对象 dingtalk 和≤15秒 TTL。没有公开 confirm BFF，也不接受浏览器的 actor/source/targetConfirmed。
+- Enterprise 重新取得自身 `enterprise.runtime` → `console` 服务令牌，使用既有 `console:hr-source-sync:view/admin/execute` 精确 capability。Console 增量接受精确 `(enterprise,enterprise.runtime)` 与旧 `(people,people.runtime)`，不接受交叉配对；服务命令验签仍绑定 tenant、源/目标部署、短时效、命令摘要、原键。历史 `people.hr-source-sync.dingtalk.*` 是固定操作名，不代表伪造 People 身份。三个 grant 仅 seed/verify 候选，无环境写入。
+- `people-hr-source` 安装子集只新增 `people_hr_source_state` 一表，generation/schemaVersion/既有表和视图不变。准备命令先在统一库 Repeatable Read caller-Tx 锁固定 dingtalk 根，冻结完整 Console 命令/actor/key/version 到既有 integration_operation，并写既有 service_command_receipt；同键不同意图409。已冻结命令只重放原命令，不能从新快照派生。Console确认以后，另一个caller-Tx按员工→任职锁序归并已确认 aliases，推进 operation 与清除闸门，与回执同事务；归并故障全回滚，闸门仍为pending。每次恢复先重新授权，撤权旧键403。只有原actor可恢复；需要他人接管属于后续可审计恢复合同，不允许换actor/换key。
+- 来源命令尚未确认时禁止新同步/新映射命令；job-start 的 `sourceReady` 由 Host 读取 Console 映射总数后计算，签入 permit，浏览器不得提供。Runtime仅在新命令冻结时要求全部mapped；原键已冻结命令可恢复，不因来源后来改变而丢失目标回执。该短期前置事实不改变原命令摘要/回执意图。
+- 本段只迁 HR 控制入口和引用归并；Connector、HR provided/empty/absent/invalid 的既有生产者及目标合同不变，不批准任职、不提前生效未来任职、不修改工资/职级/工号。部门别名归并保留任职的生效日、审批状态与历史顺序，仅转换稳定目录引用及row_version。本段未证明旧 HR 接收器已满足 R17-01 字段所有权/冲突复核与 R17-02 单调 revision；旧 sync.go 还引用新 APF schema 不存在的 monthly_standard_cost。启用同步前必须核验 Connector→People 目标的新 schema 兼容与这两项规则，未通过不得启用；不以本段控制入口迁移视为事实接收链已完成。旧People用户入口不在本段退役；任何环境启用需安装候选、三条精确grant逐行核验，以及Console/Connector/People事实目标链验证。不得因UI的job成功把Directory/Platform安全投影标为成功。
+- 页面权限显式加载并区分失败；映射、来源差异、作业分区。未确认意图只在内存保存，刷新可从Runtime恢复原actor的冻结意图；没有HR记录/token写入浏览器storage。危险操作useConfirm；响应private,no-store。18B通知、17b离职/Assets与成本/绩效不属于本段。
+
+### APF-18B1：Enterprise 到期通知（默认关闭，候选）
+
+六族固定 S 合同为 `sales-due`、`billing-due`、`issuance-due`、`reconciliation-due`、`handover-due`、`asset-recovery-due`，各有 `scan-due / published / closure-ack`，共 18 个操作。唯一 owner 是既有 Gateway 签名 APF wake → Enterprise，不新增 cron。Runtime 严格检查 `enterprise.runtime`、部署、实时 grant、unified generation 和对应 `<domain>:scheduler:execute`；不接受用户 actor、U permit 或宽 scope。Foundation 系统通道登记同一精确路径集合。
+
+来源只取统一库权威的直接责任人、截止时间和状态。销售任务优先于同源 lead/opportunity 下一步，开票/核销相互独立；People 两族读离职交接和资产回收**协调任务**，不把提醒视为 Assets 已归还证据。不会推进商机、开票、核销、归还或离职状态。空责任人、广播 UID、未来时间、非活动状态不产生通知。发布前 Console subject eligibility 复核 active 和固定人员 `view` 门槛；通知仅站内，正文不含金额、薪资、私密档案或业务数量。
+
+每域新增可独立安装/verify/rollback 的 checkpoint、cursor、audit 三表（安装子集 `<domain>-due`，仅候选）。冻结键 `apf-due:<family>:<source-kind>:<id>:<generation>`，事实摘要固定直接责任人/截止时间；扫描每族最多 20 个源行与 20 个待收口行，分别轮转，不因早期已发布记录饿死后续记录。冻结和审计同事务，锁序为来源行 → checkpoint；扫描先锁本族 cursor。发布成功后只记录目标实际回执；同键同回执幂等，不同回执 409。负责人/截止/状态变化先取消或解决旧 actionable，确认关闭后才产生新一代。
+
+发布响应或 ACK 不确定且来源已变时，只用原 payload/key 查询 Console 回执（`probeOnly`，仅验签 Enterprise 身份和 APF 类型可用，不创建通知）。查到后记录并关闭；查不到**不能**排除原请求仍在途，保留未知，不强行关闭、不换键。此类未知缺少自动判定的安全依据，需上线后对账；本批不提供强制成功或数据库修补入口。通知 ACK 丢失且事实未变时按原键重投，Console 目标幂等。关闭使用同 actionable key 和稳定版本，关闭 ACK 丢失仍按原键重试。
+
+实际 sourceApp 为 `enterprise`，不冒充旧三域来源。新增 APF descriptor 使用 Console→Enterprise `enterprise:notification-detail:authorize`，再用三域精确 P scope 复核当前直接责任人与 checkpoint/fact；Console 自己复核对应业务人员权限。旧三域通知仍走原 P 目标，不整组切换旧通知。详情不返回金额或无权数量。
+
+开关门禁：Enterprise 六个 `HZY_ENTERPRISE_<DOMAIN>_<FAMILY>_ENABLED` 默认关闭（准确名称见 `enterpriseAPFDueDelivery.ts`）；旧同族开关必须显式 `false`，Runtime `enterprise.dueNotifications[family]` 的 `enabled` 和 `legacyOwnerDisabled` 也都须为 true。销售新族的 `HZY_ALTOC_SALES_DUE_NOTIFICATIONS_ENABLED=false` 是显式退役确认，旧源码没有该族独立开关，不能把变量缺省当退役证明。启用前必须完成旧 owner/在途通知核对；本批不执行环境配置或 seed。调度复用 APF-18A 双 audience 六行候选；P 与 Console 发布/资格/回查使用 `Console-SQL-{Seed,Verify}-apf18b1-enterprise-notifications.sql`。既有 revoked 或绑定不符行不得复活、覆盖，另请批准。
+
+同域两个通知族并行但各有独立 cursor/故障计数，共享 20 秒启动预算；预算内才开始下一目标调用，单次调用沿用现有传输超时。通知与 Directory/审批恢复并行，不累加各队列等待时间、不注册额外 owner。真实 cron CPU/壁钟验收、安装、grant、旧 owner 退役均是后续环境批准点。18B2 死信族未在本批实施；Workflow、Aims 反馈投递 owner 和 People 非任职审批归属不变。
+
+通知键对应 v1 固定线协议：标题/说明/正文/站内落点、descriptor、metadata 与冻结来源字段的派生规则必须保持不变（Host 契约测试锁定 v1 文案和落点）。不得在旧 checkpoint 未收口时直接替换模板或派生规则；未来模板变更须另定协议版本并保留旧键的原 payload 重建能力。本批安全落点为 Enterprise 通知中心，业务细节继续经 P 实时授权；不拼接输入 URL。
+
+### APF-18B2 Enterprise 死信通知与关闭（候选，默认关闭）
+
+- Altoc/Finance/People 各四个固定 S 操作：`pending-dead-letter-actionables`、`dead-letter-actionable-published`、`pending-dead-letter-closures`、`dead-letter-closure-acknowledged`。唯一 owner 是现有 Gateway 签名的 Enterprise APF wake，无新 timer。精确 `<domain>:scheduler:execute`，enterprise.runtime、实时 grant、部署及 Registry scheduler generation 验证；禁止 U/purpose/用户 actor 替代。
+- 每域 Runtime `deadLetterNotifications[domain].enabled && legacyOwnerDisabled` 与 Host `HZY_ENTERPRISE_<DOMAIN>_DEAD_LETTER_NOTIFICATIONS_ENABLED=true` 双重默认关闭；Host 要求旧 `HZY_<DOMAIN>_INTEGRATION_OPERATION_DEAD_LETTER_NOTIFICATIONS_ENABLED=false`。Altoc/Finance 旧请求内通知调用也须实际停止、在途对账完成（APF-18C），不是仅设置新变量。legacy 未确认或该 Host 部署存在非 enterprise.runtime 的旧 operation 时失败关闭，不自动接管。
+- 原始命令事实保留 source_app（Altoc/Finance 是各自域，People 是 enterprise），不作为新投递服务身份。出站重新获取 Enterprise 的 notifications:publish；Console 精确验证 enterprise.runtime，源应用 enterprise，封闭 moduleAppCode。只站内投递；沿用原 actor active 优先、配置 active 收件人回退，未找到收件人仍失败，不扩展角色或全员通知。
+- 复用每域既有 integration_operation_dead_letter_actionable，caller-Tx 和 generation 栅栏；无 schema/新 U 操作。每次至多3个创建、3个关闭，20秒开始预算，失败只回报计数、不输出原错误/正文。创建 ACK 冻结通知 ID 与实际收件人；丢失 ACK 原键重试；恢复发生在 ACK 前仍先创建，再按原 key/version/收件人关闭。通知失败绝不推进原 operation 为成功，也不能代理人工 replay。
+- 详情使用原 P 路径，`apf_<domain>_dead_letter` 两字段 descriptor。Console 当前 `<domain>/integration_operations:view` 先判权，Runtime 再精确核对 notificationId、冻结收件人、当前死信状态/version、未关闭；其它用户/大小写不同 UID/旧 generation 均不可读。企业通知链接只指向 `/enterprise/notifications`，不拼接错误文本或内部URL。
+- grant 制品复用 APF-18A 双 audience 的三个 domain scheduler grant，以及 APF-18B1 三域双 audience P + Enterprise notifications:publish + Console→Enterprise P 的 seed/verify，不新增宽 scope。候选不等于环境启用；release 必须核对两个 audience 与发布 grant 后再开同族 owner。People 非任职审批仍原 People；16f 的 Aims owner 不变。
+
+
+### Finance 法人主体目录与银行账户补充字段（W3，2026-10-04）
+
+Enterprise Host → Runtime 用户委托通道内的 Finance 自有能力，不新增服务 capability，不涉及其它应用。
+
+- **法人主体**（`finance_legal_entity`，W1 子集 `w1-finance-legal-entity`）：`/v1/enterprise/finance/legal-entities:{list|view|create|update}`，Host 为 `/finance/api/v1/legal-entities`。人员资源 `finance:legal_entities`，列表与详情要求 `view`，新建与修改要求 `edit`。字段闭集：名称（唯一，重名 `409 finance_legal_entity_name_exists`）、简称、统一社会信用代码、类型、注册地址、开票抬头、税号、状态（`active`/`inactive`，新建不可指定）、排序号、备注。页面新建的编码为 `ENT-<十六进制>`，迁移写入的为 `ENT-W<源主键>`，两者不相撞。只停用、不删除；停用不影响已关联的账户与合同，但不能再被新对象选择。**目录表未安装时全部返回 `503 finance_legal_entity_unavailable`**，不返回空列表，也不伪装成 403。
+- **银行账户补充字段**（W1 子集 `finance-bank-account-columns`）：`shortName`（唯一，重复 `409 finance_account_short_name_exists`）、`bankBranchCode`、`legalEntityCode`（须存在且启用，否则 `409 finance_legal_entity_invalid`）、`sortNo`、`accountSubtype`（仅 `bank` 类型可有，否则 `409 finance_account_subtype_invalid`）。Runtime 在事务内探测列是否存在：已安装则读取返回这些字段并接受写入；**未安装时读取与既有写入行为不变，写入这些字段返回 `409 finance_account_fields_unavailable`**。账户写入沿用既有的 `bank_accounts:admin`。`account_no_secret_ref` 不出现在任何读取结果中。
+- 其它应用需要显示主体名称时（如 Altoc 合同的签约主体）经 Finance 的进程内 typed 入口读取名称，不要求用户具备 `legal_entities` 资源，也不直接查表。
+- 推荐角色：能看账户的角色（出纳、财务会计）同时具备 `legal_entities:view`，因为账户资料里要显示主体名称；能管账户的角色（财务负责人、财务管理员）具备 `legal_entities:admin`。
+
+### 迁移事项队列的读取（W3，2026-10-04）
+
+迁移后需要人工处理的遗留事项与人员匹配。Enterprise Host → Runtime 用户委托通道，不新增服务 capability。这是运行时代码对迁移台账 `mig_*` 的受控读取（W1 §1.4、§6.2 允许的两处之一），业务查询仍不得读取或关联 `mig_*`。
+
+- **接口**：`/v1/enterprise/altoc/migration-exceptions:page`、`/v1/enterprise/altoc/migration-identities:page`、`/v1/enterprise/finance/migration-exceptions:page`；Host 为 `/altoc/api/v1/migration/{exceptions|identities}` 与 `/finance/api/v1/migration/exceptions`。
+- **人员权限**：各应用自己的 `migration_exceptions:view`（Altoc 与 Finance 各一个资源，互不相通）；许可范围必须是不受限的 `all`——队列里的对象不属于任何单个负责人或部门。推荐角色仅 `altoc:admin` / `finance:admin`。`resolve` 动作已在 manifest 声明，由写操作使用。
+- **按域隔离**：每个应用只看到 `owning_domain` 等于自己的事项；`kind` 是闭集（W2 工具合同 §10.1），跨域的 kind 作为查询参数返回 400，库里出现本版本不认识的 kind 时既不列出也不计数。
+- **闭合投影**：每种 kind 只返回 §10.1 规定的 `detail_json` 键；“待归属联系人”额外返回 `mig_source_row.row_json` 中固定的八个键（姓名、部门、职务、两个电话、备用手机、星级、关键联系人标记）和原业务员的显示名。**从不返回整行 JSON、行摘要或白名单外的键**；搜索只匹配姓名与电话。人员显示名只取 `mig_identity_map.display_name`。
+- **未安装**：迁移台账子集未安装（`migration` 域未绑定）时全部返回 `503 migration_ledger_unavailable`，不返回空列表。
+- 读取不改变台账任何内容。
+
+### 迁移事项队列的处理（W3，2026-10-04）
+
+对“迁移事项队列的读取”的补充。Enterprise Host → Runtime 用户委托通道，不新增服务 capability。
+
+- **接口**：`/v1/enterprise/{altoc|finance}/migration-exceptions:resolve`、`/v1/enterprise/altoc/migration-identities:{confirm|reject}`；Host 为 `POST /{altoc|finance}/api/v1/migration/exceptions/:id/resolve` 与 `POST /altoc/api/v1/migration/identities/:sourceUserId/{confirm|reject}`。全部要求 `Idempotency-Key`。
+- **人员权限**：各应用的 `migration_exceptions:resolve`，许可范围必须为 `all`。两种触及客户的处理方式（`assign_customer`、`link_existing`）**另外**要求调用者对目标客户有 `altoc:customer:edit` 与数据范围：Host 用调用者自己的授权算出客户范围，放进签名的命令里，Runtime 据此校验；浏览器不能提供范围。
+- **处理方式是闭集**：`accept`（保持现状/确认无误，`open→accepted`；“有效额大于总额”必须给原因）、`reopen`（`accepted→open`）、`mark_done`（`open→resolved`，仅限在对象上修正后标记的两类）、`assign_customer` 与 `link_existing`（仅“待归属联系人”）。每种方式只适用于表内列出的 kind，其它组合返回 `409 migration_exception_method_not_applicable`。`contract_balance_mismatch` 在一期没有任何处理方式；余额类的“认领到账户”“指定取值”依赖余额登记流水，尚未提供。跨域的事项对另一个应用表现为不存在（404）。
+- **归属到客户**：联系人内容由 Runtime 从台账行取（姓名、部门、职务、电话、手机、备用手机、微信、地址、备注，以及关键联系人标记与星级），**浏览器只选客户，不能提交联系人内容**。创建走既有的联系人创建写路径（范围校验、审计、命令回执照旧），与事项更新为 `resolved` 在**同一个事务**里完成，事项记录生成的联系人编码。目标客户下已有同名同手机的联系人返回 `409 migration_contact_duplicate`，由用户改用 `link_existing`。源值超出联系人模型能容纳的长度时返回 `409 migration_contact_source_invalid`，不截断，资料继续留在台账。
+- **人员匹配**：源人员以完整键标识（`employee:<id>` / `user:<id>`）。确认要求目标是当前有效的目录用户、不是保留主体、**不是操作者本人**（`409 migration_identity_self_match`）；`source_missing` 的源人员不可匹配。同一结论重复提交不再写入。一期只接受在职目录用户；“匹配到非在职账号仅用于历史显示”留待后续。
+- **并发与重放**：事项以 `expectedVersion`、人员以 `expectedStatus` 保护；同一幂等键重放返回首次结果且不再写入；状态已被他人改变返回 409。
+- **Runtime 对台账的写入是闭集**：只有两条语句——更新 `mig_exception` 的 `status/resolution_json/resolved_by/resolved_at/row_version`，更新 `mig_identity_map` 的 `directory_uid/match_status/match_basis/directory_status/matched_by/matched_at`——在所属域的写事务内执行。不 INSERT、不 DELETE，不触碰 `mig_source_row`、`mig_object_map`、`mig_batch*`。数据库账号本身对统一库有库级 DML，**权限不构成边界**，边界由代码闭集与源码级测试 `TestMigrationLedgerWritesAreClosed` 保证：除命名空间声明、安装器和两个队列文件外，任何 Runtime 源码提到 `mig_` 表即失败。
+- **审计**：每次处理在所属应用的审计表写一行（`entity_type='migration_exception'` 或 `'migration_identity'`，含方式与原因）。
+- **按源人员批量改派**：`/v1/enterprise/altoc/migration-identities:apply`（Host `POST /altoc/api/v1/migration/identities/:sourceUserId/apply`，仅 `employee:<id>`）。把该源人员名下未处理的 `owner_unmatched` 事项交给已确认的目录用户：一次最多 100 条，**逐条一个事务**——锁定并校验事项 → 走客户或合同的正常“变更负责人”命令（负责人校验、两头的范围校验、审计照旧）→ 事项置为 `resolved`。单条失败不影响其它条，返回每条结果与剩余未处理数；整批可重复执行。权限为 `migration_exceptions:resolve` 加调用者自己的 `customer:edit` 与 `contract:edit` 范围（由 Host 放进签名命令）。**职责分离**：每次执行都重新校验匹配是由目标用户以外的人确认的（不只在确认时拦截），否则 `409 migration_identity_self_match`；执行人不受限制；每条事项的处理记录写明目标、确认人与执行人。每次执行都重查目标用户仍在职。只改负责人，不自动填写部门。
+
+### Altoc 客户层级、主联系人与联系人星级（W3，2026-10-04）
+
+既有客户命令通道内的补充，人员权限均为 `customer:edit` 与数据范围，不新增动作或服务 capability。
+
+- **上级客户** `customers-set-parent`（`/v1/enterprise/altoc/customers:set-parent`，Host `PATCH /altoc/api/v1/customers/:customerId/parent`）：载荷只有 `parent_customer_id`（id 或 `null` 清空）与 `expectedVersion`。上级必须存在、未删除且在调用者范围内（否则 403，不区分“不存在”与“无权”）；不能是自己；不能成环；上方链路加下方子树的总深度不超过 10 层，否则 `409 altoc_customer_hierarchy_invalid`。使用基础列，不依赖 W1 子集。
+- **主联系人** `customers-set-primary-contact`（`…/customers:set-primary-contact`，Host `PATCH …/primary-contact`）：载荷只有 `primary_contact_id`（id 或 `null`）。必须是该客户自己的未删除联系人，否则 `409 altoc_primary_contact_invalid`。作为主联系人的联系人不能删除（联系人是软删除，外键拦不住，由命令校验），须先更换或清空，否则 `409 altoc_contact_is_primary`。“主联系人”与既有的“关键联系人”标记是两件事，互不影响。
+- **联系人星级**：联系人新建与修改接受 `star_level`（1–6 的整数或 `null`）。
+- **读取**：客户读取返回 `parent_customer_id`；联系人返回 `is_key_contact`；W1 列（`primary_contact_id`、`contact_name_text`、`sort_no`、`star_level`）已安装时一并返回。
+- **未安装 W1 客户/联系人列子集**：主联系人命令与星级写入返回 `409 altoc_customer_fields_unavailable`；层级命令与全部既有读写不受影响。
+
+### Finance 余额登记流水（W3，2026-10-04）
+
+Enterprise Host → Runtime 用户委托通道内的 Finance 自有能力，不新增服务 capability。模型见 W1 §4.2：每次登记一行只增不改的流水，当日展示值取登记时刻最晚的金额。
+
+- **接口**：`/v1/enterprise/finance/balance-entries:{list|create}`；Host 为 `GET|POST /finance/api/v1/bank-accounts/:code/balance-entries`（读取带 `date`）。
+- **人员权限**：读取 `bank_accounts:view`；登记 `bank_accounts:edit`。`edit` 只用于登记余额——账户资料的新建与修改仍要求 `admin`，查看完整账号仍要求 `reveal-account-no`，`edit` 都不满足（有契约测试）。推荐角色中出纳（`finance:cashier`）新增 `bank_accounts:edit`。
+- **登记**：载荷只有对账日期、金额（文本，两位小数，可为负）、备注；来源固定为 `manual`，登记时刻与登记人由服务端确定，不接受调用方指定。按账户行锁串行，登记时刻保证严格晚于当日已有的人工登记，因此页面登记不会产生“同一时刻不同金额”。写入流水后重算当日同来源的快照：金额、`entry_count`、`latest_tie_count`、`distinct_amounts`，并维护 `is_day_latest`。同一天再次登记不覆盖历史。日期不得晚于今天；已销户账户不接受登记。
+- **幂等**：流水的 `entry_ref` 由幂等键派生，重放命中唯一键后比对内容——相同返回首次结果，不同 `409 finance_idempotency_conflict`。
+- **规则无法决定的情况**：某日最新时刻的多条登记金额不同（只可能来自导入）时不生成快照，返回/记录 `finance_balance_latest_conflict`，由迁移事项队列处理。
+- **列表补充**：账户列表每行返回最近余额与日期，并返回整个筛选结果（不是当前页）按“法人主体 + 币种”的合计 `balanceTotals`；没有任何余额记录的账户不返回 0，也不计入合计。余额快照列表在已安装时返回三个登记统计列。
+- **迁移事项**：Finance 的 `migration-exceptions:resolve` 增加方式 `record_balance`，适用于“无账户的余额”（须指定账户）与“当日最新金额冲突”（账户取事项本身的目标，不可改指别处）。金额必须是事项列出的候选金额之一，日期取自事项；以一条人工登记落账并把事项置为已处理，同一事务。
+- **未安装**：流水表未映射或快照统计列不存在时，两个新接口返回 `503 finance_balance_entry_unavailable`；既有账户列表与快照列表照常工作。
+
+### Finance 查看完整银行账号（W3，2026-10-04）
+
+路径：浏览器 → Enterprise Host `POST /finance/api/v1/bank-accounts/:code/reveal-account-no` → Runtime `/v1/enterprise/finance/bank-accounts:reveal-account-no` → **进程内** Console 保险箱 `RevealCustodySecretForOwner`（ADR-018a D11：同进程同租户，不签服务令牌、不登记 grant）。不新增服务 capability。
+
+- **人员权限**：`finance:bank_accounts:reveal-account-no`，独立敏感动作，平台默认蕴含下 `admin`/`edit`/`view` 都不满足；Host 以该显式动作向 Console 申请授权并写入许可，Runtime 校验许可动作逐字相等。推荐角色仅 `finance:admin`。
+- **只能取到本账户的账号**：Runtime 不信任账户行上的 `account_no_secret_ref`，而是由账户编码推出唯一合法密钥码 `finance.bank-account.<code>.account-no`，要求行上引用恰好等于 `hzybase://vault/<该密钥码>`（否则 `409 finance_account_no_ref_invalid`，不触达保险箱）。保险箱再独立复核：`usage_type='custody'`、`secret_type='bank_account_number'`、`owner_type='finance_bank_account'`、`owner_key=<账户编码>`，任一不符统一 404，不区分“不存在”与“不属于你”。`ResolveVaultSecret` 对 custody 密钥仍固定 403。
+- **银行 custody 预览**：Console 创建/轮转 `secret_type=bank_account_number`、`owner_type=finance_bank_account`、`usage_type=custody` 的 db_encrypted 密钥时，仅保留账号末四字符；长度不超过四的全部遮盖。其它密钥类型的预览行为不变。WizBiz 工具的账户掩码与该预览一致，不通过解密生成预览，不改变 reveal/resolve 授权。
+- **输入**：浏览器只提交 `reason`（4–200 字，必填）。客户端地址与 User-Agent 由 Host 从自身请求上下文取得并放进**签名的命令载荷**：地址取连接对端；仅当对端是回环/私网地址（即来自 Gateway）时采用 Gateway 覆盖写入的 `X-Real-IP`；**从不读取 `X-Forwarded-For`**。浏览器请求体里出现 `clientIp`、`secretCode` 等任何其它字段一律 400。User-Agent 是浏览器自报信息，仅作上下文记录。
+- **双重审计**：① Finance 业务审计 `finance_audit_log`（`action='reveal_account_no'`：谁、何时、哪个账户、原因、地址；不含账号），**先提交、后揭示**；② 保险箱访问日志（`action='reveal'`，`success`/`failed`/`denied`，含操作者、`app_code='finance'`、地址、UA、原因）。保险箱日志写不进去时不返回明文。
+- **频率限制**：同一用户每小时最多 20 次（尝试即计数，含保险箱随后失败的）。超限返回 `429 finance_account_no_reveal_rate_limited`，另写一条 `reveal_account_no_rate_limited` 审计，不触达保险箱。按用户串行化计数（连接级命名锁，在事务结束前释放）。
+- **不是幂等命令**：每次查看都是一次新的受审访问，不走命令回执，不存在可重放的已存响应。
+- **错误语义**：无权 403；账户不存在或没有保存完整账号 404；引用不属于该账户 409；超限 429；保险箱未就绪或失败 503（不伪装成 403）。错误信息是固定文案，不回显保险箱错误或任何账号片段。
+- **不落盘、不进日志**：响应 `Cache-Control: no-store`；Host 处理函数、Foundation 的 Runtime 传输与 Runtime 访问日志都只记录固定的元数据字段，不记录请求体或响应体（有源码级断言锁定）；账号不进入任何列表、导出、搜索或业务表。
+- **不在本合同内**：把账号写入保险箱（登记或更换完整账号）。迁移由工具按 W2 工具合同写入；页面上的更换账号另行设计，属于凭证写入。
+
+### Altoc 合同列表合计与客户子树汇总（W3 只读前置，2026-10-04）
+
+既有 `/v1/enterprise/altoc/contracts:list` 的纯新增能力，不新增路由、服务 capability 或人员动作；人员权限仍是 `contract:view` 与合同数据范围。
+
+- **`summary`**：每次列表读取都返回整个筛选结果（不是当前页）的 `count` 与 `amounts[{currency_code,count,amount}]`。金额按币种分行，调用方不得跨币种相加，也不得在客户端对当前页求和代替它。
+- **`includeDescendants`**（查询字段，仅合同列表、且须同时给 `customerId`）：把列表与合计的客户范围从单个客户扩到其整棵子树（按 `parent_customer_id`，忽略已删除客户）。深度上限 10、节点上限 2,000，超限返回 `422 altoc_customer_subtree_too_large`，不截断；成环不会死循环。
+- **`rollup`**（带 `customerId` 时返回）：只统计调用者合同范围内可见的销售方向合同——`count`、`amounts`（不含中止）、`terminatedCount`、`signedLast12Months`、`signedThisYear`、布尔 `excluded`（所涉客户下存在范围外的销售合同）。不受 `search`/`status` 筛选影响。**不含任何客户 id、编码、名称或不可见合同的数量**：子树遍历只在服务端使用客户 id，调用者对下属客户是否有 `customer:view` 不影响也不被泄露。
+- **签名**：`includeDescendants` 属于读许可签名的 query 部分。为保持既有许可的字节不变，Runtime 与 Foundation 的 canonical 仅在该值为 `true` 时在末尾追加一个 `true`；双端共用黄金向量 `data-runtime/internal/server/testdata/enterprise-altoc-contract-descendants-read-permit.json`。许可内 query 与请求体 query 必须逐字段相等，Host 不能在签名后扩大范围。
+- 只使用既有列，未安装 W1 列的环境同样可用。
+
+### W3 对象只读展示扩展（2026-10-04）
+
+沿用现有客户、合同、银行账户读操作和对象 `view` 范围，不新增固定操作、capability 或 grant；所有读取都在 Registry 快照事务内。未装 W1 列/快照/台账映射时不返回对应字段，既有无新增筛选的读取保持可用；配置了映射但物理表缺失时返回依赖失败，不伪装成空数据。
+
+- 客户列表增加 `parentId`、`rootsOnly`、`ownerUnassigned`，前两者互斥。`childCount` 仅计可见直接下属，`hasHiddenChildren` 仅表示是否存在范围外下属，不返回其数量或名称。`ancestors` 至多 10 层，任一不可见上级截断路径；直接上级不可见时不返回其 ID/名称，仅给 `parentHidden=true`。
+- 合同列表增加 `origin`（`native` / `historical_import`）、`category`、`ownerUnassigned`；W1 列未装时指定来源/类别得到空匹配，不影响既有查询。列表和详情按已装列返回 W1 字段；客户 `rollup.effectiveAmounts` 每币种独立返回 `count/amount/missingCount`，NULL 不当作已填零。
+- 新筛选进入 Go/TS 共享 canonical：按 `parentId, rootsOnly, ownerUnassigned, origin, category` 顺序，仅非空字符串/true 追加 `[字段名,值]`；false/空值不改变老许可字节。仍要求许可 query 与请求 query 精确相等。共享向量：`enterprise-altoc-w3-read-permits.json`。
+- 详情 `migration_snapshot` 只返回类型化快照表的固定字段；`source_info` 只含 `system/table/pk/batchCode/importedAt`。受控台账读取限定 `w3_read_metadata.go`，已登记在 `TestMigrationLedgerWritesAreClosed`。对象主映射通过 `mig_object_map → mig_batch` 取来源；未分配负责人的源 UID 从同来源、同目标对象的 `owner_unmatched` 事项取出，再匹配 `mig_identity_map` 的 `employee:` 命名空间，仅返回 `source_owner_name`。不返回事项 JSON、源行正文或身份映射行，列表不读台账。
+- 合同的签约主体名称及账户简称走 Finance owning 窄函数 `financeW3ReferenceName`，与 Altoc 共享 Registry 只读快照；只返回引用对象名称，不返回账号或保险箱引用，调用前已核对合同范围。账户详情返回法人主体名称，缺目录映射时保留编码。
+- 同账户同日人工和导入快照并存，余额列表在 COUNT/LIMIT 前排除被人工覆盖的导入行，账户最新余额与整个筛选结果的按主体/币种汇总也优先人工。无快照保持 NULL，不冒充零余额。页面不对当前页 reduce 合计。
+
+### 历史导入合同的操作护栏（WizBiz 迁移 W2 前置三，2026-10-04）
+
+适用对象：`altoc_contract.origin_type='historical_import'`（必然 `amount_basis='header'`）以及任何 `amount_basis='header'` 的合同。这是“历史合同行落库后 Runtime 可以启动”的前置门；依据 W1 设计 §5.3、§5.4。
+
+- **判定方式**：各入口在已持有的合同行锁内读取当前行（`SELECT *`），按 `amount_basis` / `origin_type` 判断；未安装 W1 列的环境读不到这两个键，护栏不生效，行为与此前一致。不查询可能不存在的列。
+- **Altoc 统一库路径**（`enterpriseapf` 合同命令，范围校验之后、任何写入与幂等回执之前）：
+  - `amount_basis='header'`：`contract-lines-replace` → `409 altoc_contract_header_lines_locked`。行合计重算对 header 合同的跳过保留为纵深防御。
+  - `origin_type='historical_import'`：除 `contract-projects-bind`、`contracts-set-owner`（见下）与两个只读命令外，全部写命令（`contracts-update`、`payment-terms-replace`、`obligations-replace`、`obligations-transition`、`contracts-sign`、`contracts-activate`）→ `409 altoc_contract_historical_operation_denied`。
+  - **后续命令（W3）**：`contracts-annotate`（`contract:edit`；只改 `contact_id`、`remark`、`content_summary`，联系人须属于该合同客户，否则 `409 altoc_contract_contact_invalid`）、`contracts-complete` 与 `contracts-terminate`（`contract:close`；须 `status='effective'`，中止必须给原因）。目标状态与导入映射一致：完结 → `completed/closed/fulfilled` 并写 `completed_at`；中止 → `terminated/terminated/cancelled` 并写 `terminated_at`；`financial_status`、`activation_status` 不变。不发 Workflow、不写集成出站、不同步 Finance 摘要、不动 Aims；写版本审计，完结/中止另写一条含原因的审计。三条命令**只适用于历史导入合同**，对其它合同（含未安装 W1 列的环境）返回 `409 altoc_contract_operation_not_applicable`；一期不提供撤销。
+  - **变更负责人** `contracts-set-owner`（`contract:edit`，对原生与历史合同、任何状态都可用）：只改 `owner_uid` 与可选的 `owner_dept_code`，不改状态、金额、审批字段，不产生出站；负责人须是在职目录用户、不是保留主体；**当前合同与改派后的负责人/部门都必须在调用者数据范围内**，否则 403——不能把合同改派出自己的范围。写版本审计，另写一条记录改派前后负责人的审计。
+  - `contract:close` 是 Altoc manifest 的独立动作，平台默认动作蕴含下 `admin`、`edit` 都不满足它；Host 以显式动作申请许可（全局管理员角色同样需要显式授权），Runtime 校验许可动作与命令要求的动作逐字相等。推荐角色中仅 `altoc:admin` 含该动作。
+- **Finance**：台账写命令在锁定来源合同时判定，历史合同一律 `409 finance_historical_contract_not_ready`（开票申请、收款登记、由结算计划发起的开票及其后续命令）。Altoc 的合同财务摘要入口对历史合同同样失败关闭，不静默跳过，避免 Finance 已有事实而 Altoc 无感知。
+- **旧 Altoc 适配器**：行写入与状态/激活入口有同样的判断（完结、中止放行）。旧路径操作的是旧库表，历史合同只落统一库，这里仅为纵深防御。
+- **不是人员权限**：以上是对象状态约束，与角色、数据范围无关；`admin` 不能绕过。
+- **待后续放开**：P1 期初应收批次落地时重新设计付款条款、Finance 开票/收款与摘要同步的放开条件。放开前不得以放宽本护栏的方式提供这些能力。
+
+### Altoc 负责人指派校验与“未分配”保留主体（WizBiz 迁移 W2 前置二，2026-10-04）
+
+- **规则**：任何写入口为对象指派负责人时（payload 的 `owner_uid`、`owner_user_id` 或 Finance 的 `responsibleUid`），目标必须是 Console Directory 中存在且 `status=active` 的用户，不限 `user_type`。以 `system:`、`client:` 开头或等于 `system` 的保留主体、含空白或控制字符、`@all`、超过 64 字符的值一律 `400 apf_owner_invalid`；不是有效用户 `400 apf_owner_not_active`；Directory 不可用 `503 directory_subject_status_unavailable`（未配置 Directory 时 `503 apf_owner_directory_unavailable`），不降级放行。接口原有输入格式校验先执行，格式错误也可能返回该接口的 input-invalid 错误。只阻断新指派，不因历史负责人失效而拒绝读取或不产生新指派的更新。
+- **位置**：校验在 Runtime `enterpriseapf` 的每个公开写入口内、输入校验之后、业务事务之前，作用于该入口随后写入的同一份 payload（客户、线索/商机及转化、续约、招投标、服务工单、服务协议、报价、合同）。没有独立的“操作 → 负责人字段”清单，源码级测试保证：负责人字段集合封闭、每个入口都有该校验、读取负责人字段的文件都在受保护入口之后。
+- **Enterprise → Directory**：Runtime 进程内 typed 调用 `EnterpriseActiveUser`（ADR-018a D11，同进程同租户），不签服务令牌、不新增 capability 或 grant。
+- **`system:unassigned`**：表示历史负责人未能映射到目录用户的对象。用户可达的写入口不能把它作为新指派目标；迁移工具通过 `enterpriseapf.ValidateMigrationOwner` 写入，用户写路径不能调用这个迁移专用例外。该字面量在 `enterpriseapf` 生产代码中只允许出现在 `owner_guard.go`。负责人为该值且部门为空的对象只对 `all` 数据范围可见、可改派；由其下新建的对象（报价、工单等）负责人取创建人，不继承该值。
+- **Foundation**：`system:unassigned` 登记为内置目录用户（显示名“未分配”，`status=0`），批量与单个目录查询在本地解析，不转发 Console。保留主体不能成为会话主体（`requireFoundationSessionUid` 视为未登录）、不能取得权限快照或 scoped authorization（`403`，含本地开发捷径之前）、不出现在 `UserTreeSelector`（`APFUserSelect` 经它）的候选中，也不会被选择器提交。`useAltocDirectoryLabels` 不为保留主体发起查询，也不因其未解析而标记目录错误。
+- **责任人覆盖核查（第 3 批）**：W1 列出的遗留项共 4 个字段。Finance `invoice-requests-assign-issuance` 写 `issuance_responsible_uid`，`receipts-create/update` 写 `reconciliation_responsible_uid`，均在 `FinanceLedger` 事务前按同一份 `responsibleUid` 执行 owner-guard。销售任务 `assignee_uid` 来自线索/商机当前 owner：先按当前范围读取来源快照，在业务事务前预读 Directory；仅实际插入新任务时消费校验结果，已有任务不重新指派。新跟进活动和线索转化生成对象也复用该结果；实际 uid 与预读值不同返回 `409 altoc_sales_owner_changed`，整笔事务回滚。不会在业务事务持锁期间查询 Directory。结算计划 `collection_responsible_uid` 目前没有 Enterprise 用户指派入口，合同生成和期初迁移均保持 NULL；合同 payload、付款条款明细及未登记的 billing 写操作拒绝注入责任人字段，不为补校验新增业务接口。旧独立 Altoc 的 `receivable_plan` 是另一套未迁移接口，不属于此 `altoc_billing_schedule` 合同。
+- **客户、联系人、银行账号**：客户创建/改派已有 owner-guard；联系人写入口不接受独立 owner 字段，按客户范围授权；银行账号 `ownerDeptCode` 是部门标识，不按人员 uid 校验，两类入口均拒绝注入人员负责人字段。Foundation 选择器继续排除保留主体，真实组件测试同时覆盖候选、提交和历史值显示。
+
+### APF-17c 现有开通链恢复与安全撤权诊断（候选，环境未验）
+
+本段保留真实钉钉候选的开通、激活、状态查询合同。手工候选仍只能维护资料，自动开通在页面与服务端失败关闭。LDAP、邮箱停用及其独立成功回执没有既有目标合同，本段不实现，也不把 Console/Platform 已确认解释为外部账号全部停用。
+
+- 开通恢复沿用原动作、原 `expectedVersion` 和原 `Idempotency-Key`，按原阶段的版本偏移重放已有回执。浏览器 sessionStorage 只存这些元信息和同租户/用户/部署绑定，不存员工资料、命令、令牌或目标确认。策略 revision 更新不丢弃同身份原意图，但每次重试都重新执行当前人员权限、员工范围与短期 permit 校验；切换身份/部署不能恢复他人的意图。目标拒绝释放时不能推进本地取消；必须取得 `released=true` 和相同 reservationId。
+- Directory 恢复新增三个固定 U 操作 `people.apf09c1-directory-operations-list/view/replay`，复用 `people:enterprise-host:execute`。人员门槛分别为 `integration_operations:view/replay`，仅租户全局同授权单元可用，部门/本人范围不得扩大为全公司操作。Runtime 限定当前 tenant/deployment、source_app=enterprise、service_client_id=enterprise.runtime、target_app=console、source_biz_type=employee，以及 employment-sync/offboarding-disable 两个固定 family；旧 People 来源不在此恢复入口中。
+- list COUNT/分页在同一快照；view 返回浏览器字段白名单，命令与摘要仅在服务器间用于 probe。replay 在同一 caller-Tx 锁定原命令，校验 frozen hash/来源/目标 capability，当前授权在读取既有回执之前复核；复用 service_command_receipt 与 ReplayInTransaction，只重排 failed_permanent/dead_letter，保留原 payload/hash/key。processing/partial_unknown/succeeded 不得强制成功或重排；同键改意图、版本变化409，失败整笔回滚。没有新增表、grant 或 owner。
+- Enterprise probe 只从 Runtime 的冻结命令取得 employeeUid/sourceRevision/snapshotHash/type，不接受浏览器自报 uid、版本、确认或新 payload。重新取得 enterprise.runtime → Console 令牌，employment 与 offboarding 分别使用既有 `console:directory-employment:sync`、`console:directory-offboarding:disable`；Console 校验真实服务来源、精确客户端、aud/tenant/deployment。只读 `lifecycle-command-status` 由 Console 自身凭据以现有 `console:directory-connector:execute` 查询 Runtime，绝不转发上游令牌。
+- Console 在一致快照中核对 Directory lifecycle 的精确 revision/hash/type，并查询同 revision 的 Platform operation。Directory 已应用与 Platform pending/partial_unknown 分开展示；更晚 Directory revision 显示 superseded，不冒充原版本完成。响应只含封闭状态，无原始错误、URL、凭据或私密档案。未知结果保持未确认，依赖故障503；参数400、身份/范围403、版本冲突409保留。
+
+本段不启用任何环境。部署需同时带上 Runtime、Console、Foundation/Host 的固定路由与生成物，核验既有精确 grant/目标部署和受信 Console 传输路径；hzy0 本地 egress 已补两条精确只读 probe 路径候选，实际切换另作为启用前核验项，不以隔离测试冒称已接通。17d 及旧 owner 退役等待整批提交后另案。
+
+
+### People 任职用户原键恢复（2026-10-04）
+
+`POST /enterprise/api/apf/people/assignments/:id/recover` 只接受 employeeUid、expectedVersion 与稳定 Idempotency-Key。沿用 `assignments:edit`、Foundation 唯一人员范围投影及 U 通道；Runtime 在锁内复核当前范围、发起人 created_by 与签名 actor 相等、pending 状态和冻结版本。恢复通过既有 request-workflow 固定操作的 phase=recover 获取单个不可变 command_json；无记录或记录不唯一返回 409，不创建新的 operation。浏览器不能提供原键、表单或实例号。
+
+Host 用冻结 actor/form/operationKey 经正式 Workflow prepare/create 获取原实例，随后沿用 attach-workflow 与独立 workflowapproval reader 校验并绑定；回绑键与原提交的 bind 键一致。已绑定 pending 的重试不再调用 Workflow。恢复不进入 scheduler-inspect、不会唤醒或领取 Directory lifecycle operation；无需启用调度或新增 capability/grant。任职只读白名单增加 created_by 与 workflow_instance_id 以显示发起人恢复入口和审批链接，不包含薪资或私密资料。
+
+### GitLab 仓库内容只读（2026-10-04，文档资产设计 DOC-01）
+
+依据 [文档资产统一管理设计](./Document-Asset-Unified-Management-Design.md) §6，平台不再向 GitLab 仓库写入内容。本批为代码与候选授权脚本，未在任何环境执行授权变更或部署。
+
+- **删除**：Foundation 五个通用接口 `/api/git-integration/{commit,commits,commit-diff,file,markdown-tree}`（无前端调用方，处理器内无人员授权）与 `createGitCommit`、`resolveGitCommitActions`；Codocs `POST /api/project-docs/gitlab-submit/**` 及其编排、页面“提交到 GitLab”入口。
+- **Runtime**：`/v1/console/service/integrations/{code}/gitlab/{operation}` 的固定操作集合去掉 `commit`、`resolve-actions`，对持有 `integration_operations:execute` 且带幂等键的调用方同样返回 `404 console_gitlab_operation_not_found`。保留只读操作 `project-info`、`group-projects`、`commits`、`commit-diff`、`markdown-tree`、`file`，以及仍需 `Idempotency-Key` 的 `issue-upsert`（工作项与 GitLab Issue 关联，是否保留见设计 §9 第 6 项）。
+- **授权**：`gitlab.commit`、`gitlab.resolve-actions` 的语义授权由候选脚本 `Console-SQL-Seed-v2.35-gitlab-repository-read-only-candidate.sql` 收回（只从 `operations` 中移除两项，不改状态、不删行、不复活已撤销行），配套只读 verify。执行属于环境写入，需逐环境批准；执行前 Runtime 已不再受理这两项操作，授权残留不构成可用通路。
+- **读取**：GitLab 读取只经各业务模块自身的服务端入口，由该入口先判项目范围与仓库绑定，再调用 Foundation `gitIntegration` 的只读辅助函数；浏览器不能直接指定任意仓库。
+- **约束**：GitLab 集成令牌保留写权限以支持 `issue-upsert`（用户 2026-10-04 决定，DOC-02 取消）。仓库内容只读依赖 Runtime 固定操作白名单与 Console 操作授权，不得再新增写仓库内容的固定操作；相关契约测试是防回退的门。
+- **仍待处理**：旧独立 Codocs 的 `GET /api/project-docs/gitlab-sync/**` 只校验静态 `projects:edit`，未按项目成员关系限定 `projectCode`；它只读仓库并写入本项目 OSS 前缀，随旧 Codocs 项目文档退役处理，退役前如继续使用应补项目范围判权。独立 Aims 的仓库读取入口已有 `assertAimsProjectRepositoryAccess`。
+
+### Codocs 文档存储维度（DOC-06a/6b，2026-10-04，未在任何环境执行迁移）
+
+依据 [DOC-05/06 实施细化稿](./Document-Asset-DOC-05-06-Implementation-Spec.md) §2。本批不改变任何读写行为。
+
+- **表结构（候选迁移）**：`documents` 新增 `storage_type`（`oss`/`git`，默认 `oss`）、`storage_locator`、`origin_json`；`document_versions` 新增 `storage_revision`。只增列并回填隐含的桶（`git-project` → `projects`，其余 → `documents`）；回填可重复执行。现有代码在未加列的库上照常工作。
+- **判别收口**：`git-project`（仓库文档的 OSS 副本，存于项目文档桶）的判断只允许出现在 Runtime `internal/apps/codocs/document_storage.go` 与 Codocs `shared/utils/documentStorage.ts`；两处各有测试禁止其它文件直接比较该值。在迁移确认执行之前，这两处不得引用新增列。
+- **后续**：`storage_type=git` 的只读读取（6c）与旧取值规范（6d）另行交付；在此之前不得改写或停止写入 `git-project`。
+
+### Aims 项目集成员与文档仓库登记（DOC-05a，2026-10-04，表未在任何环境安装）
+
+依据 [DOC-05/06 实施细化稿](./Document-Asset-DOC-05-06-Implementation-Spec.md) §3。本批只提供成员与仓库登记的读写，不改变任何文档的读写判权（项目集归属文档在 Host 上仍固定 409，见 5b）。
+
+- **Host 路由**：`GET /aims/api/v1/portfolios/:id/members`、`PUT /aims/api/v1/portfolios/:id/members`、`PUT /aims/api/v1/portfolios/:id/doc-repo`。对应 Runtime 固定用户操作 `/v1/enterprise/aims/project-portfolios:{members-list,members-save,doc-repo-save}`，仍由 `aims:enterprise-host:execute` 授权，不新增 capability 或 grant。写入必须带 `Idempotency-Key`；浏览器只能提交 `action/uid/relationType/validUntil/expectedRevision` 或 `repoPath/expectedRowVersion`，不接受任何身份字段。
+- **人员权限**：读取要求 `portfolios:view`；写入要求 `portfolios:admin`（Host 判定后才注入 `current_user_can_manage_portfolios`，调用方自带的同名参数丢弃）。
+- **关系复核（Runtime 事务内、对锁定行）**：写入者除上述权限外，还必须是该项目集的负责人（`owner_uid`）或当前有效的 `manager`；actor 只取签名委托。两者缺一即 `403 portfolio_member_manager_required`。
+- **引导规则**：仅当项目集没有负责人且没有任何有效 `manager` 时，允许只凭 `portfolios:admin` 新增第一名 `manager`；不能借此新增其它关系、修改或重新启用已有成员，也不适用于文档仓库登记。
+- **不变量**：没有负责人的项目集至少保留一名有效 `manager`，最后一名管理者被移除或降级时返回 `409 portfolio_last_manager_required`。成员按 `(portfolio_id, uid)` 唯一，更新与移除带修订号，冲突返回 409；移除为软删除并立即失去管理资格。
+- **数据与安装**：表 `aims_portfolio_members`、`aims_portfolio_doc_repos`（逻辑名与物理名相同，不属于兼容视图族）。独立 Aims 库执行 `aims/docs/migration_v5.42_portfolio_members.sql`；统一库经域安装子集 `aims-portfolio-members` 安装并登记映射（安装器子集另行交付）。统一写入模式下映射缺少这两张表时，三个入口固定 `503 aims_portfolio_members_unavailable`，其它 Aims 功能与默认映射 hash 不变。统一模式的事务持 Registry 代次栅栏，代次不符时在任何业务写入前拒绝。
+- **负责人已失效（5b-1 补充）**：Enterprise Host 路径下，Runtime 在业务事务之前用进程内 typed 调用向 Directory 预读该项目集负责人是否仍为有效员工（`status=active` 且 `user_type=employee`）。失效的负责人视同“无负责人”：不再是隐含 `manager`；引导规则与“最后一名管理者”保护都按无负责人计算；成员列表返回 `ownerInactive`。预读结果与事务内锁定行的 `owner_uid` 绑定，期间负责人被更换返回 `409 portfolio_owner_changed`。Directory 不可用时这些入口返回 `503 directory_subject_status_unavailable`，不降级为“按记录信任负责人”。独立 Aims 路径没有目录预读，行为不变。
+- **未做**：成员 uid（负责人以外）是否为在职员工的目录校验、成员管理页面（5c）、项目集文档写入（5b-2）。
+
+### Aims 项目集文档只读（DOC-05 5b-1，2026-10-04，迁移未在任何环境执行）
+
+依据 [DOC-05/06 实施细化稿](./Document-Asset-DOC-05-06-Implementation-Spec.md) §3 与 §8。本批只读：项目集归属文档的写入在 Host 上仍固定 `409 project_document_portfolio_owner_unsupported`。
+
+- **Host 路由**：`GET /aims/api/v1/portfolios/:id/documents`，不接受查询参数。对应 Runtime 固定用户操作 `/v1/enterprise/aims/project-portfolios:documents-list`，仍由 `aims:enterprise-host:execute` 授权，不新增 capability 或 grant。
+- **判权（同一上下文内同时成立）**：人员权限 `portfolios:view`（Host）；与项目集的当前关系（Runtime，按签名 actor 与当前行计算，不接受调用方传入）。关系来源依次为：有效负责人或有效 `manager` 行 → `manager`；其它有效成员行 → `contributor` / `viewer`；当前归属该项目集的项目的负责人或有效成员 → `inherited`；都不是 → `403 portfolio_document_relation_required`。成员行过期或移除、项目移出项目集、项目成员停用后立即失效。
+- **Aims → Codocs（进程内 typed 调用，ADR-018a D11）**：Aims 只把自己选出的项目集文档 UUID 与（actor、项目集编码、关系）交给 `CheckEnterprisePortfolioDocument`；不签服务令牌、不新增路由。Aims 是文档归属的事实源，策略行只贡献密级、默认权限与继承开关，且仅当该行显式归属本项目集（`source_owner_type='portfolio'` 且编码一致）时才采用；否则按限制性默认（L2、不继承）处理。
+- **可见范围**：直接关系可看该项目集全部文档（含仓库引用文档）；`inherited` 只可看显式归属本项目集、密级 L0/L1 且 `inherit_to_member_projects=1` 的文档，仓库引用文档不继承。被过滤文档的标题、数量与只含这类文档的文件夹对 `inherited` 不可观察；`total` 为过滤后的数量。下载是否开放只看策略的 `default_permission`，关系不放宽。全部结果只读。
+- **同名编码**：项目集文档的判权从不使用“来源项目成员”规则。项目路径的该规则只对 `source_owner_type='project'` 的策略行成立，因此策略行显式标为项目集后，与项目集同编码的项目的成员也不能经项目路径读取。存量策略行默认为 `project`，由 `hzy-document-catalog-reconcile --portfolio-policy-owners`（默认 dry-run，`--apply` 幂等，只改已存在行的归属类型与编码并记审计）标记；**标记前该同名缺口在项目路径上依然存在**，启用前必须在目标环境执行并核对。
+- **项目文档列表**：`project-documents:accessible` 的响应增加只读区 `portfolioDocuments`（该项目当前所属项目集、对当前用户过滤后的文档，带 `inheritedFrom: 'portfolio'` 与 `relation`）和 `portfolioDocumentsUnavailable`。原 `items` 不变。项目集侧依赖（成员表未安装、策略列未安装、Directory 不可用）不可用时只省略该区并置标志，不影响项目文档。
+- **数据**：Codocs 候选迁移 `codocs/docs/migrations/20261007_document_access_policy_owner.sql` 为 `document_access_policies` 增加 `source_owner_type`、`inherit_to_member_projects`。列未安装时项目集文档列表固定 `503 codocs_portfolio_policy_unavailable`；项目文档判权不依赖这两列。成员表未安装沿用 `503 aims_portfolio_members_unavailable`。
+- **未做**：单份项目集文档的打开/内容读取与页面（5c）、产品线归属。
+
+### Aims 项目集文档写入与策略维护（DOC-05 5b-2，2026-10-04）
+
+依据 [DOC-05/06 实施细化稿](./Document-Asset-DOC-05-06-Implementation-Spec.md) §9。只提供“登记、文件夹、移除引用、策略维护”；**不在项目集下新建正文或上传附件**（Codocs 尚无项目集归属，另行设计）。项目文档入口对项目集归属文档仍固定 `409 project_document_portfolio_owner_unsupported`，以下是唯一的写入口。
+
+- **Host 路由**：`POST /aims/api/v1/portfolios/:id/documents`、`DELETE /aims/api/v1/portfolios/:id/documents/:docId`、`PUT /aims/api/v1/portfolios/:id/documents/:docId/policy`。对应 Runtime 固定用户操作 `/v1/enterprise/aims/project-portfolios:{documents-create,documents-delete,documents-policy}`，仍由 `aims:enterprise-host:execute` 授权，不新增 capability 或 grant。三者都必须带 `Idempotency-Key`。
+- **判权（同时成立）**：人员权限 `portfolios:edit`（Host）；当前关系（Runtime，写事务内对锁定的项目集行与成员行复核，actor 只取签名委托）——登记与移除要求 `manager` 或 `contributor`，策略维护仅 `manager`；`viewer` 与组内项目成员（继承关系）不能写。负责人失效规则同 5b-1。关系撤销后，旧请求的重放与首次请求同样被拒绝。
+- **归属**：只取路径中的项目集。请求体只接受 `uuid/title/parentId/isFolder/docCategory/documentSource/codocsUuid/repoFilePath/repoCommitId`，出现任何项目、里程碑、工作项、项目集或身份字段即 400。父级必须是同一项目集自有的文件夹。
+- **登记 Codocs 文档（Aims → Codocs，进程内 typed 调用，ADR-018a D11）**：挂入项目集等同于对外分享，Aims 在自己的写事务之前调用 `ConfirmEnterprisePortfolioDocumentSharer`，要求 actor 是该 Codocs 文档的所有者（与 Codocs“只有所有者可管理分享”一致；编辑分享不够），且文档未删除、未进回收站、未只读锁定。不签服务令牌。同一文档在同一项目集只能登记一次。文档的策略行若属于某项目或其它项目集，登记仍允许，响应返回 `policyOwnedElsewhere=true`；此时读取侧按限制性默认（L2、不继承）处理。
+- **登记仓库文件**：仓库只能是该项目集登记的文档仓库（Runtime 在事务内读取登记表，不接受调用方传仓库）；Host 经只读固定操作取回文件并冻结提交版本。登记的仓库路径超过 50 个字符时返回 `409 portfolio_doc_repo_unsupported`（`project_documents.repo_project_code` 的列宽限制）。
+- **幂等**：`uuid` 由浏览器生成，是引用的身份与幂等锚点：同一 actor 的相同登记重放返回同一行（`replayed=true`）；同一 `uuid` 的不同内容或他人重放返回 `409 document_uuid_conflict`。移除不存在的引用返回 404。策略保存“已是目标状态”时为 no-op。
+- **移除**：只删除 Aims 的引用行，不触碰 Codocs 正文、分享或策略。`manager` 可移除任意引用与空文件夹树；`contributor` 只能移除自己登记的非文件夹引用。文件夹内仍有文档时 `409 portfolio_document_folder_not_empty`；逐行校验后代都属于同一项目集后才删除。
+- **策略维护**：字段为生命周期、密级、`default_permission`、`inherit_to_member_projects` 与 `expectedEtag`。Codocs 策略行是权威，先写（进程内 typed 调用 `SaveEnterprisePortfolioDocumentPolicy`），Aims 的 `access_*` 镜像列随后更新，仅用于展示；镜像更新丢失时重发同一状态即可修复。**只允许作用于没有策略行、或策略行已显式归属本项目集的文档**；策略行属于某项目或其它项目集时返回 `409 portfolio_document_policy_owned_elsewhere`，不改写其归属。并发以 `etag` 保护，过期返回 `409 portfolio_document_policy_conflict`。文件夹与仓库文件没有可维护的策略。每次变更记 `policy_update` 审计。
+- **目录登记**：仓库文件引用的登记与移除在提交后触发文档目录的定向对账（归属 = 该项目集）。
+- **项目路径不得改写**：既有的项目文档策略更新入口（Codocs `updateDocumentAccessPolicy`）对 `source_owner_type` 不是 `project` 的策略行返回 `409 document_policy_owned_elsewhere`，不改写其编码或其它字段；列未安装时行为不变。
+- **列表补充**：`documents-list` 对直接关系返回 `canLink`、`canManagePolicy` 与每份文档的策略状态（`etag`、`defaultPermission`、`inheritToMemberProjects`、`ownedElsewhere`）；继承关系不返回策略状态。
+- **未做**：项目集下新建 Markdown 与上传附件、Codocs 侧项目集归属、内容打开（5c-2）、产品线。
+
+### 项目集详情页（DOC-05 5c-1，2026-10-04）
+
+- **页面**：Host 原生页 `/aims/portfolios/:id`（`aims/layer/pages/enterprise-portfolio-detail.vue`），从项目总览的项目集名称进入，不占顶层导航。三个页签：项目集文档、成员、文档仓库。只调用上面已登记的 Host 路由，不新增操作；所有入口是否显示取自服务端返回的 `canManage` / `canBootstrap` / `canLink` / `canManagePolicy`，不是安全边界。
+- **列表口径调整**：`documents-list` 与项目文档列表只读区的 `total` 与 `items` 同口径（含文件夹）；新增 `documentTotal` 只计文档。
+- **悬空引用**：引用指向的 Codocs 文档已不存在时，直接关系仍返回该行并带 `missingSource=true`（不带策略状态，`accessPermission='none'`），供管理者移除；继承关系继续省略。
+- **成员列表上限**：`members-list` 最多返回 500 行，超出时 `truncated=true`；并返回 `portfolio{id,code,name}` 供页头显示。
+- **项目文档页**：侧栏增加“所属项目集文档”只读区（标题与数量，链接到项目集页）；项目集侧不可用时仅提示，不影响项目文档。
+- **未做**：从“我的文档”选择器挂入（首版粘贴文档链接或标识）。
+
+### 项目集文档内容打开（DOC-05 5c-2，2026-10-04）
+
+只读查看 `document_source=codocs` 的文档正文。不提供下载、编辑或协作；仓库文件引用暂不支持在线查看。
+
+- **Host 路由**：`GET /aims/api/v1/portfolios/:id/documents/:docId/open`，不接受查询参数；浏览器只给出项目集与引用的数字标识，文档 UUID、存储位置、文档类型与正文引用一律来自 Runtime，绝不接受浏览器传入。页面 `/aims/portfolios/:id/documents/:docId`。
+- **Runtime 固定用户操作**：`/v1/enterprise/aims/project-portfolios:documents-content`（沿用 `aims:enterprise-host:execute`，无新 capability 或 grant）。只返回正文定位（文档元数据 + 已发布快照引用），不含正文，仅供宿主服务端使用。
+- **判权**：人员权限 `portfolios:view`（Host）与当前关系（Runtime，同 5b-1）同时成立。Aims 确认引用属于该项目集后，经进程内 typed 调用 `ReadEnterprisePortfolioDocument` 由 Codocs 按与列表**同一个判定函数**决定：直接关系可读；继承关系仅“策略行显式归属本项目集 + L0/L1 + 开启继承”。
+- **不可区分**：对继承关系，“不允许查看”与“不存在”是同一个 `404 portfolio_document_not_found`（同状态码、同响应体）：引用不存在、属于项目或其它项目集、是文件夹或仓库文件、策略未开放、文档已删除或进回收站，均如此。Codocs 始终同时读取文档行与策略行并写审计后才看结果；Aims 在没有可读对象时也走同一条读取路径。直接关系对文件夹与仓库文件得到 `409 portfolio_document_content_unsupported`。
+- **放出正文前二次复核**：Host 用第一次返回的定位取正文（`bodyRef: 'required'`），随后再读一次 Runtime；文档 UUID、存储路径、更新时间、快照代次与引用、文档类型必须不变，且关系与权限不得降级，否则 `409`，不返回正文。响应逐字段构造，不含 UUID、存储路径或正文引用，`Cache-Control: no-store`。
+- **正文引用规则（共享逻辑）**：`withEnterpriseCodocsDocumentContent` 的 `bodyRef: 'required'` 现在对所有文档类型一致——有 Runtime 引用用引用；`snapshot_generation === 0` 读自身路径；其余 `503 enterprise_document_body_ref_required`。因此非所有者读取他人私人文档时不会走“按当前用户读取个人快照头”的路径。既有 open-department 读取与所有者自读行为不变。
+- **审计**：每次判定（允许或拒绝）在 Codocs 记录 actor、关系、项目集编码与文档 UUID。
+- **已知限制**：存储路径以 `codocs/company/` 开头的文档在取正文后还会经过既有的、按当前用户的访问记录与 ACL 复核；项目集读者若在 Codocs 原生权限上无权，该复核会失败关闭（403/503），不会放出正文。
+
+### 文档目录登记（DOC-07，2026-10-04，表未在任何环境安装）
+
+完整合同见 [DOC-05/06 实施细化稿](./Document-Asset-DOC-05-06-Implementation-Spec.md) §7。
+
+- **方向**：Aims → Codocs 文档目录，单向。Aims 拥有仓库引用文档、已基线需求规格、已冻结项目周报的事实与正文；目录只保存元数据（标题、归属、存储定位、版本、内容哈希、状态）。
+- **调用方式**：Runtime 进程内 typed 调用（ADR-018a D11），不签服务令牌、不登记 grant、无新增 HTTP 路由或 capability。Aims 事务提交后投递定向对账请求（该项目的仓库文档、该项目的需求规格、本次冻结/解冻的周报），由单个后台 worker 合并后串行执行，绝不阻塞或失败 Aims 请求；队列满则丢弃并计数。写入型对账先取 `tenant/app/kind` 库级锁再读来源，保证当前版本不回退。尽力而为：目录不可用、进程退出或丢弃都不影响 Aims 业务；独立 Aims 旧路径不挂触发点。漏登记由 `hzy-document-catalog-reconcile`（默认 dry-run，`--apply` 幂等）补齐。
+- **隔离**：登记记录在独立表 `document_catalog_entries` / `document_catalog_entry_versions`，不进入 `documents`，对 Codocs 现有的全部读写路径不可见、不可写。只读视图 `document_catalog` 合并 `documents`（排除已删除与回收站）与有效登记，仅供登记包、对账命令与后续索引使用，不得挂接任何用户接口。
+- **判权**：目录不授予任何访问权。内容读取与人员判权仍由 Aims 的既有入口执行；后续索引使用目录时必须由原模块按提问人实时判权。
+- **身份**：`UUIDv5(固定命名空间, tenant, app, kind, objectId)`；来源为封闭集合，新增来源须修改合同与代码。
+
+W3 法人主体列表/详情仅在 Host 复核同一主体、同一 bundle 的 `bank_accounts:view` 后，以签名绑定的 `finance.accountCountAllowed=true` 请求 `account_count`；其余调用不查询也不返回该字段。主许可有效期取两项权限的最早到期时间。该字段仅允许主体列表/详情，旧请求缺省 false 的 canonical 不变；true 增加闭合标签 `[accountCountAllowed,true]`。Runtime 在同一 Registry 快照事务内统计该主体关联的未删除银行账户（含停用账户）；未装账户主体列时为 0。不返回账号、余额或账户明细，不新增权限/操作。Host 法人主体目录、账户编辑五列、余额登记/当日流水页面沿用上述固定操作、版本与原键合同。
+
+## W3 第6批：只读扩展
+
+复用既有 `customer:view`、`contract:view`、`bank_accounts:view`、`migration_exceptions:view` 与固定读取操作，不新增 capability/grant/schema。列表、详情分别由服务端授权；来源信息在所属对象通过范围检查后，以 Registry 快照事务读取迁移台账。仅返回 `system/table/pk/batchCode/importedAt`，不返回源 JSON。
+
+- 客户 list/detail 返回 `customer_level_id`（NULL 保持）及已有字典 `customer_level_name`；不与信用等级混用。联系人来源随受控客户详情返回；账户来源仅在账户详情返回。
+- `GET /altoc/api/v1/contracts?parentContractId=<id>&page=&pageSize=`：仅当前合同范围内的直接下级合同；W1 列未装时为空，不恢复宽读取。
+- 同一合同 list 的 `customerIds=2,3`（最多100个不同正整数，无 customerId/includeDescendants）返回 `customerSummaries`：一次批量分组，各客户的可见销售合同（排除 terminated）count/amounts，按币种分开；只用合同范围，不查询客户名称或存在性，不返回不可见计数。无可见合同与客户不存在都返回零。
+- 账户 list 的 `legalEntityCode/accountType` 服务端筛选；`complete=true` 仅 page=1，整个筛选结果≤200才完整返回，响应 `complete=true`；超过200则 `complete=false`、按传入 pageSize（≤100）分页。响应 pageSize 保持请求值，完整模式仅作为有界展示例外；合计仍覆盖整个筛选结果。W1 主体列未装，主体筛选返回空。
+- 余额 list 的 `legalEntityCode` 经账户关联筛选，total 与返回记录采用同一条件；同账户同日人工快照优先于导入。
+- Finance exceptions 读增加 `exceptionId`，仅 kind=balance_without_account，不接受 status/search；沿用既有签名泛型 ID 和 page/pageSize。详情返回分页白名单流水（sourceEntryId/balanceDate/amount/recordedAt/recordedByName），固定源表与事项冻结快照，匹配原 sourceEntryIds、日期和 ba_id=0；其它批次/日期/关联账户记录不可混入。Ledger 未装仍503。
+
+新增 Altoc/Finance query 在 Go/TS canonical 中仅有值时追加，旧请求字节保持不变，共享金向量覆盖参数删改。exceptionId 使用原有签名 ID 槽位，不改变旧许可格式。
+
+### APF UI B1 验收修订：合同客户投影与筛选
+
+合同列表/详情仍由 contract:view 与原合同范围判定。客户名称使用同一策略快照下独立 customer:view 范围许可，作为可选 customerRead 附加于原 token-bound HMAC permit；Runtime 复用原 permit 校验，绑定 actor/tenant/deployment/版本/到期时间，拒绝嵌套许可和跨快照拼接。无客户读授权时合同不消失，customer_visible=false、customer_name=NULL；依赖故障仍为 503。每页只做一次 scoped 客户批量查询，不逐行读取。
+
+搜索覆盖合同名称/编码/合同编号，客户名称匹配只在独立客户范围内执行；不可见客户不贡献搜索命中。新增 ownerUid、direction、contractType、amountMin、amountMax 均可选且仅有值时签入；旧空参数 permit 字节不变。金额为非负 DECIMAL(18,2)，区间包含边界；按列表合同金额过滤（历史原签约额、原生当前额），不换算币种。所有筛选先于 COUNT、全结果 summary 和分页，分页上限 100。
+
+有效额缺失只在显示时回退到该行合同金额，注明来源，不改有效额存储或统计口径。显示列的本机保存不保存视图/筛选/合同内容。详情次要信息以概览、履约与项目、来源与关联页签组织；桌面关键信息网格，390 宽度单列。
+
+### APF UI B4：迁移办理与只读扩展
+
+- 沿用 Altoc/Finance 的既有固定 U 操作和人员权限；不新增 capability、grant 或解决命令。迁移办理写入、意图键、版本冲突与逐对象应用合同不变。
+- `migration-exceptions-page` 可选 `migrationQuery`：`objectSearch` 搜索 `source_pk/target_key`，`createdFrom/createdTo` 为事项入队日期（不是源业务发生日期），`sort` 为 `created_asc/created_desc`。已有 `status` 可传去重、排序后的逗号分隔状态集合；COUNT 和分页在同一快照、同一筛选内完成。旧请求不携带新对象，旧 permit 正文保持不变。
+- 迁移事件使用该读操作的独立 `eventsFor` 模式：`exception:<id>` 或 Altoc 的 `identity:employee:<id>/identity:user:<id>`。它不能与事项筛选混用；先复核事项所属域或源身份存在，再查询 owning 域审计表。仅返回 `id/action/operator_uid/channel/created_at`，不返回 `old_value/new_value/resolution_json/row_json`。页码、每页条数和 COUNT 同快照，ID 倒序稳定分页。Finance 不可读取 Altoc 人员匹配事件。
+- 合同 `summary.effectiveMetrics` 按当前筛选与既有合同范围分币种统计；`contract_count` 为集合内排除“其父合同也在同一可见集合中”的子合同后的数量，`missing_count` 为该集合中有效额 NULL 的数量，`effective_amount` 只加已登记有效额，全缺失时为 NULL。隐藏或已被筛掉的父合同不参与去重，不回退到签约额。客户 rollup 的同名指标沿用已有 rollup 集合（销售类、非终止合同），不改变已有记录数或签约额指标。
+- Finance `accounts-list` 的截至日期模式要求有效 `asOfDate`；可选 `staleBefore/balanceState/currencyCode` 仅在该模式使用。沿用账户读取门槛与有效快照规则，先取截至日内每账户最新有效日期；手工确认优先于被其取代的导入证据。同日仍有冲突时金额为 NULL、不按 ID 选胜出；无快照为 missing，只有显式过期边界才判 stale。汇总按主体和币种分组；缺失/冲突不计金额，真实零余额仍有效，stale 金额纳入且单列数量。旧 Finance permit 参数不变，新增非空参数签入意图。
+- 页面默认待处理，分页 20/50/100；URL 保留查询，本机视图仅保存列名并按应用/会话作用域隔离。无权时清空结果；刷新失败不伪造零值。合同差异始终只读，没有通用解决入口。
+- 本轮 R5 仅覆盖两域迁移事项及 Altoc 身份匹配的处理事件；全域业务对象时间线与统一附件聚合尚未接入，相关入口省略。已有附件/知识引用访问与下载复核合同不变。
+
+### B5-A 应收工作台、账龄与催收责任
+
+当前结算计划 read 与催收 write 沿 Altoc owning APF 用户通道，精确 `receivables:{page,detail,aging-summary,set-collection-owner,set-due-date,followup-create}`，复用 altoc:enterprise-host:execute；新增敏感人员动作由 Altoc manifest 显式声明。范围、当前业务日、分币种合计、法人筛选的额外 Finance 授权、锁序、追加事件/receipt/CAS、历史护栏与安装失败关闭见 [B5-A 合同](B5A-Receivables-Contract.md)。通知继续沿既有 billing-due S/P 通道，不开启 scheduler、不新增 grant。
+
+
+### Host 项目管理原生入口与批量部门事务（2026-10-06）
+
+导航稳定区域 `delivery` 更名为“项目”。项目文档迁至该区域；项目管理入口仍为 `/aims/admin/projects`，仅静态 `admin:admin` 可读写，不能用项目经理关系替代。原独立 Aims 管理页保留。Host 新增 `/aims/admin/projects/:id/edit` 与 `/aims/portfolios/new` 原生组合页面，登记项目复用 `/aims/projects/new`；成员和生命周期审批链接已登记的项目内页面，仍执行各自现时范围与关系校验。管理员强制状态改写、彻底删除不提供 UI 入口。
+
+管理员列表新增可选 `projectId`（精确读取）、`sort=code|name|updated|start`，`portfolioId=0` 表示未分组；搜索新增负责人 UID。未提交参数时保留原排序与输入形状，参数位于原受信请求体，不改变旧读许可签名字节。COUNT、分页、版本与单项目 members/milestones/workItems 数量在同一只读事务内计算。管理员编辑仅提交既有白名单字段与当前 editVersion；409 保留草稿并精确回读项目比较。
+
+- `POST /aims/api/v1/admin/projects/batch-create-routine` → 固定 `aims.admin-project-routine-batch` → `POST /v1/enterprise/aims/admin-projects:routine-batch`。浏览器仅提交 `year`（2000–2100）和 Idempotency-Key，不接受部门、成员或管理标志。Host 先验证无对象范围静态 `admin:admin`，再读取 Directory 正式部门、有效负责人、分页 active 成员；负责人状态按每批最多 100 UID 查询。缺负责人部门跳过。Runtime 再核对服务身份、租户、部署、actor、admin-static permit 与 15 秒有效期。
+- 批量写入复用原 owning 逻辑，但使用 registry generation 栅栏与 caller-Tx。锁序为 binding registry → command receipt → 日常事务项目集 → 按部门编码排序的项目/成员。回执意图只包含年度，首次成功后同键同年不因目录变化重新创建；同键改年 409。重放只确认原回执，不重复展示未保存的首次业务响应，UI 回读列表。
+- 既有 `/aims/api/v1/portfolios` 创建仍要求 `portfolios:admin`，不从 `admin:admin` 推导权限。原精确 `project-portfolios:create` Host 固定操作补强为必需 Idempotency-Key、registry 栅栏、回执与项目集 INSERT 同事务；旧独立 owning 创建路径不变。重放返回回执确认，不二次 INSERT。
+
+本批只新增一个固定 Runtime 路径，复用既有 `aims:enterprise-host:execute`，不新增资源、人员动作、capability、grant 或 schema，无需 Platform manifest 发布和 test 重签；上线须配套部署新 Runtime，不能仅热更新页面。
+
+### Host 管理员项目树只读投影
+
+现有 `aims.admin-project-list` 支持仅在有值时提交 `query.tree=true`，复用 `admin:admin` 静态授权和原精确 Runtime 路径，不新增 capability/grant。该投影的 `items` 为项目集根节点（`id/code/name` 与已有项目集编辑字段），`total/page/pageSize` 按根节点计；空项目集无筛选时保留，未归属项目集的项目以 `id=0` 的“未分组”节点展示。项目搜索/分类/状态筛选只保留包含匹配项目的父节点；展开时以现有 `portfolioId` 筛选独立分页项目，`0` 对应 NULL。读取在同一只读事务内完成，项目明细原投影与许可字节不变。项目集编辑复用现有 PUT 与 `portfolios:admin`，项目创建只预填项目集 ID，后端原授权继续校验。
+
+Host 项目集树修订：每个根节点增加 `projectCount`，统计与同次管理员项目列表完全相同的筛选与可见授权上下文（包括未分组），不从目录全局统计推导或透出不可见数量。树读只面向已验证的静态 `admin:admin`，有限项目范围不能获取该投影。项目集已有编辑字段增加 `editVersion`（当前持久字段快照 SHA-256）。现有 Host PUT 更新必须携带 `expectedVersion` 与该用户意图的 `Idempotency-Key`；Runtime registry 栅栏事务内锁定项目集、校验版本、写入与回执原子提交，过期版本返回 `409 portfolio_version_conflict`，同键同命令返回回执确认，同键改命令冲突。独立 Aims 兼容入口不变，无 schema/capability/grant 增项。
+
+## B5-B 净期初接续与分配（2026-10-06 候选）
+
+历史销售合同只采用净期初路径：已审核 opening 的金额与快照日 T0 冻结在 Finance 激活记录，旧 OA 收款/发票/支出仅作保全查询，不生成 Finance 核销。余额为期初减 T0 后有效核销及已确认调整；撤销按实际时刻留痕，不删除原事实，不允许同时启用全历史重建。没有可靠 T0、opening review hash/confirmation、完整映射和逐合同一致性证据时继续拒绝。关闭/中止合同不豁免未结应收。
+
+新增 Finance 固定用户操作：historical-finance-preview/activate、historical-finance-history-page、allocation-candidates、allocation-batches-page/detail、reconciliation-allocate-batch、allocation-batches-reverse、receivable-adjustments-page/detail/create/confirm/reverse。沿用 finance:enterprise-host:execute；人员历史接续及调整使用 manifest 的精确资源/动作，确认/激活不由 admin 蕴含。录入者与确认者不得同人，actor 仅取受信委托。每个写动作携带 Idempotency-Key、当前版本，回执与全部事实同事务；相同键异 payload 返回冲突，重试同键不重复记账。
+
+锁序先冻结：Registry → 客户（ID 升序）→ 合同（ID 升序）→ 结算计划（ID 升序）→ 历史接续记录 → 发票 → 到账 → 核销/分配组/调整 → Finance 合同摘要 → 项目成本财务目标 → 回执/审计。发现阶段只读；锁定后重验版本、目标关联、币种、客户、法人主体与当前权限。多目标容量与余额在同一事务重新计算，全部成功或全部回滚；撤销和调整复用同一锁序，拒绝导致负未结的变更。历史激活只读取迁移台账；不得更新原 mig_batch/mig_object_map 或修改确认文件。
+
+安装候选 finance-receivables 为三张新事实/审计表：finance_historical_readiness、finance_allocation_batch、finance_receivable_adjustment。走 domaininstall 原停止检查、plan/reviewHash/apply/verify/checkpoint/rollback。新表缺失时新写入口失败关闭；原业务读取仍可用。安装与逐合同激活是不同动作，不因建表自动放开历史写。Platform 必须导入新 Finance manifest 并仅重签授权环境，未执行前新增敏感按钮继续失败关闭。
+
+B5-B 的精确操作、人员角色增量、净期初证据边界、跨域 caller-Tx 与安装步骤见 [Finance B5-B 合同](../finance/docs/B5B-Receivables-Contract.md)。原子分配本批只承接结算计划目标；未知法人主体失败关闭，组内核销禁止单独撤销。旧支出保全源表使用实际 `wb_project_payment`，不生成台账或冲减净期初。
+
+部门协作默认成员可写仅调整正文协作与详情提示；标题/目录移动、回收等管理规则不随之放宽，个人文档owner/share规则不变。分享变更撤销当前会话的epoch机制保留，但仍在本部门的成员可重新打开；离部门或停用仍在admit/renew/publish重验时拒绝。
+
+### 2026-10-07 部门负责人写入裁定
+
+Directory EnterpriseCodocsDepartmentRole.CanWrite 包含直接 active leader/member/manager；parent/none 不写，CanManage 仍仅 manager。正文协作与 Host can_edit 使用同一结果。创建/上传/复制目标因此允许 leader；标题修改仍核 owner/写分享，移动仍核 owner/manager；回收、只读、恢复、目录管理不扩大。本文此前 leader 只读描述由此裁定覆盖。
+
+### Aims 退役 R2 补漏：项目文档访问判定
+
+Host `POST /aims/api/v1/projects/:id/documents/:documentId/access-check` 调用固定 `aims.project-document-access-check` → `POST /v1/enterprise/aims/project-documents:access-check`。复用既有 `aims:enterprise-host:execute` 用户委托身份与 projects:view、父项目短期范围 permit；不新增 grant。Runtime 自读项目文档归属、UUID、项目成员/部门/角色事实，再调用 Codocs typed ACL 核心；浏览器不能提交 UUID、actor 或关系事实。动作闭集为 view/download/edit，只读文档拒绝 edit，缺失/删除对象拒绝，保留既有访问审计。该路径不再调用仅接受 aims.runtime 的旧 Codocs Service API，也不放宽旧接口身份限制。旧 permit 格式与字节不变。 Git 仓库文档的 UUID 仅使用 cabinet_file 策略命名空间，不代表 cabinet_files 实体；Aims owning adapter 先复核项目文档归属、当前成员及精确仓库绑定，再通过独立 typed 入口复用相同 ACL。真实 Codocs/cabinet 引用仍要求实体存在且未删除。所有允许/拒绝结果均返回 allowed、permission、readonly、reason、lifecycleStage、confidentialityLevel；缺失实体固定 reason=document_not_found。前端异常/缺字段响应失败关闭，不覆盖有效的生命周期/密级显示。
+### Console 系统公告（候选，2026-10-07）
+
+Console 拥有公告、范围、本人已读及分渠道投递事实。Enterprise 通过 `console/server/public/announcements.ts` typed 入口组合人员读写 BFF，复用 `console:enterprise-host:execute`，不自调用 Console HTTP；管理页面原生组合到 Enterprise Host，独立 Console 仅提供跳转入口。人员权限 `console:announcements:view/admin` 由 manifest 定义，Runtime 重验绑定完整命令/幂等键/策略截止时间的许可及实时 Directory 范围。立即投递在当前公告管理员的固定 U 操作内执行，逐次重验人员许可；冻结 outbox 使用稳定键与栅栏回执，失败由管理员原键恢复。无机器调度、新服务 scope 或新 grant；定时公告读取时生效，本轮不支持定时推送。全员基线仅增 announcements:view，系统管理员增 announcements:admin。详见 [系统公告实现与发布约定](System-Announcements.md)。Platform 发布、test 重签、DDL/常驻帮助种子和生产启用仍各自待批，不因代码合入自动执行。
+
+### AR09：Aims 旧 URL 与项目文档关联恢复
+
+旧页面按精确 Host 注册表兼容，详见 `Aims-Legacy-Page-Compatibility.md`。settings 复用已授权的原生编辑页；登录/个人资料只作固定客户端重定向；无 Host 等价功能的源 URL 提供归档说明，不恢复独立 Aims API，不新增能力或 grant。
+
+项目正文 UUID 关联先按签名项目范围与当前成员复核。相同 UUID 若另有悬空项目索引，`project_not_found` 候选不遮蔽权威解析到目标项目的合法引用；只有悬空或其它项目引用仍拒绝。数据库与权限失败不跳过，不修改存量索引。总览仓库预览携原 projectDocumentId，与项目内预览保持相同的固定版本及引用 ACL。
+
+### 文档共享：禁止自共享（2026-10-08）
+
+创建文档共享时，目标 UID 不得等于文档的权威 owner UID 或已验证操作者 UID。Host 提前拒绝操作者自共享，Runtime 按当前文档 owner 和签名 actor 再验，返回 HTTP 400 `share_self_not_allowed`；拒绝发生于共享事务开始之前，不写共享/关系行，不发通知。文档列表共享弹窗和编辑器共享面板均排除当前用户，并拦截过时的自选结果。既有所有者自共享行只读统计，清理须另行批准。
+
+Host 共享列表的姓名补全使用 Foundation Directory 的 `console:directory-users:read`（audience=console）既有共享投影，不申请目录管理 scope；补全失败仍保留 UID 回退，不改变文档共享 ACL。共享保存与通知投递分开判断：外部投递失败保留共享事实及原幂等键，不把重试变成新共享。
+
+
+### Codocs 共享通知的外部身份降级（2026-10-08）
+
+Codocs 共享通知在既有 Console 通知发布合同中显式请求 `resolveExternalChannel`（闭集：`wecom` / `dingtalk`）。该传输字段不进入规范通知正文和摘要，不改变既有幂等键、permit 或能力；未启用的调用保持原行为。Console Runtime 只解析本次规范通知收件人，通过 Directory 的 active 身份返回绑定目标；不接受调用方自报外部身份。该响应仅用于服务端投递，不下发浏览器，不记录外部身份值。
+
+收件人缺有效外部绑定或已停用时，在同一通知事务中记录 `skipped` 及闭集原因。站内通知成功后，外部跳过不构成共享失败；有效绑定的收件人仍正常投递。Directory 依赖故障、响应不完整或不匹配不得降级为跳过。原键重放不重复写跳过记录。真实临时投递失败保留 pending 和原键；授权/配置或渠道明确拒绝显示已共享与渠道提示，不伪装为共享行写入失败。
+
+共享列表姓名补充复用 Foundation 既有目录用户读取合同；失败仅回退 UID，不改变共享 ACL。禁止将文档共享给当前操作者或文档所有者：Host 与 Runtime 在写入/通知前返回 `share_self_not_allowed`。历史自共享行不自动清理。
+### Console 全局文本反馈（G0+G1，2026-10-07 候选）
+
+- Enterprise → `console/server/public/feedback.ts` 为同进程 typed owning 入口；Foundation UI 不调用 WebDev、不派发 Agent 任务。Host 跨进程访问 Runtime 的固定 `console.feedback-{options,draft,submit,list,detail}` 使用 `enterprise.runtime` / `console:enterprise-host:execute`。
+- 固定 POST `/v1/{enterprise/console,console}/feedback:{operation}` 需要签名用户委托和 14 秒人员 permit。permit 绑定 method/path/Idempotency-Key、payload、UID、tenant/deployment、资源/动作、策略版本/hash/revision、self/global 投影；Runtime 复核活跃 Directory 用户、tenant 与本人归属后才处理或重放。Host 不提供 settings/admin/retry/cancel 操作。
+- 人员事实见 Console manifest：`feedback:view/submit/retry/admin`、`feedback-settings:view/edit`。`admin` 不蕴含 `submit/retry`。员工基线与 reporter 角色为 `subject:self`；管理员为租户范围。列表固定每页 20 条，detail 独立复核。授权模拟禁止写。
+- Console scheduler 复用已受信 `/api/internal/integration-operations/drain`，只在无其他 operation claim 且 `feedbackDeliveryEnabled=true` 时执行有界反馈 drain；默认关闭。Runtime `/v1/console/feedback:drain` 与 `/v1/console/feedback-notifications:{events,freeze,claim,ack}` 仅接受 `console.runtime` 的精确 `console:feedback-delivery:execute`、实时 credential/grant 校验，拒绝用户委托。双 audience seed/verify 为 v2.41；环境令牌签发与现有通知/目录/策略 scope 组合验证是启用前置条件。
+- hzy0 的反馈机器 owner 为本机 Gateway：仅 `features.feedbackDeliveryEnabled=true` 时每 30 秒签名唤醒既有 Console drain 的 `{feedbackOnly:true,phase:issue|notification}` 闭集分支（两阶段交替，避免外部通知重试阻挡建单），验签与开关校验先于分支；单实例防重叠、25 秒请求上限、关闭/退出清理 timer，不启用其它 Console/租户任务。复用 v2.41 双 audience 精确授权，无用户委托或宽 scope。该分支直接返回，不认领相邻 lifecycle/actionable/announcement 命令。
+- Runtime 使用持久反馈记录冻结的 integrationCode，通过 Console 内部拥有的 GitLab 凭据解析内核建单，目标固定 `huizhi-yun/huizhiyun`；不借用 Aims `issue-upsert`，不修改任意 IID，不把 Token 发往 Nuxt。投递前提交 dispatching 意图；超时、5xx、回执不完整或 lease 丢失转 unknown，只进行分页精确 marker 对账。零命中保持 unknown；明确拒绝/建单前依赖失败转 failed，只有显式 retry 权限可重投。
+- 状态与通知意图同事务；事件、接收人、铃铛/企业微信各有持久回执。接收人按配置 UID/角色去重并冻结，发送和通知详情重新验证活跃用户及租户范围 feedback:view；未解析到合格接收人保持待投递。铃铛已成功时外部重试沿用同一键。Console typed publisher 经 Foundation 通知投递链路发送，保持 `notifyRedirectTo` 和本地 in-app-only 限制。反馈消息详情先经 Runtime 绑定当前收件人，再核验正式签名 revision 与实时活跃/反馈读取权限；用户读取不触发策略快照写入，漂移/依赖故障仍失败关闭。
+- 通知只含类型、标题、提交人姓名、页面与 Issue 链接；不含描述、图片、诊断或底层错误。外部回链取可信 deployment public URL 绝对地址；配置保存要求与当前部署入口一致。员工/管理员查看记录仍独立受权。事件回执只表示本地验证，不能代表企业微信生产送达。
+- v2.41 在 Console schema 安装四表；不改变业务域表。草稿 24 小时、本地已完成记录 180 天，有界清理每次最多 50 条；failed/unknown 或未完成通知不自动删除，GitLab 留存独立。迁移、Platform manifest/基线发布及 test 重签、真实外部测试写入和 scheduler 开启分别待批。
+
+### Console feedback 图片与截图（G2+G3）
+
+Host → Console public typed → Runtime 固定 `feedback:attachment-put/attachment-read`；Console 管理端另有 `cleanup-media`，Host 禁止此管理操作。人员动作分别为 feedback:submit/view/admin；复用原有精确服务通道，不新增 admin 对敏感动作的蕴含。二进制先在 BFF 有界读取，完整 base64 payload/摘要、对象、UID/tenant/deployment/策略与幂等键进入同一 HMAC permit；Runtime 再复核所有权、内容摘要和尺寸，重编码去元数据。私有表与 schema manifest 为 v2.42，默认图片 gate 关闭。
+
+GitLab 上传固定 `huizhi-yun/huizhiyun`，凭据只在 Runtime integration/vault 解析。发图前必须有未过期人工匿名验证记录，并实时核验 private/enforce_auth_checks_on_uploads。逐图 intent/receipt 和父任务 attempt fence 防止盲重传；未知上传只按文件名+字节摘要对账。管理员清理仅限已取消、无 Issue 回执、固定回执 ID 的孤儿图片；普通 worker 不删除。图片 URL/内容不进入管理员通知。启用、保留期、GitLab 精确设置和恢复限制见 Global-Feedback-Design §14。

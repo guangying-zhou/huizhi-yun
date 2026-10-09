@@ -28,6 +28,7 @@ interface SubjectRoleAssignment {
   subjectType: string
   subjectCode: string
   subjectDisplayName: string
+  subjectStatus?: string
   roleId: number
   roleCode: string
   roleName: string
@@ -273,16 +274,25 @@ function getSubjectTreeItemKey(item: SubjectTreeItem) {
             <div class="flex flex-wrap items-start justify-between gap-3">
               <div class="min-w-0 space-y-1">
                 <div class="flex flex-wrap items-center gap-2">
-                  <p class="font-semibold text-highlighted">
+                  <p
+                    class="font-semibold"
+                    :class="item.subjectStatus && item.subjectStatus !== 'active' ? 'text-muted' : 'text-highlighted'"
+                  >
                     {{ item.subjectDisplayName }}
                   </p>
                   <UBadge
                     :color="item.active ? 'success' : 'neutral'"
                     variant="soft"
                   >
-                    {{ item.active ? 'active' : 'expired' }}
+                    {{ item.subjectStatus && item.subjectStatus !== 'active' ? '已停用' : item.active ? '生效中' : '已失效' }}
                   </UBadge>
                 </div>
+                <p
+                  v-if="item.subjectStatus && item.subjectStatus !== 'active'"
+                  class="text-sm text-muted"
+                >
+                  账号已停用、授权不生效
+                </p>
                 <p class="font-mono text-xs text-muted">
                   {{ item.subjectType }}:{{ item.subjectCode }} → {{ item.roleCode }}
                 </p>
@@ -297,7 +307,7 @@ function getSubjectTreeItemKey(item: SubjectTreeItem) {
                 color="error"
                 variant="soft"
                 size="sm"
-                :disabled="!item.active"
+                :disabled="!item.active && (!item.subjectStatus || item.subjectStatus === 'active')"
                 :loading="props.pendingAction"
                 @click="emit('revoke', item)"
               >

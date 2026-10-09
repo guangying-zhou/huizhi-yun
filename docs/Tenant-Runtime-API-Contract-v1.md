@@ -15,7 +15,7 @@ Console GET 首次缺行返回 `404 policy_snapshot_missing`；缺表/配置/损
 已按此接线，未切换运行环境，详见同一合同第 9 节。
 完整字段、配置、兼容及错误码见 [策略验证合同](./Console-Enterprise-Policy-Verification-Contract.md#7-runtime-持久化与接口批次代码验证完成环境未启用)。
 
-2026-09-25 可选 P1：`POST /v1/console/auth/service-tokens/exchange` 仅接受 `console.runtime` 的完整服务 JWT 和新 `console:service-token:exchange` 精确 scope，拒绝 key assertion/bootstrap 及请求体自选来源、租户、部署。仅用于携带 secret 的 `client_credentials`；Runtime 在同一事务检查客户端当前密钥、grant 和来源部署，比较 Console 已验证策略摘要与本地存储的 version/hash，签名并写成功审计，提交后才返回令牌。摘要不作为授权事实。默认关闭；无密钥 Gateway 路径保留现有合同。
+2026-09-25 可选 P1：`POST /v1/console/auth/service-tokens/exchange` 仅接受 `console.runtime` 的完整服务 JWT 和新 `console:service-token:exchange` 精确 scope，拒绝 key assertion/bootstrap 及请求体自选来源、租户、部署。仅用于携带 secret 的 `client_credentials`；Runtime 在同一事务检查客户端当前密钥、grant 和来源部署，比较 Console 已验证策略摘要与正式 `verified_policy_snapshots` 信封的 version/hash（复用已有签名、精确 tenant/environment/Console deployment 及 `valid/grace` 租约检查；不得使用 legacy `policy_bundle_snapshots` 回退），签名并写成功审计，提交后才返回令牌。摘要不作为授权事实。默认关闭；无密钥 Gateway 路径保留现有合同。
 
 2026-09-22 Console 稳态服务身份（R1）：`POST /v1/console/auth/service-tokens/issue` 除 Platform 启动令牌外，
 还接受 Console 部署密钥断言（`typ: hzy-console-assertion+jwt`）。只在该路由生效；Runtime 要求
@@ -727,3 +727,7 @@ owner/create/summary/delete 校验 projects:edit 与签名 projectWriteAuthoriza
 该类文档不出现在项目页列表；项目集文档专用范围合同属于后续迁移缺口。
 固定 create 要求稳定 UUID；重复 UUID 只有同一创建内容与当前授权均符合才回放，
 否则 409。集合/子项删除逐归属预检，失败整体回滚。跨进程 Codocs 权限合同仍独立执行。
+
+### Console 全局反馈媒体增量（G2+G3）
+
+固定 POST `feedback:attachment-put/attachment-read` 同时登记 Console/Enterprise Console 用户通道，`feedback:cleanup-media` 仅 Console 管理通道。人员动作 submit/view/admin，原服务 scope 不扩权；permit 金向量为 `data-runtime/internal/server/testdata/feedback-media-permit.json`。原始上传在 BFF 限流读入，Runtime 的有界 JSON envelope 包含反馈/附件 ID、base64、SHA-256、MIME，签名覆盖完整内容。Runtime 不接受浏览器指定 GitLab URL、Token、上传 ID 或 Markdown。v2.42 私有暂存表、逐步回执、租约 fence、媒体门禁和孤儿清理规范见 `Global-Feedback-Design.md` §14。

@@ -1,4 +1,5 @@
 import { fileURLToPath } from 'node:url'
+import { legacyAimsPages } from './legacyPages.mjs'
 
 const page = (path, name, source, children) => ({ path, name, file: fileURLToPath(new URL(`../app/pages/${source}.vue`, import.meta.url)), ...(children ? { children } : {}) })
 const layerPage = (path, name, source) => ({ path, name, file: fileURLToPath(new URL(`./pages/${source}.vue`, import.meta.url)) })
@@ -18,10 +19,10 @@ const hostReadiness = Object.freeze({
 // Labels follow the navigation specification §3 so one page is discovered under
 // one name; a page is listed only when the Host actually serves it.
 const navigation = Object.freeze([
-  { id: 'aims.documents.space.project-documents', area: 'documents', group: 'project', label: '项目文档', to: '/aims/project-documents', permission: { resource: 'projects', action: 'view' }, order: 10 },
+  { id: 'aims.documents.space.project-documents', area: 'delivery', group: 'documents', label: '项目文档', to: '/aims/project-documents', permission: { resource: 'projects', action: 'view' }, order: 10 },
   { id: 'aims.product.planning.products', area: 'product', group: 'planning', label: '产品管理空间', to: '/aims/products', permission: { resource: 'products', action: 'view' }, order: 1 },
   { id: 'aims.delivery.project.projects', area: 'delivery', group: 'project', label: '项目总览', to: '/aims/projects', permission: { resource: 'projects', action: 'view' }, order: 1 },
-  { id: 'aims.console.config.admin-projects', area: 'console', group: 'config', label: '项目管理（管理员）', to: '/aims/admin/projects', permission: { resource: 'admin', action: 'admin' }, order: 1 },
+  { id: 'aims.console.config.admin-projects', area: 'delivery', group: 'management', label: '项目管理', to: '/aims/admin/projects', permission: { resource: 'admin', action: 'admin' }, order: 1 },
   { id: 'aims.console.config.weekly-reporting-settings', area: 'console', group: 'config', label: '周报设置', to: '/aims/admin/weekly-reporting-settings', permission: { resource: 'weekly_reports', action: 'configure' }, order: 2 },
   { id: 'aims.delivery.execution.work-items', area: 'delivery', group: 'execution', label: '任务中心', to: '/aims/work-items', permission: { resource: 'work_items', action: 'view' }, order: 1 },
   { id: 'aims.delivery.execution.timesheet', area: 'delivery', group: 'execution', label: '工时日历', to: '/aims/timesheet', permissionRefs: [{ resource: 'timesheet', action: 'view' }, { resource: 'timesheet', action: 'submit' }], mode: 'any', order: 2 },
@@ -87,13 +88,20 @@ export default Object.freeze({
   // 项目总览改用 Aims 原页面。闭包经 check-page-migration 全清：
   // 项目集 CRUD 与彻底删除已补齐，后者要求 admin:admin（与 Aims 一致）。
   page('/projects', 'projects', 'projects/index'),
+  // 项目集详情（成员、文档仓库登记、项目集文档）。从项目总览进入，不占顶层导航。
+  layerPage('/portfolios/:id', 'portfolio-detail', 'enterprise-portfolio-detail'),
+  layerPage('/portfolios/:id/documents/:docId', 'portfolio-document-open', 'enterprise-portfolio-document-open'),
   page('/project-documents', 'project-document-overview', 'project-documents'),
   layerPage('/admin/projects', 'admin-projects', 'enterprise-admin-projects'),
+  layerPage('/admin/projects/:id/edit', 'admin-project-edit', 'enterprise-admin-project-edit'),
+  layerPage('/portfolios/new', 'portfolio-new', 'enterprise-portfolio-new'),
   // 周报设置复用 Aims 原页面；读写经 Host → Runtime 委托，服务端只认 weekly_reports:configure。
   page('/admin/weekly-reporting-settings', 'admin-weekly-reporting-settings', 'admin/weekly-reporting-settings'),
   layerPage('/projects/new', 'project-new', 'enterprise-project-new'),
   layerPage('/projects/:id', 'project-detail', 'enterprise-project-detail'),
   layerPage('/projects/:id/edit', 'project-edit', 'enterprise-project-edit'),
+  // Preserve the exact former settings URL without restoring the retired service.
+  layerPage('/projects/:id/settings', 'project-settings-compat', 'enterprise-project-edit'),
   layerPage('/projects/:projectId/work-items/new', 'work-item-new', 'enterprise-work-item-form'),
   layerPage('/work-items/:id/edit', 'work-item-edit', 'enterprise-work-item-form'),
   layerPage('/work-items/:id/association', 'work-item-association', 'enterprise-work-item-association'),
@@ -132,6 +140,7 @@ export default Object.freeze({
   page('/projects/:id/work-items/:workItemId/breakdown', 'project-work-item-breakdown', 'projects/[id]/work-items/[workItemId]/breakdown'),
   page('/projects/:id/work-items/:workItemId/decompose', 'project-work-item-decompose', 'projects/[id]/work-items/[workItemId]/decompose'),
   page('/work-items', 'work-items', 'work-items'),
-  layerPage('/work-items/:id', 'work-item-detail', 'enterprise-work-item-detail')],
+  layerPage('/work-items/:id', 'work-item-detail', 'enterprise-work-item-detail'),
+  ...legacyAimsPages.map(route => ({ ...layerPage(route.path, route.name, 'enterprise-legacy-page'), compatibilityOnly: true }))],
   handlers: [], tasks: []
 })

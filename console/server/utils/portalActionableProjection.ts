@@ -10,6 +10,7 @@ export interface AdvancePortalActionableLifecycleInput {
 }
 
 export interface PortalActionableActor {
+  notificationSourceApp?: 'aims'
   appCode?: string | null
 }
 
@@ -64,7 +65,7 @@ export function validatePortalActionableLifecycleInput(
   input: AdvancePortalActionableLifecycleInput,
   actor: PortalActionableActor
 ) {
-  const sourceAppCode = boundedText(actor.appCode, 'source_app_code', 64).toLowerCase()
+  const sourceAppCode = boundedText(actor.notificationSourceApp || actor.appCode, 'source_app_code', 64).toLowerCase()
   const requestedSource = text(input.sourceAppCode).toLowerCase()
   if (requestedSource && requestedSource !== sourceAppCode) {
     throw new PortalActionableProjectionError(403, 'sourceAppCode does not match service identity', 'source_app_mismatch')

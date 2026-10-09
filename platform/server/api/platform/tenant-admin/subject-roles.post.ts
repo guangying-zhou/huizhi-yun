@@ -15,6 +15,7 @@ interface SubjectRow extends RowDataPacket {
   subject_type: string
   subject_code: string
   display_name: string | null
+  status: string
 }
 
 interface RoleRow extends RowDataPacket {
@@ -86,7 +87,7 @@ async function loadSubject(input: {
 }) {
   if (input.subjectId) {
     return queryRow<SubjectRow>(
-      `SELECT id, tenant_code, subject_type, subject_code, display_name
+      `SELECT id, tenant_code, subject_type, subject_code, display_name, status
        FROM tenant_subjects
        WHERE id = ?
          AND tenant_code = ?
@@ -97,7 +98,7 @@ async function loadSubject(input: {
   }
 
   return queryRow<SubjectRow>(
-    `SELECT id, tenant_code, subject_type, subject_code, display_name
+    `SELECT id, tenant_code, subject_type, subject_code, display_name, status
      FROM tenant_subjects
      WHERE tenant_code = ?
        AND subject_type = ?
@@ -186,6 +187,10 @@ export default defineEventHandler(async (event) => {
     })
   }
 
+  if (subject.status !== 'active') {
+    throw createError({ statusCode: 409, message: '账号已停用，不能分配角色', data: { code: 'subject_inactive' } })
+  }
+
   if (!resolvedRoleId && !roleCode && systemRoleCode) {
     const materialized = await withTransaction(async (tx) => {
       return materializeSystemRole(tx, {
@@ -266,6 +271,14 @@ export default defineEventHandler(async (event) => {
       expiredAt,
       excludeAssignmentId: existingAssignment?.id || null
     })
+
+    const currentSubject = await tx.queryRow<SubjectRow>(
+      'SELECT id, status FROM tenant_subjects WHERE tenant_code = ? AND id = ? FOR UPDATE',
+      [tenantCode, subject.id]
+    )
+    if (!currentSubject || currentSubject.status !== 'active') {
+      throw createError({ statusCode: 409, message: '账号已停用，不能分配角色', data: { code: 'subject_inactive' } })
+    }
 
     await tx.execute<ResultSetHeader>(
       `INSERT INTO tenant_subject_roles

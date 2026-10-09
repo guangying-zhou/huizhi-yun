@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import DocumentTree from './DocumentTree.vue'
+
 export interface DocumentNode {
   id: number
   uuid?: string

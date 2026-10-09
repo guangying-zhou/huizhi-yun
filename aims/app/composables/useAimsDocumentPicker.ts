@@ -211,7 +211,7 @@ export interface RepoDocResult {
 export async function fetchRepoDocContent(
   repoProjectCode: string,
   filePath: string,
-  options?: { ref?: string, commitId?: string | null, aimsProjectId?: number | null },
+  options?: { ref?: string, commitId?: string | null, aimsProjectId?: number | null, documentId?: number | null },
   // 本函数从事件处理器调用，那里不保证有 Nuxt 实例，所以不在内部调 useAimsModule；
   // 由调用方传入构造器，默认恒等 —— 独立应用行为不变。
   urlFor: (path: string) => string = path => path
@@ -221,6 +221,7 @@ export async function fetchRepoDocContent(
     if (options?.ref) params.ref = options.ref
     if (options?.commitId) params.commit_id = options.commitId
     if (options?.aimsProjectId) params.aimsProjectId = String(options.aimsProjectId)
+    if (options?.documentId) params.documentId = String(options.documentId)
     const res = await $fetch<{ code: number, data: RepoDocResult }>(
       urlFor(`/api/account/projects/doc/${encodeURIComponent(repoProjectCode)}`),
       { params }

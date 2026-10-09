@@ -14,13 +14,15 @@ export async function handleProductRequestAction(event: H3Event, action: 'merge'
   const key = productCommandKey(getHeader(event, 'Idempotency-Key'))
   const requestId = getRouterParam(event, 'requestId') || ''
   const raw = await readBody(event)
-  const input = action === 'merge' ? productRequestMergeInput(raw, requestId) : action === 'edit'
-    ? productRequestEditInput(raw, requestId)
-    : action === 'decide'
-      ? productRequestDecisionInput(raw, requestId)
-      : action === 'source-create'
-        ? productRequestSourceInput(raw, requestId)
-        : productRequestSourceDeleteInput(raw, requestId, getRouterParam(event, 'sourceId') || '')
+  const input = action === 'merge'
+    ? productRequestMergeInput(raw, requestId)
+    : action === 'edit'
+      ? productRequestEditInput(raw, requestId)
+      : action === 'decide'
+        ? productRequestDecisionInput(raw, requestId)
+        : action === 'source-create'
+          ? productRequestSourceInput(raw, requestId)
+          : productRequestSourceDeleteInput(raw, requestId, getRouterParam(event, 'sourceId') || '')
   if (!key || !input) throw createError({ statusCode: 400, message: '需求字段或幂等键无效' })
   const permission = (action === 'decide' || action === 'merge') ? 'decide' : action === 'source-delete' ? 'delete' : 'edit'
   const facts = await requireProductPermission(event, code, 'product_requests', permission, bridge?.authorizationSource)

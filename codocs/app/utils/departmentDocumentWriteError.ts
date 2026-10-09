@@ -36,6 +36,9 @@ export function departmentDocumentWriteErrorMessage(error: unknown, fallback: st
 export function documentLoadErrorMessage(error: unknown): string {
   const outer = envelope(error)
   const status = outer.statusCode || outer.status || 0
+  if (status === 401) return '登录状态已失效，请重新登录'
+  if (status === 404) return '文档不存在或已移除，请返回文档列表确认'
+  if (status === 410) return '此文档入口已下线，请返回文档列表使用现有功能'
   if (status === 403) return '你没有查看此文档正文的权限，请返回文档列表'
   const message = departmentDocumentWriteErrorMessage(error, '')
   const known = new Set<string>([...Object.values(messages), '服务暂时不可用，请稍后重试'])

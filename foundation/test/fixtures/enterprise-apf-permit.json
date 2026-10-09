@@ -1,0 +1,32 @@
+{
+  "method": "POST",
+  "target": "/v1/enterprise/finance/bank-accounts:save",
+  "body": {
+    "id": "",
+    "code": "MARKED",
+    "name": "中文<& ",
+    "rowVersion": 0,
+    "page": 0,
+    "pageSize": 0,
+    "search": "",
+    "authorization": {
+      "actorUid": "Person",
+      "tenant": "C000001",
+      "deployment": "Host",
+      "resource": "bank_accounts",
+      "action": "admin",
+      "operation": "save",
+      "objectId": "",
+      "allowed": true,
+      "expiresAt": 123,
+      "bundleVersion": "1",
+      "bundleHash": "hash",
+      "policyRevision": 38,
+      "scope": {
+        "access": "all",
+        "departmentCodes": []
+      }
+    }
+  },
+  "canonical": "[\"hzy-enterprise-apf-permit.v1\",\"POST\",\"/v1/enterprise/finance/bank-accounts:save\",\"Person\",\"C000001\",\"Host\",\"bank_accounts\",\"admin\",\"save\",\"\",true,123,\"1\",\"hash\",38,\"all\",[],\"\",\"MARKED\",\"中文<&\\u2028\",0,0,0,\"\"]"
+}

@@ -1,11 +1,9 @@
 import { createTwoFilesPatch } from 'diff'
 import {
-  createGitCommit,
   extractGitProjectPath,
   getGitRepositoryFile,
   listGitCommits,
-  listGitMarkdownTree,
-  resolveGitCommitActions
+  listGitMarkdownTree
 } from '@hzy/foundation/server/utils/gitIntegration'
 import { createProjectsOSSClient } from './oss'
 
@@ -25,14 +23,6 @@ export interface GitlabSyncData {
   nochange: SyncFileItem[]
   conflict: SyncFileItem[]
   deleted: SyncFileItem[]
-}
-
-export interface SubmitGitlabDocsInput {
-  projectCode: string
-  uid: string
-  authorName: string
-  authorEmail: string
-  docs: { oss_path?: string, gitlab_path?: string }[]
 }
 
 function isTargetMarkdownPath(path: string) {
@@ -259,38 +249,6 @@ export async function syncProjectDocsFromGitLab(projectCode: string): Promise<Gi
   }
 
   return result
-}
-
-export async function submitProjectDocsToGitLab(input: SubmitGitlabDocsInput) {
-  const ossClient = createProjectsOSSClient()
-  const docs: { gitlabPath: string, content: string }[] = []
-
-  for (const doc of input.docs) {
-    if (!doc.oss_path || !doc.gitlab_path) continue
-    const file = await ossClient.get(doc.oss_path)
-    docs.push({
-      gitlabPath: doc.gitlab_path,
-      content: file.content.toString('utf-8')
-    })
-  }
-
-  const resolved = await resolveGitCommitActions({
-    projectCode: input.projectCode,
-    docs
-  })
-  if (resolved.actions.length === 0) {
-    throw createError({ statusCode: 400, message: 'No valid documents to commit' })
-  }
-
-  const fileList = resolved.actions.map(action => action.file_path).join(', ')
-  return await createGitCommit({
-    projectCode: input.projectCode,
-    branch: resolved.branch,
-    commitMessage: `docs(bot): Update ${resolved.actions.length} file(s) from Codocs\n\nFiles: ${fileList}\n\nSubmitted by: ${input.authorName} (${input.uid})`,
-    actions: resolved.actions,
-    authorName: input.authorName,
-    authorEmail: input.authorEmail
-  })
 }
 
 export async function getRepoPathForProject(projectCode: string) {

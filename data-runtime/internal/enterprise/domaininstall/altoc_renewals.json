@@ -1,0 +1,31 @@
+[
+  {
+    "Logical": "altoc_renewal_opportunity",
+    "Physical": "altoc_renewal_opportunity",
+    "Columns": [
+      "id",
+      "code",
+      "customer_id",
+      "contract_id",
+      "name",
+      "renewal_type",
+      "expected_amount",
+      "expected_sign_date",
+      "stage",
+      "status",
+      "owner_uid",
+      "owner_dept_code",
+      "risk_level",
+      "reason",
+      "next_action",
+      "next_action_due_date",
+      "row_version",
+      "created_by",
+      "updated_by",
+      "created_at",
+      "updated_at",
+      "deleted_at"
+    ],
+    "DDL": "CREATE TABLE altoc_renewal_opportunity (\n id BIGINT PRIMARY KEY AUTO_INCREMENT,\n code VARCHAR(30) NOT NULL,\n customer_id BIGINT NOT NULL,\n contract_id BIGINT DEFAULT NULL,\n name VARCHAR(200) NOT NULL,\n renewal_type VARCHAR(30) NOT NULL DEFAULT 'maintenance',\n expected_amount DECIMAL(18,2) DEFAULT NULL,\n expected_sign_date DATE DEFAULT NULL,\n stage VARCHAR(30) NOT NULL DEFAULT 'identified',\n status VARCHAR(30) NOT NULL DEFAULT 'open',\n owner_uid VARCHAR(50) NOT NULL,\n owner_dept_code VARCHAR(50) DEFAULT NULL,\n risk_level VARCHAR(20) DEFAULT NULL,\n reason VARCHAR(500) DEFAULT NULL,\n next_action VARCHAR(500) DEFAULT NULL,\n next_action_due_date DATE DEFAULT NULL,\n row_version INT UNSIGNED NOT NULL DEFAULT 1,\n created_by VARCHAR(50) NOT NULL,\n updated_by VARCHAR(50) NOT NULL,\n created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,\n updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,\n deleted_at DATETIME DEFAULT NULL,\n UNIQUE KEY uk_code(code),\n INDEX idx_customer(customer_id),\n INDEX idx_contract(contract_id),\n INDEX idx_owner(owner_uid),\n INDEX idx_dept(owner_dept_code),\n INDEX idx_status(status)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;"
+  }
+]

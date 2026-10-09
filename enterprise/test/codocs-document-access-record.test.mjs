@@ -59,11 +59,11 @@ test('Enterprise Codocs access records use fresh permission, actor binding, and 
     const { recordEnterpriseCodocsDocumentAccess } = await import('../server/utils/enterpriseCodocsDocumentAccessRecord.ts')
     const app = createApp()
     const router = createRouter()
-    router.get('/audit/:uuid', defineEventHandler(async event => {
+    router.get('/audit/:uuid', defineEventHandler(async (event) => {
       await recordEnterpriseCodocsDocumentAccess(event, event.context.auditUuid, event.context.auditPath, event.context.auditPermission)
       return { success: true }
     }))
-    app.use(defineEventHandler(event => {
+    app.use(defineEventHandler((event) => {
       event.context.consoleAuth = globalThis.__codocsAuditSession
       event.context.auditUuid = 'doc-1'
       event.context.auditPath = 'codocs/company/release.md'
@@ -150,7 +150,6 @@ test('Enterprise Codocs access records use fresh permission, actor binding, and 
     assert.equal(unauthenticated.status, 401)
     assert.equal(runtimeCalls.length, beforeUnauthenticated)
     globalThis.__codocsAuditSession = session
-
   } finally {
     if (server) await new Promise(done => server.close(done))
     hooks.deregister()

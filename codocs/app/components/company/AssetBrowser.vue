@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import ContentPageHeader from '../../../../foundation/app/components/ContentPageHeader.vue'
 import { useCodocsModule } from '../../../layer/useCodocsModule'
 import { useResizablePanel } from '../../composables/useResizablePanel'
 import { useViewerWatermark } from '../../composables/useViewerWatermark'
@@ -27,7 +28,7 @@ const props = defineProps<{ subdir: string, title: string, hideExport?: boolean 
 usePageTitle(props.title)
 
 const toast = useToast()
-const { moduleUrl } = useCodocsModule()
+const { moduleUrl, hosted } = useCodocsModule()
 const mutationKeys = new Map<string, string>()
 function mutationBody(action: string, body: Record<string, unknown>) {
   const key = `${action}:${JSON.stringify(body)}`
@@ -38,7 +39,7 @@ const { confirm } = useConfirm()
 const { panelWidth, panelCollapsed, onResizeStart, showPanel } = useResizablePanel(288)
 const { hasPermission } = usePermissions()
 const isAdmin = computed(() => hasPermission('company', 'admin'))
-const { watermarkText } = useViewerWatermark()
+const { watermarkText } = useViewerWatermark({ includeTime: true })
 const isSystemAdmin = computed(() => hasPermission('admin', 'admin'))
 const canImportKnowledge = computed(() => isSystemAdmin.value && hasPermission('company', 'publish'))
 
@@ -244,6 +245,12 @@ const archiveFile = async () => {
 
 <template>
   <UDashboardPanel grow>
+    <ContentPageHeader
+      :hosted="hosted"
+      :title="title"
+      description="浏览目录与文档"
+      class="shrink-0 px-4 py-3"
+    />
     <div v-if="panelCollapsed" class="hidden md:flex items-center gap-2 px-3 py-1 border-b border-default">
       <UButton
         icon="i-lucide-folder-tree"
@@ -420,7 +427,7 @@ const archiveFile = async () => {
           </div>
           <!-- PDF 预览 -->
           <div v-else-if="previewFileExt === 'pdf' && previewUrl" class="w-full h-full">
-            <PublishedPdfViewer :src="previewUrl" :title="selectedFile.name" />
+            <PublishedPdfViewer :watermark-text="watermarkText" :src="previewUrl" :title="selectedFile.name" />
           </div>
           <!-- Markdown 预览 -->
           <div v-else class="max-w-4xl mx-auto bg-white dark:bg-gray-900 shadow-sm rounded-lg min-h-full">

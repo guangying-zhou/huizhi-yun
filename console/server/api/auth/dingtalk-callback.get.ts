@@ -1,3 +1,4 @@
+import { redirectLoginFailure } from '~~/server/utils/loginFailure'
 import { createError, defineEventHandler, getQuery, sendRedirect } from 'h3'
 import { getAuthRequestIp, writeAuthLoginEvent } from '~~/server/utils/authAudit'
 import { resolveOrBindDirectoryIdentity } from '~~/server/utils/authIdentity'
@@ -14,7 +15,7 @@ export default defineEventHandler(async (event) => {
   const defaultApp = String(runtime.public?.appCode || runtime.public?.appName || 'console')
   let targetApp = defaultApp
   if (!code || !state) {
-    throw createError({ statusCode: 400, message: '钉钉登录回调无效' })
+    return redirectLoginFailure(event, createError({ statusCode: 400, message: '钉钉登录回调无效' }))
   }
   try {
     const transaction = await consumeExternalLoginTransaction(event, { provider: 'dingtalk', state })
@@ -50,12 +51,7 @@ export default defineEventHandler(async (event) => {
       targetApp, authProvider: 'dingtalk', loginType: 'dingtalk', loginResult: 'failed',
       failureReason: safeFailureCode, ipAddress: getAuthRequestIp(event)
     })
-    const projectedMessage = projectedCode && typeof error === 'object' && error !== null && 'message' in error
-      ? String((error as { message?: unknown }).message || '').trim()
-      : ''
-    throw createError({
-      statusCode: [400, 401, 403, 409, 503].includes(statusCode) ? statusCode : 502,
-      message: projectedMessage || (statusCode === 403 ? '钉钉账号未绑定有效企业用户' : '钉钉登录失败，请重试')
-    })
+
+    return redirectLoginFailure(event, error)
   }
 })

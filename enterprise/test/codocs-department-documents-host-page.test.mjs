@@ -19,7 +19,7 @@ test('department documents Host page compiles and only uses Host department rout
   assert.match(source, /Idempotency-Key/)
   assert.match(source, /v-if="canManage"/)
   assert.match(source, /暂未开放/)
-  for (const action of ['新建文档', '上传', '回收站', '改名\/移动', '设为只读', '下载', '复制', '恢复']) assert.match(source, new RegExp(action))
+  for (const action of ['新建文档', '上传', '回收站', '改名/移动', '设为只读', '下载', '复制', '恢复']) assert.match(source, new RegExp(action))
 })
 
 test('department documents page is registered under 部门空间 with departments:view', async () => {

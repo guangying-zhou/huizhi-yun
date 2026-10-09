@@ -170,3 +170,8 @@
 5. 零 PII 展示层策略
 - 当前 user 列表已最小化
 - 如需“人类可读姓名/邮箱”，需通过外部身份 read-through（不回写 tenant 库）
+
+
+## 环境应用 release pin（2026-10-07 候选）
+
+新增 tenant/environment 选择集、逐应用 release 选择与同事务审计。租户详情提供独立环境选择、只读完整差异预览和 CAS 保存；签包按选择解析 manifest/推荐角色，prod 未初始化时阻止新签包，test/dev 保持兼容。DDL/部署/生产初始化与签包尚待批准。数据关系、权限、迁移和验收见 [环境版本说明](../../docs/Platform-Environment-App-Release-Pins.md)。

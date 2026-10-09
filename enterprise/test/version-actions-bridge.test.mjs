@@ -32,14 +32,22 @@ test('version lifecycle Host routes preserve original validation and exact autho
   const hooks = registerHooks({
     resolve(specifier, context, next) {
       let source
-      if (specifier.endsWith('/consoleSessionBridge') || specifier === './consoleSessionBridge') source = 'export const resolveConsoleAuthWithSessionBridge = async () => globalThis.__planningSession'
-      if (specifier.endsWith('/tenantRuntimeClient') || specifier === './tenantRuntimeClient') source = 'export const maybeCallTenantRuntime = (...args) => globalThis.__planningTransport(...args); export const verifiedServiceCommandActor=()=>null;export const prepareTenantRuntime = async () => true'
-      if (specifier.endsWith('/platformBundleAuthorization')) source = 'export const loadScopedAuthorizationFromConsoleRuntime = (...args) => globalThis.__planningAuthorization(...args)'
-      if (source) return { url: `data:text/javascript,${encodeURIComponent(source)}`, shortCircuit: true }
+      if (specifier.endsWith('/consoleSessionBridge') || specifier === './consoleSessionBridge')
+        source = 'export const resolveConsoleAuthWithSessionBridge = async () => globalThis.__planningSession'
+      if (specifier.endsWith('/tenantRuntimeClient') || specifier === './tenantRuntimeClient')
+        source = 'export const maybeCallTenantRuntime = (...args) => globalThis.__planningTransport(...args); export const verifiedServiceCommandActor=()=>null;export const prepareTenantRuntime = async () => true'
+      if (specifier.endsWith('/platformBundleAuthorization'))
+        source = 'export const loadScopedAuthorizationFromConsoleRuntime = (...args) => globalThis.__planningAuthorization(...args)'
+      if (source)
+        return { url: `data:text/javascript,${encodeURIComponent(source)}`, shortCircuit: true }
       let candidate
-      if (specifier.startsWith('@hzy/foundation/')) candidate = resolve(root, 'foundation', specifier.slice('@hzy/foundation/'.length))
-      else if (specifier.startsWith('.') && context.parentURL?.startsWith('file:')) candidate = resolve(dirname(fileURLToPath(context.parentURL)), specifier)
-      if (candidate && !existsSync(candidate) && existsSync(`${candidate}.ts`)) return { url: pathToFileURL(`${candidate}.ts`).href, shortCircuit: true }
+      if (specifier.startsWith('@hzy/foundation/'))
+        candidate = resolve(root, 'foundation', specifier.slice('@hzy/foundation/'.length))
+      else
+        if (specifier.startsWith('.') && context.parentURL?.startsWith('file:'))
+          candidate = resolve(dirname(fileURLToPath(context.parentURL)), specifier)
+      if (candidate && !existsSync(candidate) && existsSync(`${candidate}.ts`))
+        return { url: pathToFileURL(`${candidate}.ts`).href, shortCircuit: true }
       return next(specifier, context)
     }
   })
@@ -48,7 +56,9 @@ test('version lifecycle Host routes preserve original validation and exact autho
     const { handleProductVersionCollection } = await import('../../aims/server/utils/productVersionRuntime.ts')
     const { handleProductVersionAcceptance } = await import('../../aims/server/utils/productVersionAcceptanceRuntime.ts')
     const router = createRouter(), app = createApp()
-    app.use(defineEventHandler(event => { event.context.consoleAuth = session }))
+    app.use(defineEventHandler((event) => {
+      event.context.consoleAuth = session
+    }))
     const cases = [
       ['edit', 'PATCH', '', { expectedRevision: 3, expectedVersionRevision: 2, versionCode: 'v2', name: 'Second', reason: 'Edit' }],
       ['delete', 'DELETE', '', { expectedRevision: 3, expectedVersionRevision: 2, expectedScopeRevision: 1, reason: 'Remove' }],
@@ -72,33 +82,34 @@ test('version lifecycle Host routes preserve original validation and exact autho
     }
     for (const [action, method, suffix, input] of cases) {
       const path = `/products/P-A/versions/12${suffix}`
-      for (const [url, body, key] of [[path, {...input, tenant:'forged'}, 'key'], [path,input,''], [path+'?actor=forged',input,'key'], [path.replace('/12','/0'),input,'key']]) {
+      for (const [url, body, key] of [[path, { ...input, tenant: 'forged' }, 'key'], [path, input, ''], [path + '?actor=forged', input, 'key'], [path.replace('/12', '/0'), input, 'key']]) {
         const before = calls.length
-        assert.equal((await request(url,method,body,key)).status,400)
-        assert.equal(calls.length,before)
+        assert.equal((await request(url, method, body, key)).status, 400)
+        assert.equal(calls.length, before)
       }
       const permission = action === 'transition' ? 'edit' : action
       denied = `product_versions:${permission}`
-      assert.equal((await request(path,method,input)).status,403)
+      assert.equal((await request(path, method, input)).status, 403)
       denied = ''
-      assert.equal((await request(path,method,input)).status,200)
+      assert.equal((await request(path, method, input)).status, 200)
       const command = calls.at(-1)
       assert.equal(command.path, `/v1/enterprise/aims/product-version:${action}`)
       assert.equal(command.options.scope, 'aims:enterprise-host:execute')
-      assert.equal(command.options.appCode,'enterprise')
-      assert.equal(command.options.body.tenant,session.tenant)
-      assert.equal(command.options.body.deployment,session.deployment)
-      assert.equal(command.options.body.authorization.facts.actor_uid,session.uid)
-      assert.equal(command.options.body.authorization.action,permission)
-      assert.equal(command.options.body.input.version_id,12)
-      assert.equal(command.options.idempotencyKey,'version-command')
+      assert.equal(command.options.appCode, 'enterprise')
+      assert.equal(command.options.body.tenant, session.tenant)
+      assert.equal(command.options.body.deployment, session.deployment)
+      assert.equal(command.options.body.authorization.facts.actor_uid, session.uid)
+      assert.equal(command.options.body.authorization.action, permission)
+      assert.equal(command.options.body.input.version_id, 12)
+      assert.equal(command.options.idempotencyKey, 'version-command')
       const normalized = command.options.body.input
-      assert.equal((await request(path.replace('/products/','/legacy/'),method,input)).status,200)
+      assert.equal((await request(path.replace('/products/', '/legacy/'), method, input)).status, 200)
       assert.equal(calls.at(-1).path, `/v1/aims/internal/products/P-A/versions:${action}`)
-      assert.deepEqual(calls.at(-1).options.body.input,normalized)
+      assert.deepEqual(calls.at(-1).options.body.input, normalized)
     }
   } finally {
-    if (server) await new Promise(done => server.close(done))
+    if (server)
+      await new Promise(done => server.close(done))
     hooks.deregister()
     globalThis.useRuntimeConfig = oldConfig
     delete globalThis.__planningSession

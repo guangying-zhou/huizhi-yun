@@ -46,10 +46,15 @@ export default defineNuxtPlugin((nuxtApp) => {
     onVerified(next) { verifiedScope.value = next }
   })
   // Cookies/claims only invalidate; they never supply the identity used in keys.
-  watch(() => [auth.token.value, auth.user?.value, auth.tenant?.value, auth.subjectCode?.value, auth.policyVersion?.value], () => {
+  watch(() => [auth.user?.value, auth.tenant?.value, auth.subjectCode?.value, auth.policyVersion?.value], () => {
     coordinator.invalidate()
     void coordinator.refresh().catch(() => {})
   }, { flush: 'sync' })
+  // Same-identity token renewal rechecks the server session without clearing
+  // page data. Identity/policy changes above still invalidate synchronously.
+  watch(() => auth.token.value, () => {
+    void coordinator.refresh().catch(() => {})
+  })
   const onFocus = () => {
     void coordinator.refresh().catch(() => {})
   }

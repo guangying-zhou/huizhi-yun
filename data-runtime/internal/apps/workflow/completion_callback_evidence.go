@@ -4,12 +4,13 @@ import (
 	"context"
 	"database/sql"
 	"github.com/huizhi-yun/data-runtime/internal/httperror"
+	"github.com/huizhi-yun/data-runtime/internal/workflowapproval"
 )
 
 // Derive evidence inside the terminal transition transaction. Earlier submission
 // rounds cannot supply approvers for a resubmitted instance.
 func bindCompletionApprovalEvidence(ctx context.Context, tx *sql.Tx, callback *WorkflowCallback, instance map[string]any, actionID int64) error {
-	if callback.URL != aimsCompletionWorkflowCallback {
+	if callback.URL != aimsCompletionWorkflowCallback && !workflowapproval.CallbackRegistered(cleanAnyString(callback.Payload["app_code"]), cleanAnyString(callback.Payload["resource_code"]), cleanAnyString(callback.Payload["action_code"])) {
 		return nil
 	}
 	action := "approve"

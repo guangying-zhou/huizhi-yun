@@ -62,13 +62,18 @@ export function consoleServiceBinding(event?: H3Event | null): CloudflareService
  * Service Binding 直达 Console Worker，必须去掉租户网关的 `/console` 前缀。
  *
  * 唯一例外是自托管回环传输：自托管的 Console 以 `NUXT_APP_BASE_URL=/console/` 运行，收到没有前缀的路径会
- * 302 到带前缀的路径，而回环传输不跟随重定向，所以那里必须保留 `/console`。是否是自托管回环传输只由传入的
+ * 302 到带前缀的路径，而回环传输不跟随重定向，所以那里必须补齐并保留 `/console`。是否是自托管回环传输只由传入的
  * binding 对象决定（`consoleServiceBinding()` 返回的传输类型，模块内部登记，不取决于 URL 或任何请求输入）；
  * 不传 binding 或传入其它 binding（Cloudflare Service Binding、hzy0 本机传输）时行为与以前逐字相同。
  */
 export function normalizeConsoleServiceBindingUrl(input: string | URL, binding?: unknown) {
   const value = input instanceof URL ? new URL(input) : new URL(input)
-  if (isSelfHostedLoopbackBinding(binding)) return value.toString()
+  if (isSelfHostedLoopbackBinding(binding)) {
+    if (value.pathname !== '/console' && !value.pathname.startsWith('/console/')) {
+      value.pathname = `/console${value.pathname}`
+    }
+    return value.toString()
+  }
   if (value.pathname === '/console') {
     value.pathname = '/'
   } else if (value.pathname.startsWith('/console/')) {

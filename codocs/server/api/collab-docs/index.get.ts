@@ -13,8 +13,13 @@ export default defineEventHandler(async (event) => {
   delete query.current_user
   delete query.currentUser
   delete query.codocs_trusted_review_execution_admin
-  try { optionalReadPagination(query) } catch { throw createError({ statusCode: 400, message: '分页参数无效' }) }
-  if ('sharedTab' in query && ((query.category || 'shared') !== 'shared' || typeof query.sharedTab !== 'string' || !['received', 'sent'].includes(query.sharedTab))) throw createError({ statusCode: 400, message: '协同文档筛选参数无效' })
+  try {
+    optionalReadPagination(query)
+  } catch {
+    throw createError({ statusCode: 400, message: '分页参数无效' })
+  }
+  if ('sharedTab' in query && ((query.category || 'shared') !== 'shared' || typeof query.sharedTab !== 'string' || !['received', 'sent'].includes(query.sharedTab)))
+    throw createError({ statusCode: 400, message: '协同文档筛选参数无效' })
   const canAdminReviewExecution = await checkPermission(event, 'reviews', 'admin')
   const data = await callCodocsTenantRuntime(event, '/v1/codocs/collab-docs', {
     query: {

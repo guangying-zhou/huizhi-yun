@@ -218,6 +218,32 @@ func (s *Server) routeEnterpriseDelegated(r *http.Request, route enterpriseDeleg
 			})
 		})
 	}
+	if spec.Resource == "project-portfolios" && enterprisePortfolioRelationAction(route.Action) {
+		ctx, err = s.enterprisePortfolioActionContext(ctx, route.Action)
+		if err != nil {
+			return result, err
+		}
+	}
+	if spec.Resource == "project-portfolios" && route.Action == "create" {
+		if query.Get("current_user_can_manage_portfolios") != "1" {
+			return result, httperror.New(403, "portfolio_manage_required", "Portfolio administration is required")
+		}
+		value, err := s.aims.CreateEnterprisePortfolio(ctx, aimsapp.EnterpriseProjectCreateIdentity{
+			Tenant: input.Tenant, SourceDeployment: input.Deployment, TargetDeployment: s.cfg.Deployment,
+			ActorUID: verified.ActorUID, ServiceClientID: verified.Service.ClientID,
+			IdempotencyKey: r.Header.Get("Idempotency-Key"), RequestID: requestID(r),
+		}, payload)
+		result.Body = map[string]any{"code": 0, "data": value}
+		return result, err
+	}
+	if spec.Resource == "project-portfolios" && route.Action == "update" {
+		if query.Get("current_user_can_manage_portfolios") != "1" {
+			return result, httperror.New(403, "portfolio_manage_required", "Portfolio administration is required")
+		}
+		value, err := s.aims.UpdateEnterprisePortfolio(ctx, aimsapp.EnterpriseProjectCreateIdentity{Tenant: input.Tenant, SourceDeployment: input.Deployment, TargetDeployment: s.cfg.Deployment, ActorUID: verified.ActorUID, ServiceClientID: verified.Service.ClientID, IdempotencyKey: r.Header.Get("Idempotency-Key"), RequestID: requestID(r)}, input.ObjectID, payload)
+		result.Body = map[string]any{"code": 0, "data": value}
+		return result, err
+	}
 	out, operation, err := s.aims.HandleRuntime(ctx, act.Method, act.Target(input), query, payload)
 	if operation != "" {
 		result.Operation = "enterprise." + operation
@@ -232,7 +258,8 @@ func enterpriseDelegatedRequiresIdempotencyKey(resource, action string) bool {
 	return (resource == "time-entry-reviews" && action == "submit") || (resource == "project-deliverables" && action != "list") || (resource == "work-item-deliverables" && action == "update") || (resource == "project-time-entries" && action != "list") || (resource == "work-item-time-entries" && action != "view") ||
 		(resource == "work-item-comments" && action == "create") || (resource == "work-item-commits" && (action == "link" || action == "unlink")) || (resource == "work-item-documents" && (action == "link" || action == "unlink")) ||
 		(resource == "work-item-decomposition" && (action == "submit" || action == "clone-from-template")) || (resource == "work-item-batch" && action == "update") ||
-		(resource == "weekly-reporting-settings" && action == "update")
+		(resource == "weekly-reporting-settings" && action == "update") ||
+		(resource == "project-portfolios" && (action == "create" || action == "update" || action == "documents-create" || action == "documents-delete" || action == "documents-policy"))
 }
 
 func decodeEnterpriseDelegatedInput(body map[string]any, spec enterpriseDelegatedSpec) (enterpriseDelegatedInput, error) {

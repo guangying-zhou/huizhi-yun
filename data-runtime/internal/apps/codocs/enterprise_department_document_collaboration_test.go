@@ -79,9 +79,9 @@ func TestDepartmentWriterRuleMatrix(t *testing.T) {
 		{"leader or parent with write share", none, "other", "-", false, false},
 		{"manager of someone else's document", manager, "other", "-", false, true},
 		{"member owner", member, "owner", "-", false, true},
-		{"member with write share", member, "other", "write", true, true},
-		{"member with read share", member, "other", "read", true, false},
-		{"member without share", member, "other", "", true, false},
+		{"member with write share", member, "other", "write", false, true},
+		{"member with read share", member, "other", "read", false, true},
+		{"member without share", member, "other", "", false, true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

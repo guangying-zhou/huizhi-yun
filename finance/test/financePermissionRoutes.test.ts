@@ -493,16 +493,11 @@ describe('resolveFinanceApiPermission sensitive status mapping', () => {
     }
 
     const adminPermissions = rolePermissions('finance:admin')
-    for (const permission of [
-      'finance:dashboard:export',
-      'finance:invoices:approve',
-      'finance:receipts:confirm',
-      'finance:expenses:approve',
-      'finance:expenses:confirm',
-      'finance:reconciliation:confirm',
-      'finance:reports:export'
-    ]) {
-      assert.ok(adminPermissions.includes(permission), `finance:admin must include ${permission}`)
+    for (const permission of ['finance:dashboard:export', 'finance:reports:export']) {
+      assert.ok(adminPermissions.includes(permission), `finance:admin retains ${permission}`)
+    }
+    for (const permission of ['finance:invoices:approve', 'finance:invoices:issue', 'finance:receipts:confirm', 'finance:expenses:approve', 'finance:expenses:confirm', 'finance:reconciliation:confirm']) {
+      assert.equal(adminPermissions.includes(permission), false, `finance:admin must delegate ${permission} to a separated role`)
     }
   })
 })

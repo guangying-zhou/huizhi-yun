@@ -24,7 +24,7 @@ function text(value: unknown) {
 
 function notificationIdempotencyKey(input: IntegrationOperationFailureNotificationInput) {
   const digest = createHash('sha256')
-    .update([input.tenantCode, input.deploymentCode, input.sourceApp, input.operationId, input.generation ?? 'legacy'].join('|'))
+    .update([input.tenantCode, input.deploymentCode, input.sourceApp, ...(input.sourceApp === 'enterprise' ? [input.moduleAppCode] : []), input.operationId, input.generation ?? 'legacy'].join('|'))
     .digest('hex')
   return `integration-operation-dead-letter:${digest}`
 }
@@ -73,7 +73,7 @@ export async function notifyIntegrationOperationDeadLetter(
       severity: 'error',
       title: '跨应用任务需要人工处理',
       summary: `${input.sourceApp} 到 ${input.targetApp} 的任务在 ${input.attemptCount}/${input.maxAttempts} 次尝试后进入死信队列。`,
-      body: `业务对象 ${input.sourceBizType}:${input.sourceBizCode} 的跨应用处理失败，请在源应用的任务诊断中检查并受控重放。`,
+      body: input.sourceApp === 'enterprise' ? '跨应用处理未完成，请联系授权人员核对并受控恢复。' : `业务对象 ${input.sourceBizType}:${input.sourceBizCode} 的跨应用处理失败，请在源应用的任务诊断中检查并受控重放。`,
       actionUrl,
       bizType: 'integration_operation',
       bizId: input.operationId,

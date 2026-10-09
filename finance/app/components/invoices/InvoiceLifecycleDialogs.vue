@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { financeBankAccountLabel } from '../../utils/hostFinanceObjectChoices'
 import { financeApiPath } from '~/composables/useFinanceApi'
 import {
   invoiceCode,
@@ -73,11 +74,7 @@ function responsePage(value: unknown) {
 }
 
 function bankAccountLabel(account: Record<string, unknown>) {
-  const name = String(account.account_name || account.code || '')
-  const bankName = String(account.bank_name || '').trim()
-  const code = String(account.code || '').trim()
-  const suffix = [bankName, code].filter(Boolean).join('，')
-  return suffix ? `${name}（${suffix}）` : name
+  return financeBankAccountLabel(account)
 }
 
 async function loadBankAccountOptions() {

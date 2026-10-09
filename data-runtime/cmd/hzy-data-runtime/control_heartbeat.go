@@ -62,7 +62,7 @@ func startControlHeartbeat(
 							restartRequired = true
 						}
 					}
-					if bindingsChanged(cfg.DeploymentBindings, response.DeploymentBindings, os.Getenv("HZY_LOCAL_WORKFLOW_DEPLOYMENT")) {
+					if bindingsChanged(cfg.DeploymentBindings, response.DeploymentBindings, os.Getenv("HZY_LOCAL_WORKFLOW_DEPLOYMENT"), os.Getenv("HZY_LOCAL_COLLAB_DEPLOYMENT")) {
 						if err := writeDeploymentBindings(response.DeploymentBindings); err != nil {
 							log.Printf("[hzy-data-runtime] persist Platform deployment bindings failed: %v", err)
 						} else {
@@ -155,7 +155,7 @@ func normalizeDeploymentBindings(input map[string]string) map[string]string {
 	return bindings
 }
 
-func bindingsChanged(current map[string]string, next map[string]string, localWorkflowDeployment string) bool {
+func bindingsChanged(current map[string]string, next map[string]string, localWorkflowDeployment string, localCollabDeployment ...string) bool {
 	if len(next) == 0 {
 		return false
 	}
@@ -167,6 +167,12 @@ func bindingsChanged(current map[string]string, next map[string]string, localWor
 	if localWorkflowDeployment == "C000001-test-workflow-local" &&
 		current["workflow"] == localWorkflowDeployment && next["workflow"] == "" {
 		delete(current, "workflow")
+	}
+	// Config.Load has already validated the hzy0-only Collab opt-in. Ignore
+	// exactly that local addition; any actual Platform binding still wins.
+	if len(localCollabDeployment) == 1 && localCollabDeployment[0] == "C000001-test-collab" &&
+		current["collab"] == localCollabDeployment[0] && next["collab"] == "" {
+		delete(current, "collab")
 	}
 	return !reflect.DeepEqual(current, next)
 }

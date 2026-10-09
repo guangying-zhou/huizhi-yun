@@ -16,6 +16,7 @@ export interface PortalActionableDescriptor {
 }
 
 export interface PublishPortalNotificationInput {
+  resolveExternalChannel?: unknown
   sourceAppCode?: unknown
   eventType?: unknown
   category?: unknown
@@ -33,6 +34,7 @@ export interface PublishPortalNotificationInput {
 }
 
 export interface PortalNotificationActor {
+  notificationSourceApp?: 'aims'
   actorId?: string | null
   appCode?: string | null
 }
@@ -261,7 +263,7 @@ export function derivePortalActionableDescriptor(input: {
 }
 
 export function canonicalizePortalNotificationRequest(input: PublishPortalNotificationInput, actor: PortalNotificationActor): CanonicalPortalNotification {
-  const actorAppCode = normalizeCode(actor.appCode, '')
+  const actorAppCode = normalizeCode(actor.notificationSourceApp || actor.appCode, '')
   if (!actorAppCode) {
     throw new PortalNotificationPublishError(403, '服务身份缺少绑定应用，不能发布通知', 'source_app_identity_required')
   }

@@ -69,6 +69,7 @@ func validateEnterpriseWorkItemTransitionTx(ctx context.Context, tx *sql.Tx, pro
 }
 
 func (a *Adapter) TransitionEnterpriseWorkItem(ctx context.Context, id EnterpriseProjectUpdateIdentity, projectID, itemID, action string, command map[string]any) (map[string]any, error) {
+	ctx = ticketTransactionItem(ctx, itemID)
 	capability, ok := EnterpriseWorkItemStateCapabilities[action]
 	expected, _ := command["expectedVersion"].(string)
 	if !ok || len(command) != 1 || len(expected) != 64 || len(id.Personnel) > 0 {

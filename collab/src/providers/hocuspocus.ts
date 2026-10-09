@@ -9,6 +9,7 @@ import { RuntimeHttpExtension } from '../extensions/runtime-http.js'
 import { configureCodocsRuntime } from '../utils/codocs-runtime.js'
 import { createV2RuntimeClient, createV2Snapshots } from '../utils/v2-snapshots.js'
 import type { CollabProvider, CollabRuntimeStatus } from './types.js'
+import { bindLoopbackListener } from './loopback-listener.js'
 
 export function createHocuspocusProvider(config: CollabConfig): CollabProvider {
   let redisStatus = 'disabled'
@@ -134,6 +135,7 @@ export function createHocuspocusProvider(config: CollabConfig): CollabProvider {
         }
       })
 
+      bindLoopbackListener(server.httpServer, config.address)
       await server.listen()
     },
     async stop() {

@@ -1,3 +1,5 @@
+import { loadEnvironmentAppSelection, selectionReceipt, assertSelectionUnchanged } from './environmentAppReleases.ts'
+import { projectEnvironmentReleaseFacts, selectedAppCodes, type EnvironmentAppSelection } from './environmentAppReleaseModel.ts'
 import { hashPolicyBundlePayload as hashBundlePayload, hashPolicyBundleFactsForRevision, reuseEnvironmentPolicyPayload } from './environmentPolicyPayload'
 import { resolveTenantEnvironmentPolicyRevision } from './environmentPolicyRevision'
 import type { H3Event } from 'h3'
@@ -608,7 +610,7 @@ async function collectTenantRoleScopes(tenantCode: string) {
   )
 }
 
-async function collectTenantRoleAppRoleMaps(tenantCode: string) {
+async function collectTenantRoleAppRoleMaps(tenantCode: string, historical = false) {
   return queryRows<RowDataPacket[]>(
     `SELECT r.role_code AS roleCode, tram.app_role_code AS appRoleCode,
             tram.source_system_role_code AS sourceSystemRoleCode, tram.sort_order AS sortOrder
@@ -619,7 +621,7 @@ async function collectTenantRoleAppRoleMaps(tenantCode: string) {
       AND r.status = 'active'
      INNER JOIN platform_app_roles ar
       ON ar.role_code = tram.app_role_code
-      AND ar.status = 'active'
+      ${historical ? '' : 'AND ar.status = \'active\''}
       AND ar.app_code <> 'collab'
       AND ${excludeLegacyConsoleViewerRoleSql('ar')}
      WHERE tram.tenant_code = ?
@@ -850,7 +852,10 @@ async function collectAppRolePermissions(appCodes: string[]) {
   )
 }
 
-async function collectAppRoleScopes(appCodes: string[]) {
+async function collectAppRoleScopes(appCodes: string[], versioned = false) {
+  if (versioned && !await queryRow<RowDataPacket>('SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=\'platform_app_role_scopes\' AND COLUMN_NAME=\'source_type\'')) {
+    throw createError({ statusCode: 503, message: '环境版本选择需要先安装 app role scope source_type 迁移' })
+  }
   const appFilter = hasAppCodes(appCodes)
     ? `AND (ar.app_code IN (${buildInClause(appCodes)}) OR s.app_code IN (${buildInClause(appCodes)}))`
     : ''
@@ -858,13 +863,13 @@ async function collectAppRoleScopes(appCodes: string[]) {
   return queryRows<RowDataPacket[]>(
     `SELECT ar.role_code AS roleCode, s.app_code AS appCode, s.resource_code AS resourceCode,
             s.action, s.scope_type AS scopeType, s.scope_value AS scopeValue,
-            s.manifest_action_id AS manifestActionId, s.status
+            s.manifest_action_id AS manifestActionId, s.status${versioned ? ', s.source_type AS sourceType' : ''}
      FROM platform_app_role_scopes s
      INNER JOIN platform_app_roles ar ON ar.id = s.app_role_id
-     WHERE ar.status = 'active'
+     WHERE 1=1 ${versioned ? '' : 'AND ar.status = \'active\''}
        AND ar.app_code <> 'collab'
        AND ${excludeLegacyConsoleViewerRoleSql('ar')}
-       AND s.status = 'active'
+       ${versioned ? '' : 'AND s.status = \'active\''}
        ${appFilter}
      ORDER BY ar.role_code, s.app_code, s.resource_code, s.action, s.scope_type, s.scope_value`,
     hasAppCodes(appCodes) ? [...appCodes, ...appCodes] : []
@@ -881,7 +886,7 @@ async function collectSystemRoles() {
   )
 }
 
-async function collectSystemAppRoleMaps(appCodes: string[]) {
+async function collectSystemAppRoleMaps(appCodes: string[], historical = false) {
   const appFilter = hasAppCodes(appCodes)
     ? `AND ar.app_code IN (${buildInClause(appCodes)})`
     : ''
@@ -895,7 +900,7 @@ async function collectSystemAppRoleMaps(appCodes: string[]) {
       AND sr.status = 'active'
      INNER JOIN platform_app_roles ar
        ON ar.id = sarm.app_role_id
-      AND ar.status = 'active'
+      ${historical ? '' : 'AND ar.status = \'active\''}
       AND ar.app_code <> 'collab'
       AND ${excludeLegacyConsoleViewerRoleSql('ar')}
      WHERE 1 = 1
@@ -961,6 +966,7 @@ export async function buildPolicyBundlePayload(input: string | {
   environment?: unknown
   platformBaseUrl?: string | null
   policyRevision?: unknown
+  appSelection?: EnvironmentAppSelection
 }) {
   const { tenantCode, environment, platformBaseUrl, policyRevision } = normalizePolicyBundleInput(input)
   const tenant = await findTenant(tenantCode)
@@ -972,6 +978,7 @@ export async function buildPolicyBundlePayload(input: string | {
     })
   }
 
+  const appSelection = typeof input !== 'string' && input.appSelection ? input.appSelection : await loadEnvironmentAppSelection({ queryRow, queryRows }, tenantCode, environment)
   const deployments = await findTargetDeployments(tenantCode, environment)
   const deploymentSite = await findDeploymentSiteProjection(tenantCode, environment)
   const tenantSettings = parseTenantSettings(tenant.settingsJson)
@@ -979,36 +986,40 @@ export async function buildPolicyBundlePayload(input: string | {
   const generatedAt = new Date().toISOString()
   const enterpriseEntitlement = await loadBundleEnterpriseEntitlement(queryRow, tenantCode, tenant.status, generatedAt)
   const legacyAppCodes = await collectTenantAppCodes(tenantCode, environment, deployments)
-  const appCodes = enterpriseEntitlement
+  const qualifiedAppCodes = enterpriseEntitlement
     ? (await queryRows<Array<RowDataPacket & { appCode: string }>>(ENTERPRISE_MODULE_CATALOG_SQL)).map(row => row.appCode)
     : legacyAppCodes
+  const appCodes = appSelection ? selectedAppCodes(appSelection) : qualifiedAppCodes
+  if (appSelection && appCodes.some(code => !qualifiedAppCodes.includes(code) && !legacyAppCodes.includes(code))) {
+    throw createError({ statusCode: 409, message: '所选应用不在当前租户有效应用目录中；版本选择不能扩张产品资格' })
+  }
   // Full product qualification must not expand baseline grants or system-role app mappings.
   // Explicit tenant role grants remain authoritative and use the full resource catalog.
-  const baselinePermissions = await collectConfiguredBaselinePermissions(legacyAppCodes)
+  const rawBaselinePermissions = await collectConfiguredBaselinePermissions(legacyAppCodes)
 
   const [
-    applications,
-    manifestResources,
-    manifestActions,
-    manifestActionImplications,
+    rawApplications,
+    rawManifestResources,
+    rawManifestActions,
+    rawManifestActionImplications,
     subjects,
     subjectMemberships,
     roles,
     roleHolderRevisions,
-    roleAppRoleMaps,
-    rolePermissions,
-    roleScopes,
+    rawRoleAppRoleMaps,
+    rawRolePermissions,
+    rawRoleScopes,
     subjectRoles,
-    subjectRoleScopes,
+    rawSubjectRoleScopes,
     permissionTemplates,
     templateRoles,
     templateBindings,
     templateOverrides,
-    appRoles,
-    appRolePermissions,
-    appRoleScopes,
+    rawAppRoles,
+    rawAppRolePermissions,
+    rawAppRoleScopes,
     systemRoles,
-    systemAppRoleMaps,
+    rawSystemAppRoleMaps,
     capabilities,
     conflictRules
   ] = await Promise.all([
@@ -1020,7 +1031,7 @@ export async function buildPolicyBundlePayload(input: string | {
     collectSubjectMemberships(tenantCode),
     collectTenantRoles(tenantCode),
     collectRoleHolderRevisions(tenantCode),
-    collectTenantRoleAppRoleMaps(tenantCode),
+    collectTenantRoleAppRoleMaps(tenantCode, Boolean(appSelection)),
     collectTenantRolePermissions(tenantCode),
     collectTenantRoleScopes(tenantCode),
     collectSubjectRoles(tenantCode),
@@ -1031,12 +1042,15 @@ export async function buildPolicyBundlePayload(input: string | {
     collectTemplateOverrides(tenantCode),
     collectAppRoles(appCodes),
     collectAppRolePermissions(appCodes),
-    collectAppRoleScopes(appCodes),
+    collectAppRoleScopes(appCodes, Boolean(appSelection)),
     collectSystemRoles(),
-    collectSystemAppRoleMaps(legacyAppCodes),
+    collectSystemAppRoleMaps(legacyAppCodes, Boolean(appSelection)),
     collectCapabilities(tenantCode, environment),
     collectRoleConflictRules(tenantCode)
   ])
+
+  const rawFacts = { applications: rawApplications, manifestResources: rawManifestResources, manifestActions: rawManifestActions, manifestActionImplications: rawManifestActionImplications, appRoles: rawAppRoles, appRolePermissions: rawAppRolePermissions, appRoleScopes: rawAppRoleScopes, roleAppRoleMaps: rawRoleAppRoleMaps, rolePermissions: rawRolePermissions, roleScopes: rawRoleScopes, systemAppRoleMaps: rawSystemAppRoleMaps, baselinePermissions: rawBaselinePermissions, subjectRoleScopes: rawSubjectRoleScopes, roles }
+  const { applications, manifestResources, manifestActions, manifestActionImplications, appRoles, appRolePermissions, appRoleScopes, roleAppRoleMaps, rolePermissions, roleScopes, systemAppRoleMaps, baselinePermissions, subjectRoleScopes } = appSelection ? projectEnvironmentReleaseFacts(rawFacts, appSelection) as typeof rawFacts : rawFacts
 
   const enterpriseHostRoutes = enterpriseEntitlement ? await loadEnterpriseHostModuleRoutes(queryRow, tenantCode, environment) : []
   const routedApplications = enterpriseEntitlement ? applyEnterpriseHostModuleRoutes(applications, enterpriseHostRoutes) : applications
@@ -1058,6 +1072,7 @@ export async function buildPolicyBundlePayload(input: string | {
     schemaVersion: POLICY_BUNDLE_SCHEMA_VERSION,
     ...v2Compat,
     generatedAt,
+    ...(appSelection ? { appReleaseSelection: selectionReceipt(appSelection) } : {}),
     ...(enterpriseEntitlement ? { enterpriseEntitlement, enterpriseHostRoutes, moduleAvailability: enterpriseModuleAvailability(applications, deployments, enterpriseHostRoutes) } : {}),
     environment,
     tenant: {
@@ -1134,8 +1149,10 @@ export async function generatePolicyBundle(input: {
 
   const environment = normalizeDeploymentEnvironment(input.environment)
   const platformBaseUrl = String(input.platformBaseUrl || '').trim().replace(/\/+$/, '') || null
-  await syncInheritedSystemRoles(tenantCode)
-  const draftPayload = await buildPolicyBundlePayload({ tenantCode, environment, platformBaseUrl, policyRevision: 0 })
+  const selection = await loadEnvironmentAppSelection({ queryRow, queryRows }, tenantCode, environment)
+  if (!selection && environment === 'prod') throw createError({ statusCode: 409, message: 'prod 必须先初始化环境应用版本；已有环境须使用已签基线包' })
+  if (!selection) await syncInheritedSystemRoles(tenantCode)
+  const draftPayload = await buildPolicyBundlePayload({ tenantCode, environment, platformBaseUrl, policyRevision: 0, ...(selection ? { appSelection: selection } : {}) })
   const targetDeployments = Array.isArray(draftPayload.deployments) ? draftPayload.deployments : []
 
   if (targetDeployments.length === 0) {
@@ -1153,13 +1170,17 @@ export async function generatePolicyBundle(input: {
   const expiresAt = input.expiresAt ? toSqlDateTime(new Date(input.expiresAt)) : null
 
   return withTransaction(async (tx) => {
+    await assertSelectionUnchanged(tx, tenantCode, environment, selectionReceipt(selection))
     let policyRevision = await resolveTenantEnvironmentPolicyRevision(tx, tenantCode, policyHash, environment)
     // Reuse exact published bytes/version, not a new generatedAt at the same
     // revision. Consumers deliberately reject equal-revision content conflicts.
     const previous = await tx.queryRow<RuntimePolicyBundleRow>(
+      // Resolve the id through the index first: sorting whole rows (large
+      // payload JSON) can exceed MySQL's sort buffer (ER_OUT_OF_SORTMEMORY).
       `SELECT pb.*, pb.id AS bundle_id, 0 AS deployment_id
-       FROM policy_bundles pb WHERE tenant_code=? AND environment=?
-       ORDER BY id DESC LIMIT 1 FOR UPDATE`, [tenantCode, environment])
+       FROM policy_bundles pb
+       WHERE pb.id=(SELECT MAX(latest.id) FROM policy_bundles latest WHERE latest.tenant_code=? AND latest.environment=?)
+       FOR UPDATE`, [tenantCode, environment])
     const previousTargets = previous
       ? await tx.queryRows<DeploymentTargetRow[]>(
           `SELECT d.id, d.deployment_code AS deploymentCode, d.app_code AS appCode, d.environment

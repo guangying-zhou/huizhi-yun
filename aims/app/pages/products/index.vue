@@ -157,6 +157,7 @@ const { setRefresh, clearRefresh } = usePageActions()
 let recoveryTimer: ReturnType<typeof setInterval> | undefined
 onMounted(() => {
   setRefresh(refreshTree)
+  if (useRuntimeConfig().public.manualRefresh === true) return
   window.addEventListener('focus', recoverFailedReads)
   window.addEventListener('online', recoverFailedReads)
   recoveryTimer = setInterval(() => {
@@ -189,7 +190,6 @@ function resetFilters() {
 <template>
   <div
     class="min-h-0 min-w-0 flex-1 space-y-4 overflow-y-auto p-4 sm:p-6"
-    :class="{ 'hosted-products-content': hosted }"
   >
     <ContentPageHeader
       :hosted="hosted"
@@ -499,11 +499,3 @@ function resetFilters() {
     </div>
   </div>
 </template>
-
-<style scoped>
-@media (min-width: 640px) {
-  .hosted-products-content {
-    padding: 3rem;
-  }
-}
-</style>

@@ -12,7 +12,7 @@ type WorkflowTransactionRequirements struct{ Aims, Workflow []string }
 // BeginWorkflowWriteTransaction is a B2 primitive, not a public business lane.
 // reqs must come from local deployment configuration. Both domains are checked
 // before callers may run owning-domain code or read an idempotency receipt.
-func (r *Registry) BeginWorkflowWriteTransaction(ctx context.Context, b Binding, aims, workflow ResolveRequest, required WorkflowTransactionRequirements) (*sql.Tx, []Resolved, error) {
+func (r *Registry) BeginWorkflowWriteTransaction(ctx context.Context, b Binding, aims, workflow ResolveRequest, required WorkflowTransactionRequirements, participants ...ResolveRequest) (*sql.Tx, []Resolved, error) {
 	if aims.Domain != "aims" || workflow.Domain != "workflow" || aims.Operation != Write || workflow.Operation != Write || len(required.Aims) == 0 || len(required.Workflow) == 0 {
 		return nil, nil, ErrBindingMismatch
 	}
@@ -20,7 +20,18 @@ func (r *Registry) BeginWorkflowWriteTransaction(ctx context.Context, b Binding,
 	if err != nil {
 		return nil, nil, err
 	}
-	tx, resolved, err := r.BeginWriteTransaction(ctx, aims, workflow)
+	reqs := []ResolveRequest{aims, workflow}
+	if len(participants) > 1 {
+		return nil, nil, ErrBindingMismatch
+	}
+	if len(participants) == 1 {
+		q := participants[0]
+		if q.Domain != "altoc" || q.Operation != Write || q.Key != aims.Key || q.Generation != aims.Generation {
+			return nil, nil, ErrBindingMismatch
+		}
+		reqs = append(reqs, q)
+	}
+	tx, resolved, err := r.BeginWriteTransaction(ctx, reqs...)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -47,6 +58,9 @@ func (r *Registry) BeginWorkflowWriteTransaction(ctx context.Context, b Binding,
 					}
 				}
 			}
+		}
+		if item.Domain == "altoc" {
+			continue
 		}
 		names := required.Aims
 		if item.Domain == "workflow" {

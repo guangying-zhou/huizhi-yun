@@ -1,6 +1,7 @@
 import { createError } from 'h3'
 
 export interface IntegrationOperationNotificationActor {
+  actorId?: string | null
   appCode?: string | null
   tenantCode?: string | null
   deploymentCode?: string | null
@@ -9,7 +10,8 @@ export interface IntegrationOperationNotificationActor {
 export interface IntegrationOperationFailureNotificationInput {
   tenantCode: string
   deploymentCode: string
-  sourceApp: 'aims' | 'altoc' | 'assets' | 'finance' | 'people'
+  moduleAppCode?: 'altoc' | 'finance' | 'people'
+  sourceApp: 'enterprise' | 'aims' | 'altoc' | 'assets' | 'finance' | 'people'
   targetApp: string
   operationId: string
   operationCode: string
@@ -37,7 +39,8 @@ export function integrationOperationActionableMetadata(input: IntegrationOperati
         objectVersion: input.objectVersion,
         eventVersion: input.objectVersion,
         bizKey: `${input.sourceApp}:integration_operation:${input.operationId}`,
-        authorizationDescriptor: { resource: 'integration_operation', id: input.operationId },
+        authorizationDescriptor: { resource: input.sourceApp === 'enterprise' ? `apf_${input.moduleAppCode}_dead_letter` : 'integration_operation', id: input.operationId },
+        ...(input.sourceApp === 'enterprise' ? { moduleAppCode: input.moduleAppCode, notificationKind: 'apf_dead_letter' } : {}),
         generation: input.generation,
         operationVersion: input.operationVersion
       }
@@ -48,6 +51,7 @@ export function integrationOperationActionUrl(
   input: Pick<IntegrationOperationFailureNotificationInput, 'sourceApp' | 'operationId'>,
   appBaseUrl = ''
 ) {
+  if (input.sourceApp === 'enterprise') return '/enterprise/notifications'
   const pagePath = input.sourceApp === 'altoc'
     ? '/admin/integration-operations'
     : '/integration-operations'
@@ -55,12 +59,12 @@ export function integrationOperationActionUrl(
   return `${base}${pagePath}?${new URLSearchParams({ status: 'dead_letter', operationId: input.operationId }).toString()}`
 }
 
-const allowedSourceApps = new Set(['aims', 'altoc', 'assets', 'finance', 'people'])
+const allowedSourceApps = new Set(['aims', 'altoc', 'assets', 'finance', 'people', 'enterprise'])
 const allowedInputKeys = new Set([
   'tenantCode', 'deploymentCode', 'sourceApp', 'targetApp', 'operationId',
   'operationCode', 'sourceBizType', 'sourceBizCode', 'attemptCount', 'maxAttempts',
   'lastErrorCode', 'lastErrorClass', 'deadLetteredAt', 'originalActorUid',
-  'generation', 'operationVersion', 'actionableKey', 'objectVersion'
+  'moduleAppCode', 'generation', 'operationVersion', 'actionableKey', 'objectVersion'
 ])
 
 function text(value: unknown) {
@@ -142,10 +146,21 @@ export function validateIntegrationOperationFailureNotificationInput(
     throw createError({ statusCode: 400, message: 'source-frozen actionable identity is incomplete' })
   }
   const hasFrozenActionable = presentFrozenFields.length === frozenFields.length
+  if (sourceApp === 'enterprise' && (actor.actorId !== 'enterprise.runtime' || !['altoc', 'finance', 'people'].includes(String(input.moduleAppCode)) || !hasFrozenActionable)) {
+    throw createError({ statusCode: 403, message: 'Exact Enterprise frozen dead-letter identity required' })
+  }
+  if (sourceApp !== 'enterprise' && input.moduleAppCode !== undefined) throw createError({ statusCode: 400, message: 'moduleAppCode is reserved for Enterprise' })
   const attemptCount = boundedCount(input.attemptCount, 'attemptCount')
   const operationId = requiredOperationId(input.operationId)
+  if (sourceApp === 'enterprise') {
+    const source = input.moduleAppCode === 'people' ? 'enterprise' : input.moduleAppCode
+    const generation = positiveVersion(input.generation, 'generation')
+    const version = positiveVersion(input.operationVersion, 'operationVersion')
+    if (generation !== version || input.actionableKey !== `integration-operation:${source}:${operationId}:dead-letter:g${generation}` || input.objectVersion !== `dead-letter:g${generation}:operation-v${version}`) throw createError({ statusCode: 400, message: 'Frozen Enterprise actionable identity is invalid' })
+  }
   const deadLetteredAtISO = new Date(deadLetteredAt).toISOString()
   return {
+    ...(sourceApp === 'enterprise' ? { moduleAppCode: input.moduleAppCode as 'altoc' | 'finance' | 'people' } : {}),
     tenantCode,
     deploymentCode,
     sourceApp: sourceApp as IntegrationOperationFailureNotificationInput['sourceApp'],

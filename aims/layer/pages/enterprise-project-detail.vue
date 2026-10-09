@@ -8,6 +8,8 @@ import { useMilestoneStore } from '../../app/stores/milestone'
 import { useProjectStore } from '../../app/stores/project'
 import ProjectNavbar from '../../app/components/project/ProjectNavbar.vue'
 
+definePageMeta({ hostContentInset: false })
+
 // The Host overview shares the project header (name, code, status and the
 // project switcher) with every other project page; the sidebar keeps the
 // object navigation, so this page carries no duplicate page-link buttons.
@@ -125,7 +127,7 @@ async function refresh() {
           </template>
         </ProjectNavbar>
 
-        <div class="min-h-0 flex-1 overflow-y-auto px-4 pb-12 pt-4 sm:px-6">
+        <div class="min-h-0 flex-1 overflow-y-auto p-4 sm:p-6">
           <UAlert
             v-if="error"
             color="error"
@@ -140,7 +142,7 @@ async function refresh() {
 
           <div
             v-else-if="project"
-            class="space-y-6"
+            class="space-y-4"
           >
             <div class="grid grid-cols-2 gap-2 lg:grid-cols-4">
               <UPageCard

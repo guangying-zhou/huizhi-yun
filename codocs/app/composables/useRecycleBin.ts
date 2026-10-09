@@ -4,6 +4,7 @@
  */
 
 import type { ProjectDocument } from '../types/index'
+import { isProjectFamilyDocType } from '../../shared/utils/documentStorage'
 import { useCodocsModule } from '../../layer/useCodocsModule'
 import { createCreationAttempt } from '../../layer/creationAttempt.mjs'
 
@@ -27,7 +28,7 @@ export const useRecycleBin = () => {
       parts.push('演示文稿')
     } else if (doc.docType === 'department') {
       parts.push('部门协作')
-    } else if (doc.docType === 'project' || doc.docType === 'git-project') {
+    } else if (isProjectFamilyDocType(doc.docType)) {
       parts.push('项目文档')
       if (doc.projectCode) {
         parts.push(String(doc.projectCode))

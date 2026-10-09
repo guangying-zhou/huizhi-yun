@@ -5,11 +5,18 @@ export function createCoalescedRead<T>(load: (query: Record<string, string>) => 
   return (query: Record<string, string>): Promise<T> => {
     const key = JSON.stringify([scope(), Object.entries(query).sort(([a], [b]) => a.localeCompare(b))])
     const existing = pending.get(key)
-    if (existing) return existing
+    if (existing)
+      return existing
     const request = Promise.resolve().then(() => load(query))
     pending.set(key, request)
-    void request.then(() => { if (pending.get(key) === request) pending.delete(key) },
-      () => { if (pending.get(key) === request) pending.delete(key) })
+    void request.then(() => {
+      if (pending.get(key) === request)
+        pending.delete(key)
+    },
+    () => {
+      if (pending.get(key) === request)
+        pending.delete(key)
+    })
     return request
   }
 }

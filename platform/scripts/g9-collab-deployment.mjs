@@ -33,7 +33,9 @@ const canonical = rows => rows.map(stable).sort((a, b) => JSON.stringify(a).loca
 const digest = rows => ({ count: rows.length, sha256: sha(canonical(rows)) })
 const DEPLOYMENT_FIELDS = ['status', 'site_id', 'base_path', 'api_base', 'route_source']
 
-export function collabSubscriptionNo(tenant) { return `G9-COLLAB-${tenant}` }
+export function collabSubscriptionNo(tenant) {
+  return `G9-COLLAB-${tenant}`
+}
 
 export async function readCollabDeploymentState(db, lock = false) {
   const suffix = lock ? ' FOR UPDATE' : ''
@@ -76,7 +78,8 @@ export function planCollabDeployment(state, options) {
 
   const operations = []
   let subscription = state.subscriptions.find(r => r.tenant_code === tenant && r.app_code === COLLAB_APP_CODE && r.status === 'active')
-  if (owned[0]) subscription = state.subscriptions.find(r => String(r.id) === String(owned[0].subscription_id)) || subscription
+  if (owned[0])
+    subscription = state.subscriptions.find(r => String(r.id) === String(owned[0].subscription_id)) || subscription
   if (!subscription) {
     operations.push({ kind: 'insert-subscription', subscription_no: collabSubscriptionNo(tenant),
       row: { subscription_no: collabSubscriptionNo(tenant), tenant_subscription_id: parent.id, tenant_code: tenant, app_code: COLLAB_APP_CODE,
@@ -92,7 +95,8 @@ export function planCollabDeployment(state, options) {
   } else {
     const wanted = { status: 'active', ...route }
     const after = Object.fromEntries(DEPLOYMENT_FIELDS.filter(f => String(owned[0][f] ?? '') !== String(wanted[f] ?? '')).map(f => [f, wanted[f]]))
-    if (Object.keys(after).length) operations.push({ kind: 'update-deployment', deployment_code: code, beforeSha256: sha(stable(owned[0])), after })
+    if (Object.keys(after).length)
+      operations.push({ kind: 'update-deployment', deployment_code: code, beforeSha256: sha(stable(owned[0])), after })
   }
   const isTarget = { subscription: r => r.subscription_no === collabSubscriptionNo(tenant), deployment: r => r.deployment_code === code }
   const nonTarget = { subscriptions: digest(state.subscriptions.filter(r => !isTarget.subscription(r))), deployments: digest(state.deployments.filter(r => !isTarget.deployment(r))) }
@@ -139,21 +143,24 @@ export async function applyCollabDeployment(db, options, approvedHash, persistRe
       if (op.kind === 'insert-subscription') {
         subscriptionId = await insert(db, 'subscriptions', op.row)
         saved.insertedSubscriptionId = Number(subscriptionId)
-      } else if (op.kind === 'insert-deployment') {
-        const row = { ...op.row, subscription_id: op.row.subscription_id ?? subscriptionId }
-        assert.ok(row.subscription_id, 'G9_COLLAB_SUBSCRIPTION_REQUIRED')
-        saved.insertedDeploymentId = Number(await insert(db, 'deployments', row))
-      } else {
-        const current = before.deployments.find(r => r.deployment_code === op.deployment_code)
-        assert.equal(sha(stable(current)), op.beforeSha256, 'G9_COLLAB_TARGET_CHANGED')
-        saved.updated = { id: Number(current.id), before: Object.fromEntries(Object.keys(op.after).map(f => [f, current[f]])) }
-        const assignments = Object.keys(op.after).map(f => `\`${f}\`=?`)
-        if (Object.hasOwn(current, 'updated_at')) assignments.push('`updated_at`=UTC_TIMESTAMP()')
-        const [result] = await db.query(`UPDATE deployments SET ${assignments.join(',')} WHERE id=?`, [...Object.values(op.after), current.id])
-        assert.equal(result.affectedRows, 1, 'G9_COLLAB_UPDATE_CARDINALITY')
-      }
+      } else
+        if (op.kind === 'insert-deployment') {
+          const row = { ...op.row, subscription_id: op.row.subscription_id ?? subscriptionId }
+          assert.ok(row.subscription_id, 'G9_COLLAB_SUBSCRIPTION_REQUIRED')
+          saved.insertedDeploymentId = Number(await insert(db, 'deployments', row))
+        } else {
+          const current = before.deployments.find(r => r.deployment_code === op.deployment_code)
+          assert.equal(sha(stable(current)), op.beforeSha256, 'G9_COLLAB_TARGET_CHANGED')
+          saved.updated = { id: Number(current.id), before: Object.fromEntries(Object.keys(op.after).map(f => [f, current[f]])) }
+          const assignments = Object.keys(op.after).map(f => `\`${f}\`=?`)
+          if (Object.hasOwn(current, 'updated_at'))
+            assignments.push('`updated_at`=UTC_TIMESTAMP()')
+          const [result] = await db.query(`UPDATE deployments SET ${assignments.join(',')} WHERE id=?`, [...Object.values(op.after), current.id])
+          assert.equal(result.affectedRows, 1, 'G9_COLLAB_UPDATE_CARDINALITY')
+        }
     }
-    if (hook) await hook(db)
+    if (hook)
+      await hook(db)
     const after = await readCollabDeploymentState(db, true)
     assert.deepEqual({ subscriptions: digest(after.subscriptions.filter(r => r.subscription_no !== collabSubscriptionNo(options.tenant))),
       deployments: digest(after.deployments.filter(r => r.deployment_code !== plan.deploymentCode)) }, plan.nonTarget, 'G9_COLLAB_NON_TARGET_CHANGED')
@@ -163,7 +170,8 @@ export async function applyCollabDeployment(db, options, approvedHash, persistRe
       afterSha256: sha(stable(target)),
       afterSubscriptionSha256: saved.insertedSubscriptionId ? sha(stable(after.subscriptions.find(r => Number(r.id) === saved.insertedSubscriptionId))) : null,
       nonTarget: plan.nonTarget }
-    if (persistReceipt) await persistReceipt(receipt)
+    if (persistReceipt)
+      await persistReceipt(receipt)
     await db.commit()
     return receipt
   } catch (error) {
@@ -223,19 +231,25 @@ async function main() {
       try {
         const state = await readCollabDeploymentState(connection)
         console.log(mode === '--plan' ? JSON.stringify(planCollabDeployment(state, options), null, 2) : JSON.stringify(verifyCollabDeployment(state, options)))
-      } finally { await connection.rollback() }
-    } else if (mode === '--apply') {
-      assert.ok(receiptPath, 'G9_COLLAB_RECEIPT_PATH_REQUIRED')
-      const receipt = await applyCollabDeployment(connection, options, hashOrReceipt, value => writeFileSync(receiptPath, JSON.stringify(value), { flag: 'wx', mode: 0o600 }))
-      console.log(JSON.stringify({ applied: true, reviewHash: receipt.reviewHash, receiptPath }))
-    } else {
-      const receipt = protectedJson(resolve(hashOrReceipt))
-      assert.equal(receipt.reviewHash, receiptPath, 'G9_COLLAB_ROLLBACK_HASH_REQUIRED')
-      console.log(JSON.stringify(await rollbackCollabDeployment(connection, receipt)))
-    }
-  } finally { await connection.end() }
+      } finally {
+        await connection.rollback()
+      }
+    } else
+      if (mode === '--apply') {
+        assert.ok(receiptPath, 'G9_COLLAB_RECEIPT_PATH_REQUIRED')
+        const receipt = await applyCollabDeployment(connection, options, hashOrReceipt, value => writeFileSync(receiptPath, JSON.stringify(value), { flag: 'wx', mode: 0o600 }))
+        console.log(JSON.stringify({ applied: true, reviewHash: receipt.reviewHash, receiptPath }))
+      } else {
+        const receipt = protectedJson(resolve(hashOrReceipt))
+        assert.equal(receipt.reviewHash, receiptPath, 'G9_COLLAB_ROLLBACK_HASH_REQUIRED')
+        console.log(JSON.stringify(await rollbackCollabDeployment(connection, receipt)))
+      }
+  } finally {
+    await connection.end()
+  }
 }
-if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) main().catch((error) => {
-  console.error(`G9_COLLAB_STOPPED:${String(error.message).slice(0, 200)}`)
-  process.exitCode = 1
-})
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url))
+  main().catch((error) => {
+    console.error(`G9_COLLAB_STOPPED:${String(error.message).slice(0, 200)}`)
+    process.exitCode = 1
+  })

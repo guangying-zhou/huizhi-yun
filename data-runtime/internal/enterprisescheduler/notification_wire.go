@@ -20,7 +20,7 @@ var _ aimsapp.NotificationRepository = notificationPersistence{}
 func (s *Service) Notification(ctx context.Context, identity enterprise.SchedulerIdentity, action, operationID string, body map[string]any, now time.Time) (map[string]any, error) {
 	return notificationTransaction(ctx, s, identity, func(tx *sql.Tx) (map[string]any, error) {
 		tables := s.source.Tables()
-		trusted := integrationoperation.TrustedContext{TenantCode: identity.Tenant, DeploymentCode: identity.Deployment, SourceApp: identity.SourceApp, ServiceClientID: identity.ClientID, OutboxTables: &tables}
+		trusted := integrationoperation.TrustedContext{TenantCode: identity.Tenant, DeploymentCode: identity.Deployment, SourceApp: "aims", ServiceClientID: identity.ClientID, OutboxTables: &tables}
 		return aimsapp.ExecuteIntegrationOperationNotification(ctx, notificationPersistence{s.repository, tx}, trusted, action, operationID, body, now)
 	})
 }

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { projectPageFailure } from '../utils/projectPageFailure'
 import type { AimsProject, ProjectPortfolio, PaginatedList } from '../types/aims'
 import { useProjectStore } from '../stores/project'
 import { usePortfolioStore } from '../stores/portfolio'
@@ -281,7 +282,7 @@ async function loadDocuments(projectId: number) {
     projectDocumentCountOverrides.value.set(projectId, page.total)
   } catch (error: unknown) {
     if (!alive || request !== documentRequest) return
-    const message = (error as { data?: { message?: string }, message?: string })?.data?.message || '加载项目文档失败，请重试'
+    const message = projectPageFailure(error, '加载项目文档失败，请重试')
     documentError.value = message
     projectDocumentCountOverrides.value.set(projectId, null)
     toast.add({ title: message, color: 'error' })
@@ -352,9 +353,7 @@ async function loadOtherDocumentPreview(doc: AccessibleDocument) {
     otherPreviewInfo.value = response.data
   } catch (error: unknown) {
     if (request !== otherPreviewRequest || !alive) return
-    otherPreviewError.value = (error as { data?: { message?: string }, message?: string })?.data?.message
-      || (error as { message?: string })?.message
-      || '无法获取在线预览地址'
+    otherPreviewError.value = projectPageFailure(error, '无法获取在线预览地址')
     otherPreviewInfo.value = { previewable: false }
   } finally {
     if (request === otherPreviewRequest && alive) otherPreviewLoading.value = false
@@ -657,6 +656,7 @@ watch(showPreviewModal, (open) => {
           :source="previewDoc.documentSource"
           :codocs-uuid="previewDoc.codocsUuid"
           :project-id="previewDoc.projectId || selectedProjectId"
+          :project-document-id="previewDoc.id"
           :repo-project-code="previewDoc.repoProjectCode"
           :repo-file-path="previewDoc.repoFilePath"
           :repo-commit-id="previewDoc.repoCommitId"

@@ -1,4 +1,8 @@
 <script setup lang="ts">
+import type { DropdownMenuItem } from '@nuxt/ui'
+import CommonEmptyState from '@hzy/foundation/app/components/common/EmptyState.vue'
+import { documentLoadErrorMessage } from '../../utils/departmentDocumentWriteError'
+
 import MyDocumentSpaceHeader from '../../components/MyDocumentSpaceHeader.vue'
 import type { ProjectDocsTreeItem } from '../../types'
 import { useDocumentDownload } from '../../composables/useDocumentDownload'
@@ -13,6 +17,12 @@ definePageMeta({ hostContentInset: false })
 usePageTitle('我的文档')
 
 // Record types for API responses
+const { hasPermission } = usePermissions()
+const canCreateDocument = computed(() => hasPermission('documents', 'create'))
+const canEditDocument = computed(() => hasPermission('documents', 'edit'))
+const canDeleteDocument = computed(() => hasPermission('documents', 'delete'))
+const canExportDocument = computed(() => hasPermission('documents', 'export'))
+
 interface FolderRecord {
   id: number
   name: string
@@ -106,6 +116,10 @@ const isUploading = ref(false)
 // Mobile Sidebar
 const showMobileSidebar = ref(false)
 const { panelWidth, panelCollapsed, onResizeStart } = useResizablePanel(240)
+function openDirectoryPanel() {
+  panelCollapsed.value = false
+  showMobileSidebar.value = true
+}
 
 // Inline editing
 const editingId = ref<string | null>(null) // 'folder-{id}' or 'doc-{uuid}'
@@ -161,11 +175,11 @@ async function fetchDocumentPage(parentId: number | null, page: number): Promise
 }
 const { data: rootFolders, pending: foldersPending, error: rootFolderError, refresh: refreshRootFolders } = await useAsyncData(
   cacheKey('my-private-root-folders'), () => fetchFolderPage(null, rootFolderPage.value),
-  { watch: [user, rootFolderPage], immediate: true, getCachedData: () => undefined }
+  { watch: [user, rootFolderPage], immediate: true, lazy: true, getCachedData: () => undefined }
 )
 const { data: rootDocuments, pending: docsPending, error: rootDocumentError, refresh: refreshRootDocs } = await useAsyncData(
   cacheKey('my-private-root-docs'), () => fetchDocumentPage(null, rootDocumentPage.value),
-  { watch: [user, rootDocumentPage], immediate: true, getCachedData: () => undefined }
+  { watch: [user, rootDocumentPage], immediate: true, lazy: true, getCachedData: () => undefined }
 )
 const loading = computed(() => docsPending.value || foldersPending.value)
 async function loadChild(parentId: number, kind?: 'folder' | 'document', page?: number) {
@@ -195,6 +209,10 @@ async function loadChild(parentId: number, kind?: 'folder' | 'document', page?: 
     childPages.value = { ...childPages.value, [parentId]: { ...old, folderPage, documentPage, loading: false, error: (cause as Error)?.message || '目录加载失败' } }
   }
 }
+async function retryRootDocuments() {
+  await Promise.all([refreshFolders(), refreshDocs()])
+}
+
 async function refreshFolders() {
   await refreshRootFolders()
   await Promise.all([...expandedFolders.value].map(id => loadChild(id)))
@@ -743,6 +761,24 @@ const quickLog = async () => {
   }
 }
 
+// Owned-document menu uses the same explicit actions as the Host BFF.
+const documentMenuItems = computed<DropdownMenuItem[][]>(() => {
+  const doc = previewDoc.value
+  if (!doc) return []
+  const groups: DropdownMenuItem[][] = []
+  if (canExportDocument.value) groups.push([{ label: '下载', icon: 'i-lucide-download', onSelect: () => downloadDocument(doc.uuid) }])
+  if (canEditDocument.value) groups.push([
+    { label: doc.star_flag ? '取消收藏' : '收藏', icon: doc.star_flag ? 'i-lucide-star-off' : 'i-lucide-star', onSelect: () => toggleHome(doc) },
+    { label: doc.readonly_flag ? '取消只读' : '设为只读', icon: doc.readonly_flag ? 'i-lucide-lock-open' : 'i-lucide-lock', onSelect: () => toggleReadonly(doc) }
+  ], [
+    { label: '共享', icon: 'i-lucide-share-2', onSelect: () => openShareModal() },
+    { label: '移交', icon: 'i-lucide-folder-up', onSelect: () => openTransferModal() },
+    { label: '移动到', icon: 'i-lucide-folder-input', onSelect: () => openMoveModal(doc) }
+  ])
+  if (canDeleteDocument.value) groups.push([{ label: '删除', icon: 'i-lucide-trash-2', color: 'error', onSelect: () => confirmDelete('document', doc.uuid, doc.title) }])
+  return groups
+})
+
 // Initialize
 onMounted(() => {
   // 默认选中根目录
@@ -759,9 +795,7 @@ onMounted(() => {
       size: 'sm',
       square: true,
       class: 'md:hidden',
-      onClick: () => {
-        showMobileSidebar.value = true
-      }
+      onClick: openDirectoryPanel
     }
   ])
 })
@@ -774,7 +808,34 @@ onBeforeUnmount(() => {
 <template>
   <UDashboardPanel grow>
     <div class="px-4 pt-4 sm:px-6 sm:pt-6">
-      <MyDocumentSpaceHeader description="管理个人文档、文件夹与常用资料。" />
+      <MyDocumentSpaceHeader description="管理个人文档、文件夹与常用资料。">
+        <template #actions>
+          <UButton
+            :class="panelCollapsed ? '' : 'md:hidden'"
+            icon="i-lucide-folder-tree"
+            aria-label="打开文档目录"
+            color="neutral"
+            variant="outline"
+            @click="openDirectoryPanel"
+          >
+            目录
+          </UButton>
+        </template>
+      </MyDocumentSpaceHeader>
+      <p
+        v-if="loading"
+        role="status"
+        aria-live="polite"
+        class="py-2 text-sm text-muted"
+      >
+        正在加载文档目录…
+      </p>
+      <div v-else-if="rootFolderError || rootDocumentError" class="flex flex-wrap items-center gap-2 py-2">
+        <UAlert class="min-w-0 flex-1" color="error" title="文档目录加载失败，请重试" />
+        <UButton color="neutral" variant="outline" @click="retryRootDocuments">
+          重新加载
+        </UButton>
+      </div>
     </div>
     <!-- Two-column layout -->
     <div class="flex flex-1 overflow-hidden relative">
@@ -799,9 +860,16 @@ onBeforeUnmount(() => {
               <div v-if="loading" class="px-2 py-4 text-sm text-muted text-center">
                 加载中...
               </div>
-              <div v-else-if="treeItems.length === 0" class="px-2 py-4 text-sm text-muted text-center">
-                暂无文档
-              </div>
+              <CommonEmptyState
+                v-else-if="rootFolderError || rootDocumentError"
+                title="无法读取文档目录"
+                :description="documentLoadErrorMessage(rootFolderError || rootDocumentError)"
+              >
+                <UButton color="neutral" variant="outline" @click="retryRootDocuments">
+                  重试
+                </UButton>
+              </CommonEmptyState>
+              <CommonEmptyState v-else-if="!rootFolderError && !rootDocumentError && treeItems.length === 0" title="暂无文档" description="首次使用可新建文档，再从文档内共享给同事协同编辑。" />
               <FileTreeItem
                 v-for="item in treeItems"
                 v-else
@@ -809,6 +877,8 @@ onBeforeUnmount(() => {
                 :item="item"
                 :selected-id="selectedNodeId"
                 :expanded-ids="expandedFolders"
+                :can-mutate="canEditDocument"
+                :can-delete="canDeleteDocument"
                 :editing-id="editingId"
                 :editing-name="editingName"
                 @select="(id: string, type: 'folder' | 'document', data?: unknown) => selectNode(id, type, data as DocRecord | FolderRecord | undefined)"
@@ -821,7 +891,6 @@ onBeforeUnmount(() => {
                 @delete="confirmDelete"
                 @update:editing-name="(val) => editingName = val"
               />
-              <UAlert v-if="rootFolderError || rootDocumentError" color="error" title="目录加载失败" />
               <div v-if="rootFolders || rootDocuments" class="space-y-1 px-2 py-2 text-xs text-muted" @click.stop>
                 <span>根目录：{{ rootFolders?.total || 0 }} 个文件夹，{{ rootDocuments?.total || 0 }} 篇文档</span>
                 <UPagination
@@ -866,7 +935,8 @@ onBeforeUnmount(() => {
               variant="ghost"
               color="neutral"
               size="xs"
-              @click="showMobileSidebar = true"
+              aria-label="打开文档目录"
+              @click="openDirectoryPanel"
             />
             <template v-for="(crumb, index) in breadcrumbPath" :key="crumb.id ?? 'root'">
               <UIcon
@@ -891,51 +961,15 @@ onBeforeUnmount(() => {
           <div class="flex items-center gap-2 self-end sm:self-auto">
             <!-- 选中文档时显示编辑按钮和下拉菜单 -->
             <UButton
-              :icon="previewDoc.readonly_flag ? 'i-lucide-eye' : 'i-lucide-edit'"
+              :icon="previewDoc.readonly_flag || !canEditDocument ? 'i-lucide-eye' : 'i-lucide-edit'"
               size="sm"
               color="primary"
               @click="navigateToEdit(previewDoc.uuid)"
             >
-              {{ previewDoc.readonly_flag ? '查看' : '编辑' }}
+              {{ previewDoc.readonly_flag || !canEditDocument ? '查看' : '编辑' }}
             </UButton>
 
-            <UDropdownMenu
-              :items="[
-                [{
-                  label: '下载',
-                  icon: 'i-lucide-download',
-                  onSelect: () => downloadDocument(previewDoc!.uuid)
-                }],
-                [{
-                  label: previewDoc!.star_flag ? '取消收藏' : '收藏',
-                  icon: previewDoc!.star_flag ? 'i-lucide-star-off' : 'i-lucide-star',
-                  onSelect: () => toggleHome(previewDoc!)
-                }, {
-                  label: previewDoc!.readonly_flag ? '取消只读' : '设为只读',
-                  icon: previewDoc!.readonly_flag ? 'i-lucide-lock-open' : 'i-lucide-lock',
-                  onSelect: () => toggleReadonly(previewDoc!)
-                }],
-                [{
-                  label: '共享',
-                  icon: 'i-lucide-share-2',
-                  onSelect: () => openShareModal()
-                }, {
-                  label: '移交',
-                  icon: 'i-lucide-folder-up',
-                  onSelect: () => openTransferModal()
-                }, {
-                  label: '移动到',
-                  icon: 'i-lucide-folder-input',
-                  onSelect: () => openMoveModal(previewDoc!)
-                }],
-                [{
-                  label: '删除',
-                  icon: 'i-lucide-trash-2',
-                  color: 'error' as const,
-                  onSelect: () => confirmDelete('document', previewDoc!.uuid, previewDoc!.title)
-                }]
-              ]"
-            >
+            <UDropdownMenu v-if="documentMenuItems.length" :items="documentMenuItems">
               <UButton
                 color="neutral"
                 variant="ghost"
@@ -1006,6 +1040,7 @@ onBeforeUnmount(() => {
               >
                 <!-- 快速日志按钮 -->
                 <button
+                  v-if="canCreateDocument"
                   class="group flex flex-col items-center justify-center aspect-square md:w-40 md:h-40 rounded-2xl border-2 border-dashed border-default hover:border-primary hover:bg-primary/5 transition-all"
                   @click="quickLog"
                 >
@@ -1019,6 +1054,7 @@ onBeforeUnmount(() => {
                 </button>
                 <!-- 新建文档按钮 -->
                 <button
+                  v-if="canCreateDocument"
                   class="group flex flex-col items-center justify-center aspect-square md:w-40 md:h-40 rounded-2xl border-2 border-dashed border-default hover:border-primary hover:bg-primary/5 transition-all"
                   @click="showNewDocModal = true"
                 >
@@ -1032,6 +1068,7 @@ onBeforeUnmount(() => {
                 </button>
                 <!-- 上传文档按钮 -->
                 <button
+                  v-if="canCreateDocument"
                   class="group flex flex-col items-center justify-center aspect-square md:w-40 md:h-40 rounded-2xl border-2 border-dashed border-default hover:border-primary hover:bg-primary/5 transition-all"
                   @click="triggerUpload"
                 >
@@ -1045,6 +1082,7 @@ onBeforeUnmount(() => {
                 </button>
                 <!-- 新建子目录按钮 -->
                 <button
+                  v-if="canCreateDocument"
                   class="group flex flex-col items-center justify-center aspect-square md:w-40 md:h-40 rounded-2xl border-2 border-dashed border-default hover:border-primary hover:bg-primary/5 transition-all"
                   @click="showNewFolderModal = true"
                 >

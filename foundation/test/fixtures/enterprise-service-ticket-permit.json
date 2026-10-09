@@ -1,0 +1,39 @@
+{
+  "method": "POST",
+  "target": "/v1/enterprise/altoc/service-tickets:reopen",
+  "body": {
+    "id": "",
+    "code": "",
+    "name": "",
+    "rowVersion": 0,
+    "page": 0,
+    "pageSize": 0,
+    "search": "",
+    "authorization": {
+      "actorUid": "Person",
+      "tenant": "C000001",
+      "deployment": "Host",
+      "resource": "service_ticket",
+      "action": "reopen",
+      "operation": "service-tickets-reopen",
+      "objectId": "12",
+      "allowed": true,
+      "expiresAt": 123,
+      "bundleVersion": "1",
+      "bundleHash": "hash",
+      "policyRevision": 38,
+      "scope": {
+        "access": "self",
+        "departmentCodes": []
+      }
+    },
+    "sales": {
+      "id": "12",
+      "payload": {
+        "expectedVersion": 4,
+        "reason": "再次响应中文服务"
+      }
+    }
+  },
+  "canonical": "[\"hzy-enterprise-apf-permit.v1\",\"POST\",\"/v1/enterprise/altoc/service-tickets:reopen\",\"Person\",\"C000001\",\"Host\",\"service_ticket\",\"reopen\",\"service-tickets-reopen\",\"12\",true,123,\"1\",\"hash\",38,\"self\",[],\"\",\"\",\"\",0,0,0,\"\",[\"12\",[[\"expectedVersion\",4],[\"reason\",\"再次响应中文服务\"]]]]"
+}

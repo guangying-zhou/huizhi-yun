@@ -142,6 +142,7 @@ func (a *Adapter) RequestEnterpriseWorkItemCompletionInTransaction(ctx context.C
 	return a.requestEnterpriseWorkItemCompletionTx(ctx, tx, repo, completionInProcess, identity, projectID, itemID, kind, command, directorySnapshot...)
 }
 func (a *Adapter) requestEnterpriseWorkItemCompletionTx(ctx context.Context, tx *sql.Tx, repo *integrationoperation.ReceiptRepository, mode completionTransactionMode, identity EnterpriseProjectUpdateIdentity, projectID, itemID, kind string, command map[string]any, directorySnapshot ...json.RawMessage) (map[string]any, error) {
+	ctx = ticketTransactionItem(ctx, itemID)
 	if mode == completionInProcess {
 		var snapshot struct {
 			Context map[string]any `json:"context"`

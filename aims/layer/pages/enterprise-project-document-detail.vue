@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { projectPageFailure } from '../../app/utils/projectPageFailure'
 import ProjectNavbar from '../../app/components/project/ProjectNavbar.vue'
 import { useAimsModule } from '../useAimsModule'
 
@@ -26,6 +27,7 @@ function value(...keys: string[]) {
 async function refresh() {
   loading.value = true
   error.value = ''
+  item.value = null
   try {
     const r = await $fetch<{
       code?: number
@@ -35,7 +37,7 @@ async function refresh() {
       throw Error('文档详情暂不可用')
     item.value = r.data
   } catch (cause) {
-    error.value = cause instanceof Error ? cause.message : '文档详情暂不可用'
+    error.value = projectPageFailure(cause, '文档详情暂不可用')
   } finally {
     loading.value = false
   }

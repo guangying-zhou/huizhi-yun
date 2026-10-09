@@ -368,6 +368,7 @@ CREATE TABLE IF NOT EXISTS `milestones` (
   `completion_lock_request_id` BIGINT UNSIGNED DEFAULT NULL COMMENT '当前有效里程碑完成申请锁',
   `pivr_stage` ENUM('P','I','V','R') DEFAULT NULL COMMENT 'PIVR阶段标签(仅交付/定制类项目, NULL=不适用)',
   `template_key` VARCHAR(100) DEFAULT NULL COMMENT '来源模板中的里程碑键',
+  `billing_schedule_code` VARCHAR(64) DEFAULT NULL COMMENT 'Altoc统一结算计划稳定编码（D-06）',
   `payment_term_id` BIGINT UNSIGNED DEFAULT NULL COMMENT '关联Altoc contract_payment_term.id(逻辑关联, 非外键)',
   `recurrence_rule` VARCHAR(100) DEFAULT NULL COMMENT '周期规则(periodic模式, 如 monthly/weekly/quarterly)',
   `sort_order` INT NOT NULL DEFAULT 0 COMMENT '排序',
@@ -377,6 +378,7 @@ CREATE TABLE IF NOT EXISTS `milestones` (
   PRIMARY KEY (`id`),
   UNIQUE KEY `uk_milestone_project_id` (`project_id`, `id`),
   KEY `idx_project_status` (`project_id`, `status`),
+  KEY `idx_milestone_billing_schedule` (`billing_schedule_code`),
   KEY `idx_milestone_completion_lock` (`completion_lock_request_id`),
   KEY `idx_project_mode` (`project_id`, `mode`),
   KEY `idx_milestone_project_template_key` (`project_id`, `template_key`),
@@ -3278,3 +3280,35 @@ CREATE TABLE IF NOT EXISTS `work_item_deletion_evidence` (
   KEY `idx_wide_item` (`work_item_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
   COMMENT='工作项删除冻结证据；不随工作项/项目物理删除级联清除';
+
+-- 项目集成员与登记的文档仓库（v5.42，DOC-05a）。不属于兼容视图族；统一库经域安装子集 aims-portfolio-members 安装。
+CREATE TABLE IF NOT EXISTS aims_portfolio_members (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  portfolio_id BIGINT UNSIGNED NOT NULL,
+  uid VARCHAR(64) COLLATE utf8mb4_bin NOT NULL,
+  relation_type ENUM('manager','contributor','viewer') NOT NULL,
+  status ENUM('active','inactive') NOT NULL DEFAULT 'active',
+  valid_from DATETIME(3) NOT NULL,
+  valid_until DATETIME(3) NULL,
+  revision BIGINT UNSIGNED NOT NULL DEFAULT 1,
+  created_by VARCHAR(64) COLLATE utf8mb4_bin NOT NULL,
+  updated_by VARCHAR(64) COLLATE utf8mb4_bin NOT NULL,
+  created_at DATETIME(3) NOT NULL,
+  updated_at DATETIME(3) NOT NULL,
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_aims_portfolio_member (portfolio_id, uid),
+  KEY idx_aims_portfolio_member_uid (uid, status),
+  CONSTRAINT ck_aims_portfolio_member_dates CHECK (valid_until IS NULL OR valid_until > valid_from)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS aims_portfolio_doc_repos (
+  portfolio_id BIGINT UNSIGNED NOT NULL,
+  integration_code VARCHAR(64) COLLATE utf8mb4_bin NOT NULL,
+  repo_path VARCHAR(255) COLLATE utf8mb4_bin NOT NULL,
+  row_version BIGINT UNSIGNED NOT NULL DEFAULT 1,
+  created_by VARCHAR(64) COLLATE utf8mb4_bin NOT NULL,
+  updated_by VARCHAR(64) COLLATE utf8mb4_bin NOT NULL,
+  created_at DATETIME(3) NOT NULL,
+  updated_at DATETIME(3) NOT NULL,
+  PRIMARY KEY (portfolio_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

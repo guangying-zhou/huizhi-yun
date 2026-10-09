@@ -13,6 +13,7 @@ import (
 
 	"github.com/huizhi-yun/data-runtime/internal/apps/workflow/internal/lane"
 	"github.com/huizhi-yun/data-runtime/internal/httperror"
+	"github.com/huizhi-yun/data-runtime/internal/workflowapproval"
 )
 
 type PrepareInstanceRequest struct {
@@ -192,6 +193,7 @@ func (a *Adapter) PrepareInstance(ctx context.Context, rawBody map[string]any) (
 			"action_def": map[string]any{
 				"id":            actionDef.ID,
 				"name":          actionDef.Name,
+				"app_code":      actionDef.AppCode,
 				"resource_code": actionDef.ResourceCode,
 				"action_code":   actionDef.ActionCode,
 			},
@@ -252,6 +254,33 @@ func (a *Adapter) createInstanceTx(ctx context.Context, tx *sql.Tx, rawBody map[
 		return InstanceAPIResponse{}, httperror.New(http.StatusNotFound, "action_def_not_found", "动作定义不存在")
 	}
 
+	if workflowapproval.Registered(actionDef.AppCode, actionDef.ResourceCode, actionDef.ActionCode) && !isFrozenAltocApproval(actionDef, request) {
+		return InstanceAPIResponse{}, httperror.New(400, "altoc_approval_frozen_request_required", "Frozen approval required")
+	}
+	if isFrozenAltocApproval(actionDef, request) || isFrozenFinanceApproval(actionDef, request) {
+		var replay *InstanceAPIResponse
+		var err error
+		if isFrozenFinanceApproval(actionDef, request) {
+			replay, err = replayFinanceApproval(ctx, tx, actionDef, request)
+		} else {
+			replay, err = replayAltocApproval(ctx, tx, actionDef, request)
+		}
+		if err != nil {
+			return InstanceAPIResponse{}, err
+		}
+		if replay != nil {
+			return *replay, nil
+		}
+	}
+	if isFrozenPeopleApproval(actionDef, request) {
+		replay, replayErr := replayPeopleApproval(ctx, tx, actionDef, request)
+		if replayErr != nil {
+			return InstanceAPIResponse{}, replayErr
+		}
+		if replay != nil {
+			return *replay, nil
+		}
+	}
 	if isFrozenProjectLifecycleRequest(actionDef, request) {
 		replay, err := replayProjectLifecycleRequest(ctx, tx, actionDef, request)
 		if err != nil {
@@ -325,7 +354,7 @@ func (a *Adapter) createInstanceTx(ctx context.Context, tx *sql.Tx, rawBody map[
 
 	instanceNo := ""
 	submitMode := "created"
-	if existingRejected != nil {
+	if existingRejected != nil && !(isFrozenAltocApproval(actionDef, request) || isFrozenFinanceApproval(actionDef, request)) {
 		instanceNo = existingRejected.InstanceNo
 	}
 	if instanceNo == "" {
@@ -355,11 +384,30 @@ func (a *Adapter) createInstanceTx(ctx context.Context, tx *sql.Tx, rawBody map[
 	flowSnapshot := map[string]any{"nodes": snapshotNodes, "config": config}
 
 	firstNodeIndex := firstRunnableNode(snapshotNodes, fullContext)
+	if isFrozenAltocApproval(actionDef, request) || isFrozenFinanceApproval(actionDef, request) {
+		hasHuman := false
+		for _, node := range snapshotNodes {
+			kind := cleanAnyString(node["type"])
+			if kind == "approve" || kind == "countersign" {
+				for _, person := range resolvedAssignees(node) {
+					if person.UID == request.CurrentUser {
+						return InstanceAPIResponse{}, httperror.New(403, "altoc_self_approval_forbidden", "Self approval forbidden")
+					}
+					if person.UID != "" {
+						hasHuman = true
+					}
+				}
+			}
+		}
+		if !hasHuman || firstNodeIndex >= len(snapshotNodes) {
+			return InstanceAPIResponse{}, httperror.New(409, "altoc_approval_flow_required", "A human approval flow is required")
+		}
+	}
 	instanceID := int64(0)
 	resubmitActionID := int64(0)
 	effects := &WorkflowEffects{}
 
-	if existingRejected != nil {
+	if existingRejected != nil && !(isFrozenAltocApproval(actionDef, request) || isFrozenFinanceApproval(actionDef, request)) {
 		if existingRejected.InitiatorUID != request.CurrentUser {
 			return InstanceAPIResponse{}, httperror.New(http.StatusConflict, "resubmit_forbidden", fmt.Sprintf("该业务已有历史实例（%s），仅原发起人可重新提交", existingRejected.InstanceNo))
 		}

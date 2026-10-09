@@ -9,7 +9,8 @@ interface ViewerApiResponse<T> {
   data: T
 }
 
-export function useViewerWatermark() {
+export function useViewerWatermark(options: { includeTime?: boolean } = {}) {
+  const viewedAt = options.includeTime ? new Date().toLocaleString('zh-CN', { hour12: false }) : ''
   const auth = useAuth()
   const { user, tenant, userRealname } = auth
   const userMobileTail = computed(() => 'userMobileTail' in auth ? String((auth.userMobileTail as { value?: unknown } | undefined)?.value || '') : '')
@@ -48,7 +49,7 @@ export function useViewerWatermark() {
     const viewerName = String(profile?.realName || userRealname.value || uid).trim()
     const tail = String(profile ? profile.mobileTail4 || '' : userMobileTail.value || '').trim()
     const mobileTail = /^\d{4}$/.test(tail) ? tail : '****'
-    return `${viewerName} ${mobileTail}`
+    return `${viewerName} ${mobileTail}${viewedAt ? ` ${viewedAt}` : ''}`
   })
 
   return {

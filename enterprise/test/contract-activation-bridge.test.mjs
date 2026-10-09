@@ -48,10 +48,13 @@ test('Host compiles current Altoc and Aims permissions into bound activation evi
   let server
   try {
     const app = createApp(), router = createRouter()
-    app.use(defineEventHandler(event => { event.context.consoleAuth = session }))
-    router.post('/altoc/api/v1/contracts/:contractCode/activate-delivery', (await import('../server/routes/altoc/api/v1/contracts/[contractCode]/activate-delivery.post.ts')).default)
+    app.use(defineEventHandler((event) => {
+      event.context.consoleAuth = session
+    }))
+    router.post('/altoc/api/v1/contracts/:contractId/activate-delivery', (await import('../server/routes/altoc/api/v1/contracts/[contractId]/activate-delivery.post.ts')).default)
     app.use(router)
-    server = createServer(toNodeListener(app)); await new Promise(done => server.listen(0, '127.0.0.1', done))
+    server = createServer(toNodeListener(app))
+    await new Promise(done => server.listen(0, '127.0.0.1', done))
     const base = `http://127.0.0.1:${server.address().port}`
     const request = async (path, body = {}, key = 'activation-1') => {
       const response = await fetch(base + path, { method: 'POST', headers: { 'content-type': 'application/json', 'idempotency-key': key }, body: JSON.stringify(body) })
@@ -83,17 +86,23 @@ test('Host compiles current Altoc and Aims permissions into bound activation evi
     denyAims = true
     assert.equal((await request('/altoc/api/v1/contracts/CON-2/activate-delivery')).status, 403)
     assert.equal(calls.length, 1)
-    denyAims = false; denyAltoc = true
+    denyAims = false
+    denyAltoc = true
     assert.equal((await request('/altoc/api/v1/contracts/CON-3/activate-delivery')).status, 403)
     assert.equal(calls.length, 1)
-    denyAltoc = false; globalAdmin = true
+    denyAltoc = false
+    globalAdmin = true
     assert.equal((await request('/altoc/api/v1/contracts/CON-4/activate-delivery')).status, 200)
     assert.equal(calls.at(-1).options.body.authorization.access, 'all')
     assert.equal(directories.length, 2)
     assert.ok(checks.every(check => check.uid === 'person-a'))
   } finally {
     if (server) await new Promise(done => server.close(done))
-    hooks.deregister(); globalThis.useRuntimeConfig = oldConfig
-    delete globalThis.__activationSession; delete globalThis.__activationAuth; delete globalThis.__activationDirectory; delete globalThis.__activationTransport
+    hooks.deregister()
+    globalThis.useRuntimeConfig = oldConfig
+    delete globalThis.__activationSession
+    delete globalThis.__activationAuth
+    delete globalThis.__activationDirectory
+    delete globalThis.__activationTransport
   }
 })

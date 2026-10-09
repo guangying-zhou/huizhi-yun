@@ -20,10 +20,12 @@ export async function readLegacyMarkdown(event: H3Event, path: string, type: str
 }
 
 type ContentOptions = {
-  // The document comes from a Runtime view whose authorization is not a
-  // department relation (open department documents). Runtime annotates
-  // `snapshot_generation` (0 = still v1); a converted document's published
-  // head can only come from the body reference in that response.
+  // The document comes from a Runtime view whose authorization is not the
+  // reader's own relation to the document (open department documents,
+  // portfolio documents). Runtime annotates `snapshot_generation` (0 = still
+  // v1); a converted document's published head can only come from the body
+  // reference in that response. This holds for every document type: the Host
+  // never asks the owning domain on behalf of such a reader.
   bodyRef?: 'required'
 }
 
@@ -38,6 +40,17 @@ async function publishedHead(event: H3Event, doc: Record<string, unknown>, uuid:
     const { parseSnapshotHead } = await import('./enterpriseCodocsSnapshot')
     return parseSnapshotHead(reference)
   }
+  if (options.bodyRef === 'required') {
+    if (type === 'department') {
+      const { codocsDepartmentCollaborationV2Enabled } = await import('./enterpriseCodocsDepartmentCollaboration')
+      if (!codocsDepartmentCollaborationV2Enabled()) return null
+    }
+    // A legacy path may be a stale mirror of a converted document. Never
+    // guess, and never fall back to an actor-bound read of somebody else's
+    // document: an unannotated one fails closed.
+    if (doc.snapshot_generation === 0) return null
+    throw createError({ statusCode: 503, message: '文档正文引用不可用，请稍后重试', data: { code: 'enterprise_document_body_ref_required' } })
+  }
   if (type === 'private' && process.env.HZY_ENTERPRISE_CODOCS_SNAPSHOT_V2 === 'true') {
     // Loaded only when v2 is switched on.
     const { readSnapshotHead } = await import('./enterpriseCodocsSnapshot')
@@ -46,13 +59,6 @@ async function publishedHead(event: H3Event, doc: Record<string, unknown>, uuid:
   if (type === 'department') {
     const { codocsDepartmentCollaborationV2Enabled, readDepartmentSnapshotHead } = await import('./enterpriseCodocsDepartmentCollaboration')
     if (!codocsDepartmentCollaborationV2Enabled()) return null
-    // Once department collaboration exists, a legacy path may be a stale
-    // mirror. Never guess: a reader outside the department needs Runtime's
-    // reference for a converted document, and an unannotated one fails closed.
-    if (options.bodyRef === 'required') {
-      if (doc.snapshot_generation === 0) return null
-      throw createError({ statusCode: 503, message: '文档正文引用不可用，请稍后重试', data: { code: 'enterprise_document_body_ref_required' } })
-    }
     if (typeof doc.dept_code !== 'string' || !departmentPattern.test(doc.dept_code)) {
       throw createError({ statusCode: 503, message: '文档元数据响应无效' })
     }

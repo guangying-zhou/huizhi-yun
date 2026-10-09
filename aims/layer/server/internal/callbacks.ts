@@ -1,7 +1,7 @@
 import { owningCreateError as createError, type OwningH3Event as H3Event } from '@hzy/foundation/server/utils/owningModuleHttp'
 import { callEnterpriseSystemRuntime } from '@hzy/foundation/server/utils/enterpriseRuntimeChannels'
 
-const callbackFields = new Set(['event', 'instance_id', 'instance_no', 'app_code', 'resource_code', 'action_code', 'biz_id', 'status', 'initiator_uid', 'form_data', 'approval_actor_uids', 'non_self_approval_actor_uids', 'approval_operator_uid', 'cancellation_actor_uid', 'idempotencyKey'])
+const callbackFields = new Set(['event', 'instance_id', 'instance_no', 'app_code', 'resource_code', 'action_code', 'biz_id', 'status', 'initiator_uid', 'completed_at', 'form_data', 'approval_actor_uids', 'non_self_approval_actor_uids', 'approval_operator_uid', 'cancellation_actor_uid', 'idempotencyKey'])
 export async function receiveWorkflowCallback(event: H3Event, kind: 'standard' | 'completion', input: unknown) {
   if (!input || typeof input !== 'object' || Array.isArray(input)) throw createError({ statusCode: 400, message: 'Workflow callback is invalid.' })
   const body = input as Record<string, unknown>

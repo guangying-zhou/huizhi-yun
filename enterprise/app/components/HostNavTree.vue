@@ -3,6 +3,10 @@ interface NavItem { id: string, label: string, icon?: string, to?: string, modul
 interface NavigationContext { visibleTree: { value: NavItem[] }, activeId: { value: string }, setPreferred: (id: string) => void }
 
 const props = withDefaults(defineProps<{ items: NavItem[], level?: number }>(), { level: 1 })
+// A single visible destination is a page, not an expandable submenu.
+const displayItems = computed(() => props.items.map(item => item.children?.length === 1 && item.children[0]?.to && !item.children[0].children?.length
+  ? { ...item.children[0], icon: item.children[0].icon || item.icon }
+  : item))
 const route = useRoute()
 const navigationContext = inject<NavigationContext | null>('enterprise-navigation-context', null)
 
@@ -16,7 +20,9 @@ function matchesRoute(item: NavItem): boolean {
 const activeLeafId = computed(() => navigationContext?.activeId.value || props.items
   .filter(item => item.to && matchesRoute(item))
   .sort((a, b) => (b.to?.length || 0) - (a.to?.length || 0))[0]?.id || '')
-function isCurrent(item: NavItem): boolean { return item.id === activeLeafId.value }
+function isCurrent(item: NavItem): boolean {
+  return item.id === activeLeafId.value
+}
 
 // Only the current row carries the three-part treatment. An ancestor merely
 // holds the current page: it opens, but marking it too would leave the sidebar
@@ -47,7 +53,9 @@ const preferenceScope = computed(() => {
 })
 const preferences = ref<Record<string, boolean>>({})
 const visibleIds = computed(() => new Set((navigationContext?.visibleTree.value || props.items).flatMap(item => [item.id, ...item.children?.map(child => child.id) || []])))
-function preferenceKey() { return `hzy.enterprise.nav:${preferenceScope.value}` }
+function preferenceKey() {
+  return `hzy.enterprise.nav:${preferenceScope.value}`
+}
 function loadPreferences() {
   preferences.value = {}
   if (!preferenceScope.value || typeof localStorage === 'undefined') return
@@ -63,7 +71,9 @@ function savePreference(id: string, value: boolean) {
   if (!preferenceScope.value || typeof localStorage === 'undefined') return
   loadPreferences()
   preferences.value[id] = value
-  try { localStorage.setItem(preferenceKey(), JSON.stringify(preferences.value)) } catch { /* private mode or quota: keep in-memory state */ }
+  try {
+    localStorage.setItem(preferenceKey(), JSON.stringify(preferences.value))
+  } catch { /* private mode or quota: keep in-memory state */ }
 }
 function setOpen(item: NavItem, value: boolean) {
   open[item.id] = value
@@ -76,7 +86,7 @@ function setOpen(item: NavItem, value: boolean) {
 // area's preferences. Clicking another group remains usable until navigation.
 watch(preferenceScope, loadPreferences, { immediate: true })
 watch([() => route.path, activeLeafId, preferenceScope, () => props.items], () => {
-  for (const id of Object.keys(open)) delete open[id]
+  for (const id of Object.keys(open)) Reflect.deleteProperty(open, id)
   const currentArea = navigationContext?.visibleTree.value.find(area => holdsCurrent(area))
   for (const item of props.items) {
     if (item.children) open[item.id] = holdsCurrent(item)
@@ -86,8 +96,14 @@ watch([() => route.path, activeLeafId, preferenceScope, () => props.items], () =
 </script>
 
 <template>
-  <ul class="flex flex-col gap-px" :class="level > 1 ? 'host-nav-branches' : ''">
-    <li v-for="item in items" :key="item.id">
+  <ul
+    class="flex flex-col gap-px"
+    :class="level > 1 ? 'host-nav-branches' : ''"
+  >
+    <li
+      v-for="item in displayItems"
+      :key="item.id"
+    >
       <div class="relative flex items-center">
         <!-- The indicator is the third part of the current-row treatment, with
              the soft background and the darker label; colour alone never marks it. -->
@@ -101,9 +117,22 @@ watch([() => route.path, activeLeafId, preferenceScope, () => props.items], () =
              followed without JavaScript; a pure group is a button that only
              expands. Resolving the component dynamically silently produced an
              unknown element instead, which looked right and clicked nowhere. -->
-        <NuxtLink v-if="item.to" :to="item.to" :class="rowClass(item)" :aria-current="isCurrent(item) ? 'page' : undefined" @click="navigationContext?.setPreferred(item.id)">
-          <UIcon v-if="item.icon" :name="item.icon" class="size-4 shrink-0" />
-          <span class="truncate text-sm leading-5" :class="level === 1 ? 'font-medium' : ''">{{ item.label }}</span>
+        <NuxtLink
+          v-if="item.to"
+          :to="item.to"
+          :class="rowClass(item)"
+          :aria-current="isCurrent(item) ? 'page' : undefined"
+          @click="navigationContext?.setPreferred(item.id)"
+        >
+          <UIcon
+            v-if="item.icon"
+            :name="item.icon"
+            class="size-4 shrink-0"
+          />
+          <span
+            class="truncate text-sm leading-5"
+            :class="level === 1 ? 'font-medium' : ''"
+          >{{ item.label }}</span>
         </NuxtLink>
         <button
           v-else
@@ -112,8 +141,15 @@ watch([() => route.path, activeLeafId, preferenceScope, () => props.items], () =
           :aria-expanded="item.children ? open[item.id] === true : undefined"
           @click="item.children ? setOpen(item, !open[item.id]) : undefined"
         >
-          <UIcon v-if="item.icon" :name="item.icon" class="size-4 shrink-0" />
-          <span class="truncate text-sm leading-5" :class="level === 1 ? 'font-medium' : ''">{{ item.label }}</span>
+          <UIcon
+            v-if="item.icon"
+            :name="item.icon"
+            class="size-4 shrink-0"
+          />
+          <span
+            class="truncate text-sm leading-5"
+            :class="level === 1 ? 'font-medium' : ''"
+          >{{ item.label }}</span>
         </button>
 
         <!-- Entering and expanding are separate targets: the label navigates,
@@ -126,7 +162,11 @@ watch([() => route.path, activeLeafId, preferenceScope, () => props.items], () =
           :aria-label="`${open[item.id] ? '收起' : '展开'} ${item.label}`"
           @click="setOpen(item, !open[item.id])"
         >
-          <UIcon name="i-lucide-chevron-right" class="size-4 transition-transform" :class="open[item.id] ? 'rotate-90' : ''" />
+          <UIcon
+            name="i-lucide-chevron-right"
+            class="size-4 transition-transform"
+            :class="open[item.id] ? 'rotate-90' : ''"
+          />
         </button>
         <UIcon
           v-else-if="item.children"
@@ -137,7 +177,11 @@ watch([() => route.path, activeLeafId, preferenceScope, () => props.items], () =
         />
       </div>
 
-      <HostNavTree v-if="item.children && open[item.id]" :items="item.children" :level="level + 1" />
+      <HostNavTree
+        v-if="item.children && open[item.id]"
+        :items="item.children"
+        :level="level + 1"
+      />
     </li>
   </ul>
 </template>

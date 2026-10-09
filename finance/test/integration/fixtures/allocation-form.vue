@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import FinanceEntityFormSlideover from '../../../app/components/FinanceEntityFormSlideover.vue'
 import { pageConfigs } from '../../../app/config/pageConfigs'
+
 const config = pageConfigs['project-accounting/allocations']!
 const open = ref(false)
 const form = ref<Record<string, string>>({})
@@ -17,13 +18,24 @@ function submit() {
   open.value = false
 }
 </script>
+
 <template>
   <main class="p-6">
-    <UButton @click="open = true">新建分摊</UButton>
+    <UButton @click="open = true">
+      新建分摊
+    </UButton>
     <pre data-testid="saved">{{ saved }}</pre>
-    <FinanceEntityFormSlideover v-model:open="open" v-model:form="form"
-      :title="config.title" :description="config.description" :fields="config.createFields!"
-      :error="error" :get-field-options="() => []" :get-selected-file-name="() => ''"
-      @submit="submit" @cancel="open = false" />
+    <FinanceEntityFormSlideover
+      v-model:open="open"
+      v-model:form="form"
+      :title="config.title"
+      :description="config.description"
+      :fields="config.createFields!"
+      :error="error"
+      :get-field-options="() => []"
+      :get-selected-file-name="() => ''"
+      @submit="submit"
+      @cancel="open = false"
+    />
   </main>
 </template>

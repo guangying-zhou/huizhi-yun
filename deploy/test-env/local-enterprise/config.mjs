@@ -52,7 +52,7 @@ export function validateProfile(profile, { requireApproval = true } = {}) {
   if (profile.features !== undefined) {
     if (!profile.features || typeof profile.features !== 'object' || Array.isArray(profile.features)) issues.push('features must be an object')
     else {
-      rejectUnknownKeys(profile.features, ['codocsSnapshotV2', 'codocsCollaborationV2', 'codocsDepartmentCollaborationV2', 'notificationsInAppOnly', 'workflowLocal', 'companySummaryCodocsDelivery', 'aimsRetired', 'allowLegacyAimsCallbacks', 'allowLegacyNotificationDetails', 'codocsLegacyAimsServiceEnabled'], 'features', issues)
+      rejectUnknownKeys(profile.features, ['codocsSnapshotV2', 'codocsCollaborationV2', 'codocsDepartmentCollaborationV2', 'notificationsInAppOnly', 'workflowLocal', 'companySummaryCodocsDelivery', 'aimsRetired', 'allowLegacyAimsCallbacks', 'allowLegacyNotificationDetails', 'codocsLegacyAimsServiceEnabled', 'feedbackDeliveryEnabled'], 'features', issues)
       for (const flag of ['aimsRetired', 'allowLegacyAimsCallbacks', 'allowLegacyNotificationDetails', 'codocsLegacyAimsServiceEnabled']) {
         if (profile.features[flag] !== undefined && typeof profile.features[flag] !== 'boolean') issues.push(`features.${flag} must be a boolean`)
       }
@@ -63,11 +63,13 @@ export function validateProfile(profile, { requireApproval = true } = {}) {
       if (profile.features.companySummaryCodocsDelivery !== undefined && typeof profile.features.companySummaryCodocsDelivery !== 'boolean') issues.push('features.companySummaryCodocsDelivery must be a boolean')
       if (profile.features.companySummaryCodocsDelivery === true && profile.features.workflowLocal !== true) issues.push('companySummaryCodocsDelivery requires workflowLocal')
       if (profile.features.notificationsInAppOnly !== undefined && typeof profile.features.notificationsInAppOnly !== 'boolean') issues.push('features.notificationsInAppOnly must be a boolean')
+      if (profile.features.feedbackDeliveryEnabled !== undefined && typeof profile.features.feedbackDeliveryEnabled !== 'boolean') issues.push('features.feedbackDeliveryEnabled must be a boolean')
       if (profile.features.workflowLocal !== undefined && typeof profile.features.workflowLocal !== 'boolean') issues.push('features.workflowLocal must be a boolean')
       if (profile.features.codocsCollaborationV2 === true && profile.features.codocsSnapshotV2 !== true) issues.push('features.codocsCollaborationV2 requires codocsSnapshotV2')
     }
   }
   if (profile.features?.aimsRetired === true) {
+    if (profile.scheduler?.aimsExecutor !== 'enterprise') issues.push('retired Aims requires scheduler.aimsExecutor=enterprise')
     for (const flag of ['allowLegacyAimsCallbacks', 'allowLegacyNotificationDetails', 'codocsLegacyAimsServiceEnabled']) {
       if (profile.features?.[flag] !== false) issues.push(`problem: hzy-aims is retired but ${flag} is still true (including default)`)
     }
@@ -174,7 +176,7 @@ export function validateProfile(profile, { requireApproval = true } = {}) {
     if (profile.identity.consoleFacadeMode !== 'local-canonical-facade') issues.push('workflowLocal requires the local Console facade')
     if (profile.runtime.transportMode !== 'loopback') issues.push('workflowLocal requires the pinned loopback Runtime')
     if (profile.listeners?.workflow?.host !== '127.0.0.1' || profile.listeners?.workflow?.port !== 23140) issues.push('listeners.workflow must be 127.0.0.1:23140')
-    if (profile.listeners?.aims?.host !== '127.0.0.1' || profile.listeners?.aims?.port !== 23141) issues.push('listeners.aims must be 127.0.0.1:23141')
+    if (profile.features?.aimsRetired !== true && (profile.listeners?.aims?.host !== '127.0.0.1' || profile.listeners?.aims?.port !== 23141)) issues.push('listeners.aims must be 127.0.0.1:23141')
   } else if (profile.listeners?.workflow !== undefined || profile.listeners?.aims !== undefined) issues.push('listeners.workflow and listeners.aims require workflowLocal')
   if (profile.features?.codocsCollaborationV2 === true) {
     if (identity.consoleFacadeMode !== 'local-canonical-facade') issues.push('collaboration requires the local Console facade')
@@ -197,8 +199,11 @@ export function validateProfile(profile, { requireApproval = true } = {}) {
 
   const scheduler = record(profile.scheduler)
   rejectUnknownKeys(scheduler, [
-    'registerBusinessCron', 'consumeBusinessOutbox', 'registerAdditionalSharedRefreshWriter'
+    'registerBusinessCron', 'consumeBusinessOutbox', 'registerAdditionalSharedRefreshWriter', 'aimsExecutor'
   ], 'scheduler', issues)
+  if (scheduler.aimsExecutor !== undefined && !['aims', 'enterprise'].includes(scheduler.aimsExecutor)) {
+    issues.push('scheduler.aimsExecutor must be aims or enterprise')
+  }
   for (const name of ['registerBusinessCron', 'consumeBusinessOutbox', 'registerAdditionalSharedRefreshWriter']) {
     requireFalse(scheduler[name], `scheduler.${name}`)
   }

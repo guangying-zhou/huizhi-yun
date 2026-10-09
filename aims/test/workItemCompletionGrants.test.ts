@@ -5,7 +5,10 @@ import { readFileSync } from 'node:fs'
 const read = (path: string) => readFileSync(new URL(`../../${path}`, import.meta.url), 'utf8')
 const manifest = JSON.parse(read('aims/app.manifest.json'))
 const workflow = JSON.parse(read('workflow/app.manifest.json'))
-const has = (m: typeof manifest, capability: string) => { const [app, resource, action] = capability.split(':'); return m.appCode === app && m.resources.some((row: { code: string, actions: string[] }) => row.code === resource && row.actions.includes(action)) }
+const has = (m: typeof manifest, capability: string) => {
+  const [app, resource, action] = capability.split(':')
+  return m.appCode === app && m.resources.some((row: { code: string, actions: string[] }) => row.code === resource && row.actions.includes(action))
+}
 test('completion grant candidates match declared exact resources and both Runtime audiences without reactivating revoked grants', () => {
   for (const version of ['v2.6-aims', 'v2.7-workflow']) {
     const suffix = 'work-item-completion'
@@ -13,7 +16,10 @@ test('completion grant candidates match declared exact resources and both Runtim
     const verify = read(`console/docs/sql/Console-SQL-Verify-${version}-${suffix}-grants.sql`)
     assert.match(seed, /NOT EXISTS/u)
     assert.doesNotMatch(seed, /ON DUPLICATE KEY UPDATE/u)
-    for (const audience of ['data-runtime', 'tenant-runtime']) { assert.ok(seed.includes(audience)); assert.ok(verify.includes(audience)) }
+    for (const audience of ['data-runtime', 'tenant-runtime']) {
+      assert.ok(seed.includes(audience))
+      assert.ok(verify.includes(audience))
+    }
     assert.ok(verify.includes('NOT_ACTIVE'))
     assert.ok(verify.includes('BINDING_MISMATCH'))
   }

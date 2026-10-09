@@ -104,7 +104,7 @@ function baselineGrantId(row: Record<string, unknown>) {
   ].join(':')
 }
 
-function rolePermissionGrantId(row: Record<string, unknown>) {
+export function rolePermissionGrantId(row: Record<string, unknown>) {
   return [
     'role-permission',
     nullableString(row.roleCode) || '',
